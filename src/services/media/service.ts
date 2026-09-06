@@ -23,6 +23,7 @@ import { getLocaleLanguageName } from '../../i18n/localeBcp47';
 import {
   formatDocumentSizeLimitMB,
   resolveDocumentInputDecision,
+  type DocumentInputRefusalReason,
 } from '../llm/catalog/documentCapabilities';
 
 export interface MediaUnderstandingOptions {
@@ -228,17 +229,35 @@ async function readDocumentAttachmentText(attachment: Attachment): Promise<strin
  * Returns the original body enriched with media context, or unchanged if
  * nothing was processed.
  */
+/** One attachment's structurally-decided document-input refusal, for a UI to persist onto it. */
+export interface MediaUnderstandingDocumentRefusal {
+  attachmentIndex: number;
+  refusalReason: DocumentInputRefusalReason;
+  maxBytes?: number;
+}
+
+export interface MediaUnderstandingResult {
+  enrichedBody: string;
+  processedCount: number;
+  /**
+   * Per-attachment document-input refusals discovered while enriching `body`, keyed by index
+   * into the `attachments` array passed in — never inferred from `enrichedBody`'s text, so a
+   * caller can persist the reason onto the attachment structurally.
+   */
+  documentInputRefusals: ReadonlyArray<MediaUnderstandingDocumentRefusal>;
+}
+
 export async function runMediaUnderstanding(
   body: string,
   attachments: Attachment[],
   options: MediaUnderstandingOptions,
-): Promise<{ enrichedBody: string; processedCount: number }> {
+): Promise<MediaUnderstandingResult> {
   const modelVisibleAttachments = attachments.flatMap((attachment, index) =>
     isModelVisibleAttachment(attachment) ? [{ attachment, index }] : [],
   );
 
   if (!options.enabled || modelVisibleAttachments.length === 0) {
-    return { enrichedBody: body, processedCount: 0 };
+    return { enrichedBody: body, processedCount: 0, documentInputRefusals: [] };
   }
 
   const tasks = modelVisibleAttachments.map(({ attachment, index }) =>
@@ -256,8 +275,21 @@ export async function runMediaUnderstanding(
 
   const processedCount = outputs.filter((o) => o.text && !o.error).length;
   const enrichedBody = formatMediaUnderstandingBody(body, outputs);
+  const documentInputRefusals: MediaUnderstandingDocumentRefusal[] = outputs.flatMap((output) =>
+    output.documentInputRefusalReason
+      ? [
+          {
+            attachmentIndex: output.attachmentIndex,
+            refusalReason: output.documentInputRefusalReason,
+            ...(output.documentInputRefusalMaxBytes !== undefined
+              ? { maxBytes: output.documentInputRefusalMaxBytes }
+              : {}),
+          },
+        ]
+      : [],
+  );
 
-  return { enrichedBody, processedCount };
+  return { enrichedBody, processedCount, documentInputRefusals };
 }
 
 async function processAttachment(
@@ -487,6 +519,9 @@ async function extractDocumentAttachment(
       attachmentIndex: index,
       text,
       documentInputRefusalReason: decision.refusalReason,
+      ...(decision.refusalReason === 'exceeds_size_limit' && decision.maxBytes !== undefined
+        ? { documentInputRefusalMaxBytes: decision.maxBytes }
+        : {}),
     };
   }
 

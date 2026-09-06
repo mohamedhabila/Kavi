@@ -5,6 +5,7 @@ import type {
   MessageProviderReplay,
   ToolCall,
 } from '../../types/message';
+import type { Attachment } from '../../types/attachment';
 import type { AgentRunAsyncOperation, AgentRunControlGraphState } from '../../types/agentRun';
 import type { ToolDefinition } from '../../types/tool';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -42,6 +43,7 @@ export interface OrchestratorCallbacks {
   onReasoning?: (token: string) => void;
   onAssistantStreamReset?: () => void;
   onUserMessageEnriched?: (messageId: string, enrichedContent: string) => void;
+  onUserMessageAttachmentsUpdated?: (messageId: string, attachments: Attachment[]) => void;
   onToolCallQueued?: (toolCall: ToolCall) => void;
   onToolCallStart: (toolCall: ToolCall) => void;
   onToolCallComplete: (toolCall: ToolCall) => void;

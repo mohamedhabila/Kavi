@@ -109,6 +109,14 @@ export function stripAttachmentPayload(attachment: Attachment): Attachment {
       ? { durationMs: Math.max(0, Math.round(attachment.durationMs)) }
       : {}),
     ...(attachment.transcript?.trim() ? { transcript: attachment.transcript.trim() } : {}),
+    ...(attachment.documentInputRefusalReason
+      ? { documentInputRefusalReason: attachment.documentInputRefusalReason }
+      : {}),
+    ...(attachment.documentInputRefusalReason === 'exceeds_size_limit' &&
+    typeof attachment.documentInputRefusalMaxBytes === 'number' &&
+    Number.isFinite(attachment.documentInputRefusalMaxBytes)
+      ? { documentInputRefusalMaxBytes: attachment.documentInputRefusalMaxBytes }
+      : {}),
     ...(attachment.waveformLevels?.length
       ? {
           waveformLevels: attachment.waveformLevels

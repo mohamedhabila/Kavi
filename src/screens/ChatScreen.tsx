@@ -498,6 +498,7 @@ export const ChatScreen: React.FC = () => {
       updateMessageAssistantMetadata,
       updateMessageEffect,
       updateMessageEnrichedContent,
+      updateMessageAttachments: useChatStore.getState().updateMessageAttachments,
       updateMessageProviderReplay,
       updateMessageReasoning,
       updateToolCallStatus,

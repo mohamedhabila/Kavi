@@ -2318,6 +2318,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     voiceNote: '语音笔记',
     playAudioLabel: '播放 {name}',
     pauseAudioLabel: '暂停 {name}',
+    documentUnsupportedNotice:
+      '当前模型无法读取文档。请切换到支持文档的提供商（如 Anthropic、OpenAI 或 Google Gemini）以读取此文件。',
+    documentExceedsSizeLimitNotice: '此 PDF 超过了当前提供商 {limit} 的限制，因此仅将文件名和大小分享给了模型。',
     type: {
       image: '图片',
       audio: '音频',

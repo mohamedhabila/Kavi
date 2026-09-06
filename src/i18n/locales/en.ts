@@ -2512,6 +2512,10 @@ export const en: TranslationMap = {
     voiceNote: 'Voice note',
     playAudioLabel: 'Play {name}',
     pauseAudioLabel: 'Pause {name}',
+    documentUnsupportedNotice:
+      'The current model can’t read documents. Switch to a provider with document support — such as Anthropic, OpenAI, or Google Gemini — to have this file read.',
+    documentExceedsSizeLimitNotice:
+      'This PDF is over the current provider’s {limit} limit, so only its name and size were shared with the model.',
     type: {
       image: 'Image',
       audio: 'Audio',

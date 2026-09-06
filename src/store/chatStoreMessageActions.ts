@@ -3,7 +3,11 @@ import type { Message, ToolCall } from '../types/message';
 import { generateId } from '../utils/id';
 import { generateConversationTitle, isPlaceholderTitle } from '../utils/conversation';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
-import { extractToolCallAttachments, mergeAttachmentLists } from '../utils/messageAttachments';
+import {
+  cloneAttachments,
+  extractToolCallAttachments,
+  mergeAttachmentLists,
+} from '../utils/messageAttachments';
 import { mergeAssistantMessageMetadata } from '../utils/assistantMessageMetadata';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import {
@@ -75,6 +79,7 @@ export function createMessageStoreActions(
   | 'applyConversationCompaction'
   | 'updateMessage'
   | 'updateMessageEnrichedContent'
+  | 'updateMessageAttachments'
   | 'updateMessageReasoning'
   | 'updateMessageProviderReplay'
   | 'updateMessageAssistantMetadata'
@@ -181,6 +186,20 @@ export function createMessageStoreActions(
           messageId,
           (message) =>
             message.enrichedContent === enrichedContent ? message : { ...message, enrichedContent },
+        );
+        return conversations ? { conversations } : state;
+      }),
+
+    updateMessageAttachments: (conversationId, messageId, attachments) =>
+      set((state) => {
+        const conversations = updateConversationMessageWithMemoryPublicationFence(
+          state.conversations,
+          conversationId,
+          messageId,
+          (message) =>
+            areAttachmentsEqual(message.attachments, attachments)
+              ? message
+              : { ...message, attachments: cloneAttachments(attachments) },
         );
         return conversations ? { conversations } : state;
       }),

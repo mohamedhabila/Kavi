@@ -2313,6 +2313,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     voiceNote: '語音筆記',
     playAudioLabel: '播放 {name}',
     pauseAudioLabel: '暫停 {name}',
+    documentUnsupportedNotice:
+      '目前的模型無法讀取文件。請切換至支援文件讀取的供應商（例如 Anthropic、OpenAI 或 Google Gemini）以讀取此檔案。',
+    documentExceedsSizeLimitNotice: '此 PDF 超過目前供應商 {limit} 的限制，因此僅將檔名和大小分享給模型。',
     type: {
       image: '圖片',
       audio: '音訊',

@@ -410,6 +410,9 @@ describe('runMediaUnderstanding', () => {
       expect(result.enrichedBody).toContain(
         i18n.t('mediaUnderstanding.documentUnsupportedProvider', { name: 'doc.pdf' }),
       );
+      expect(result.documentInputRefusals).toEqual([
+        { attachmentIndex: 0, refusalReason: 'unsupported_provider' },
+      ]);
     });
 
     it('skips enrichment entirely once the active model can read the PDF natively', async () => {
@@ -427,6 +430,7 @@ describe('runMediaUnderstanding', () => {
       expect(result.processedCount).toBe(0);
       expect(result.enrichedBody).toBe('What is this?');
       expect(result.enrichedBody).not.toContain('<media_context>');
+      expect(result.documentInputRefusals).toEqual([]);
     });
 
     it('refuses an oversized PDF with a localized size-limit notice', async () => {
@@ -445,6 +449,24 @@ describe('runMediaUnderstanding', () => {
       expect(result.enrichedBody).toContain(
         i18n.t('mediaUnderstanding.documentExceedsSizeLimit', { name: 'doc.pdf', limit: '32 MB' }),
       );
+      expect(result.documentInputRefusals).toEqual([
+        { attachmentIndex: 0, refusalReason: 'exceeds_size_limit', maxBytes: 32 * 1024 * 1024 },
+      ]);
+    });
+
+    it('reports the refusing attachment index when it is not the first attachment', async () => {
+      const result = await runMediaUnderstanding(
+        'Review these',
+        [
+          makeImageAttachment({ id: 'img1' }),
+          makePdfAttachment({ id: 'f2', name: 'contract.pdf' }),
+        ],
+        { enabled: true, provider: makeProvider(), model: 'chat-model' },
+      );
+
+      expect(result.documentInputRefusals).toEqual([
+        { attachmentIndex: 1, refusalReason: 'unsupported_provider' },
+      ]);
     });
   });
 

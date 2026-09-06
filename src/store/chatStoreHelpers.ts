@@ -113,6 +113,8 @@ export function areAttachmentsEqual(
       leftAttachment.workspacePath !== rightAttachment.workspacePath ||
       leftAttachment.durationMs !== rightAttachment.durationMs ||
       leftAttachment.transcript !== rightAttachment.transcript ||
+      leftAttachment.documentInputRefusalReason !== rightAttachment.documentInputRefusalReason ||
+      leftAttachment.documentInputRefusalMaxBytes !== rightAttachment.documentInputRefusalMaxBytes ||
       JSON.stringify(leftAttachment.waveformLevels ?? []) !==
         JSON.stringify(rightAttachment.waveformLevels ?? [])
     ) {

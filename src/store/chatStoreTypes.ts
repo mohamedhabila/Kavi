@@ -11,6 +11,7 @@ import type {
   AgentRunTerminalReason,
 } from '../types/agentRun';
 import type { WorkflowTaskAnchor } from '../types/workflowTaskAnchor';
+import type { Attachment } from '../types/attachment';
 import type {
   AssistantMessageMetadata,
   Message,
@@ -124,6 +125,11 @@ export interface ChatState {
     conversationId: string,
     messageId: string,
     enrichedContent?: string,
+  ) => void;
+  updateMessageAttachments: (
+    conversationId: string,
+    messageId: string,
+    attachments: Attachment[],
   ) => void;
   updateMessageReasoning: (conversationId: string, messageId: string, reasoning: string) => void;
   updateMessageProviderReplay: (

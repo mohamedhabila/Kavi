@@ -24,4 +24,6 @@ export interface MediaUnderstandingOutput {
    * matching the (localized) message text.
    */
   documentInputRefusalReason?: DocumentInputRefusalReason;
+  /** The provider's documented byte ceiling that was exceeded; set only alongside `'exceeds_size_limit'`. */
+  documentInputRefusalMaxBytes?: number;
 }

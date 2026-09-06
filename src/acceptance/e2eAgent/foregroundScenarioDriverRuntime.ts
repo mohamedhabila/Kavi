@@ -640,6 +640,7 @@ export function createForegroundScenarioRuntime(
       updateMessageAssistantMetadata: store.updateMessageAssistantMetadata,
       updateMessageEffect: store.updateMessageEffect,
       updateMessageEnrichedContent: store.updateMessageEnrichedContent,
+      updateMessageAttachments: store.updateMessageAttachments,
       updateMessageProviderReplay: store.updateMessageProviderReplay,
       updateMessageReasoning: store.updateMessageReasoning,
       updateToolCallStatus: store.updateToolCallStatus,

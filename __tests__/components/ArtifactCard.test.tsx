@@ -2,6 +2,8 @@ import { render } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { ArtifactCard } from '../../src/components/artifacts/ArtifactCard';
 import type { Attachment } from '../../src/types/attachment';
+import { formatDocumentSizeLimitMB } from '../../src/services/llm/catalog/documentCapabilities';
+import { i18n } from '../../src/i18n/manager';
 import {
   GRAPHEME_CLUSTER_FIXTURES,
   buildBoundaryStraddlingText,
@@ -20,6 +22,7 @@ jest.mock('../../src/theme/useAppTheme', () => ({
       primary: '#0f0',
       onPrimary: '#fff',
       border: '#444',
+      warning: '#f59e0b',
     },
   }),
   AppPalette: {},
@@ -63,5 +66,81 @@ describe('ArtifactCard — name grapheme safety', () => {
     );
 
     expect(getByText('notes.txt')).toBeTruthy();
+  });
+});
+
+describe('ArtifactCard — document-input refusal notice', () => {
+  beforeEach(async () => {
+    await i18n.setLocale('en');
+  });
+
+  it('renders no notice when the attachment carries no refusal reason', () => {
+    const { queryByTestId } = render(
+      <ArtifactCard artifact={makeArtifact()} isUser={false} width={240} />,
+    );
+
+    expect(queryByTestId('artifact-document-refusal-artifact-1')).toBeNull();
+  });
+
+  it('explains that the current model cannot read documents, without naming any provider in code', () => {
+    const { getByTestId, getByText } = render(
+      <ArtifactCard
+        artifact={makeArtifact({ documentInputRefusalReason: 'unsupported_provider' })}
+        isUser={false}
+        width={240}
+      />,
+    );
+
+    expect(getByTestId('artifact-document-refusal-artifact-1')).toBeTruthy();
+    expect(getByText(i18n.t('artifactCard.documentUnsupportedNotice'))).toBeTruthy();
+  });
+
+  it('includes the formatted byte ceiling for an oversized PDF', () => {
+    const maxBytes = 32 * 1024 * 1024;
+    const { getByTestId, getByText } = render(
+      <ArtifactCard
+        artifact={makeArtifact({
+          size: 40 * 1024 * 1024,
+          documentInputRefusalReason: 'exceeds_size_limit',
+          documentInputRefusalMaxBytes: maxBytes,
+        })}
+        isUser={false}
+        width={240}
+      />,
+    );
+
+    expect(getByTestId('artifact-document-refusal-artifact-1')).toBeTruthy();
+    expect(
+      getByText(
+        i18n.t('artifactCard.documentExceedsSizeLimitNotice', {
+          limit: formatDocumentSizeLimitMB(maxBytes),
+        }),
+      ),
+    ).toBeTruthy();
+  });
+
+  it('renders no notice for a malformed exceeds_size_limit record missing its byte ceiling', () => {
+    const { queryByTestId } = render(
+      <ArtifactCard
+        artifact={makeArtifact({ documentInputRefusalReason: 'exceeds_size_limit' })}
+        isUser={false}
+        width={240}
+      />,
+    );
+
+    expect(queryByTestId('artifact-document-refusal-artifact-1')).toBeNull();
+  });
+
+  it('marks the notice as a polite live region for screen readers', () => {
+    const { getByTestId } = render(
+      <ArtifactCard
+        artifact={makeArtifact({ documentInputRefusalReason: 'unsupported_provider' })}
+        isUser={false}
+        width={240}
+      />,
+    );
+
+    const notice = getByTestId('artifact-document-refusal-artifact-1');
+    expect(notice.props.accessibilityLiveRegion).toBe('polite');
   });
 });

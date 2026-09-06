@@ -2533,6 +2533,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     voiceNote: 'Sprachnotiz',
     playAudioLabel: '{name} abspielen',
     pauseAudioLabel: '{name} pausieren',
+    documentUnsupportedNotice:
+      'Das aktuelle Modell kann keine Dokumente lesen. Wechseln Sie zu einem Anbieter mit Dokumentunterstützung – etwa Anthropic, OpenAI oder Google Gemini –, damit diese Datei gelesen werden kann.',
+    documentExceedsSizeLimitNotice:
+      'Dieses PDF überschreitet das {limit}-Limit des aktuellen Anbieters; dem Modell wurden daher nur Name und Größe übermittelt.',
     type: {
       image: 'Bild',
       audio: 'Audio',

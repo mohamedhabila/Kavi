@@ -2609,6 +2609,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
     voiceNote: 'ملاحظة صوتية',
     playAudioLabel: 'تشغيل {name}',
     pauseAudioLabel: 'إيقاف {name} مؤقتًا',
+    documentUnsupportedNotice:
+      'لا يمكن للنموذج الحالي قراءة المستندات. بدّل إلى مزوّد يدعم قراءة المستندات — مثل Anthropic أو OpenAI أو Google Gemini — لتتم قراءة هذا الملف.',
+    documentExceedsSizeLimitNotice:
+      'يتجاوز حجم ملف PDF هذا الحد المسموح به لدى المزوّد الحالي ({limit})، لذا تمت مشاركة اسمه وحجمه فقط مع النموذج.',
     type: {
       image: 'صورة',
       audio: 'صوت',

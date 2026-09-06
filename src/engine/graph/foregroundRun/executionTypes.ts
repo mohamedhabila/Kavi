@@ -72,6 +72,7 @@ export type ForegroundConversationRunStoreActions = Pick<
   | 'updateAgentRunSummary'
   | 'updateMessage'
   | 'updateMessageAssistantMetadata'
+  | 'updateMessageAttachments'
   | 'updateMessageEffect'
   | 'updateMessageEnrichedContent'
   | 'updateMessageProviderReplay'

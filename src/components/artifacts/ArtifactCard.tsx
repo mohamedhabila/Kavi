@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { I18nManager, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
+  AlertTriangle,
   Archive,
   Code2,
   ExternalLink,
@@ -17,6 +18,7 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { redactSensitiveText } from '../../services/security/toolDetailRedaction';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import type { Attachment } from '../../types/attachment';
+import { formatDocumentSizeLimitMB } from '../../services/llm/catalog/documentCapabilities';
 import { truncateGraphemesTo } from '../../utils/graphemes';
 import { AudioAttachmentCard } from '../chat/AudioAttachmentCard';
 
@@ -104,6 +106,30 @@ function formatArtifactSize(size: unknown): string | null {
   return `${(size / (1024 * 1024)).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
+/**
+ * The compact, localized notice this card shows when `artifact` is a PDF the active
+ * provider/model couldn't read as a provider-native document block. Branches only on the
+ * structured `documentInputRefusalReason` — never on message text — per the closed
+ * `DocumentInputRefusalReason` taxonomy in `services/llm/catalog/documentCapabilities.ts`.
+ */
+function getDocumentRefusalNotice(artifact: Attachment, t: Translate): string | null {
+  if (artifact.documentInputRefusalReason === 'unsupported_provider') {
+    return t('artifactCard.documentUnsupportedNotice');
+  }
+
+  if (
+    artifact.documentInputRefusalReason === 'exceeds_size_limit' &&
+    typeof artifact.documentInputRefusalMaxBytes === 'number' &&
+    Number.isFinite(artifact.documentInputRefusalMaxBytes)
+  ) {
+    return t('artifactCard.documentExceedsSizeLimitNotice', {
+      limit: formatDocumentSizeLimitMB(artifact.documentInputRefusalMaxBytes),
+    });
+  }
+
+  return null;
+}
+
 export const ArtifactCard: React.FC<ArtifactCardProps> = ({
   artifact,
   isUser,
@@ -120,6 +146,7 @@ export const ArtifactCard: React.FC<ArtifactCardProps> = ({
   const kindLabel = getArtifactKindLabel(kind, t);
   const size = formatArtifactSize(artifact.size);
   const provenance = isUser ? t('artifactCard.addedByYou') : t('artifactCard.createdInChat');
+  const documentRefusalNotice = getDocumentRefusalNotice(artifact, t);
   const safeArtifact = useMemo(() => ({ ...artifact, name }), [artifact, name]);
 
   return (
@@ -169,6 +196,23 @@ export const ArtifactCard: React.FC<ArtifactCardProps> = ({
             {name}
           </Text>
           {size ? <Text style={styles.meta}>{size}</Text> : null}
+        </View>
+      ) : null}
+
+      {documentRefusalNotice ? (
+        <View
+          style={styles.documentRefusalNotice}
+          accessibilityLiveRegion="polite"
+          testID={`artifact-document-refusal-${artifact.id}`}
+        >
+          <AlertTriangle
+            size={13}
+            color={colors.warning}
+            style={styles.documentRefusalIcon}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+          <Text style={styles.documentRefusalText}>{documentRefusalNotice}</Text>
         </View>
       ) : null}
 
@@ -322,6 +366,20 @@ const createStyles = (colors: AppPalette, isUser: boolean, width: number) =>
     },
     imageInfo: {
       gap: 2,
+    },
+    documentRefusalNotice: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+    },
+    documentRefusalIcon: {
+      marginTop: 1,
+    },
+    documentRefusalText: {
+      flex: 1,
+      color: colors.warning,
+      fontSize: 11,
+      lineHeight: 15,
     },
     filePreview: {
       minHeight: 72,

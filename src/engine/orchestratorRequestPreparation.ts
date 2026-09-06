@@ -1,5 +1,8 @@
 import { runLinkUnderstanding } from '../services/links/service';
-import { runMediaUnderstanding } from '../services/media/service';
+import {
+  runMediaUnderstanding,
+  type MediaUnderstandingDocumentRefusal,
+} from '../services/media/service';
 import { type LivingMemoryBridgeOutput } from '../services/memory/livingMemoryBridge';
 import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
 import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
@@ -7,6 +10,7 @@ import type { RequestContinuation, RequestFrame } from '../services/agents/reque
 import { getSkillSystemPrompts } from '../services/skills/manager';
 import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
+import type { Attachment } from '../types/attachment';
 import type { Message } from '../types/message';
 import {
   resolveMemoryContextStrategy,
@@ -36,6 +40,7 @@ type LoggerLike = {
 
 type PreparationCallbacks = {
   onUserMessageEnriched?: (messageId: string, enrichedContent: string) => void;
+  onUserMessageAttachmentsUpdated?: (messageId: string, attachments: Attachment[]) => void;
 };
 
 type PreMemoryEnrichmentResult = {
@@ -43,7 +48,50 @@ type PreMemoryEnrichmentResult = {
   enrichedMessageId?: string;
   enrichedContent?: string;
   shouldPersistEnrichment?: boolean;
+  /** Set only when a document-input refusal was structurally recorded on an attachment. */
+  updatedAttachments?: Attachment[];
 };
+
+/**
+ * Applies structured document-input refusals discovered by `runMediaUnderstanding` onto their
+ * source attachments (matched by index into the same array `runMediaUnderstanding` was called
+ * with). Returns the original `attachments` reference unchanged when nothing needs to change,
+ * so callers can cheaply detect "nothing to persist" via reference equality.
+ */
+function applyDocumentInputRefusals(
+  attachments: Attachment[] | undefined,
+  refusals: ReadonlyArray<MediaUnderstandingDocumentRefusal>,
+): Attachment[] | undefined {
+  if (!attachments?.length || refusals.length === 0) {
+    return attachments;
+  }
+
+  const refusalByAttachmentIndex = new Map(
+    refusals.map((refusal) => [refusal.attachmentIndex, refusal]),
+  );
+  let changed = false;
+  const nextAttachments = attachments.map((attachment, index) => {
+    const refusal = refusalByAttachmentIndex.get(index);
+    if (
+      !refusal ||
+      (attachment.documentInputRefusalReason === refusal.refusalReason &&
+        attachment.documentInputRefusalMaxBytes === refusal.maxBytes)
+    ) {
+      return attachment;
+    }
+
+    changed = true;
+    return {
+      ...attachment,
+      documentInputRefusalReason: refusal.refusalReason,
+      ...(refusal.maxBytes !== undefined
+        ? { documentInputRefusalMaxBytes: refusal.maxBytes }
+        : {}),
+    };
+  });
+
+  return changed ? nextAttachments : attachments;
+}
 
 export type OrchestratorMemoryAccessInput = Readonly<{
   activeModel: string;
@@ -100,6 +148,7 @@ async function enrichLatestUserMessageForRequest(params: {
 
   const initialPersistedEnrichedContent = getUserMessagePromptContent(lastUserForEnrichment);
   let persistedEnrichedContent = initialPersistedEnrichedContent;
+  let documentInputRefusals: ReadonlyArray<MediaUnderstandingDocumentRefusal> = [];
 
   if (params.linkUnderstandingEnabled) {
     try {
@@ -125,25 +174,42 @@ async function enrichLatestUserMessageForRequest(params: {
         },
       );
       persistedEnrichedContent = mediaResult.enrichedBody;
+      documentInputRefusals = mediaResult.documentInputRefusals;
     } catch {
       // Best-effort only.
     }
   }
 
   const currentUserContent = lastUserForEnrichment.enrichedContent || lastUserForEnrichment.content;
-  if (persistedEnrichedContent === currentUserContent) {
+  const contentChanged = persistedEnrichedContent !== currentUserContent;
+  const updatedAttachments = applyDocumentInputRefusals(
+    lastUserForEnrichment.attachments,
+    documentInputRefusals,
+  );
+  const attachmentsChanged = updatedAttachments !== lastUserForEnrichment.attachments;
+
+  if (!contentChanged && !attachmentsChanged) {
     return { messages: params.messages };
   }
 
   return {
     messages: params.messages.map((message) =>
       message.id === lastUserForEnrichment.id
-        ? { ...message, enrichedContent: persistedEnrichedContent }
+        ? {
+            ...message,
+            ...(contentChanged ? { enrichedContent: persistedEnrichedContent } : {}),
+            ...(attachmentsChanged ? { attachments: updatedAttachments } : {}),
+          }
         : message,
     ),
     enrichedMessageId: lastUserForEnrichment.id,
-    enrichedContent: persistedEnrichedContent,
-    shouldPersistEnrichment: persistedEnrichedContent !== initialPersistedEnrichedContent,
+    ...(contentChanged
+      ? {
+          enrichedContent: persistedEnrichedContent,
+          shouldPersistEnrichment: persistedEnrichedContent !== initialPersistedEnrichedContent,
+        }
+      : {}),
+    ...(attachmentsChanged ? { updatedAttachments } : {}),
   };
 }
 
@@ -331,6 +397,17 @@ export async function prepareOrchestratorRequestBundle(params: {
         enrichedRequest.enrichedContent,
       );
     }
+  }
+  if (enrichedRequest.enrichedMessageId && enrichedRequest.updatedAttachments) {
+    workingMessages = workingMessages.map((message) =>
+      message.id === enrichedRequest.enrichedMessageId
+        ? { ...message, attachments: enrichedRequest.updatedAttachments }
+        : message,
+    );
+    params.callbacks.onUserMessageAttachmentsUpdated?.(
+      enrichedRequest.enrichedMessageId,
+      enrichedRequest.updatedAttachments,
+    );
   }
   workingMessages = rebuildSessionMemoryRefreshMessages({
     internalUserMessages: memoryRefreshInternalUserMessages,

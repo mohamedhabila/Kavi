@@ -1,4 +1,5 @@
 import type { AgentRunAsyncOperation } from '../../../types/agentRun';
+import type { Attachment } from '../../../types/attachment';
 import type { Message } from '../../../types/message';
 import { createForegroundRunOrchestratorCallbacks } from './orchestratorCallbacks';
 import type {
@@ -85,6 +86,9 @@ export function createForegroundConversationRunRuntime(
       },
       updateMessageEnrichedContent: (messageId, enrichedContent) => {
         shared.store.updateMessageEnrichedContent(conversationId, messageId, enrichedContent);
+      },
+      updateMessageAttachments: (messageId, attachments) => {
+        shared.store.updateMessageAttachments(conversationId, messageId, attachments as Attachment[]);
       },
     },
     controllers: {

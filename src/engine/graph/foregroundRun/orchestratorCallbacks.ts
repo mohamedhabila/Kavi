@@ -3,6 +3,7 @@ import type {
   MessageProviderReplay,
   ToolCall,
 } from '../../../types/message';
+import type { Attachment } from '../../../types/attachment';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import { recordConversationUsageEvent } from '../../../services/usage/conversationUsage';
 import { editWorkingBlock } from '../../../services/memory/workingBlocks';
@@ -66,6 +67,7 @@ type ForegroundOrchestratorCallbacksActions = {
   applyConversationCompaction: (messages: unknown[]) => void;
   setLatestPendingAsyncOperations: (operations: unknown[]) => void;
   updateMessageEnrichedContent: (messageId: string, enrichedContent: string) => void;
+  updateMessageAttachments: (messageId: string, attachments: Attachment[]) => void;
 };
 
 export function createForegroundRunOrchestratorCallbacks(params: {
@@ -143,6 +145,12 @@ export function createForegroundRunOrchestratorCallbacks(params: {
         return;
       }
       params.actions.updateMessageEnrichedContent(messageId, enrichedContent);
+    },
+    onUserMessageAttachmentsUpdated: (messageId, attachments) => {
+      if (!params.guardRunCallback()) {
+        return;
+      }
+      params.actions.updateMessageAttachments(messageId, attachments);
     },
     onToolCallQueued: (toolCall) => {
       if (!params.guardRunCallback()) {

@@ -2427,6 +2427,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     voiceNote: 'ボイスメモ',
     playAudioLabel: '{name} を再生',
     pauseAudioLabel: '{name} を一時停止',
+    documentUnsupportedNotice:
+      '現在のモデルはドキュメントを読み取れません。このファイルを読み取るには、Anthropic、OpenAI、Google Gemini などドキュメント対応のプロバイダーに切り替えてください。',
+    documentExceedsSizeLimitNotice:
+      'この PDF は現在のプロバイダーの上限（{limit}）を超えているため、ファイル名とサイズのみがモデルに共有されました。',
     type: {
       image: '画像',
       audio: '音声',

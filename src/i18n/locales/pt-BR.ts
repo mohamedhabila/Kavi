@@ -2545,6 +2545,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     voiceNote: 'Nota de voz',
     playAudioLabel: 'Reproduzir {name}',
     pauseAudioLabel: 'Pausar {name}',
+    documentUnsupportedNotice:
+      'O modelo atual não consegue ler documentos. Mude para um provedor com suporte a documentos — como Anthropic, OpenAI ou Google Gemini — para que este arquivo seja lido.',
+    documentExceedsSizeLimitNotice:
+      'Este PDF excede o limite de {limit} do provedor atual, então apenas o nome e o tamanho foram compartilhados com o modelo.',
     type: {
       image: 'Imagem',
       audio: 'Áudio',
