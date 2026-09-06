@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 904 |
+| MIT | 905 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -314,12 +314,12 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @react-native/js-polyfills | 0.83.10 | transitive | MIT |
 | @react-native/normalize-colors | 0.83.10 | transitive | MIT |
 | @react-native/virtualized-lists | 0.83.10 | transitive | MIT |
-| @react-navigation/core | 7.16.1 | transitive | MIT |
-| @react-navigation/drawer | 7.9.4 | runtime | MIT |
-| @react-navigation/elements | 2.9.10 | transitive | MIT |
-| @react-navigation/native | 7.1.33 | runtime | MIT |
-| @react-navigation/native-stack | 7.14.5 | runtime | MIT |
-| @react-navigation/routers | 7.5.3 | transitive | MIT |
+| @react-navigation/core | 7.21.13 | transitive | MIT |
+| @react-navigation/drawer | 7.13.10 | runtime | MIT |
+| @react-navigation/elements | 2.9.40 | transitive | MIT |
+| @react-navigation/native | 7.3.18 | runtime | MIT |
+| @react-navigation/native-stack | 7.18.10 | runtime | MIT |
+| @react-navigation/routers | 7.6.4 | transitive | MIT |
 | @sinclair/typebox | 0.27.10 | transitive | MIT |
 | @sinonjs/commons | 3.0.1 | transitive | BSD-3-Clause |
 | @sinonjs/fake-timers | 10.3.0 | transitive | BSD-3-Clause |
@@ -361,7 +361,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @typescript-eslint/utils | 8.58.2 | transitive | MIT |
 | @typescript-eslint/visitor-keys | 8.58.2 | transitive | MIT |
 | @ungap/structured-clone | 1.3.0 | transitive | ISC |
-| @xmldom/xmldom | 0.8.13 | transitive | MIT |
+| @xmldom/xmldom | 0.8.15 | transitive | MIT |
 | @xterm/addon-fit | 0.10.0 | development | MIT |
 | @xterm/addon-search | 0.15.0 | development | MIT |
 | @xterm/addon-web-links | 0.11.0 | development | MIT |
@@ -426,7 +426,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | bplist-creator | 0.1.0 | transitive | MIT |
 | bplist-parser | 0.3.1 | transitive | MIT |
 | brace-expansion | 1.1.18 | transitive | MIT |
-| brace-expansion | 5.0.8 | transitive | MIT |
+| brace-expansion | 5.0.9 | transitive | MIT |
 | braces | 3.0.3 | transitive | MIT |
 | brotli-js | 1.0.2 | runtime | MIT |
 | browserslist | 4.28.8 | transitive | MIT |
@@ -608,12 +608,12 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | fast-deep-equal | 3.1.3 | transitive | MIT |
 | fast-json-stable-stringify | 2.1.0 | transitive | MIT |
 | fast-levenshtein | 2.0.6 | transitive | MIT |
-| fast-uri | 3.1.4 | transitive | BSD-3-Clause |
+| fast-uri | 3.1.7 | transitive | BSD-3-Clause |
 | fb-dotslash | 0.5.8 | transitive | (MIT OR Apache-2.0) |
 | fb-watchman | 2.0.2 | transitive | Apache-2.0 |
 | fdir | 6.5.0 | transitive | MIT |
 | fetch-nodeshim | 0.4.10 | transitive | MIT |
-| fflate | 0.8.2 | runtime | MIT |
+| fflate | 0.8.3 | runtime | MIT |
 | file-entry-cache | 8.0.0 | transitive | MIT |
 | file-uri-to-path | 1.0.0 | transitive | MIT |
 | fill-range | 7.1.1 | transitive | MIT |
@@ -665,7 +665,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | hermes-parser | 0.32.0 | transitive | MIT |
 | hermes-parser | 0.35.0 | transitive | MIT |
 | hoist-non-react-statics | 3.3.2 | transitive | BSD-3-Clause |
-| hono | 4.12.31 | transitive | MIT |
+| hono | 4.13.7 | transitive | MIT |
 | hosted-git-info | 7.0.2 | transitive | ISC |
 | html-encoding-sniffer | 3.0.0 | transitive | MIT |
 | html-entities | 2.6.0 | transitive | MIT |
@@ -689,7 +689,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | inherits | 2.0.4 | transitive | ISC |
 | ini | 1.3.8 | transitive | ISC |
 | invariant | 2.2.4 | transitive | MIT |
-| ip-address | 10.2.0 | transitive | MIT |
+| ip-address | 10.7.0 | transitive | MIT |
 | ipaddr.js | 1.9.1 | transitive | MIT |
 | is-arrayish | 0.2.1 | transitive | MIT |
 | is-arrayish | 0.3.4 | transitive | MIT |
@@ -746,7 +746,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | jimp-compact | 0.16.1 | transitive | MIT |
 | jose | 6.2.1 | transitive | MIT |
 | js-tokens | 4.0.0 | transitive | MIT |
-| js-yaml | 3.15.0 | transitive | MIT |
+| js-yaml | 3.15.2 | transitive | MIT |
 | js-yaml | 4.3.2 | transitive | MIT |
 | jsc-safe-url | 0.2.4 | transitive | 0BSD |
 | jsdom | 20.0.3 | transitive | MIT |
@@ -921,7 +921,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | pump | 3.0.4 | transitive | MIT |
 | punycode | 2.3.1 | transitive | MIT |
 | pure-rand | 6.1.0 | transitive | MIT |
-| qs | 6.15.3 | transitive | BSD-3-Clause |
+| qs | 6.16.0 | transitive | BSD-3-Clause |
 | query-string | 7.1.3 | transitive | MIT |
 | querystringify | 2.2.0 | transitive | MIT |
 | queue | 6.0.2 | transitive | MIT |
@@ -935,7 +935,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | react-is | 18.3.1 | transitive | MIT |
 | react-is | 19.2.8 | transitive | MIT |
 | react-native | 0.83.10 | runtime | MIT |
-| react-native-drawer-layout | 4.2.2 | transitive | MIT |
+| react-native-drawer-layout | 4.2.10 | transitive | MIT |
 | react-native-gesture-handler | 2.31.2 | runtime | MIT |
 | react-native-get-random-values | 1.11.0 | runtime | MIT |
 | react-native-is-edge-to-edge | 1.2.1 | transitive | MIT |
@@ -1019,6 +1019,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | stacktrace-gps | 3.1.2 | transitive | MIT |
 | stacktrace-js | 2.0.2 | transitive | MIT |
 | stacktrace-parser | 0.1.11 | transitive | MIT |
+| standard-navigation | 0.0.8 | transitive | MIT |
 | statuses | 1.5.0 | transitive | MIT |
 | statuses | 2.0.2 | transitive | MIT |
 | stream-buffers | 2.2.0 | transitive | Unlicense |
@@ -1086,7 +1087,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | util-deprecate | 1.0.2 | transitive | MIT |
 | utils-merge | 1.0.1 | transitive | MIT |
 | utrie | 1.0.2 | transitive | MIT |
-| uuid | 7.0.3 | transitive | MIT |
+| uuid | 11.1.1 | transitive | MIT |
 | v8-to-istanbul | 9.3.0 | transitive | ISC |
 | validate-npm-package-name | 5.0.1 | transitive | ISC |
 | vary | 1.1.2 | transitive | MIT |

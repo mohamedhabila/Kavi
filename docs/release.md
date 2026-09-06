@@ -83,16 +83,20 @@ tag candidate and run the release gate from a clean checkout.
   exception before any SDK tuple change, run Expo's unfiltered check, and add a
   new exception only when the upstream incompatibility and both native build
   results are documented.
-- The SDK 55 build graph currently retains the moderate advisory
-  [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq)
-  through Expo's build-time
-  `@expo/config-plugins -> xcode@3.0.1 -> uuid@7.0.3` chain. npm expands that
-  one chain into multiple findings. Kavi does not execute this package in the
-  app runtime, and the `xcode` package calls `uuid.v4()` without the
-  caller-provided buffer implicated by the advisory's affected APIs. This
-  disposition must be reviewed whenever Expo, `xcode`, or `uuid` changes; it
-  stops being acceptable if the call sites or reachability change, severity
-  increases, or an SDK-compatible upstream fix becomes available.
+- Resolved 2026-09-06: the moderate advisory
+  [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq),
+  reached through Expo's build-time
+  `@expo/config-plugins -> xcode@3.0.1 -> uuid@7.0.3` chain (npm expanded that
+  one chain into eight findings across `@expo/cli`, `@expo/config`,
+  `@expo/config-plugins`, `@expo/local-build-cache-provider`,
+  `@expo/metro-config`, `@expo/prebuild-config`, `expo`, and `expo-sharing`),
+  is now fixed with a scoped `package.json` `overrides` entry pinning `uuid`
+  to `^11.1.1` only within `xcode`'s dependency subtree. `xcode` is the sole
+  consumer of `uuid` in the tree, its only usage (`uuid.v4()` in
+  `lib/pbxProject.js`) is a named-export call stable across uuid's CJS builds
+  from v8 through v14, and `npx expo install --check` still reports
+  dependencies up to date after the override. No stale accepted-risk note is
+  needed for this advisory going forward.
 - The lockfile selects patched `brace-expansion@1.1.18` for legacy
   `glob@7 -> minimatch@3` build-tool callers and patched modern releases for
   newer callers, resolving
@@ -111,6 +115,55 @@ tag candidate and run the release gate from a clean checkout.
   must also be compatible with Xcode's selected platform SDK; a mismatched or
   missing runtime can reject the destination before source compilation begins.
 - Review [THIRD_PARTY_PROVENANCE.md](../THIRD_PARTY_PROVENANCE.md) when dependency patches, generated assets, or attribution-sensitive files change.
+
+### Dependency Advisories (accepted risk, reviewed 2026-09-06)
+
+`npm audit --omit=dev --audit-level=high` still reports 11 advisories (7
+moderate, 4 high) after `npm audit fix` and the `uuid` override above. No
+further semver-compatible fix exists upstream for either cluster below; both
+are accepted as risk rather than blocking the release gate. Re-review this
+list whenever `@react-navigation/*`, `metro`, `image-size`, or their
+transitive advisories change.
+
+- **`@react-navigation/core`, `@react-navigation/drawer`,
+  `@react-navigation/elements`, `@react-navigation/native`,
+  `@react-navigation/native-stack`, `query-string`, `decode-uri-component`**
+  (moderate) — [GHSA-vcc3-ghjq-m6fr](https://github.com/advisories/GHSA-vcc3-ghjq-m6fr)
+  (`decode-uri-component` ReDoS via malformed percent-encoded input), reached
+  through `@react-navigation/core -> query-string@7.1.3 ->
+  decode-uri-component@0.2.2`. `npm audit` reports no fix: the newest
+  `@react-navigation/core` still pins `query-string@^7.1.3`, and
+  `decode-uri-component@0.5.0` (the only patched release) dropped its
+  CommonJS build (`"type": "module"`, no `main`/`require` export), which would
+  break `query-string`'s `require('decode-uri-component')` call at runtime.
+  Not reachable in Kavi: `decode-uri-component` is only exercised by
+  `@react-navigation/core`'s `getStateFromPath`/`getPathFromState`, which run
+  only when `NavigationContainer` is given a `linking` config.
+  `src/navigation/AppNavigator.tsx` renders `NavigationContainer` with no
+  `linking` prop, and no code in `src/` wires an OS deep link
+  (`Linking.addEventListener('url', ...)`) into navigation state, so this
+  parsing path never runs against external input.
+- **`image-size`, `metro`, `metro-config`, `metro-transform-worker`** (high) —
+  [GHSA-w3rx-r6r6-pgpr](https://github.com/advisories/GHSA-w3rx-r6r6-pgpr) and
+  [GHSA-5p2g-fcmc-qvqq](https://github.com/advisories/GHSA-5p2g-fcmc-qvqq)
+  (`image-size` ICNS/JXL/HEIF parser infinite loops), reached through
+  `react-native -> @react-native/community-cli-plugin -> metro -> image-size`.
+  The advisory range covers every published `image-size` version through the
+  current latest (`<=2.0.2`); there is no patched release to move to or
+  override to. `metro`, `metro-config`, and `metro-transform-worker` are
+  flagged solely because they depend on vulnerable `image-size`, not for a
+  defect of their own. This is already mitigated in-tree:
+  `patches/image-size+1.2.1.patch`, applied automatically by `patch-package`
+  during `postinstall`, patches the compiled ICNS, JXL, and HEIF parsers to
+  guarantee forward progress on a malformed/crafted box or entry instead of
+  looping forever, and `__tests__/scripts/imageSizeParserHardening.test.ts`
+  regression-guards that the patch stays applied. `npm audit` cannot see
+  local patches, so it keeps reporting these four findings against the
+  unpatched upstream version until a real upstream release fixes the parsers;
+  the residual risk is otherwise low regardless, since all four packages are
+  Metro bundler build-time tooling that runs on the developer/CI machine and
+  does not ship in the compiled app bundle. Keep the patch and its regression
+  test in sync whenever `image-size` or `metro` changes version.
 - Confirm Android signing material is configured only in maintainer-local
   storage. Use local `android/keystore.properties` or the
   `KAVI_UPLOAD_STORE_FILE`, `KAVI_UPLOAD_STORE_PASSWORD`,
