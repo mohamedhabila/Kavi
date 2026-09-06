@@ -134,6 +134,7 @@ const DEFAULT_CONFIG = {
     'docs/feature-matrix.md',
     'docs/memory-hybrid-retrieval.md',
     'docs/privacy-and-permissions.md',
+    'docs/user-guide.md',
     'docs/privacy-policy.md',
     'docs/release.md',
     'docs/setup/development.md',
