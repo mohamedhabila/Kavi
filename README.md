@@ -71,7 +71,7 @@ claims; they are reproducible checks for this mobile assistant codebase.
 | Signal                    | Current gate                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Contributor CI            | `npm run verify` runs public checks, app metadata, i18n, maintainability, lint, typecheck, and deterministic Jest.               |
-| Local deterministic tests | Latest verification passed 6,100+ Jest tests across 700+ suites.                                                                 |
+| Local deterministic tests | Latest verification passed 12,443 Jest tests across 1,422 suites.                                                                |
 | Coverage floor            | `npm run test:coverage` enforces statements >=83.8%, branches >=70.7%, functions >=87.6%, lines >=84.3%.                         |
 | Strict keyless metrics    | `npm run eval:memory` passed 4/4 memory metric tests; `npm run eval:agent` passed 13/13 agent metric tests.                      |
 | Opt-in E2E shape          | 60 selected-provider scenarios plus 2 delegation scenarios, mapped across 24 benchmark families and 11 assessment dimensions.    |
@@ -234,6 +234,7 @@ You can fully disable long-term memory in Settings. When disabled:
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
+- [docs/user-guide.md](docs/user-guide.md) — for people using the app, not developers
 - [docs/setup/development.md](docs/setup/development.md)
 - [docs/testing.md](docs/testing.md)
 - [docs/feature-matrix.md](docs/feature-matrix.md)

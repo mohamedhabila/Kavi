@@ -1,0 +1,15 @@
+# Code Owners
+#
+# This file defines who is automatically requested for review on pull
+# requests. GitHub matches patterns top-to-bottom and the LAST matching
+# pattern for a given path wins, so keep the whole-tree default first and add
+# more specific area owners below it as the maintainer team grows.
+#
+# To add an area owner, append a more specific pattern after the default,
+# for example:
+#   /src/services/memory/  @some-other-maintainer
+#   /docs/                 @docs-maintainer
+#
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @mohamedhabila

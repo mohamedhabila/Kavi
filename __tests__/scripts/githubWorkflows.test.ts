@@ -69,6 +69,17 @@ describe('GitHub workflows', () => {
       'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e',
       'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     ]);
+    expect(workflowUses(readWorkflow('codeql.yml'))).toEqual([
+      'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0',
+      'github/codeql-action/init@6f5948dfacef28e207b48d0905cf90c03365536d',
+      'github/codeql-action/analyze@6f5948dfacef28e207b48d0905cf90c03365536d',
+    ]);
+    expect(workflowUses(readWorkflow('scorecard.yml'))).toEqual([
+      'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0',
+      'ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc',
+      'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+      'github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d',
+    ]);
 
     const actionRefs = readWorkflowFiles().flatMap((fileName) =>
       workflowUses(readWorkflow(fileName)),
@@ -86,6 +97,28 @@ describe('GitHub workflows', () => {
         expect(checkoutBlock).toContain('persist-credentials: false');
       }
     }
+  });
+
+  it('runs CodeQL analysis on push, pull request, and a weekly schedule with minimal job permissions', () => {
+    const codeqlWorkflow = readWorkflow('codeql.yml');
+
+    expect(codeqlWorkflow).toMatch(/on:\n {2}push:\n {4}branches:\n {6}- main/);
+    expect(codeqlWorkflow).toMatch(/pull_request:\n {4}branches:\n {6}- main/);
+    expect(codeqlWorkflow).toContain('schedule:');
+    expect(codeqlWorkflow).toMatch(/cron: '\d+ \d+ \* \* \d'/);
+    expect(codeqlWorkflow).toContain('languages: javascript-typescript');
+    expect(codeqlWorkflow).toMatch(/permissions:\n {6}contents: read\n {6}security-events: write/);
+  });
+
+  it('runs Scorecard analysis on the default branch and a weekly schedule, publishing to code scanning', () => {
+    const scorecardWorkflow = readWorkflow('scorecard.yml');
+
+    expect(scorecardWorkflow).toMatch(/on:\n {2}push:\n {4}branches:\n {6}- main/);
+    expect(scorecardWorkflow).toContain('schedule:');
+    expect(scorecardWorkflow).toMatch(/cron: '\d+ \d+ \* \* \d'/);
+    expect(scorecardWorkflow).toContain('publish_results: true');
+    expect(scorecardWorkflow).toContain('uses: github/codeql-action/upload-sarif@');
+    expect(scorecardWorkflow).not.toContain('pull_request:');
   });
 
   it('avoids untrusted pull request execution patterns', () => {

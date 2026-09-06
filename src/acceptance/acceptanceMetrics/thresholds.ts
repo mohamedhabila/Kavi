@@ -1,5 +1,9 @@
 // ---------------------------------------------------------------------------
-// Kavi — Acceptance metric thresholds (from mobile-agent-implementation-plan)
+// Kavi — Acceptance metric thresholds
+// ---------------------------------------------------------------------------
+// Pass-rate bars for the `eval:memory` and `eval:agent` structural gates that
+// run as part of `npm run verify:strict` (Tier 2). See the "Tier 2
+// (verify:strict)" section of docs/testing.md for what each gate covers.
 // ---------------------------------------------------------------------------
 
 export const MEMORY_RECALL_MIN_PASS_RATE = 0.9;

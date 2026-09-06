@@ -54,7 +54,7 @@ function requireE2eAgentEvalEnv(label, env = process.env) {
   if (env.RUN_E2E_AGENT_EVAL !== '1') {
     return fail(
       label,
-      'Set RUN_E2E_AGENT_EVAL=1 in .env.local or your shell. See docs/agent-quality-roadmap.md',
+      'Set RUN_E2E_AGENT_EVAL=1 in .env.local or your shell. See the Tier 3 (verify:strict:e2e) section of docs/testing.md',
     );
   }
 
