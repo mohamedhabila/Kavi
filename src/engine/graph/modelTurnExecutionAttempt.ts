@@ -3,7 +3,10 @@ import {
   selectByteEquivalentSystemPromptSections,
   splitCacheableSystemPromptSections,
 } from '../../services/llm/core/systemPromptSections';
-import { resolveModelHostedFamily } from '../../services/llm/catalog/providerFamilies';
+import {
+  resolveModelHostedFamily,
+  resolveProviderFamily,
+} from '../../services/llm/catalog/providerFamilies';
 import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { resolveProviderTransport } from '../../services/llm/catalog/providerProtocols';
 import type { ToolChoiceMode } from '../../services/llm/support/contracts';
@@ -15,6 +18,7 @@ import type {
 } from '../../types/message';
 import { getThinkingParams } from '../thinking';
 import { canContinueAnthropicThinking } from '../orchestratorMessageFormatting';
+import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCounter';
 import { estimateWorkingMessageTokens } from '../orchestratorCompaction';
 import {
   getProviderOverflowRetryMaxTokens,
@@ -22,10 +26,8 @@ import {
 } from '../orchestratorProviderRuntime';
 import { isToolLoopInProgress } from '../orchestratorToolTranscript';
 import { hasProviderToolTurnReplayCoverage } from '../../services/llm/support/toolTurnReplayCoverage';
-import {
-  executeAgentControlGraphModelTurnStreaming,
-  executeAgentControlGraphModelTurnViaSendMessage,
-} from './modelTurnExecutionStreaming';
+import { executeAgentControlGraphModelTurnStreaming } from './modelTurnExecutionStreaming';
+import { executeAgentControlGraphModelTurnViaSendMessage } from './modelTurnExecutionSendMessage';
 import {
   buildGraphObservabilityRecordedEvent,
   buildToolSurfaceTokenAuditDetail,
@@ -88,6 +90,17 @@ export async function executeAgentControlGraphModelTurnAttempt(
     resolveModelHostedFamily(params.requestModel) === 'gemini' &&
     /gemini[- ]?3/i.test(params.requestModel);
   const geminiNativeTransport = resolveProviderTransport(params.activeProvider) === 'gemini';
+  // The active provider's own configured family (falling back to host/model-name detection)
+  // beats a model-name-only guess, since a provider can front a model under a different name
+  // (e.g. an OpenRouter-hosted Claude model). This is the calibration bucket key threaded
+  // through the whole request below, from the pre-flight estimate to the recorded observation.
+  const requestFamily = resolveProviderFamily(params.activeProvider);
+  // Captured now, immediately before the pre-flight budget estimate is computed below, so the
+  // observation recorded once this request completes can recover the exact uncalibrated base
+  // that estimate was built from — see `recordObservedTokenRatio`'s doc comment in
+  // `tokenCounter.ts`. Reading it later (e.g. at flush time) would risk pairing this request's
+  // estimate with a factor other observations already nudged in the meantime.
+  const appliedCalibrationFactor = getObservedTokenCalibrationFactor(requestFamily);
   const stagedCompactionEvents: OrchestratorCompactionEvent[] = [];
   const stageCompaction = params.preparedTurn.memoryReadFence
     ? (event: OrchestratorCompactionEvent) => stagedCompactionEvents.push(event)
@@ -111,6 +124,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,
     turnPinnedCount: params.toolSurfacePinTelemetry?.turnPinnedCount ?? 0,
+    requestFamily,
     requestMaxTokens: params.requestMaxTokens,
     requestModel: params.requestModel,
     toolsForIteration: params.preparedTurn.toolsForIteration,
@@ -131,6 +145,13 @@ export async function executeAgentControlGraphModelTurnAttempt(
   }
   const contextWindow = preparedRequestBudget.contextWindow;
   const workingMessages = preparedRequestBudget.workingMessages;
+  // Only an image attachment gets embedded as real binary content in the outgoing request
+  // (file/audio attachments are summarized to text — see orchestratorMessageFormatting.ts);
+  // a request carrying one skips token calibration since the char-based estimator never
+  // prices image bytes. Checked structurally against this exact request's own messages.
+  const requestHasImageAttachment = workingMessages.some((message) =>
+    (message.attachments ?? []).some((attachment) => attachment.type === 'image'),
+  );
 
   const toolLoopInProgress = isToolLoopInProgress(workingMessages);
   const budgetResult = preparedRequestBudget.budgetResult;
@@ -241,14 +262,18 @@ export async function executeAgentControlGraphModelTurnAttempt(
         const reconcileResult = await executeAgentControlGraphModelTurnViaSendMessage({
           applyGraphEvents: params.applyGraphEvents,
           budgetTools: budgetResult.tools || [],
+          appliedCalibrationFactor,
+          calibrationFamily: requestFamily,
           callbacks: params.callbacks,
           geminiNative: true,
           isForegroundRun: params.isForegroundRun,
           iteration: params.iteration,
           llm: params.llm,
           memoryPolicyBinding,
+          preflightEstimatedInputTokens: budgetResult.result.totalTokens,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
+          requestHasImageAttachment,
           requestMessages,
           requestModel: params.requestModel,
           signal: params.signal,
@@ -270,13 +295,17 @@ export async function executeAgentControlGraphModelTurnAttempt(
           allowQueuedToolCalls,
           applyGraphEvents: params.applyGraphEvents,
           budgetTools: budgetResult.tools || [],
+          appliedCalibrationFactor,
+          calibrationFamily: requestFamily,
           callbacks: params.callbacks,
           isForegroundRun: params.isForegroundRun,
           iteration: params.iteration,
           llm: params.llm,
           memoryPolicyBinding,
+          preflightEstimatedInputTokens: budgetResult.result.totalTokens,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
+          requestHasImageAttachment,
           requestMessages,
           requestModel: params.requestModel,
           signal: params.signal,
@@ -370,9 +399,10 @@ export async function executeAgentControlGraphModelTurnAttempt(
         onCompaction: params.preparedTurn.memoryReadFence
           ? (event) => overflowCompactionEvents.push(event)
           : params.onCompaction,
-        currentTokenCount: estimateWorkingMessageTokens(workingMessages),
+        currentTokenCount: estimateWorkingMessageTokens(workingMessages, requestFamily),
         forceTier: 'aggressive',
         failureLabel: 'Provider overflow recovery compaction failed',
+        requestFamily,
         warn: params.warn,
       });
       if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {

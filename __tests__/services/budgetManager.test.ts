@@ -12,7 +12,11 @@ import {
   MAX_SYSTEM_PROMPT_TOKENS,
   MAX_TOOL_DEFINITION_TOKENS,
 } from '../../src/services/context/budgetManager';
-import { estimateTokens } from '../../src/services/context/tokenCounter';
+import {
+  estimateTokens,
+  recordObservedTokenRatio,
+  resetTokenCalibrationForTests,
+} from '../../src/services/context/tokenCounter';
 import { ToolDefinition } from '../../src/types/tool';
 
 function makeTool(name: string, description = 'Test tool.'): ToolDefinition {
@@ -101,6 +105,61 @@ describe('inspectContextBudget', () => {
     );
 
     expect(withLargeToolCall.messagesTokens).toBeGreaterThan(plain.messagesTokens + 3_000);
+  });
+
+  describe('with a provider family threaded through', () => {
+    afterEach(() => {
+      resetTokenCalibrationForTests();
+    });
+
+    it('reflects the learned calibration factor in totalTokens for the same input', () => {
+      const family = 'budget-calibration-test-family';
+      const systemPrompt = 'System prompt used for calibration threading verification.';
+      const tools: ToolDefinition[] = [makeTool('search', 'Searches the web for information.')];
+      const messages = [
+        makeMessage('user', 'Please calibrate this budget computation for the test.'),
+      ];
+
+      const before = inspectContextBudget('gpt-5.4', systemPrompt, tools, messages, 8000, {
+        family,
+      });
+
+      // Fold in observations reporting far more actual tokens than estimated, so the family's
+      // learned factor climbs well above the uncalibrated default of 1.
+      for (let i = 0; i < 30; i += 1) {
+        recordObservedTokenRatio(family, before.totalTokens, before.totalTokens * 2, 1);
+      }
+
+      const after = inspectContextBudget('gpt-5.4', systemPrompt, tools, messages, 8000, {
+        family,
+      });
+
+      expect(after.totalTokens).toBeGreaterThan(before.totalTokens);
+      expect(after.systemPromptTokens).toBeGreaterThan(before.systemPromptTokens);
+      expect(after.toolsTokens).toBeGreaterThan(before.toolsTokens);
+      expect(after.messagesTokens).toBeGreaterThan(before.messagesTokens);
+    });
+
+    it('leaves an unrelated family unaffected', () => {
+      const calibratedFamily = 'budget-calibration-isolated-family';
+      const otherFamily = 'budget-calibration-untouched-family';
+      const systemPrompt = 'Isolation check system prompt.';
+      const messages = [makeMessage('user', 'Isolation check message content.')];
+
+      const baseline = inspectContextBudget('gpt-5.4', systemPrompt, [], messages, 8000, {
+        family: otherFamily,
+      });
+
+      for (let i = 0; i < 30; i += 1) {
+        recordObservedTokenRatio(calibratedFamily, baseline.totalTokens, baseline.totalTokens * 2, 1);
+      }
+
+      const afterOtherFamily = inspectContextBudget('gpt-5.4', systemPrompt, [], messages, 8000, {
+        family: otherFamily,
+      });
+
+      expect(afterOtherFamily.totalTokens).toBe(baseline.totalTokens);
+    });
   });
 });
 
@@ -506,5 +565,38 @@ describe('enforceContextBudget', () => {
         protectedSystemPromptSection: protectedSection,
       }),
     ).toThrow('protected_system_prompt_section_exceeds_budget');
+  });
+
+  describe('with a provider family threaded through', () => {
+    afterEach(() => {
+      resetTokenCalibrationForTests();
+    });
+
+    it('reports a higher systemPromptTokens/toolsTokens/messagesTokens result once the family is calibrated', () => {
+      const family = 'enforce-budget-calibration-family';
+      const prompt = 'You are a helpful assistant with a calibrated token estimator.';
+      const tools = [makeTool('read_file', 'Read a file from the workspace.')];
+      const messages = [
+        makeMessage('system', prompt),
+        makeMessage('user', 'Please account for the calibration factor in this budget.'),
+      ];
+
+      const before = enforceContextBudget('gpt-5.4', prompt, tools, messages, 8192, { family });
+
+      for (let i = 0; i < 30; i += 1) {
+        recordObservedTokenRatio(
+          family,
+          before.result.totalTokens,
+          before.result.totalTokens * 2,
+          1,
+        );
+      }
+
+      const after = enforceContextBudget('gpt-5.4', prompt, tools, messages, 8192, { family });
+
+      expect(after.result.systemPromptTokens).toBeGreaterThan(before.result.systemPromptTokens);
+      expect(after.result.toolsTokens).toBeGreaterThan(before.result.toolsTokens);
+      expect(after.result.totalTokens).toBeGreaterThan(before.result.totalTokens);
+    });
   });
 });

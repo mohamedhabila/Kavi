@@ -105,6 +105,8 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   compactionEngine: AgentTurnCompactionEngine;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  requestFamily?: string;
   warn: (message: string, error: unknown) => void;
   publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
   onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
@@ -637,6 +639,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     compactionEngine: params.compactionEngine,
     livingMemory: params.livingMemory,
     onCompaction: params.onCompaction,
+    requestFamily: params.requestFamily,
     warn: params.warn,
     onStateChange: params.onStateChange,
     applyGraphEvents: params.applyGraphEvents,

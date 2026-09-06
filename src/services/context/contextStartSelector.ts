@@ -8,6 +8,12 @@ import {
 export interface ContextStartSelection {
   startIndex: number;
   reason: 'full_history' | 'single_user_turn' | 'topic_shift_boundary' | 'carryover_limit';
+  /**
+   * Legacy field, kept for API compatibility with existing callers. No longer
+   * derived from content (see module doc): 1 when no structural boundary was
+   * applied, 0 when the start index was cut back by an idle-gap boundary or
+   * the carryover cap.
+   */
   similarityScore: number;
   idleGapMs: number;
   droppedMessageCount: number;
@@ -20,107 +26,31 @@ export interface ContextStartSelectionOptions {
   policyOverride?: Partial<PersonaContextPolicy>;
 }
 
-type WordSegment = {
-  segment: string;
-  isWordLike?: boolean;
-};
-
-type WordSegmenter = {
-  segment(input: string): Iterable<WordSegment>;
-};
-
-type WordSegmenterConstructor = new (
-  locales?: string | string[],
-  options?: { granularity?: 'word' },
-) => WordSegmenter;
-
-const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
-const WORD_LIKE_CODE_POINT_PATTERN = /[\p{L}\p{N}]/u;
-const CONTINUOUS_WORD_SCRIPT_PATTERN =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
-
-let cachedWordSegmenter: WordSegmenter | null | undefined;
-
-function getMessageText(message: Message): string {
-  const text = message.enrichedContent?.trim() || message.content?.trim() || '';
-  return text;
-}
-
-function getWordSegmenter(): WordSegmenter | null {
-  if (cachedWordSegmenter !== undefined) return cachedWordSegmenter;
-  const segmenterCtor = (
-    Intl as typeof Intl & {
-      Segmenter?: WordSegmenterConstructor;
-    }
-  ).Segmenter;
-  cachedWordSegmenter =
-    typeof segmenterCtor === 'function'
-      ? new segmenterCtor(undefined, { granularity: 'word' })
-      : null;
-  return cachedWordSegmenter;
-}
-
-function normalizeLexicalText(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase();
-}
-
-function hasWordLikeCodePoint(value: string): boolean {
-  return WORD_LIKE_CODE_POINT_PATTERN.test(value);
-}
-
-function addSegmentUnits(units: Set<string>, rawSegment: string): void {
-  const segment = normalizeLexicalText(rawSegment).trim();
-  if (!segment || !hasWordLikeCodePoint(segment)) return;
-  units.add(segment);
-
-  if (!CONTINUOUS_WORD_SCRIPT_PATTERN.test(segment)) return;
-  const codePoints = Array.from(segment);
-  for (const width of [2, 3]) {
-    if (codePoints.length < width) continue;
-    for (let index = 0; index <= codePoints.length - width; index += 1) {
-      units.add(`${width}:${codePoints.slice(index, index + width).join('')}`);
-    }
-  }
-}
-
-function addUnicodeSequenceUnits(units: Set<string>, value: string): void {
-  WORD_LIKE_SEQUENCE_PATTERN.lastIndex = 0;
-  for (const match of value.matchAll(WORD_LIKE_SEQUENCE_PATTERN)) {
-    addSegmentUnits(units, match[0]);
-  }
-}
-
-function tokenize(text: string): Set<string> {
-  const normalized = normalizeLexicalText(text);
-  const units = new Set<string>();
-  const segmenter = getWordSegmenter();
-  if (segmenter) {
-    for (const segment of segmenter.segment(normalized)) {
-      if (segment.isWordLike === false) continue;
-      addSegmentUnits(units, segment.segment);
-    }
-  }
-  addUnicodeSequenceUnits(units, normalized);
-  return units;
-}
-
-function jaccardSimilarity(left: string, right: string): number {
-  const leftTokens = tokenize(left);
-  const rightTokens = tokenize(right);
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return 0;
-  }
-
-  let intersection = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      intersection += 1;
-    }
-  }
-
-  const union = leftTokens.size + rightTokens.size - intersection;
-  return union > 0 ? intersection / union : 0;
-}
+// ---------------------------------------------------------------------------
+// Kavi — Context start selection
+// ---------------------------------------------------------------------------
+// Decides how far back into the conversation history a turn's context should
+// reach. This used to run a Jaccard word-overlap comparison between the
+// latest user turn and prior turns to guess at a "topic shift" — a natural-
+// language heuristic that could drop an entire history on a pronoun-only
+// follow-up ("what about that one?") or a paraphrase, and that behaved
+// inconsistently across scripts.
+//
+// The boundary is now purely structural:
+//   - a hard idle gap (wall-clock time since the previous user turn) or pilot
+//     mode forces a fresh start, keeping only the persona's minimum recent
+//     turns ('topic_shift_boundary');
+//   - otherwise, the persona's max-carryover-turns cap is the only other
+//     reason history gets cut ('carryover_limit');
+//   - full history is kept otherwise.
+// Token-budget windowing (`budgetManager.ts`) and tool-call-group alignment
+// (boundaries always land on a user-turn index, which can never split an
+// atomic assistant-tool_call + tool-result group) still apply downstream of
+// this selection. No model-emitted "new topic" field exists in the
+// compaction summary today (`compactionSummary.ts` / `compactionSummarizer.ts`
+// build Task Overview / Current State / Open Threads sections only), so one
+// isn't invented here — see the task report for that limitation.
+// ---------------------------------------------------------------------------
 
 function getUserMessageIndices(messages: Message[]): number[] {
   const indices: number[] = [];
@@ -191,8 +121,6 @@ export function selectContextStartIndex(
   }
 
   const latestUserIndex = userIndices[userIndices.length - 1];
-  const latestUserText = getMessageText(messages[latestUserIndex]);
-
   const previousUserTimestamp = getPreviousUserMessageTimestamp(messages, userIndices);
   const previousTimestamp =
     previousUserTimestamp ?? getPreviousMessageTimestamp(messages, latestUserIndex);
@@ -204,59 +132,33 @@ export function selectContextStartIndex(
       : 0;
   const enforceTopicBoundary = idleGapMs >= policy.hardIdleCutoffMs || options.mode === 'pilot';
 
-  let selectedUserPos = userIndices.length - 1;
-  let includedCarryover = 0;
-  let lastSimilarity = 1;
-  let reason: ContextStartSelection['reason'] = 'full_history';
+  // Position at or after which at least `minRecentUserTurns` turns survive.
+  const minRecentFloorPos = Math.max(0, userIndices.length - policy.minRecentUserTurns);
 
-  for (let pos = userIndices.length - 2; pos >= 0; pos -= 1) {
-    if (includedCarryover >= policy.maxCarryoverUserTurns) {
-      reason = 'carryover_limit';
-      break;
-    }
+  let selectedUserPos: number;
+  let reason: ContextStartSelection['reason'];
 
-    const candidateText = getMessageText(messages[userIndices[pos]]);
-    const similarity = jaccardSimilarity(latestUserText, candidateText);
-    lastSimilarity = similarity;
-
-    if (similarity >= policy.semanticSimilarityThreshold) {
-      selectedUserPos = pos;
-      includedCarryover += 1;
-      continue;
-    }
-
-    if (!enforceTopicBoundary && policy.allowCrossTopicCarryover) {
-      selectedUserPos = pos;
-      includedCarryover += 1;
-      continue;
-    }
-
-    if (!enforceTopicBoundary && includedCarryover < Math.max(0, policy.minRecentUserTurns - 1)) {
-      selectedUserPos = pos;
-      includedCarryover += 1;
-      continue;
-    }
-
-    reason = 'topic_shift_boundary';
-    break;
-  }
-
-  const requiredStartPos = Math.max(0, userIndices.length - policy.minRecentUserTurns);
-  if (selectedUserPos > requiredStartPos) {
-    selectedUserPos = requiredStartPos;
+  if (enforceTopicBoundary) {
+    // A long idle gap (or pilot mode, which always treats the turn as a
+    // fresh session) can't be trusted to share context with what came
+    // before, so keep only the guaranteed-minimum recent turns.
+    selectedUserPos = minRecentFloorPos;
+    reason = selectedUserPos > 0 ? 'topic_shift_boundary' : 'full_history';
+  } else {
+    // No idle-gap signal: the only other structural cut is the persona's
+    // max-carryover-turns cap.
+    const carryoverFloorPos = Math.max(0, userIndices.length - 1 - policy.maxCarryoverUserTurns);
+    selectedUserPos = Math.min(carryoverFloorPos, minRecentFloorPos);
+    reason = selectedUserPos > 0 ? 'carryover_limit' : 'full_history';
   }
 
   const startIndex = userIndices[selectedUserPos] ?? 0;
   const droppedMessageCount = Math.max(0, startIndex);
 
-  if (startIndex === 0 && reason !== 'carryover_limit') {
-    reason = 'full_history';
-  }
-
   return {
     startIndex,
     reason,
-    similarityScore: lastSimilarity,
+    similarityScore: reason === 'full_history' ? 1 : 0,
     idleGapMs,
     droppedMessageCount,
   };

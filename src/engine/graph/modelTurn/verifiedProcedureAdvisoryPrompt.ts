@@ -33,6 +33,7 @@ function assertPreparedMemoryReadCurrent(preparedTurn: PreparedAgentTurn): void 
 export async function appendVerifiedProcedureAdvisoryPrompt(
   preparedTurn: PreparedAgentTurn,
   session: VerifiedProcedureExecutionSession | undefined,
+  family?: string,
 ): Promise<PreparedAgentTurn> {
   assertPreparedMemoryReadCurrent(preparedTurn);
   if (!session || !preparedTurn.toolsForIteration?.length) {
@@ -44,7 +45,7 @@ export async function appendVerifiedProcedureAdvisoryPrompt(
   if (!advisory) {
     return preparedTurn;
   }
-  if (estimateTokens(advisory.section) > VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS) {
+  if (estimateTokens(advisory.section, family) > VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS) {
     return preparedTurn;
   }
   if (

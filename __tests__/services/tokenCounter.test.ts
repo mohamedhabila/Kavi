@@ -10,14 +10,31 @@ import {
   getWorkingContextWindow,
   getCompactionThreshold,
   getCompactionThresholds,
+  getObservedTokenCalibrationFactor,
+  getTokenCalibrationSampleCount,
+  recordObservedTokenRatio,
+  resetTokenCalibrationForTests,
   MODEL_CONTEXT_WINDOWS,
   MAX_ROUTINE_COMPACTION_WORKING_CONTEXT,
   SELECTIVE_COMPACTION_THRESHOLD_SHARE,
   TOOL_CLEARING_THRESHOLD_SHARE,
   AGGRESSIVE_COMPACTION_THRESHOLD_SHARE,
+  SAFETY_MARGIN,
 } from '../../src/services/context/tokenCounter';
 
+// `recordObservedTokenRatio`'s `appliedFactor` recovers the uncalibrated base as
+// `estimatedTokens / (appliedFactor * SAFETY_MARGIN)`. Passing `1 / SAFETY_MARGIN` makes that
+// denominator exactly 1, so `base === estimatedTokens` — i.e. the tests below that only care
+// about the EMA/clamping mechanics (not the base-recovery math itself) can keep comparing
+// `actualTokens` directly against `estimatedTokens`, exactly as they did before `appliedFactor`
+// existed.
+const NEUTRAL_APPLIED_FACTOR = 1 / SAFETY_MARGIN;
+
 describe('estimateTokens', () => {
+  afterEach(() => {
+    resetTokenCalibrationForTests();
+  });
+
   it('returns 0 for empty string', () => {
     expect(estimateTokens('')).toBe(0);
   });
@@ -27,8 +44,8 @@ describe('estimateTokens', () => {
     expect(estimateTokens(null as any)).toBe(0);
   });
 
-  it('estimates roughly 1 token per 3.5 chars', () => {
-    const text = 'Hello world'; // 11 chars → ~3.14 → ceil → 4
+  it('estimates roughly 1 token per 3.5 chars for pure Latin text', () => {
+    const text = 'Hello world'; // 11 chars, Latin baseline ratio (4 chars/token) * 1.2 margin
     const tokens = estimateTokens(text);
     expect(tokens).toBeGreaterThan(0);
     expect(tokens).toBe(Math.ceil(11 / 3.5));
@@ -38,6 +55,202 @@ describe('estimateTokens', () => {
     const short = estimateTokens('hi');
     const long = estimateTokens('hi'.repeat(100));
     expect(long).toBeGreaterThan(short);
+  });
+
+  describe('script-aware estimation', () => {
+    // Same-length (30 code point) samples across script families. Non-Latin
+    // scripts pack more meaning per character, so a correct estimator must
+    // charge them *more* tokens per character than Latin — i.e. produce a
+    // *higher* token estimate for the same character count.
+    const SAMPLE_LENGTH = 30;
+    const latinSample = 'abcdefghijklmnopqrstuvwxyzabcd'.slice(0, SAMPLE_LENGTH);
+    const chineseSample = '这是一个用于测试分词器脚本感知能力的中文示例句子内容，继续补充'.slice(
+      0,
+      SAMPLE_LENGTH,
+    );
+    const arabicSample = 'هذا نص عربي تجريبي لاختبار تقدير الرموز حسب الكتابة نص'.slice(
+      0,
+      SAMPLE_LENGTH,
+    );
+    const thaiSample = 'นี่คือประโยคภาษาไทยตัวอย่างสำหรับทดสอบการประมาณค่าโทเค็นตามอักษร'.slice(
+      0,
+      SAMPLE_LENGTH,
+    );
+    const hindiSample = 'यह एक हिन्दी उदाहरण वाक्य है जो टोकन अनुमान का परीक्षण करता है'.slice(
+      0,
+      SAMPLE_LENGTH,
+    );
+
+    it('charges every non-Latin sample more tokens per character than the Latin sample', () => {
+      const latinTokens = estimateTokens(latinSample);
+      expect(estimateTokens(chineseSample)).toBeGreaterThan(latinTokens);
+      expect(estimateTokens(arabicSample)).toBeGreaterThan(latinTokens);
+      expect(estimateTokens(thaiSample)).toBeGreaterThan(latinTokens);
+      expect(estimateTokens(hindiSample)).toBeGreaterThan(latinTokens);
+    });
+
+    it('orders CJK as the densest (fewest chars/token) of the sampled scripts', () => {
+      // Same length in code points; CJK's ~1.3 chars/token ratio should yield
+      // the highest token count of the five samples.
+      const tokenCounts = {
+        latin: estimateTokens(latinSample),
+        chinese: estimateTokens(chineseSample),
+        arabic: estimateTokens(arabicSample),
+        thai: estimateTokens(thaiSample),
+        hindi: estimateTokens(hindiSample),
+      };
+      expect(tokenCounts.chinese).toBeGreaterThanOrEqual(tokenCounts.arabic);
+      expect(tokenCounts.chinese).toBeGreaterThanOrEqual(tokenCounts.thai);
+      expect(tokenCounts.chinese).toBeGreaterThanOrEqual(tokenCounts.hindi);
+      expect(tokenCounts.chinese).toBeGreaterThan(tokenCounts.latin);
+    });
+
+    it('blends per-script ratios for mixed-script text rather than defaulting to Latin', () => {
+      const mixed = `hello ${chineseSample}`;
+      const pureLatinOfSameLength = 'x'.repeat(mixed.length);
+      expect(estimateTokens(mixed)).toBeGreaterThan(estimateTokens(pureLatinOfSameLength));
+    });
+
+    it('treats digits, punctuation and whitespace as the Latin baseline', () => {
+      const digits = '0123456789'.repeat(3);
+      const latinLetters = 'a'.repeat(30);
+      expect(estimateTokens(digits)).toBe(estimateTokens(latinLetters));
+    });
+  });
+
+  describe('calibration', () => {
+    it('leaves estimates unchanged for an unobserved family', () => {
+      expect(getObservedTokenCalibrationFactor('anthropic')).toBe(1);
+      expect(getTokenCalibrationSampleCount('anthropic')).toBe(0);
+      expect(estimateTokens('hello world', 'anthropic')).toBe(estimateTokens('hello world'));
+    });
+
+    it('converges the calibration factor toward the observed ratio over repeated samples', () => {
+      // Estimator's uncalibrated base is 100; the provider keeps reporting 150 (1.5x that base).
+      for (let i = 0; i < 50; i += 1) {
+        recordObservedTokenRatio('gemini', 100, 150, NEUTRAL_APPLIED_FACTOR);
+      }
+      expect(getObservedTokenCalibrationFactor('gemini')).toBeCloseTo(1.5, 1);
+      expect(getTokenCalibrationSampleCount('gemini')).toBe(50);
+    });
+
+    it('moves the factor toward each new observation without jumping straight to it', () => {
+      recordObservedTokenRatio('openai', 100, 200, NEUTRAL_APPLIED_FACTOR); // observed ratio 2.0
+      const afterOne = getObservedTokenCalibrationFactor('openai');
+      expect(afterOne).toBeGreaterThan(1);
+      expect(afterOne).toBeLessThan(2);
+    });
+
+    it('clamps an extreme observed ratio instead of applying it verbatim', () => {
+      recordObservedTokenRatio('custom', 10, 1000, NEUTRAL_APPLIED_FACTOR); // observed ratio 100x
+      const factor = getObservedTokenCalibrationFactor('custom');
+      expect(factor).toBeLessThan(3); // well below the raw 100x observation
+      expect(factor).toBeGreaterThan(1);
+    });
+
+    it('ignores non-finite or non-positive samples', () => {
+      recordObservedTokenRatio('mistral', 0, 100, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('mistral', 100, -1, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('mistral', NaN, 100, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('mistral', 100, NaN, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('mistral', 100, 100, NaN);
+      recordObservedTokenRatio('mistral', 100, 100, 0);
+      recordObservedTokenRatio('mistral', 100, 100, -1);
+      expect(getTokenCalibrationSampleCount('mistral')).toBe(0);
+      expect(getObservedTokenCalibrationFactor('mistral')).toBe(1);
+    });
+
+    it('ignores an unset or empty family', () => {
+      recordObservedTokenRatio(undefined, 100, 200, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('', 100, 200, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio(null, 100, 200, NEUTRAL_APPLIED_FACTOR);
+      expect(getObservedTokenCalibrationFactor(undefined)).toBe(1);
+    });
+
+    it('keys calibration per provider family independently', () => {
+      recordObservedTokenRatio('anthropic', 100, 130, NEUTRAL_APPLIED_FACTOR);
+      recordObservedTokenRatio('gemini', 100, 170, NEUTRAL_APPLIED_FACTOR);
+      expect(getObservedTokenCalibrationFactor('anthropic')).not.toBe(
+        getObservedTokenCalibrationFactor('gemini'),
+      );
+    });
+
+    it('scales estimateTokens output by the learned factor once calibrated', () => {
+      const baseline = estimateTokens('a long enough string to have a stable base estimate');
+      for (let i = 0; i < 20; i += 1) {
+        recordObservedTokenRatio('deepseek', 100, 150, NEUTRAL_APPLIED_FACTOR);
+      }
+      const calibrated = estimateTokens(
+        'a long enough string to have a stable base estimate',
+        'deepseek',
+      );
+      expect(calibrated).toBeGreaterThan(baseline);
+    });
+
+    // ── Feedback-loop math: base recovery, convergence, and margin preservation ──────────
+    //
+    // `recordObservedTokenRatio` must compare the provider's actual token count against the
+    // *uncalibrated, un-margined* base the pre-flight estimate was built from — not against
+    // the already-margined, already-calibrated `estimatedTokens` value directly. Comparing
+    // directly (the old, buggy behavior) would (a) treat SAFETY_MARGIN itself as calibration
+    // error, driving the fixed point to zero headroom, and (b) once the factor also flows into
+    // the pre-flight estimate, converge the learned factor to `sqrt(trueRatio)` instead of
+    // `trueRatio`. These tests drive the real `estimateTokens`/`getObservedTokenCalibrationFactor`
+    // production pair the way `modelTurnExecutionAttempt.ts` does — reading the factor in effect
+    // immediately before computing the estimate, on every iteration — so drift in the factor
+    // across iterations cannot silently make the test pass under either the old or new math by
+    // accident.
+    it('converges the factor to the true actual/base ratio and keeps the margin over actual', () => {
+      const family = 'convergence-test-family';
+      const text = 'a stable sample string long enough for calibration convergence testing';
+      const trueRatio = 1.5; // the provider consistently reports 1.5x this text's true base
+
+      for (let i = 0; i < 200; i += 1) {
+        const appliedFactor = getObservedTokenCalibrationFactor(family);
+        const estimatedTokens = estimateTokens(text, family);
+        const base = estimatedTokens / (appliedFactor * SAFETY_MARGIN);
+        const actualTokens = base * trueRatio;
+        recordObservedTokenRatio(family, estimatedTokens, actualTokens, appliedFactor);
+      }
+
+      const convergedFactor = getObservedTokenCalibrationFactor(family);
+      expect(convergedFactor).toBeCloseTo(trueRatio, 1);
+
+      // Margin preserved: once converged, the calibrated estimate is ~trueRatio * base *
+      // SAFETY_MARGIN — i.e. still SAFETY_MARGIN above what the provider actually reports for
+      // this text, not equal to it.
+      const finalEstimate = estimateTokens(text, family);
+      const finalBase = finalEstimate / (convergedFactor * SAFETY_MARGIN);
+      const finalActual = finalBase * trueRatio;
+      expect(finalEstimate / finalActual).toBeCloseTo(SAFETY_MARGIN, 1);
+    });
+
+    it('regression: keeps SAFETY_MARGIN headroom over actual at the fixed point, never collapsing to it', () => {
+      // A provider whose usage always matches the true (uncalibrated) base exactly — the
+      // "perfectly calibrated estimator" case. The true actual/base ratio is 1, so the factor
+      // should converge to 1, not to 1/SAFETY_MARGIN. Under the old math (observed = actual /
+      // estimatedTokens, comparing straight against the margined+calibrated value), this same
+      // setup would converge the factor toward 1/SAFETY_MARGIN and the calibrated estimate would
+      // collapse to equal actual — losing the margin entirely. This test fails under that old
+      // formula and passes under the fixed one.
+      const family = 'margin-regression-family';
+      const text = 'another stable sample string reserved for the margin regression test only';
+
+      for (let i = 0; i < 200; i += 1) {
+        const appliedFactor = getObservedTokenCalibrationFactor(family);
+        const estimatedTokens = estimateTokens(text, family);
+        const base = estimatedTokens / (appliedFactor * SAFETY_MARGIN);
+        recordObservedTokenRatio(family, estimatedTokens, base, appliedFactor);
+      }
+
+      const convergedFactor = getObservedTokenCalibrationFactor(family);
+      expect(convergedFactor).toBeCloseTo(1, 1);
+
+      const finalEstimate = estimateTokens(text, family);
+      const finalBase = finalEstimate / (convergedFactor * SAFETY_MARGIN);
+      expect(finalEstimate).toBeGreaterThan(finalBase); // margin still present
+      expect(finalEstimate / finalBase).toBeCloseTo(SAFETY_MARGIN, 1);
+    });
   });
 });
 

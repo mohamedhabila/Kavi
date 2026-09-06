@@ -1,3 +1,4 @@
+import { resolveProviderFamily } from '../../services/llm/catalog/providerFamilies';
 import { buildPreparedModelTurnPrompt } from './modelTurn/buildPreparedPromptTurn';
 import { appendVerifiedProcedureAdvisoryPrompt } from './modelTurn/verifiedProcedureAdvisoryPrompt';
 import { resolveModelTurnGroundedToolSurface } from './modelTurn/resolveGroundedToolSurface';
@@ -44,12 +45,14 @@ export async function prepareAgentControlGraphModelTurn(
     workingMessages: params.workingMessages,
   });
 
+  const requestFamily = resolveProviderFamily(params.activeProvider);
   const basePreparedTurn = buildPreparedModelTurnPrompt({
     actionablePromptTurn: !iterationRequest.effectiveForceTextThisTurn,
     allTools: params.allTools,
     allowSessionCoordinationTools: toolSurface.allowSessionCoordinationTools,
     effectiveForceTextReasonThisTurn: iterationRequest.effectiveForceTextReasonThisTurn,
     effectiveForceTextThisTurn: iterationRequest.effectiveForceTextThisTurn,
+    family: requestFamily,
     groundedRequestScopedTools: toolSurface.groundedRequestScopedTools,
     iteration: params.iteration,
     pinnedToolNames: toolSurface.pinnedToolNames,
@@ -65,6 +68,7 @@ export async function prepareAgentControlGraphModelTurn(
   const preparedTurn = await appendVerifiedProcedureAdvisoryPrompt(
     basePreparedTurn,
     params.verifiedProcedureSession,
+    requestFamily,
   );
 
   return {

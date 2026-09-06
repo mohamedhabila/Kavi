@@ -41,6 +41,9 @@ export interface PrepareAgentTurnRequestBudgetParams {
   pinnedToolNames?: ReadonlyArray<string>;
   sessionPinnedCount?: number;
   turnPinnedCount?: number;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`); applied to
+   *  every estimate this function computes directly. Omit for a pure structural estimate. */
+  requestFamily?: string;
   requestMaxTokens: number;
   requestModel: string;
   toolsForIteration: ReadonlyArray<ToolDefinition> | undefined;
@@ -66,6 +69,8 @@ export interface CompactAgentTurnWorkingMessagesParams {
   forceTier?: ForcedCompactionTier;
   failureLabel: string;
   compactionContext?: CompactionContext;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  requestFamily?: string;
   warn: (message: string, error: unknown) => void;
 }
 
@@ -93,19 +98,30 @@ export async function compactAgentTurnWorkingMessages(
   }
 
   try {
+    // Merge `requestFamily` into the compaction context so `compact()` can calibrate its own
+    // internal token estimates even when the caller has no other pending-work state to pass —
+    // hence the merge runs whenever either is present, not only when `compactionContext` is.
+    const effectiveCompactionContext: CompactionContext | undefined =
+      params.compactionContext || params.requestFamily !== undefined
+        ? { ...params.compactionContext, requestFamily: params.requestFamily }
+        : undefined;
     const compactResult = await params.compactionEngine.compact({
       sessionId: params.conversationId,
       messages: params.currentMessages,
       ...(params.currentTokenCount != null ? { currentTokenCount: params.currentTokenCount } : {}),
       ...(params.tokenBudget != null ? { tokenBudget: params.tokenBudget } : {}),
       ...(params.forceTier ? { forceTier: params.forceTier } : {}),
-      ...(params.compactionContext ? { compactionContext: params.compactionContext } : {}),
+      ...(effectiveCompactionContext ? { compactionContext: effectiveCompactionContext } : {}),
     });
     if (!compactResult.compacted || !compactResult.result) {
       return { messages: params.currentMessages, compacted: false };
     }
 
-    const applied = applyCompactionResultToWorkingMessages(params.currentMessages, compactResult);
+    const applied = applyCompactionResultToWorkingMessages(
+      params.currentMessages,
+      compactResult,
+      params.requestFamily,
+    );
     params.onCompaction?.(applied);
     return { messages: applied.messages, compacted: true };
   } catch (compactionError: unknown) {
@@ -118,6 +134,7 @@ async function previewRequestBudget(params: {
   enrichedSystemPrompt: string;
   candidateMessages: Message[];
   onDeviceProvider?: boolean;
+  requestFamily?: string;
   requestMaxTokens: number;
   requestModel: string;
   toolsForIteration: ToolDefinition[];
@@ -139,23 +156,27 @@ async function previewRequestBudget(params: {
       params.toolsForIteration,
       nonSystemCandidateApiMessages,
       params.requestMaxTokens,
-      { onDeviceProvider: params.onDeviceProvider === true },
+      { onDeviceProvider: params.onDeviceProvider === true, family: params.requestFamily },
     ),
   };
 }
 
-function estimateApiMessageTokens(message: {
-  role: string;
-  content: string | any[];
-  [key: string]: any;
-}): number {
+function estimateApiMessageTokens(
+  message: {
+    role: string;
+    content: string | any[];
+    [key: string]: any;
+  },
+  family: string | undefined,
+): number {
   const content =
     typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-  return estimateTokens(content) + 4;
+  return estimateTokens(content, family) + 4;
 }
 
 function buildMessageTokenBuckets(
   messages: ReadonlyArray<{ role: string; content: string | any[]; [key: string]: any }>,
+  family: string | undefined,
 ): Pick<UsageTokenBuckets, 'conversationHistoryTokens' | 'toolResultTokens' | 'userTurnTokens'> {
   let latestUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -167,7 +188,7 @@ function buildMessageTokenBuckets(
 
   return messages.reduce(
     (acc, message, index) => {
-      const tokens = estimateApiMessageTokens(message);
+      const tokens = estimateApiMessageTokens(message, family);
       if (message.role === 'tool') {
         acc.toolResultTokens += tokens;
       } else if (index === latestUserIndex) {
@@ -187,6 +208,7 @@ function buildMessageTokenBuckets(
 
 function buildUsageTokenBuckets(params: {
   budgetResult: ReturnType<typeof enforceContextBudget>;
+  family: string | undefined;
   goalsTokens: number;
   memoryCacheableTokens: number;
   memoryDynamicTokens: number;
@@ -198,7 +220,7 @@ function buildUsageTokenBuckets(params: {
     Math.max(0, rawMemoryContextTokens),
     Math.max(0, params.budgetResult.result.systemPromptTokens),
   );
-  const messageBuckets = buildMessageTokenBuckets(params.budgetResult.messages);
+  const messageBuckets = buildMessageTokenBuckets(params.budgetResult.messages, params.family);
 
   return {
     systemPromptTokens: Math.max(
@@ -238,6 +260,7 @@ export async function prepareAgentTurnRequestBudget(
     enrichedSystemPrompt: params.enrichedSystemPrompt,
     candidateMessages: modelVisibleMessages,
     onDeviceProvider: params.onDeviceProvider === true,
+    requestFamily: params.requestFamily,
     requestMaxTokens: params.requestMaxTokens,
     requestModel: params.requestModel,
     toolsForIteration,
@@ -257,10 +280,11 @@ export async function prepareAgentTurnRequestBudget(
         conversationId: params.conversationId,
         currentMessages: workingMessages,
         onCompaction: params.onCompaction,
-        currentTokenCount: estimateWorkingMessageTokens(workingMessages),
+        currentTokenCount: estimateWorkingMessageTokens(workingMessages, params.requestFamily),
         forceTier,
         failureLabel: 'Pre-flight compaction failed, continuing without compaction',
         ...(compactionContext ? { compactionContext } : {}),
+        requestFamily: params.requestFamily,
         warn: params.warn,
       });
       if (!budgetCompaction.compacted) {
@@ -274,6 +298,7 @@ export async function prepareAgentTurnRequestBudget(
         enrichedSystemPrompt: params.enrichedSystemPrompt,
         candidateMessages: modelVisibleMessages,
         onDeviceProvider: params.onDeviceProvider === true,
+        requestFamily: params.requestFamily,
         requestMaxTokens: params.requestMaxTokens,
         requestModel: params.requestModel,
         toolsForIteration,
@@ -292,6 +317,7 @@ export async function prepareAgentTurnRequestBudget(
       enrichedSystemPrompt: params.enrichedSystemPrompt,
       candidateMessages: placeholderCompactedModelVisibleMessages,
       onDeviceProvider: params.onDeviceProvider === true,
+      requestFamily: params.requestFamily,
       requestMaxTokens: params.requestMaxTokens,
       requestModel: params.requestModel,
       toolsForIteration,
@@ -310,7 +336,7 @@ export async function prepareAgentTurnRequestBudget(
   const pinnedToolNames = Array.from(
     new Set((params.pinnedToolNames ?? []).map((name) => name.trim()).filter(Boolean)),
   );
-  const compactionOptions = { pinnedToolNames: new Set(pinnedToolNames) };
+  const compactionOptions = { pinnedToolNames: new Set(pinnedToolNames), family: params.requestFamily };
   const candidateTools = compressToolDefinitions(toolsForIteration, compactionOptions);
   const budgetResult = enforceContextBudget(
     params.requestModel,
@@ -320,6 +346,7 @@ export async function prepareAgentTurnRequestBudget(
     params.requestMaxTokens,
     {
       ...workingContextOptions,
+      family: params.requestFamily,
       pinnedToolNames,
       protectedSystemPromptSection: workflowTaskAnchorPromptSection,
     },
@@ -337,14 +364,15 @@ export async function prepareAgentTurnRequestBudget(
 
   const memoryCacheableTokens = (params.livingMemory?.sections ?? [])
     .filter((section) => section.cacheable === true)
-    .reduce((sum, section) => sum + estimateTokens(section.text), 0);
-  const goalsTokens = estimateTokens(currentGoalsPromptSection ?? '');
+    .reduce((sum, section) => sum + estimateTokens(section.text, params.requestFamily), 0);
+  const goalsTokens = estimateTokens(currentGoalsPromptSection ?? '', params.requestFamily);
   const memoryDynamicTokens = Math.max(
     0,
     Math.round((params.livingMemory?.recalledFactCount ?? 0) * 48),
   );
   const usageTokenBuckets = buildUsageTokenBuckets({
     budgetResult,
+    family: params.requestFamily,
     goalsTokens,
     memoryCacheableTokens,
     memoryDynamicTokens,

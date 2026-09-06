@@ -1,18 +1,9 @@
-import type {
-  AssistantCompletionMetadata,
-  MessageProviderReplay,
-  ToolCall,
-} from '../../types/message';
+import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
-import { isPlainRecord } from '../../services/llm/core/json';
 import { createAgentRunAbortError } from '../../services/runtimeError';
-import {
-  createCompletionMetadata,
-  normalizeGeminiCompletion,
-  normalizeOpenAiCompatibleCompletion,
-} from '../../services/llm/core/streaming/metadataBuilder';
 import { upsertPendingToolCall } from '../orchestratorToolTranscript';
-import { createModelTurnUsageTracker } from './modelTurnExecutionSupport';
+import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
+import { createModelProjectionPublisher } from './modelTurnProjectionPublisher';
 import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,
@@ -27,19 +18,15 @@ import {
   createModelTurnActivityGuard,
   FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
   normalizeModelTurnActivityError,
-  waitForPromiseOrAbort,
 } from './modelTurnActivityGuard';
 export { MODEL_TURN_INACTIVITY_TIMEOUT_MS } from './modelTurnActivityGuard';
 
-const MODEL_PROJECTION_BATCH_MAX_LATENCY_MS = 48;
-const MODEL_PROJECTION_BATCH_MAX_EVENTS = 24;
-const MODEL_PROJECTION_BATCH_MAX_TEXT_CHARS = 768;
-const MODEL_PROJECTION_AUTHORITY_LEASE_MS = 200;
-
-type ModelProjectionOperation =
-  | { kind: 'token'; content: string }
-  | { kind: 'reasoning'; content: string }
-  | { kind: 'tool_call'; toolCall: ToolCall };
+// The streaming (SSE) request path. `modelTurnExecutionSendMessage.ts` holds the sibling
+// non-streaming send-message path (Gemini-native tool-turn replay reconciliation); both share
+// the batching/authority projection publisher in `modelTurnProjectionPublisher.ts` and the
+// usage/calibration tracker in `modelTurnExecutionSupport.ts`. Split this way — rather than one
+// file — to stay under this repo's maintainability line-count guardrail while keeping each
+// request path's real logic in one place instead of scattering it across re-export shims.
 
 type ObservedIteratorNext<T> = {
   state: 'pending' | 'fulfilled' | 'rejected';
@@ -126,164 +113,6 @@ async function waitForIteratorOrDeadline<T>(
   });
 }
 
-function createModelProjectionPublisher(params: {
-  callbacks: ExecuteAgentControlGraphModelTurnParams['callbacks'];
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  onInvalidated: () => void;
-}) {
-  let batch: ModelProjectionOperation[] = [];
-  let batchEventCount = 0;
-  let batchTextChars = 0;
-  let batchStartedAt: number | undefined;
-  let authorityLeaseDeadline: number | undefined;
-  let hasPublishedProjection = false;
-  let invalidated = false;
-
-  const clearBatch = () => {
-    batch = [];
-    batchEventCount = 0;
-    batchTextChars = 0;
-    batchStartedAt = undefined;
-  };
-  const invalidate = () => {
-    if (invalidated) return;
-    invalidated = true;
-    clearBatch();
-    authorityLeaseDeadline = undefined;
-    params.onInvalidated();
-    if (hasPublishedProjection) {
-      try {
-        params.callbacks.onAssistantStreamReset?.();
-      } catch {
-        // Reset observer failures are ancillary; authority revocation remains primary.
-      }
-    }
-  };
-  const assertDurablyCurrent = () => {
-    try {
-      assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-    } catch (error) {
-      invalidate();
-      throw error;
-    }
-  };
-  const renewAuthorityLease = () => {
-    if (params.memoryPolicyBinding.kind === 'policy_independent') {
-      authorityLeaseDeadline = undefined;
-      return;
-    }
-    const now = Date.now();
-    const bindingDeadline = params.memoryPolicyBinding.validUntil ?? Number.POSITIVE_INFINITY;
-    authorityLeaseDeadline = Math.min(now + MODEL_PROJECTION_AUTHORITY_LEASE_MS, bindingDeadline);
-  };
-  const enqueueText = (kind: 'token' | 'reasoning', content: string) => {
-    if (!content) return;
-    batchStartedAt ??= Date.now();
-    batchEventCount += 1;
-    batchTextChars += content.length;
-    const previous = batch.at(-1);
-    if (previous?.kind === kind) {
-      previous.content += content;
-      return;
-    }
-    batch.push({ kind, content });
-  };
-
-  return {
-    enqueueReasoning(content: string) {
-      enqueueText('reasoning', content);
-    },
-    enqueueToken(content: string) {
-      enqueueText('token', content);
-    },
-    enqueueToolCall(toolCall: ToolCall) {
-      batchStartedAt ??= Date.now();
-      batchEventCount += 1;
-      batch.push({ kind: 'tool_call', toolCall });
-    },
-    flush() {
-      if (batch.length === 0) return;
-      const operations = batch;
-      clearBatch();
-      const publishGroup = (group: ReadonlyArray<ModelProjectionOperation>) => {
-        assertDurablyCurrent();
-        let callbackThrew = false;
-        let callbackError: unknown;
-        try {
-          for (const operation of group) {
-            switch (operation.kind) {
-              case 'token':
-                hasPublishedProjection = true;
-                params.callbacks.onToken(operation.content);
-                break;
-              case 'reasoning':
-                if (params.callbacks.onReasoning) {
-                  hasPublishedProjection = true;
-                  params.callbacks.onReasoning(operation.content);
-                }
-                break;
-              case 'tool_call':
-                if (params.callbacks.onToolCallQueued) {
-                  hasPublishedProjection = true;
-                  params.callbacks.onToolCallQueued(operation.toolCall);
-                }
-                break;
-            }
-          }
-        } catch (error) {
-          callbackThrew = true;
-          callbackError = error;
-        }
-        assertDurablyCurrent();
-        if (callbackThrew) throw callbackError;
-      };
-      let textGroup: ModelProjectionOperation[] = [];
-      for (const operation of operations) {
-        if (operation.kind !== 'tool_call') {
-          textGroup.push(operation);
-          continue;
-        }
-        if (textGroup.length > 0) {
-          publishGroup(textGroup);
-          textGroup = [];
-        }
-        publishGroup([operation]);
-      }
-      if (textGroup.length > 0) publishGroup(textGroup);
-      renewAuthorityLease();
-    },
-    invalidate,
-    nextDeadline(): number | undefined {
-      const batchDeadline =
-        batchStartedAt === undefined
-          ? undefined
-          : batchStartedAt + MODEL_PROJECTION_BATCH_MAX_LATENCY_MS;
-      if (batchDeadline === undefined) return authorityLeaseDeadline;
-      if (authorityLeaseDeadline === undefined) return batchDeadline;
-      return Math.min(batchDeadline, authorityLeaseDeadline);
-    },
-    onDeadline() {
-      const now = Date.now();
-      if (
-        batchStartedAt !== undefined &&
-        batchStartedAt + MODEL_PROJECTION_BATCH_MAX_LATENCY_MS <= now
-      ) {
-        this.flush();
-      }
-      if (authorityLeaseDeadline !== undefined && authorityLeaseDeadline <= Date.now()) {
-        assertDurablyCurrent();
-        renewAuthorityLease();
-      }
-    },
-    shouldFlushImmediately(): boolean {
-      return (
-        batchEventCount >= MODEL_PROJECTION_BATCH_MAX_EVENTS ||
-        batchTextChars >= MODEL_PROJECTION_BATCH_MAX_TEXT_CHARS
-      );
-    },
-  };
-}
-
 function closeModelStreamIterator(iterator: AsyncIterator<unknown> | undefined): void {
   if (!iterator?.return) return;
   try {
@@ -293,49 +122,6 @@ function closeModelStreamIterator(iterator: AsyncIterator<unknown> | undefined):
   }
 }
 
-function resolveSendMessageCompletionMetadata(params: {
-  finishReason: unknown;
-  hasToolCalls: boolean;
-  geminiNative: boolean;
-}): AssistantCompletionMetadata | undefined {
-  if (params.hasToolCalls) {
-    return createCompletionMetadata('complete', 'tool_calls');
-  }
-
-  return params.geminiNative
-    ? normalizeGeminiCompletion(params.finishReason)
-    : normalizeOpenAiCompatibleCompletion(params.finishReason);
-}
-
-function mapSendMessageToolCalls(
-  toolCalls: ReadonlyArray<Record<string, unknown>>,
-): PendingAgentToolCall[] {
-  const pendingToolCalls: PendingAgentToolCall[] = [];
-  for (const toolCall of toolCalls) {
-    if (!isPlainRecord(toolCall)) {
-      continue;
-    }
-    const rawFunction = isPlainRecord(toolCall.function) ? toolCall.function : undefined;
-    const id = typeof toolCall.id === 'string' ? toolCall.id.trim() : '';
-    const name = typeof rawFunction?.name === 'string' ? rawFunction.name.trim() : '';
-    const args =
-      typeof rawFunction?.arguments === 'string'
-        ? rawFunction.arguments
-        : JSON.stringify(rawFunction?.arguments ?? {});
-    if (!id || !name) {
-      continue;
-    }
-    const raw = isPlainRecord(toolCall.raw) ? toolCall.raw : toolCall;
-    upsertPendingToolCall(pendingToolCalls, {
-      id,
-      name,
-      arguments: args,
-      raw,
-    });
-  }
-  return pendingToolCalls;
-}
-
 export async function executeAgentControlGraphModelTurnStreaming(
   params: {
     allowQueuedToolCalls: boolean;
@@ -343,18 +129,19 @@ export async function executeAgentControlGraphModelTurnStreaming(
     memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
     requestMessages: Array<{ role: string; content: any }>;
     streamOptions: Record<string, any>;
-  } & Pick<
-    ExecuteAgentControlGraphModelTurnParams,
-    | 'applyGraphEvents'
-    | 'callbacks'
-    | 'isForegroundRun'
-    | 'iteration'
-    | 'llm'
-    | 'recordPerformanceMetrics'
-    | 'reportUsage'
-    | 'requestModel'
-    | 'signal'
-  >,
+  } & ReturnType<typeof pickCalibrationInputs> &
+    Pick<
+      ExecuteAgentControlGraphModelTurnParams,
+      | 'applyGraphEvents'
+      | 'callbacks'
+      | 'isForegroundRun'
+      | 'iteration'
+      | 'llm'
+      | 'recordPerformanceMetrics'
+      | 'reportUsage'
+      | 'requestModel'
+      | 'signal'
+    >,
 ): Promise<{
   completion?: AssistantCompletionMetadata;
   fullContent: string;
@@ -371,6 +158,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
     getContentSnapshot: () => ({ fullContent, reasoning }),
     reportUsage: params.reportUsage,
     requestModel: params.requestModel,
+    ...pickCalibrationInputs(params),
     usageTelemetry: params.streamOptions.usageTelemetry,
   });
   const projectionPublisher = createModelProjectionPublisher({
@@ -534,159 +322,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
         type: 'MODEL_TURN_FAILED',
         iteration: params.iteration,
         reason: streamErrorMsg,
-      },
-    ]);
-    throw effectiveError;
-  } finally {
-    activityGuard.dispose();
-  }
-}
-
-export async function executeAgentControlGraphModelTurnViaSendMessage(
-  params: {
-    budgetTools: ReadonlyArray<ToolDefinition>;
-    geminiNative: boolean;
-    memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-    requestMessages: Array<{ role: string; content: any }>;
-    streamOptions: Record<string, any>;
-  } & Pick<
-    ExecuteAgentControlGraphModelTurnParams,
-    | 'applyGraphEvents'
-    | 'callbacks'
-    | 'isForegroundRun'
-    | 'iteration'
-    | 'llm'
-    | 'recordPerformanceMetrics'
-    | 'reportUsage'
-    | 'requestModel'
-    | 'signal'
-  >,
-): Promise<{
-  completion?: AssistantCompletionMetadata;
-  fullContent: string;
-  pendingToolCalls: PendingAgentToolCall[];
-  providerReplay?: MessageProviderReplay;
-  reasoning: string;
-}> {
-  const usageTracker = createModelTurnUsageTracker({
-    getContentSnapshot: () => ({ fullContent: '', reasoning: '' }),
-    reportUsage: params.reportUsage,
-    requestModel: params.requestModel,
-    usageTelemetry: params.streamOptions.usageTelemetry,
-  });
-  const projectionPublisher = createModelProjectionPublisher({
-    callbacks: params.callbacks,
-    memoryPolicyBinding: params.memoryPolicyBinding,
-    onInvalidated: () => undefined,
-  });
-  const activityGuard = createModelTurnActivityGuard(
-    params.signal?.signal,
-    params.isForegroundRun ? FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS : undefined,
-  );
-
-  params.applyGraphEvents([
-    {
-      type: 'MODEL_TURN_STARTED',
-      iteration: params.iteration,
-      toolNames: params.budgetTools.map((tool) => tool.name),
-    },
-  ]);
-
-  const modelTurnStartedAt = Date.now();
-  try {
-    const response = await waitForPromiseOrAbort(
-      params.llm.sendMessage(params.requestMessages, {
-        ...params.streamOptions,
-        signal: activityGuard.signal,
-        stream: false,
-      }),
-      activityGuard.signal,
-    );
-    activityGuard.markActivity();
-    const usage = isPlainRecord(response?.usage) ? response.usage : undefined;
-    if (usage) {
-      usageTracker.mergeSnapshot({
-        inputTokens: Number(usage.prompt_tokens ?? usage.input_tokens ?? 0),
-        outputTokens: Number(usage.completion_tokens ?? usage.output_tokens ?? 0),
-        cacheReadTokens: Number(usage.cache_read_input_tokens ?? 0),
-        cacheWriteTokens: Number(usage.cache_creation_input_tokens ?? 0),
-        totalTokens: Number(usage.total_tokens ?? 0),
-        model: params.requestModel,
-      });
-    }
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-    const choice = isPlainRecord(response?.choices?.[0]) ? response.choices[0] : undefined;
-    const message = isPlainRecord(choice?.message) ? choice.message : {};
-    const fullContent = typeof message.content === 'string' ? message.content : '';
-    const reasoning = typeof message.reasoning === 'string' ? message.reasoning : '';
-    const providerReplay = isPlainRecord(message.providerReplay)
-      ? (message.providerReplay as MessageProviderReplay)
-      : undefined;
-    const rawToolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
-    const pendingToolCalls = mapSendMessageToolCalls(rawToolCalls);
-    const completion = resolveSendMessageCompletionMetadata({
-      finishReason: choice?.finish_reason,
-      hasToolCalls: pendingToolCalls.length > 0,
-      geminiNative: params.geminiNative,
-    });
-
-    if (fullContent) {
-      params.callbacks.onStateChange('responding');
-      projectionPublisher.enqueueToken(fullContent);
-    } else if (reasoning) {
-      params.callbacks.onStateChange('responding');
-      projectionPublisher.enqueueReasoning(reasoning);
-    }
-
-    for (const toolCall of pendingToolCalls) {
-      projectionPublisher.enqueueToolCall({
-        id: toolCall.id,
-        name: toolCall.name,
-        arguments: toolCall.arguments,
-        ...(toolCall.raw ? { raw: toolCall.raw } : {}),
-        status: 'pending',
-      });
-    }
-    projectionPublisher.flush();
-
-    usageTracker.flush({
-      allowFallback: true,
-      requestMessages: params.requestMessages,
-      budgetTools: params.budgetTools,
-    });
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-    params.recordPerformanceMetrics(
-      {
-        modelTurnCount: 1,
-        modelDurationMs: Date.now() - modelTurnStartedAt,
-      },
-      'model_turn_completed',
-    );
-
-    return {
-      completion,
-      fullContent,
-      pendingToolCalls,
-      providerReplay,
-      reasoning,
-    };
-  } catch (error: unknown) {
-    const effectiveError = normalizeModelTurnActivityError(error, activityGuard);
-    if (effectiveError instanceof MemoryPromptEpochExpiredError) {
-      projectionPublisher.invalidate();
-    }
-    usageTracker.flush({
-      allowFallback: false,
-      requestMessages: params.requestMessages,
-      budgetTools: params.budgetTools,
-    });
-    params.recordPerformanceMetrics({ modelTurnCount: 1 }, 'model_turn_failed');
-    const reason = effectiveError.message;
-    params.applyGraphEvents([
-      {
-        type: 'MODEL_TURN_FAILED',
-        iteration: params.iteration,
-        reason,
       },
     ]);
     throw effectiveError;

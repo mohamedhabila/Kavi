@@ -8,6 +8,7 @@ import type {
   ToolCall,
 } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
+import { resolveProviderFamily } from '../../services/llm/catalog/providerFamilies';
 import type { OrchestratorState } from '../../types/conversation';
 import type { ToolDefinition } from '../../types/tool';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
@@ -495,6 +496,7 @@ export async function executeAgentControlGraphToolTurn(
     compactionEngine: params.compactionEngine,
     livingMemory: params.livingMemory,
     onCompaction: params.onCompaction,
+    requestFamily: resolveProviderFamily(params.activeProvider),
     warn: params.warn,
     onToolMessage: params.callbacks.onToolMessage,
     onStateChange: params.callbacks.onStateChange,

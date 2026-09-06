@@ -15,6 +15,8 @@ const MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT = 60;
 export interface CompactToolDefinitionOptions {
   pinnedToolNames?: ReadonlySet<string>;
   precompacted?: boolean;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  family?: string;
 }
 
 export function estimateToolTokens(
@@ -24,9 +26,12 @@ export function estimateToolTokens(
   const compactedTool = options?.precompacted
     ? tool
     : compactToolDefinitionForPrompt(tool, options);
-  const nameTokens = estimateTokens(compactedTool.name);
-  const descTokens = estimateTokens(compactedTool.description || '');
-  const schemaTokens = estimateTokens(JSON.stringify(compactedTool.input_schema || {}));
+  const nameTokens = estimateTokens(compactedTool.name, options?.family);
+  const descTokens = estimateTokens(compactedTool.description || '', options?.family);
+  const schemaTokens = estimateTokens(
+    JSON.stringify(compactedTool.input_schema || {}),
+    options?.family,
+  );
   return nameTokens + descTokens + schemaTokens + 10;
 }
 
@@ -43,12 +48,15 @@ export function estimateAllToolTokens(
 
 export interface EnforceToolTokenBudgetOptions {
   pinnedToolNames?: Iterable<string>;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  family?: string;
 }
 
 function resolveCompactionOptions(
   pinnedToolNames: ReadonlySet<string>,
+  family?: string,
 ): CompactToolDefinitionOptions {
-  return { pinnedToolNames };
+  return { pinnedToolNames, family };
 }
 
 export function enforceToolTokenBudget(
@@ -57,7 +65,7 @@ export function enforceToolTokenBudget(
   options?: EnforceToolTokenBudgetOptions,
 ): ToolDefinition[] {
   const pinnedToolNames = new Set(Array.from(options?.pinnedToolNames ?? []).filter(Boolean));
-  const compactionOptions = resolveCompactionOptions(pinnedToolNames);
+  const compactionOptions = resolveCompactionOptions(pinnedToolNames, options?.family);
   let total = estimateAllToolTokens(tools, compactionOptions);
   if (total <= budgetTokens) {
     return compressToolDefinitions(tools, compactionOptions);

@@ -20,7 +20,7 @@ describe('contextStartSelector', () => {
     expect(result.droppedMessageCount).toBe(0);
   });
 
-  it('cuts to a new topic boundary after long idle gap', () => {
+  it('cuts to a topic boundary after a long idle gap, regardless of content overlap', () => {
     const messages: Message[] = [
       makeMessage({
         id: 'u1',
@@ -45,10 +45,7 @@ describe('contextStartSelector', () => {
     const result = selectContextStartIndex(messages, {
       mode: 'chat',
       now: 30_000_000,
-      policyOverride: {
-        hardIdleCutoffMs: 60_000,
-        semanticSimilarityThreshold: 0.2,
-      },
+      policyOverride: { hardIdleCutoffMs: 60_000 },
     });
 
     expect(result.startIndex).toBe(2);
@@ -81,10 +78,7 @@ describe('contextStartSelector', () => {
     const result = selectContextStartIndex(messages, {
       mode: 'chat',
       now: 30_000_000,
-      policyOverride: {
-        hardIdleCutoffMs: 60_000,
-        semanticSimilarityThreshold: 0.2,
-      },
+      policyOverride: { hardIdleCutoffMs: 60_000 },
     });
 
     expect(result.startIndex).toBe(2);
@@ -92,42 +86,37 @@ describe('contextStartSelector', () => {
     expect(result.idleGapMs).toBe(29_999_000);
   });
 
-  it('keeps same-topic carryover even after idle when similarity stays high', () => {
+  it('never drops history for a pronoun-only follow-up when the idle gap is short', () => {
+    // No content-similarity heuristic runs anymore, so a near-content-free
+    // follow-up like "What about that one?" must not trigger a cut on its own.
     const messages: Message[] = [
       makeMessage({
         id: 'u1',
         role: 'user',
-        content: 'Fix android release crash in startup flow',
+        content: 'Compare the Q3 and Q4 marketing budgets for the Berlin office',
         timestamp: 1_000,
       }),
       makeMessage({
         id: 'a1',
         role: 'assistant',
-        content: 'Checking startup traces',
+        content: 'Q3 was 120k and Q4 was 95k for the Berlin office.',
         timestamp: 2_000,
       }),
       makeMessage({
         id: 'u2',
         role: 'user',
-        content: 'Also fix android startup crash regression in release build',
-        timestamp: 40_000_000,
+        content: 'What about that one?',
+        timestamp: 3_000,
       }),
     ];
 
-    const result = selectContextStartIndex(messages, {
-      mode: 'chat',
-      now: 40_000_000,
-      policyOverride: {
-        hardIdleCutoffMs: 60_000,
-        semanticSimilarityThreshold: 0.1,
-      },
-    });
+    const result = selectContextStartIndex(messages, { mode: 'chat', now: 3_000 });
 
     expect(result.startIndex).toBe(0);
     expect(result.reason).toBe('full_history');
   });
 
-  it('keeps same-topic carryover for non-English text without ASCII tokenization', () => {
+  it('keeps full history for a short-idle-gap follow-up regardless of script', () => {
     const messages: Message[] = [
       makeMessage({
         id: 'u1',
@@ -144,19 +133,12 @@ describe('contextStartSelector', () => {
       makeMessage({
         id: 'u2',
         role: 'user',
-        content: '继续修复安卓启动崩溃回归',
-        timestamp: 40_000_000,
+        content: '那个呢？',
+        timestamp: 3_000,
       }),
     ];
 
-    const result = selectContextStartIndex(messages, {
-      mode: 'chat',
-      now: 40_000_000,
-      policyOverride: {
-        hardIdleCutoffMs: 60_000,
-        semanticSimilarityThreshold: 0.1,
-      },
-    });
+    const result = selectContextStartIndex(messages, { mode: 'chat', now: 3_000 });
 
     expect(result.startIndex).toBe(0);
     expect(result.reason).toBe('full_history');
@@ -189,14 +171,30 @@ describe('contextStartSelector', () => {
     const result = selectContextStartIndex(messages, {
       mode: 'chat',
       now: 5_000,
-      policyOverride: {
-        semanticSimilarityThreshold: 0.01,
-        maxCarryoverUserTurns: 1,
-      },
+      policyOverride: { maxCarryoverUserTurns: 1 },
     });
 
     expect(result.startIndex).toBe(2);
     expect(result.reason).toBe('carryover_limit');
+  });
+
+  it('never keeps more turns than minRecentUserTurns guarantees, even under a tighter carryover cap', () => {
+    const messages: Message[] = [
+      makeMessage({ id: 'u1', role: 'user', content: 'one', timestamp: 1_000 }),
+      makeMessage({ id: 'a1', role: 'assistant', content: 'ok', timestamp: 2_000 }),
+      makeMessage({ id: 'u2', role: 'user', content: 'two', timestamp: 3_000 }),
+    ];
+
+    const result = selectContextStartIndex(messages, {
+      mode: 'chat',
+      now: 3_000,
+      policyOverride: { maxCarryoverUserTurns: 0, minRecentUserTurns: 2 },
+    });
+
+    // minRecentUserTurns=2 guarantees both user turns survive even though
+    // maxCarryoverUserTurns=0 would otherwise cut to the last turn only.
+    expect(result.startIndex).toBe(0);
+    expect(result.reason).toBe('full_history');
   });
 
   it('keeps bounded recent carryover for agentic one-conversation context', () => {
@@ -232,7 +230,7 @@ describe('contextStartSelector', () => {
     expect(result.reason).toBe('full_history');
   });
 
-  it('cuts pilot transcript to latest relevant turn when stale context is unrelated', () => {
+  it('pilot mode always forces a topic boundary, cutting to the minimum recent turns', () => {
     const messages: Message[] = [
       makeMessage({
         id: 'u1',
@@ -259,12 +257,10 @@ describe('contextStartSelector', () => {
     const result = selectContextStartIndex(messages, {
       mode: 'pilot',
       now: 5_000,
-      policyOverride: {
-        semanticSimilarityThreshold: 0.3,
-      },
     });
 
-    expect(result.startIndex).toBe(2);
+    expect(result.startIndex).toBe(4);
     expect(result.reason).toBe('topic_shift_boundary');
+    expect(result.droppedMessageCount).toBe(4);
   });
 });

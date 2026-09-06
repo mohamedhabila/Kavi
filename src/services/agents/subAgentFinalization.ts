@@ -2,6 +2,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import type { SubAgentCompletionState } from '../../types/subAgent';
 import type { TokenUsage } from '../../types/usage';
 import { estimateMessageTokens, estimateTokens } from '../context/tokenCounter';
+import { resolveProviderFamily } from '../llm/catalog/providerFamilies';
 import { resolveFinalizationMaxTokens } from '../context/tokenOptimization';
 import { LlmService } from '../llm/LlmService';
 import { extractResponseTokenUsage } from '../usage/conversationUsage';
@@ -130,8 +131,9 @@ export async function synthesizeSubAgentFinalAnswer(params: {
     }
 
     if (!latestUsage) {
-      const inputTokens = estimateMessageTokens(requestMessages);
-      const outputTokens = estimateTokens(finalAnswer?.report || '');
+      const family = resolveProviderFamily(params.provider);
+      const inputTokens = estimateMessageTokens(requestMessages, family);
+      const outputTokens = estimateTokens(finalAnswer?.report || '', family);
       latestUsage = {
         model: params.model,
         inputTokens,

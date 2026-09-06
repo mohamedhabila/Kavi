@@ -14,12 +14,13 @@ export interface OrchestratorCompactionEvent {
   summary?: string;
 }
 
-export function estimateWorkingMessageTokens(messages: Message[]): number {
+export function estimateWorkingMessageTokens(messages: Message[], family?: string): number {
   return estimateMessageTokens(
     messages.map((message) => ({
       role: message.role,
       content: serializeWorkingMessageContent(message),
     })),
+    family,
   );
 }
 
@@ -41,6 +42,7 @@ function serializeWorkingMessageContent(message: Message): string {
 export function applyCompactionResultToWorkingMessages(
   messages: Message[],
   compactResult: CompactResult,
+  family?: string,
 ): OrchestratorCompactionEvent {
   if (!compactResult.compacted || !compactResult.result) {
     return {
@@ -55,7 +57,7 @@ export function applyCompactionResultToWorkingMessages(
       ? compactResult.tier
       : 'selective';
   if (tier === 'tool_clearing') {
-    const { messages: cleared } = clearOldToolResults(messages);
+    const { messages: cleared } = clearOldToolResults(messages, undefined, family);
     return {
       notice: `Cleared ${compactResult.result.clearedToolResults ?? 0} old tool results`,
       messages: cleared,

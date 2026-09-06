@@ -16,8 +16,6 @@
 
 import { resolveModelOutputTokenBudget } from './outputTokenBudget';
 import {
-  CHARS_PER_TOKEN,
-  SAFETY_MARGIN,
   estimateTokens,
   estimateMessageTokens,
   getWorkingContextWindow,
@@ -29,6 +27,12 @@ import {
   estimateAllToolTokens,
 } from '../../engine/tools/toolManagerTokenBudget';
 import type { ToolDefinition } from '../../types/tool';
+import {
+  truncateSystemPrompt,
+  truncateSystemPromptPreservingSection,
+} from './systemPromptTruncation';
+
+export { truncateSystemPrompt } from './systemPromptTruncation';
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -174,12 +178,14 @@ export interface ContextBudgetEnforcementOptions extends WorkingContextWindowOpt
 
 function estimateBudgetMessageTokens(
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
+  family?: string,
 ): number {
   return estimateMessageTokens(
     messages.map((message) => ({
       role: message.role,
       content: serializeBudgetMessageContent(message),
     })),
+    family,
   );
 }
 
@@ -236,9 +242,9 @@ export function inspectContextBudget(
 ): ContextBudgetPressure {
   const budget = computeContextBudget(model, maxTokens, options);
   const normalizedMessages = removeOrphanedToolResults(messages);
-  const systemPromptTokens = estimateTokens(systemPrompt);
-  const toolsTokens = estimateAllToolTokens(tools);
-  const messagesTokens = estimateBudgetMessageTokens(normalizedMessages);
+  const systemPromptTokens = estimateTokens(systemPrompt, options?.family);
+  const toolsTokens = estimateAllToolTokens(tools, { family: options?.family });
+  const messagesTokens = estimateBudgetMessageTokens(normalizedMessages, options?.family);
   const totalAvailable = budget.contextWindow - budget.outputReserve;
   const remainingMessagesBudget = Math.max(totalAvailable - systemPromptTokens - toolsTokens, 0);
   const totalTokens = systemPromptTokens + toolsTokens + messagesTokens;
@@ -260,62 +266,9 @@ export function inspectContextBudget(
 }
 
 // ── System prompt truncation ─────────────────────────────────────────────
-
-/**
- * Truncate a system prompt to fit within the token budget.
- * Preserves the beginning (base prompt + persona) and end (tool guidelines).
- * Trims the middle (memory, skills details) using head+tail strategy.
- */
-export function truncateSystemPrompt(prompt: string, budgetTokens: number): string {
-  const currentTokens = estimateTokens(prompt);
-  if (currentTokens <= budgetTokens) return prompt;
-
-  // Convert token budget to approximate chars (Kavi: 4 chars/token)
-  const budgetChars = Math.floor(budgetTokens * 4);
-  return truncateSystemPromptToChars(prompt, budgetChars);
-}
-
-function truncateSystemPromptToChars(prompt: string, budgetChars: number): string {
-  if (prompt.length <= budgetChars) return prompt;
-
-  // Head+tail: 60% from beginning (base prompt), 40% from end (guidelines)
-  const notice = '\n\n[... context truncated to fit budget ...]\n\n';
-  const available = budgetChars - notice.length;
-  const headSize = Math.floor(available * 0.6);
-  const tailSize = available - headSize;
-
-  return prompt.slice(0, headSize) + notice + prompt.slice(prompt.length - tailSize);
-}
-
-function truncateSystemPromptPreservingSection(
-  prompt: string,
-  budgetTokens: number,
-  protectedSection: string,
-): string {
-  const firstIndex = prompt.indexOf(protectedSection);
-  if (firstIndex < 0 || prompt.indexOf(protectedSection, firstIndex + 1) >= 0) {
-    throw new Error('protected_system_prompt_section_missing_or_duplicated');
-  }
-  if (estimateTokens(protectedSection) > budgetTokens) {
-    throw new Error('protected_system_prompt_section_exceeds_budget');
-  }
-
-  const separator = '\n\n';
-  const maxChars = Math.floor((budgetTokens * CHARS_PER_TOKEN) / SAFETY_MARGIN);
-  const remainingMaxChars = maxChars - protectedSection.length - separator.length;
-  if (remainingMaxChars <= 0) {
-    throw new Error('protected_system_prompt_section_exceeds_budget');
-  }
-  const remainingPrompt = `${prompt.slice(0, firstIndex)}${prompt.slice(
-    firstIndex + protectedSection.length,
-  )}`.trim();
-  const truncatedRemaining = truncateSystemPromptToChars(remainingPrompt, remainingMaxChars);
-  const adjusted = `${truncatedRemaining}${separator}${protectedSection}`;
-  if (estimateTokens(adjusted) > budgetTokens || !adjusted.endsWith(protectedSection)) {
-    throw new Error('protected_system_prompt_section_exceeds_budget');
-  }
-  return adjusted;
-}
+// The actual text-shrinking logic lives in `systemPromptTruncation.ts` (kept
+// separate to stay under this file's line-count guardrail); this section only
+// decides how much budget a protected section is allowed to claim.
 
 function resolveProtectedSystemPromptBudget(params: {
   budget: ContextBudget;
@@ -323,8 +276,9 @@ function resolveProtectedSystemPromptBudget(params: {
   protectedSection: string;
   toolsTokens: number;
   totalAvailable: number;
+  family?: string;
 }): number {
-  const protectedTokens = estimateTokens(params.protectedSection);
+  const protectedTokens = estimateTokens(params.protectedSection, params.family);
   const requiredPromptTokens = protectedTokens + MIN_PROTECTED_PROMPT_INSTRUCTION_TOKENS;
   const retainedMessageTokens = Math.min(params.messagesTokens, 4096);
   const availableAfterToolsAndMessages =
@@ -348,6 +302,7 @@ function resolveProtectedSystemPromptBudget(params: {
 export function windowMessages(
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
   budgetTokens: number,
+  family?: string,
 ): Array<{ role: string; content: string | any[]; [key: string]: any }> {
   if (messages.length === 0) return messages;
 
@@ -360,7 +315,7 @@ export function windowMessages(
   const groups: MsgGroup[] = [];
 
   const costs = messages.map((msg) => {
-    return estimateTokens(serializeBudgetMessageContent(msg)) + 4; // +4 for message framing
+    return estimateTokens(serializeBudgetMessageContent(msg), family) + 4; // +4 for message framing
   });
 
   const totalTokens = costs.reduce((a, b) => a + b, 0);
@@ -484,9 +439,10 @@ export function enforceContextBudget(
 ): AdjustedPayload {
   const budget = computeContextBudget(model, maxTokens, options);
   const adjustments: string[] = [];
+  const family = options?.family;
 
   const pinnedToolNames = new Set(Array.from(options?.pinnedToolNames ?? []).filter(Boolean));
-  const compactionOptions = { pinnedToolNames };
+  const compactionOptions = { pinnedToolNames, family };
 
   let adjustedPrompt = systemPrompt;
   let adjustedTools = compressToolDefinitions(tools, compactionOptions);
@@ -497,9 +453,9 @@ export function enforceContextBudget(
   }
 
   // 1. Estimate current sizes
-  let promptTokens = estimateTokens(adjustedPrompt);
+  let promptTokens = estimateTokens(adjustedPrompt, family);
   let toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
-  let messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
+  let messagesTokens = estimateBudgetMessageTokens(adjustedMessages, family);
 
   const totalAvailable = budget.contextWindow - budget.outputReserve;
   let effectiveSystemPromptBudget = budget.systemPromptBudget;
@@ -509,6 +465,7 @@ export function enforceContextBudget(
     if (toolsTokens > budget.toolsBudget) {
       adjustedTools = enforceToolTokenBudget(adjustedTools, budget.toolsBudget, {
         pinnedToolNames: options?.pinnedToolNames,
+        family,
       });
       toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
       adjustments.push(
@@ -524,6 +481,7 @@ export function enforceContextBudget(
       protectedSection: options.protectedSystemPromptSection,
       toolsTokens,
       totalAvailable,
+      family,
     });
     if (effectiveSystemPromptBudget > budget.systemPromptBudget) {
       adjustments.push(
@@ -539,9 +497,10 @@ export function enforceContextBudget(
           adjustedPrompt,
           effectiveSystemPromptBudget,
           options.protectedSystemPromptSection,
+          family,
         )
-      : truncateSystemPrompt(adjustedPrompt, effectiveSystemPromptBudget);
-    promptTokens = estimateTokens(adjustedPrompt);
+      : truncateSystemPrompt(adjustedPrompt, effectiveSystemPromptBudget, family);
+    promptTokens = estimateTokens(adjustedPrompt, family);
     adjustments.push(`truncated system prompt to ${promptTokens} tokens`);
   }
 
@@ -560,8 +519,8 @@ export function enforceContextBudget(
   const effectiveMessageBudget = totalAvailable - promptTokens - toolsTokens;
   if (messagesTokens > effectiveMessageBudget && effectiveMessageBudget > 0) {
     const origCount = adjustedMessages.length;
-    adjustedMessages = windowMessages(adjustedMessages, effectiveMessageBudget);
-    messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
+    adjustedMessages = windowMessages(adjustedMessages, effectiveMessageBudget, family);
+    messagesTokens = estimateBudgetMessageTokens(adjustedMessages, family);
     adjustments.push(`windowed messages from ${origCount} to ${adjustedMessages.length}`);
   }
 
@@ -572,14 +531,15 @@ export function enforceContextBudget(
     const aggressiveToolBudget = Math.floor(totalAvailable * 0.1);
     adjustedTools = enforceToolTokenBudget(adjustedTools, aggressiveToolBudget, {
       pinnedToolNames: options?.pinnedToolNames,
+      family,
     });
     toolsTokens = estimateAllToolTokens(adjustedTools, compactionOptions);
     adjustments.push(`aggressively reduced tools to ${adjustedTools.length}`);
 
     // Re-window messages with the freed budget
     const newMessageBudget = totalAvailable - promptTokens - toolsTokens;
-    adjustedMessages = windowMessages(adjustedMessages, Math.max(newMessageBudget, 2048));
-    messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
+    adjustedMessages = windowMessages(adjustedMessages, Math.max(newMessageBudget, 2048), family);
+    messagesTokens = estimateBudgetMessageTokens(adjustedMessages, family);
 
     totalTokens = promptTokens + toolsTokens + messagesTokens;
   }
@@ -590,7 +550,7 @@ export function enforceContextBudget(
       `removed ${adjustedMessages.length - normalizedMessages.length} orphaned tool results`,
     );
     adjustedMessages = normalizedMessages;
-    messagesTokens = estimateBudgetMessageTokens(adjustedMessages);
+    messagesTokens = estimateBudgetMessageTokens(adjustedMessages, family);
     totalTokens = promptTokens + toolsTokens + messagesTokens;
   }
 

@@ -54,6 +54,8 @@ export type CompactionContext = {
   requestModel?: string;
   /** True when the active provider runs on-device and must not summarize. */
   onDeviceProvider?: boolean;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  requestFamily?: string;
 };
 
 export type BootstrapResult = {

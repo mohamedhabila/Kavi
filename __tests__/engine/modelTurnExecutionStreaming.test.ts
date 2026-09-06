@@ -5,9 +5,9 @@ jest.mock('expo-sqlite', () => {
 
 import {
   executeAgentControlGraphModelTurnStreaming,
-  executeAgentControlGraphModelTurnViaSendMessage,
   MODEL_TURN_INACTIVITY_TIMEOUT_MS,
 } from '../../src/engine/graph/modelTurnExecutionStreaming';
+import { executeAgentControlGraphModelTurnViaSendMessage } from '../../src/engine/graph/modelTurnExecutionSendMessage';
 import { hasGeminiToolTurnThoughtSignatureCoverage } from '../../src/services/llm/providers/gemini/thoughtSignatureCoverage';
 import {
   buildModelTurnMemoryPolicyBinding,

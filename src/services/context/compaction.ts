@@ -127,6 +127,7 @@ export function determineCompactionTier(tokenCount: number, budget: number): Com
 export function clearOldToolResults(
   messages: Message[],
   keepRecent: number = TOOL_CLEARING_KEEP_RECENT,
+  family?: string,
 ): { messages: Message[]; cleared: number; tokensFreed: number } {
   const effectiveKeepRecent = Math.max(TOOL_CLEARING_MIN_KEEP, keepRecent);
 
@@ -151,10 +152,10 @@ export function clearOldToolResults(
   const result = messages.map((msg, idx) => {
     if (!toClearIndices.has(idx)) return msg;
 
-    const originalTokens = estimateTokens(getMessageContentForContext(msg));
+    const originalTokens = estimateTokens(getMessageContentForContext(msg), family);
     const toolName = msg.toolCalls?.[0]?.name || msg.toolCallId || 'tool';
     const placeholder = buildToolResultPlaceholder('cleared', toolName, msg.content);
-    const newTokens = estimateTokens(placeholder);
+    const newTokens = estimateTokens(placeholder, family);
     tokensFreed += Math.max(0, originalTokens - newTokens);
     cleared++;
 
@@ -239,6 +240,7 @@ export class DefaultContextEngine implements ContextEngine {
       params.currentTokenCount ??
       estimateMessageTokens(
         params.messages.map((m) => ({ role: m.role, content: getMessageContentForContext(m) })),
+        params.compactionContext?.requestFamily,
       );
     const budget = params.tokenBudget ?? 128000;
 
@@ -273,10 +275,19 @@ export class DefaultContextEngine implements ContextEngine {
   }
 
   private async applyToolClearing(
-    params: { sessionId: string; messages: Message[]; tokenBudget?: number },
+    params: {
+      sessionId: string;
+      messages: Message[];
+      tokenBudget?: number;
+      compactionContext?: CompactionContext;
+    },
     tokenCount: number,
   ): Promise<CompactResult> {
-    const { messages: cleared, cleared: count, tokensFreed } = clearOldToolResults(params.messages);
+    const { messages: cleared, cleared: count, tokensFreed } = clearOldToolResults(
+      params.messages,
+      undefined,
+      params.compactionContext?.requestFamily,
+    );
 
     if (count === 0) {
       return {
@@ -385,9 +396,10 @@ export class DefaultContextEngine implements ContextEngine {
       summarizer,
     });
     const tokensAfter =
-      estimateTokens(summary) +
+      estimateTokens(summary, params.compactionContext?.requestFamily) +
       estimateMessageTokens(
         toKeep.map((m) => ({ role: m.role, content: getMessageContentForContext(m) })),
+        params.compactionContext?.requestFamily,
       );
 
     await emitSessionEvent('compacted', {

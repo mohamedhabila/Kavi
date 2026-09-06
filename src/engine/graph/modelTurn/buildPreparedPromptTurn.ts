@@ -25,6 +25,8 @@ export function buildPreparedModelTurnPrompt(params: {
   allowSessionCoordinationTools: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
   effectiveForceTextThisTurn: boolean;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  family?: string;
   groundedRequestScopedTools: ReadonlyArray<ToolDefinition>;
   iteration: number;
   pinnedToolNames: ReadonlyArray<string>;
@@ -107,6 +109,7 @@ export function buildPreparedModelTurnPrompt(params: {
     prepareAgentTurn({
       allowSessionCoordinationTools: params.allowSessionCoordinationTools,
       effectiveForceTextThisTurn: params.effectiveForceTextThisTurn,
+      family: params.family,
       groundedRequestScopedTools: options.groundedTools,
       pinnedToolNames: options.pinnedTools,
       promptBundleContext: {

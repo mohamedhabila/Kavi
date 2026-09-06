@@ -29,6 +29,8 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
   compactionEngine: AgentTurnCompactionEngine;
   livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  requestFamily?: string;
   warn: (message: string, error: unknown) => void;
   onStateChange: (state: 'thinking') => void;
   applyGraphEvents: (events: ReadonlyArray<AgentControlGraphEvent>) => void;
@@ -134,9 +136,10 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
         conversationId: params.conversationId,
         currentMessages: workingMessages,
         onCompaction: params.onCompaction,
-        currentTokenCount: estimateWorkingMessageTokens(workingMessages),
+        currentTokenCount: estimateWorkingMessageTokens(workingMessages, params.requestFamily),
         forceTier,
         failureLabel: 'Preemptive compaction failed',
+        requestFamily: params.requestFamily,
         warn: params.warn,
       });
       if (!overflowCompaction.compacted) {

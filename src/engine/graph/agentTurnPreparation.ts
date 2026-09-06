@@ -21,6 +21,8 @@ type PromptBundleContext = Omit<
 export interface PrepareAgentTurnParams {
   allowSessionCoordinationTools: boolean;
   effectiveForceTextThisTurn: boolean;
+  /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
+  family?: string;
   groundedRequestScopedTools: ReadonlyArray<ToolDefinition>;
   pinnedToolNames?: ReadonlyArray<string>;
   promptBundleContext: PromptBundleContext;
@@ -84,6 +86,7 @@ export function prepareAgentTurn(params: PrepareAgentTurnParams): PreparedAgentT
     pinnedToolNames,
     selectedToolTokenEstimate: estimateAllToolTokens(selectedTools, {
       pinnedToolNames: new Set(pinnedToolNames),
+      family: params.family,
     }),
     selectedTools,
     toolsForIteration: promptBundle.toolsForIteration,
