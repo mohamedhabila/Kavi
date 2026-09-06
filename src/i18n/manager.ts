@@ -4,10 +4,15 @@
 // Singleton that manages the current locale and translation lookups.
 // Uses a subscriber pattern so React components can re-render on locale change.
 
+import { I18nManager as RNI18nManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Locale, TranslationMap } from './types';
+import type { Locale, PluralTable, TranslationMap, TranslationLeaf } from './types';
+import { isPluralTable } from './types';
 import { getEnglishTranslations, loadLocaleTranslations, SUPPORTED_LOCALES, resolveDeviceLocale } from './registry';
 import { getDeviceLocaleTag } from './deviceLocale';
+import { getLocaleBcp47Tag } from './localeBcp47';
+import { isRtlLanguageTag } from './rtlLocales';
+import { selectPluralCategory } from './pluralCategory';
 
 const STORAGE_KEY = 'kavi_locale';
 
@@ -109,6 +114,7 @@ class I18nManager {
     this._localePreference = preference;
     this._locale = resolvedLocale;
     this._translations = await loadLocaleTranslations(resolvedLocale);
+    this._applyDirection(resolvedLocale);
 
     if (persist) {
       try {
@@ -122,21 +128,45 @@ class I18nManager {
   }
 
   /**
-   * Translate a dot-delimited key. Supports `{param}` interpolation.
+   * Apply RN's layout direction for `locale`. `I18nManager.forceRTL` only
+   * takes effect from the *next* app start — RN reads `isRTL` once at
+   * bridge init to decide the root layout direction, so flipping it here
+   * changes what the next launch renders, not the current screen. Callers
+   * that surface a language choice to the user (the language picker in
+   * Settings) must say so in their copy; see `settings.languageRestartHint`
+   * in every locale.
+   */
+  private _applyDirection(locale: Locale): void {
+    const shouldForceRtl = isRtlLanguageTag(getLocaleBcp47Tag(locale));
+    RNI18nManager.allowRTL(true);
+    RNI18nManager.forceRTL(shouldForceRtl);
+  }
+
+  /**
+   * Translate a dot-delimited key. Supports `{param}` interpolation, and a
+   * `{count}` param additionally selects a CLDR plural category when `key`
+   * resolves to a plural table (see `PluralTable` in `./types`) rather than
+   * a flat string.
    *
    * @example
    *   t('chat.toolCall', { name: 'web_fetch' })
    *   // → "Using tool: web_fetch"
+   * @example
+   *   t('nav.memoryStatsFacts', { count: 1 })
+   *   // → "1 fact" (selects the `one` category)
    */
   t(key: string, params?: Record<string, string | number>): string {
-    let value = this._resolve(this._translations, key);
+    let resolved = this._resolve(this._translations, key);
 
     // Fallback to English when key is missing in current locale
-    if (value === undefined) {
-      value = this._resolve(getEnglishTranslations(), key);
+    if (resolved === undefined) {
+      resolved = this._resolve(getEnglishTranslations(), key);
     }
 
-    if (value === undefined) return key; // Last resort: return the key itself
+    if (resolved === undefined) return key; // Last resort: return the key itself
+
+    let value =
+      typeof resolved === 'string' ? resolved : this._selectPluralForm(resolved, params?.count);
 
     if (params) {
       for (const [k, v] of Object.entries(params)) {
@@ -158,15 +188,24 @@ class I18nManager {
     for (const fn of this._subscribers) fn();
   }
 
-  private _resolve(map: TranslationMap, key: string): string | undefined {
+  private _selectPluralForm(table: PluralTable, count: string | number | undefined): string {
+    const numericCount =
+      typeof count === 'number' ? count : typeof count === 'string' ? Number(count) : undefined;
+    const category = selectPluralCategory(this._locale, numericCount);
+    return table[category] ?? table.other;
+  }
+
+  private _resolve(map: TranslationMap, key: string): TranslationLeaf | undefined {
     const parts = key.split('.');
-    let current: TranslationMap | string = map;
+    let current: TranslationLeaf | TranslationMap = map;
     for (const part of parts) {
       if (typeof current !== 'object' || current === null) return undefined;
-      current = (current as Record<string, TranslationMap | string>)[part];
+      current = (current as TranslationMap)[part];
       if (current === undefined) return undefined;
     }
-    return typeof current === 'string' ? current : undefined;
+    if (typeof current === 'string') return current;
+    if (isPluralTable(current)) return current;
+    return undefined;
   }
 }
 

@@ -164,7 +164,10 @@ describe('AgentRosterScreen', () => {
 
     const stylesTab = getByTestId('assistant-styles-tab');
     const delegatedTab = getByTestId('delegated-work-tab');
-    expect(stylesTab.props.accessibilityLabel).toBe('Styles (1)');
+    // One persona configured: the plural table correctly selects the "one"
+    // category ("Style (1)"), not the flat "Styles (1)" the pre-pluralization
+    // fixture asserted.
+    expect(stylesTab.props.accessibilityLabel).toBe('Style (1)');
     expect(stylesTab.props.accessibilityRole).toBe('tab');
     expect(stylesTab.props.accessibilityState).toMatchObject({ selected: true });
     expect(delegatedTab.props.accessibilityLabel).toBe('Delegated work (0)');

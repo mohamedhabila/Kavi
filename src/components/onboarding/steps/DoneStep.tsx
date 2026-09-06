@@ -27,10 +27,6 @@ export function DoneStep() {
               ? t('onboarding.doneConfiguredWithServices', {
                   provider: configuredProviderName,
                   count: configuredServiceCount,
-                  label:
-                    configuredServiceCount === 1
-                      ? t('onboarding.serviceKeySingular')
-                      : t('onboarding.serviceKeyPlural'),
                 })
               : t('onboarding.doneConfiguredNoServices', { provider: configuredProviderName })
             : t('onboarding.doneSkippedProvider')}

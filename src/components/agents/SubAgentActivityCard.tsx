@@ -1,13 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-} from 'lucide-react-native';
+import { AlertTriangle, Bot, CheckCircle2, Clock } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon, ForwardChevronIcon } from '../navigation/DirectionalIcons';
 import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
 import type { SubAgentLifecycleEvent, SubAgentSnapshot } from '../../types/subAgent';
@@ -168,14 +162,10 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
   const elapsedLabel = formatCompactElapsed(getSubAgentElapsedMs(snapshot, now));
   const outputSummary = summarizeSubAgentVisibleActivity(snapshot, variant === 'queue' ? 280 : 180);
   const toolCountLabel = snapshot.toolsUsed?.length
-    ? snapshot.toolsUsed.length === 1
-      ? t('chat.subAgentToolCountOne')
-      : t('chat.subAgentToolCount', { count: snapshot.toolsUsed.length })
+    ? t('chat.subAgentToolCount', { count: snapshot.toolsUsed.length })
     : undefined;
   const iterationCountLabel = snapshot.iterations
-    ? snapshot.iterations === 1
-      ? t('chat.subAgentIterationCountOne')
-      : t('chat.subAgentIterationCount', { count: snapshot.iterations })
+    ? t('chat.subAgentIterationCount', { count: snapshot.iterations })
     : undefined;
   const nestedUnderLabel = snapshot.parentSessionId
     ? t('chat.subAgentNestedUnder', { session: getSubAgentSessionLabel(snapshot.parentSessionId) })
@@ -202,7 +192,7 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
     <View
       style={[
         styles.depthContainer,
-        depth > 0 ? { marginLeft: depth * INDENT_STEP, borderLeftWidth: 2, paddingLeft: 12 } : null,
+        depth > 0 ? { marginStart: depth * INDENT_STEP, borderStartWidth: 2, paddingStart: 12 } : null,
       ]}
       testID={`sub-agent-card-depth-${depth}`}
     >
@@ -246,11 +236,7 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
                 <Text style={[styles.statusPillText, { color: tone.accent }]}>{statusLabel}</Text>
               </View>
               {hasExpandableDetails ? (
-                expanded ? (
-                  <ChevronDown size={16} color={colors.textSecondary} />
-                ) : (
-                  <ChevronRight size={16} color={colors.textSecondary} />
-                )
+                <ExpandCollapseChevronIcon expanded={expanded} size={16} color={colors.textSecondary} />
               ) : null}
             </View>
           </View>
@@ -298,29 +284,21 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
           {hasRollup && rollup ? (
             <View style={styles.rollupStrip} testID="sub-agent-rollup-strip">
               <Text style={styles.rollupLabelText}>
-                {rollup.totalAgents === 1
-                  ? t('chat.subAgentRollupWorkersOne')
-                  : t('chat.subAgentRollupWorkers', { count: rollup.totalAgents })}
+                {t('chat.subAgentRollupWorkers', { count: rollup.totalAgents })}
               </Text>
               {rollup.runningCount > 0 ? (
                 <Text style={styles.rollupValueText}>
-                  {rollup.runningCount === 1
-                    ? t('chat.subAgentRollupRunningOne')
-                    : t('chat.subAgentRollupRunning', { count: rollup.runningCount })}
+                  {t('chat.subAgentRollupRunning', { count: rollup.runningCount })}
                 </Text>
               ) : null}
               {rollup.completedCount > 0 ? (
                 <Text style={styles.rollupValueText}>
-                  {rollup.completedCount === 1
-                    ? t('chat.subAgentRollupCompletedOne')
-                    : t('chat.subAgentRollupCompleted', { count: rollup.completedCount })}
+                  {t('chat.subAgentRollupCompleted', { count: rollup.completedCount })}
                 </Text>
               ) : null}
               {rollupIssueCount > 0 ? (
                 <Text style={[styles.rollupValueText, { color: colors.danger }]}>
-                  {rollupIssueCount === 1
-                    ? t('chat.subAgentRollupIssuesOne')
-                    : t('chat.subAgentRollupIssues', { count: rollupIssueCount })}
+                  {t('chat.subAgentRollupIssues', { count: rollupIssueCount })}
                 </Text>
               ) : null}
             </View>
@@ -336,7 +314,7 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
             testID="sub-agent-open-details"
           >
             <Text style={styles.openDetailsText}>{t('chat.subAgentOpenDetails')}</Text>
-            <ChevronRight size={16} color={colors.primary} />
+            <ForwardChevronIcon size={16} color={colors.primary} />
           </TouchableOpacity>
         ) : null}
 
@@ -388,7 +366,7 @@ export const SubAgentActivityCard: React.FC<SubAgentActivityCardProps> = ({
 const createStyles = (colors: AppPalette) =>
   StyleSheet.create({
     depthContainer: {
-      borderLeftColor: colors.subtleBorder,
+      borderStartColor: colors.subtleBorder,
     },
     card: {
       borderWidth: 1,

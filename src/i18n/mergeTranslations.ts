@@ -1,7 +1,16 @@
-import type { TranslationMap } from './types';
+import type { TranslationMap, TranslationLeaf } from './types';
+import { isPluralTable } from './types';
 
-function isTranslationBranch(value: string | TranslationMap | undefined): value is TranslationMap {
-  return typeof value === 'object' && value !== null;
+/**
+ * True for a nested translation namespace, false for a leaf value — a flat
+ * string, or a `PluralTable` (which is a plain object but must be replaced
+ * as a whole, not deep-merged category by category: a locale's plural
+ * table missing a category should surface as a gap in
+ * `check-i18n-consistency.js`, not silently inherit that category's text
+ * from the base locale).
+ */
+function isTranslationBranch(value: TranslationLeaf | TranslationMap | undefined): value is TranslationMap {
+  return typeof value === 'object' && value !== null && !isPluralTable(value);
 }
 
 export function mergeTranslations(base: TranslationMap, overrides: TranslationMap): TranslationMap {

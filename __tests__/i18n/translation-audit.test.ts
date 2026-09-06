@@ -4,6 +4,7 @@ import path from 'node:path';
 import ts from 'typescript';
 
 import { en } from '../../src/i18n/locales/en';
+import { isPluralTable } from '../../src/i18n/types';
 
 const ROOT = process.cwd();
 const SOURCE_ROOT = path.join(ROOT, 'src');
@@ -158,7 +159,17 @@ function flattenTranslationMap(value: Record<string, unknown>, prefix = ''): str
 
   for (const [entryKey, entryValue] of Object.entries(value)) {
     const fullKey = prefix ? `${prefix}.${entryKey}` : entryKey;
-    if (entryValue && typeof entryValue === 'object' && !Array.isArray(entryValue)) {
+    // A plural table (`{ one: '...', other: '...' }`) is a single
+    // translation key, not a nested namespace — `t(key, { count })` selects
+    // a category internally. Descending into it would produce phantom
+    // leaf keys like `nav.memoryStatsFacts.other` that no call site ever
+    // references.
+    if (
+      entryValue &&
+      typeof entryValue === 'object' &&
+      !Array.isArray(entryValue) &&
+      !isPluralTable(entryValue)
+    ) {
       keys.push(...flattenTranslationMap(entryValue as Record<string, unknown>, fullKey));
       continue;
     }

@@ -123,12 +123,7 @@ export const AgentRosterScreen: React.FC = () => {
 
       Alert.alert(
         t('agentRoster.queueStopTitle'),
-        t(
-          runningNodes.length === 1
-            ? 'agentRoster.queueStopConfirmOne'
-            : 'agentRoster.queueStopConfirmMany',
-          { count: runningNodes.length },
-        ),
+        t('agentRoster.queueStopConfirm', { count: runningNodes.length }),
         [
           { text: t('common.cancel'), style: 'cancel' },
           {

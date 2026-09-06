@@ -72,7 +72,7 @@ export function FeaturesStep() {
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.stepTitle}>{t('onboarding.exploreTitle')}</Text>
-        <Text style={[styles.subtitle, { textAlign: 'left', marginBottom: 16 }]}>
+        <Text style={[styles.subtitle, { textAlign: 'auto', marginBottom: 16 }]}>
           {t('onboarding.exploreHint')}
         </Text>
 

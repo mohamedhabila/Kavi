@@ -10,6 +10,7 @@ import ts from 'typescript';
 
 import { SUPPORTED_LOCALES } from '../../src/i18n/registry';
 import { en } from '../../src/i18n/locales/en';
+import { isPluralTable } from '../../src/i18n/types';
 
 const localeModules = {
   ar: require('../../src/i18n/locales/ar').ar,
@@ -29,7 +30,13 @@ function flattenRuntimeKeys(value: TranslationMap, prefix = ''): string[] {
 
   for (const [entryKey, entryValue] of Object.entries(value)) {
     const fullKey = prefix ? `${prefix}.${entryKey}` : entryKey;
-    if (entryValue && typeof entryValue === 'object' && !Array.isArray(entryValue)) {
+    // A plural table is one translation key, not a nested namespace.
+    if (
+      entryValue &&
+      typeof entryValue === 'object' &&
+      !Array.isArray(entryValue) &&
+      !isPluralTable(entryValue)
+    ) {
       keys.push(...flattenRuntimeKeys(entryValue as TranslationMap, fullKey));
       continue;
     }

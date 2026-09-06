@@ -4,6 +4,7 @@
 
 import type { Locale, TranslationMap } from './types';
 import { en } from './locales/en';
+import { mergeTranslations } from './mergeTranslations';
 
 export const SUPPORTED_LOCALES: readonly Locale[] = [
   'en',
@@ -32,26 +33,6 @@ export const LOCALE_DISPLAY_NAMES: Record<Locale, string> = {
 
 const localeCache = new Map<Locale, TranslationMap>();
 localeCache.set('en', en); // English is always loaded
-
-function mergeTranslations(base: TranslationMap, override: TranslationMap): TranslationMap {
-  const merged: TranslationMap = { ...base };
-
-  for (const [key, value] of Object.entries(override)) {
-    const baseValue = merged[key];
-    if (
-      typeof baseValue === 'object' &&
-      baseValue !== null &&
-      typeof value === 'object' &&
-      value !== null
-    ) {
-      merged[key] = mergeTranslations(baseValue as TranslationMap, value as TranslationMap);
-      continue;
-    }
-    merged[key] = value as string | TranslationMap;
-  }
-
-  return merged;
-}
 
 /**
  * Resolve a BCP-47 language tag (e.g. from device) to a supported locale.

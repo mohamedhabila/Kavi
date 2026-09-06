@@ -199,6 +199,55 @@ describe('I18nManager', () => {
     });
   });
 
+  describe('t (plural tables)', () => {
+    it('selects the "one" category for count 1', () => {
+      expect(i18n.t('nav.memoryStatsFacts', { count: 1 })).toBe('1 fact');
+    });
+
+    it('selects the "other" category for count 0', () => {
+      expect(i18n.t('nav.memoryStatsFacts', { count: 0 })).toBe('0 facts');
+    });
+
+    it('selects the "other" category for count 2 and beyond', () => {
+      expect(i18n.t('nav.memoryStatsFacts', { count: 2 })).toBe('2 facts');
+      expect(i18n.t('nav.memoryStatsFacts', { count: 42 })).toBe('42 facts');
+    });
+
+    it('accepts a string count and still interpolates and selects correctly', () => {
+      expect(i18n.t('nav.memoryStatsFacts', { count: '1' })).toBe('1 fact');
+      expect(i18n.t('nav.memoryStatsFacts', { count: '5' })).toBe('5 facts');
+    });
+
+    it('selects the correct category in a locale with its own plural rules (Arabic)', async () => {
+      await i18n.setLocale('ar');
+      expect(i18n.t('chat.subAgentToolCount', { count: 0 })).toBe('لا أدوات');
+      expect(i18n.t('chat.subAgentToolCount', { count: 1 })).toBe('أداة واحدة');
+      expect(i18n.t('chat.subAgentToolCount', { count: 2 })).toBe('أداتان');
+      expect(i18n.t('chat.subAgentToolCount', { count: 5 })).toBe('{count} أدوات'.replace('{count}', '5'));
+      expect(i18n.t('chat.subAgentToolCount', { count: 100 })).toBe('{count} أداة'.replace('{count}', '100'));
+    });
+
+    it('falls back to the binary one/other rule when Intl.PluralRules is unavailable', () => {
+      const OriginalPluralRules = Intl.PluralRules;
+      // @ts-expect-error deliberately removing a constructor to test the guarded fallback
+      delete (Intl as { PluralRules?: unknown }).PluralRules;
+      try {
+        expect(i18n.t('nav.memoryStatsFacts', { count: 1 })).toBe('1 fact');
+        expect(i18n.t('nav.memoryStatsFacts', { count: 3 })).toBe('3 facts');
+      } finally {
+        (Intl as { PluralRules?: typeof Intl.PluralRules }).PluralRules = OriginalPluralRules;
+      }
+    });
+
+    it('does not affect ordinary flat-string keys', () => {
+      expect(i18n.t('common.ok')).toBe('OK');
+    });
+
+    it('missing count falls back to the "other" category', () => {
+      expect(i18n.t('nav.memoryStatsFacts')).toBe('{count} facts');
+    });
+  });
+
   describe('subscribe', () => {
     it('returns an unsubscribe function', async () => {
       const listener = jest.fn();

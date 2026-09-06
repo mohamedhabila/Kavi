@@ -3,7 +3,6 @@ import { Platform, SectionList, StyleSheet, Text, TouchableOpacity, View } from 
 import {
   BookOpen,
   CheckCircle2,
-  ChevronRight,
   CircleEllipsis,
   CircleX,
   Clock3,
@@ -24,6 +23,7 @@ import type {
 } from '../../services/agents/delegatedWorkQueuePresentation';
 import { summarizeSubAgentOutput } from '../../services/agents/lifecycle/presentPhase';
 import { useAppTheme, type AppPalette } from '../../theme/useAppTheme';
+import { ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
 interface DelegatedWorkQueueProps {
   presentation: DelegatedWorkQueuePresentation;
@@ -46,9 +46,7 @@ function getActivityLabel(activity: DelegatedWorkActivityKind, t: Translate): st
 }
 
 function getStepCountLabel(count: number, t: Translate): string {
-  return count === 1
-    ? t('agentRoster.queueStepCountOne')
-    : t('agentRoster.queueStepCountMany', { count });
+  return t('agentRoster.queueStepCount', { count });
 }
 
 function getGroupPreview(group: DelegatedWorkGroup): string | undefined {
@@ -167,7 +165,7 @@ const DelegatedWorkCard: React.FC<
           style={styles.iconAction}
           testID={`delegated-work-details-${group.id}`}
         >
-          <ChevronRight size={20} color={colors.textSecondary} />
+          <ForwardChevronIcon size={20} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 

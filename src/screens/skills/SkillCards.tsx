@@ -171,9 +171,7 @@ export function InstalledSkillCard({
         <View style={styles.toolsRow}>
           <Wrench size={12} color={colors.textTertiary} />
           <Text style={styles.toolsText}>
-            {item.metadata.tools.length === 1
-              ? t('skills.toolCountOne')
-              : t('skills.toolCount', { count: String(item.metadata.tools.length) })}
+            {t('skills.toolCount', { count: item.metadata.tools.length })}
           </Text>
         </View>
       ) : null}

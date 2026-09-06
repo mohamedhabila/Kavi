@@ -2,6 +2,7 @@
 // Kavi — English Locale
 // ---------------------------------------------------------------------------
 
+import { plural } from '../types';
 import type { TranslationMap } from '../types';
 
 export const en: TranslationMap = {
@@ -88,8 +89,14 @@ export const en: TranslationMap = {
     pinnedMoments: 'Pinned moments',
     pinnedMomentsEmpty: 'Pin a fact to surface it here.',
     memoryStats: 'Memory',
-    memoryStatsFacts: '{count} facts',
-    memoryStatsEpisodes: '{count} episodes',
+    memoryStatsFacts: plural({
+      one: '{count} fact',
+      other: '{count} facts',
+    }),
+    memoryStatsEpisodes: plural({
+      one: '{count} episode',
+      other: '{count} episodes',
+    }),
     memoryStatsActiveTask: 'Active: {task}',
     recallPlaceholder: 'Recall a moment…',
     recallSearch: 'Search memory',
@@ -180,9 +187,18 @@ export const en: TranslationMap = {
       laterThatDay: 'Later that day · {time}',
       conversationBegan: 'Conversation began {date}',
       continuingLastSpoke: 'Continuing — last spoke {phrase}',
-      minutesAgo: '{count} minutes ago',
-      hoursAgo: '{count} hours ago',
-      daysAgo: '{count} days ago',
+      minutesAgo: plural({
+        one: '{count} minute ago',
+        other: '{count} minutes ago',
+      }),
+      hoursAgo: plural({
+        one: '{count} hour ago',
+        other: '{count} hours ago',
+      }),
+      daysAgo: plural({
+        one: '{count} day ago',
+        other: '{count} days ago',
+      }),
     },
     logKind: {
       state: 'State',
@@ -301,7 +317,10 @@ export const en: TranslationMap = {
     fetchBatchReading: 'Reading {settled} of {total} pages',
     fetchBatchRead: 'Read {total} pages',
     fetchBatchMore: '+{count} more',
-    fetchBatchFailed: '{count} could not be read',
+    fetchBatchFailed: plural({
+      one: '{count} could not be read',
+      other: '{count} could not be read',
+    }),
     shareMessage: 'Share response',
     shareMessageFailed: 'Unable to share this response right now.',
     retryMessage: 'Retry message',
@@ -323,15 +342,22 @@ export const en: TranslationMap = {
     latestLogs: 'Latest logs',
     jumpToLatest: 'Jump to latest',
     logsEmpty: 'No logs yet.',
-    showEarlierMessages: 'Show earlier messages ({count})',
+    showEarlierMessages: plural({
+      one: 'Show earlier message ({count})',
+      other: 'Show earlier messages ({count})',
+    }),
     subAgentLabel: 'Sub-agent',
     subAgentSession: 'Session {id}',
     subAgentDepth: 'Depth {depth}',
     subAgentNestedUnder: 'Nested under {session}',
-    subAgentToolCountOne: '1 tool',
-    subAgentToolCount: '{count} tools',
-    subAgentIterationCountOne: '1 round',
-    subAgentIterationCount: '{count} rounds',
+    subAgentToolCount: plural({
+      one: '1 tool',
+      other: '{count} tools',
+    }),
+    subAgentIterationCount: plural({
+      one: '1 round',
+      other: '{count} rounds',
+    }),
     subAgentShowDetails: 'Show sub-agent details',
     subAgentHideDetails: 'Hide sub-agent details',
     subAgentSandboxFull: 'Full access',
@@ -349,18 +375,32 @@ export const en: TranslationMap = {
     subAgentRollupIssuesLabel: 'Issues',
     subAgentRollupRoundsLabel: 'Rounds',
     subAgentRollupToolsLabel: 'Tool calls',
-    subAgentRollupWorkersOne: '1 worker',
-    subAgentRollupWorkers: '{count} workers',
-    subAgentRollupRunningOne: '1 running',
-    subAgentRollupRunning: '{count} running',
-    subAgentRollupCompletedOne: '1 completed',
-    subAgentRollupCompleted: '{count} completed',
-    subAgentRollupIssuesOne: '1 issue',
-    subAgentRollupIssues: '{count} issues',
+    subAgentRollupWorkers: plural({
+      one: '1 worker',
+      other: '{count} workers',
+    }),
+    subAgentRollupRunning: plural({
+      one: '1 running',
+      other: '{count} running',
+    }),
+    subAgentRollupCompleted: plural({
+      one: '1 completed',
+      other: '{count} completed',
+    }),
+    subAgentRollupIssues: plural({
+      one: '1 issue',
+      other: '{count} issues',
+    }),
     agentGoals: {
-      header: 'Goals ({count})',
+      header: plural({
+        one: 'Goal ({count})',
+        other: 'Goals ({count})',
+      }),
       bootstrapPending: 'Goals pending bootstrap',
-      evidenceCount: '{count} evidence',
+      evidenceCount: plural({
+        one: '{count} evidence',
+        other: '{count} evidence',
+      }),
       status: {
         running: 'Running',
         waitingForYou: 'Waiting for you',
@@ -378,7 +418,10 @@ export const en: TranslationMap = {
     },
     agentRunTrace: {
       header: 'Run trace',
-      preview: 'Iteration {iteration} · {count} events',
+      preview: plural({
+        one: 'Iteration {iteration} · {count} event',
+        other: 'Iteration {iteration} · {count} events',
+      }),
       iteration: 'Iteration {iteration}',
     },
     agentWorkflow: {
@@ -509,6 +552,8 @@ export const en: TranslationMap = {
     noMcpServers: 'No MCP servers configured.',
     language: 'Language',
     languageHint: 'App interface language',
+    languageRestartHint:
+      'Switching between left-to-right and right-to-left languages (such as English and Arabic) takes full effect after you restart the app.',
     features: 'Features',
     webAndTools: 'Web & Tools',
     linkUnderstanding: 'Link Understanding',
@@ -630,7 +675,10 @@ export const en: TranslationMap = {
     workspaceConfigRoots: 'Config Roots',
     workspaceConfigRootsHint:
       'One path per line. Skills that require config files only route here when these paths are covered.',
-    workspaceConfigRootsCount: '{count} config roots',
+    workspaceConfigRootsCount: plural({
+      one: '{count} config root',
+      other: '{count} config roots',
+    }),
     deleteWorkspaceTarget: 'Delete Workspace Target',
     deleteWorkspaceTargetConfirm: 'Remove this workspace target?',
     noWorkspaceTargets: 'No workspace targets configured.',
@@ -712,9 +760,18 @@ export const en: TranslationMap = {
       clearSearch: 'Clear settings search',
       everydayTitle: 'Assistant & app',
       advancedTitle: 'Advanced',
-      stylesCount: '{count} styles',
-      blockedCount: '{count} blocked',
-      configuredCount: '{count} configured',
+      stylesCount: plural({
+        one: '{count} style',
+        other: '{count} styles',
+      }),
+      blockedCount: plural({
+        one: '{count} blocked',
+        other: '{count} blocked',
+      }),
+      configuredCount: plural({
+        one: '{count} configured',
+        other: '{count} configured',
+      }),
       ready: 'Ready',
       deviceServices: 'Device services',
       appearanceSummary: '{theme} · {language}',
@@ -1053,7 +1110,10 @@ export const en: TranslationMap = {
       'Nothing remembered yet. Ask Kavi to remember a preference or detail, and it will appear here.',
     factsSearchPlaceholder: 'Search remembered details…',
     factsPinnedOnly: 'Pinned only',
-    factsCount: '{count} memories',
+    factsCount: plural({
+      one: '{count} memory',
+      other: '{count} memories',
+    }),
     aboutYou: 'About you',
     factPinned: 'Pinned',
     factCorrect: 'Correct',
@@ -1061,7 +1121,10 @@ export const en: TranslationMap = {
     correctionHint: 'Update what Kavi should remember for “{label}”.',
     correctionInputLabel: 'Corrected memory',
     correctionPlaceholder: 'Enter the correct detail',
-    correctionTooLong: 'Keep this memory to {count} characters or fewer.',
+    correctionTooLong: plural({
+      one: 'Keep this memory to {count} character or fewer.',
+      other: 'Keep this memory to {count} characters or fewer.',
+    }),
     correctionChanged: 'This memory changed before it could be saved. Close it and try again.',
     correctionMemoryDisabled: 'Long-term memory is off. Turn it on before saving a correction.',
     correctionRestricted: 'For your privacy, this sensitive value cannot be saved in memory.',
@@ -1104,7 +1167,10 @@ export const en: TranslationMap = {
     consolidationTierDeterministic: 'Structural extraction only (no LLM enrichment)',
     consolidationTierDisabled: 'Long-term memory disabled',
     consolidationFallbackActive: 'Automatic fallback active',
-    ingestionPendingJobs: '{count} consolidation jobs queued',
+    ingestionPendingJobs: plural({
+      one: '{count} consolidation job queued',
+      other: '{count} consolidation jobs queued',
+    }),
     diagnosticsTitle: 'Diagnostics',
     diagnosticsSimilarityTitle: 'Local similarity index',
     diagnosticsSimilarityStatus:
@@ -1125,7 +1191,10 @@ export const en: TranslationMap = {
     attribution: 'Inspired by MemGPT, Graphiti, and mem0.',
     episodesTitle: 'Episodes',
     episodesEmpty: 'No episodes recorded yet. Episodes capture context from completed tasks.',
-    episodeSources: '{count} sources',
+    episodeSources: plural({
+      one: '{count} source',
+      other: '{count} sources',
+    }),
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────
@@ -1269,9 +1338,14 @@ export const en: TranslationMap = {
     searchPlaceholder: 'Search skills…',
     install: 'Install',
     byAuthor: 'by {author}',
-    downloads: '{count} downloads',
-    toolCount: '{count} tools',
-    toolCountOne: '1 tool',
+    downloads: plural({
+      one: '{count} download',
+      other: '{count} downloads',
+    }),
+    toolCount: plural({
+      one: '1 tool',
+      other: '{count} tools',
+    }),
     builtIn: 'built-in',
     addSkillHint:
       'Install a remote SKILL.md directly, or create a small local skill stub for prompts and hooks.',
@@ -1401,7 +1475,10 @@ export const en: TranslationMap = {
     connecting: 'Connecting…',
     disconnected: 'Disconnected',
     error: 'Error',
-    tools: '{count} tools',
+    tools: plural({
+      one: '{count} tool',
+      other: '{count} tools',
+    }),
     reconnect: 'Reconnect',
     install: 'Install',
     installed: 'Installed',
@@ -1415,7 +1492,10 @@ export const en: TranslationMap = {
     authenticateFailedGeneric: "We couldn't sign in to this server. Try again.",
     reconnectServer: 'Reconnect {name}',
     endpoint: 'Endpoint',
-    remoteCount: '{count} endpoints',
+    remoteCount: plural({
+      one: '{count} endpoint',
+      other: '{count} endpoints',
+    }),
     version: 'v{version}',
     browseTitle: 'Remote MCP Registry',
     browseHint:
@@ -1513,9 +1593,18 @@ export const en: TranslationMap = {
     configStudioHint: 'Keep the essential remote setup on this screen.',
     workspaceHubHint:
       'Select a target to inspect launch status, verify connection, or open the dedicated editor.',
-    workspaceReadyCount: '{count} ready',
-    workspaceNeedsSetupCount: '{count} need setup',
-    workspaceDisabledCount: '{count} disabled',
+    workspaceReadyCount: plural({
+      one: '{count} ready',
+      other: '{count} ready',
+    }),
+    workspaceNeedsSetupCount: plural({
+      one: '{count} needs setup',
+      other: '{count} need setup',
+    }),
+    workspaceDisabledCount: plural({
+      one: '{count} disabled',
+      other: '{count} disabled',
+    }),
     workspaceManageFromHub: 'Manage workspace targets',
     workspaceManageFromHubHint:
       'Create and edit workspaces from the dedicated hub below so changes are always explicit.',
@@ -1617,7 +1706,10 @@ export const en: TranslationMap = {
     shellClosed: 'Shell disconnected',
     shellCommandPlaceholder: 'ls -la',
     runCommand: 'Run',
-    activeSshSessions: '{count} active sessions',
+    activeSshSessions: plural({
+      one: '{count} active session',
+      other: '{count} active sessions',
+    }),
     rootPath: 'Root path',
     baseUrl: 'Workspace URL',
     sshTrustedFingerprint: 'Trusted fingerprint',
@@ -1633,9 +1725,18 @@ export const en: TranslationMap = {
     noLiveViewHint: 'This session is active, but the provider did not return a live view URL.',
     notConfigured: 'Not configured',
     activeJobsStat: 'active jobs',
-    configuredCount: '{count} configured',
-    readyCount: '{count} ready',
-    activeCount: '{count} active',
+    configuredCount: plural({
+      one: '{count} configured',
+      other: '{count} configured',
+    }),
+    readyCount: plural({
+      one: '{count} ready',
+      other: '{count} ready',
+    }),
+    activeCount: plural({
+      one: '{count} active',
+      other: '{count} active',
+    }),
     syncExpoProjects: 'Sync Expo projects',
     linkExpoAccount: 'Link Expo account',
     expoEmptyHintWithAccounts:
@@ -1699,7 +1800,10 @@ export const en: TranslationMap = {
       onWorkflow: 'Waiting on workflow {id}',
       onExpoWorkflow: 'Waiting on Expo workflow',
       onAgent: 'Waiting on agent {id}...',
-      onAgentsCount: 'Waiting on {count} agents',
+      onAgentsCount: plural({
+        one: 'Waiting on {count} agent',
+        other: 'Waiting on {count} agents',
+      }),
       onActiveAgents: 'Waiting on active agents',
       onTool: 'Waiting on {tool}',
       upTo: 'Up to {duration}',
@@ -1827,7 +1931,10 @@ export const en: TranslationMap = {
 
   // ── Link Understanding ─────────────────────────────────────────────────
   linkUnderstanding: {
-    extracted: 'Extracted {count} link(s)',
+    extracted: plural({
+      one: 'Extracted {count} link',
+      other: 'Extracted {count} links',
+    }),
     extracting: 'Extracting link content…',
     failed: 'Failed to extract link content',
   },
@@ -1983,7 +2090,10 @@ export const en: TranslationMap = {
       'Web search, page extraction, weather, GitHub, and finance skills all become available as soon as their keys are stored.',
     recommendedKeysIntro:
       'Based on your web search choice, these keys are recommended. All others are optional.',
-    moreServicesLabel: '{count} more optional services',
+    moreServicesLabel: plural({
+      one: '{count} more optional service',
+      other: '{count} more optional services',
+    }),
     moreServicesToggle: 'Show or hide additional services',
     guideCta: 'Guide',
     openServiceGuide: 'Open {name} documentation',
@@ -1991,12 +2101,12 @@ export const en: TranslationMap = {
     optionalToolsAction: 'Set up optional services',
     doneConfiguredNoServices:
       'Your {provider} chat provider is ready. You can unlock more tools any time from Settings.',
-    doneConfiguredWithServices:
-      'Your {provider} chat provider is ready. You also unlocked {count} optional service {label}.',
+    doneConfiguredWithServices: plural({
+      one: 'Your {provider} chat provider is ready. You also unlocked {count} optional service key.',
+      other: 'Your {provider} chat provider is ready. You also unlocked {count} optional service keys.',
+    }),
     doneSkippedProvider:
       'You skipped model setup for now. You can finish provider setup from Settings whenever you are ready.',
-    serviceKeySingular: 'key',
-    serviceKeyPlural: 'keys',
     summaryChatProvider: 'AI provider',
     notConfiguredYet: 'Not configured yet',
     providers: {
@@ -2289,7 +2399,10 @@ export const en: TranslationMap = {
   },
   agentRoster: {
     title: 'Assistant',
-    personasTab: 'Styles ({count})',
+    personasTab: plural({
+      one: 'Style ({count})',
+      other: 'Styles ({count})',
+    }),
     subAgentsTab: 'Delegated work ({count})',
     builtInBadge: 'Preset',
     modifiedBadge: 'Customized',
@@ -2314,8 +2427,10 @@ export const en: TranslationMap = {
       needs_attention: 'Needs attention',
     },
     queueSourceFallback: 'Conversation',
-    queueStepCountOne: '1 delegated step',
-    queueStepCountMany: '{count} delegated steps',
+    queueStepCount: plural({
+      one: '1 delegated step',
+      other: '{count} delegated steps',
+    }),
     queueAttentionDescription:
       'This work could not finish. Review it in the original conversation or prepare a retry.',
     queueWorkingDescription:
@@ -2325,10 +2440,10 @@ export const en: TranslationMap = {
     queueOpenChat: 'Open chat',
     queueStopAction: 'Stop work',
     queueStopTitle: 'Stop delegated work?',
-    queueStopConfirmOne:
-      'This stops the running step. Completed results and the original conversation stay available.',
-    queueStopConfirmMany:
-      'This stops {count} running steps. Completed results and the original conversation stay available.',
+    queueStopConfirm: plural({
+      one: 'This stops the running step. Completed results and the original conversation stay available.',
+      other: 'This stops {count} running steps. Completed results and the original conversation stay available.',
+    }),
     queueStopReason: 'Stopped by you from Delegated work.',
     queueRetryPrompt:
       'Please retry the delegated work that needs attention. Review the previous attempt, explain what prevented completion, and continue the original request. Ask before any new consequential action.',
@@ -2371,7 +2486,10 @@ export const en: TranslationMap = {
     openLabel: 'Open {name}',
     shareOrSave: 'Share / save',
     shareLabel: 'Share or save {name}',
-    collectionLabel: '{count} files and creations',
+    collectionLabel: plural({
+      one: '{count} file or creation',
+      other: '{count} files and creations',
+    }),
     voiceNote: 'Voice note',
     playAudioLabel: 'Play {name}',
     pauseAudioLabel: 'Pause {name}',
@@ -2545,18 +2663,27 @@ export const en: TranslationMap = {
       reminderListTitle: 'List reminders',
     },
     details: {
-      recipientCount: '{count} recipient(s)',
+      recipientCount: plural({
+        one: '{count} recipient',
+        other: '{count} recipients',
+      }),
       subjectIncluded: 'subject included',
       bodyIncluded: 'message body included',
       htmlIncluded: 'HTML formatting enabled',
-      attachmentCount: '{count} attachment(s)',
+      attachmentCount: plural({
+        one: '{count} attachment',
+        other: '{count} attachments',
+      }),
       messageIncluded: 'message included',
       scheme: '{scheme} scheme',
       queryIncluded: 'search query included',
       coordinatesIncluded: 'coordinates included',
       labelIncluded: 'label included',
       limit: 'limit {count}',
-      textLength: '{count} characters',
+      textLength: plural({
+        one: '{count} character',
+        other: '{count} characters',
+      }),
       localFile: 'local file included',
       mimeType: 'MIME type {mimeType}',
       contactReference: 'contact reference included',

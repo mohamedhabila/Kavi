@@ -281,14 +281,17 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
     ) : null;
 
     return (
-      <View style={[styles.wrapper, styles.assistantWrapper]}>
+      <View style={[styles.wrapper, styles.assistantWrapper]} testID="message-assistant-wrapper">
         {agentRun ? (
           <AgentWorkflowSummary
             run={agentRun}
             executionPresentation={agentRunExecutionPresentation}
           />
         ) : null}
-        <Animated.View style={[styles.bubble, styles.assistantBubble, bubbleAnimationStyle]}>
+        <Animated.View
+          style={[styles.bubble, styles.assistantBubble, bubbleAnimationStyle]}
+          testID="message-assistant-bubble"
+        >
           {effectDecorations}
           <View style={styles.assistantChrome} testID="assistant-bubble-chrome">
             <View style={styles.assistantChromeIdentity}>

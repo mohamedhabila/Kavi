@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
 import type { AgentRun } from '../../types/agentRun';
@@ -71,11 +71,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
                 ? formatGoalStatusLabel(presentation.activeGoal.status, t)
                 : presentation.statusLabel}
             </Text>
-            {goalsExpanded ? (
-              <ChevronDown size={16} color={colors.textSecondary} />
-            ) : (
-              <ChevronRight size={16} color={colors.textSecondary} />
-            )}
+            <ExpandCollapseChevronIcon expanded={goalsExpanded} size={16} color={colors.textSecondary} />
           </TouchableOpacity>
           {goalsExpanded ? (
             <View style={styles.details} testID="agent-goals-details">
@@ -122,11 +118,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
                 count: presentation.traceEventCount,
               })}
             </Text>
-            {traceExpanded ? (
-              <ChevronDown size={16} color={colors.textSecondary} />
-            ) : (
-              <ChevronRight size={16} color={colors.textSecondary} />
-            )}
+            <ExpandCollapseChevronIcon expanded={traceExpanded} size={16} color={colors.textSecondary} />
           </TouchableOpacity>
           {traceExpanded ? (
             <View style={styles.details} testID="agent-run-trace-details">
