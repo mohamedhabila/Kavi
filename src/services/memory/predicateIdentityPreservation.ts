@@ -21,8 +21,13 @@
  * that merely occurs in the message, both pass untouched.
  */
 
-/** Segment separators an identifier may legitimately use. */
-const IDENTIFIER_SEGMENT_PATTERN = /[^A-Za-z0-9]+/;
+/**
+ * Segment separators an identifier may legitimately use. Matches on Unicode
+ * letter/number code points (`\p{L}`/`\p{N}`) rather than the ASCII `A-Za-z0-9`
+ * range, so an identifier the user wrote in Arabic, Chinese, Cyrillic, or any
+ * other script is segmented and protected the same way a Latin-script one is.
+ */
+const IDENTIFIER_SEGMENT_PATTERN = /[^\p{L}\p{N}]+/u;
 
 function segmentsOf(value: string): string[] {
   return value

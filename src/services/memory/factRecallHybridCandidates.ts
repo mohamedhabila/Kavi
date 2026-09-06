@@ -24,6 +24,7 @@ const EMPTY_PROVENANCE: RecallCandidateProvenance = Object.freeze({
   reasons: Object.freeze([]),
   fusionScore: 0,
   localSimilarityScore: null,
+  providerSimilarityScore: null,
 });
 
 function exactQuotedMatch(
@@ -64,7 +65,7 @@ function lexicalCandidateSet(input: {
     provenanceByFactId.set(
       fact.id,
       reasons.length > 0
-        ? { reasons, fusionScore: 0, localSimilarityScore: null }
+        ? { reasons, fusionScore: 0, localSimilarityScore: null, providerSimilarityScore: null }
         : EMPTY_PROVENANCE,
     );
   }

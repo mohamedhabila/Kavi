@@ -233,6 +233,9 @@ export async function orchestrateMemoryRetrieval(
     currentScope: scope.memoryScope,
     limit: 4,
     now,
+    ...(readInput.localSimilarity?.providerQueryVector
+      ? { providerQueryVector: readInput.localSimilarity.providerQueryVector }
+      : {}),
     onTiming: (timing) => {
       episodeTiming = timing;
     },

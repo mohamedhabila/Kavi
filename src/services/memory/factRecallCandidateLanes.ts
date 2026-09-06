@@ -9,6 +9,11 @@ import type { MemoryFact } from './facts/types';
 import { tokenizeLexicalUnits } from './ranking/lexical';
 import { cosineSimilarity } from './ranking/similarity';
 import { isCurrentLocalSimilarityVector } from './localSimilarity';
+import {
+  isProviderEmbeddingVector,
+  providerEmbeddingCosineSimilarity,
+  sameProviderEmbeddingModel,
+} from './providerSimilarity';
 
 const YEAR_PATTERN = /(?:^|[^\p{N}])((?:19|20)\d{2})(?=$|[^\p{N}])/gu;
 
@@ -86,6 +91,14 @@ function temporalLane(facts: ReadonlyArray<MemoryFact>, query: string): RecallCa
     .map((fact) => ({ fact }));
 }
 
+/**
+ * Semantic candidate lane. When the caller supplies a compatible provider
+ * query vector (resolved once per turn by the memory-access gateway), a
+ * same-model provider vector on the fact is the primary similarity signal;
+ * the on-device local n-gram vector is always the fallback so retrieval
+ * keeps working keyless/offline. Facts may report either, both, or neither
+ * score depending on which vectors the maintenance backfill has produced.
+ */
 function localSimilarityLane(
   facts: ReadonlyArray<MemoryFact>,
   input: RecallLocalSimilarityInput | undefined,
@@ -94,32 +107,68 @@ function localSimilarityLane(
   outcome: RecallLocalSimilarityOutcome;
 } {
   if (!input) return { entries: [], outcome: 'not_requested' };
-  if (!isCurrentLocalSimilarityVector(input.queryVector)) {
+  const localQueryCompatible = isCurrentLocalSimilarityVector(input.queryVector);
+  const providerQueryVector = input.providerQueryVector;
+  const providerQueryCompatible =
+    providerQueryVector !== undefined && isProviderEmbeddingVector(providerQueryVector);
+  if (!localQueryCompatible && !providerQueryCompatible) {
     return { entries: [], outcome: 'unavailable' };
   }
-  const compatibleFacts = facts.filter(
-    (fact) => fact.localSimilarity !== null && isCurrentLocalSimilarityVector(fact.localSimilarity),
-  );
-  if (compatibleFacts.length === 0) return { entries: [], outcome: 'unavailable' };
   const requestedMinimum = input.minimumSimilarity;
   const minimumSimilarity = Number.isFinite(requestedMinimum ?? NaN)
     ? Math.max(0, Math.min(requestedMinimum ?? 0.55, 1))
     : 0.55;
-  const entries = compatibleFacts
-    .map((fact) => ({
+
+  interface ScoredSemanticCandidate {
+    fact: MemoryFact;
+    localSimilarityScore?: number;
+    providerSimilarityScore?: number;
+    primaryScore: number;
+  }
+
+  const scored: ScoredSemanticCandidate[] = [];
+  for (const fact of facts) {
+    let providerSimilarityScore: number | undefined;
+    if (
+      providerQueryCompatible &&
+      fact.providerEmbedding &&
+      isProviderEmbeddingVector(fact.providerEmbedding) &&
+      sameProviderEmbeddingModel(providerQueryVector, fact.providerEmbedding)
+    ) {
+      providerSimilarityScore = providerEmbeddingCosineSimilarity(
+        providerQueryVector,
+        fact.providerEmbedding,
+      );
+    }
+    let localSimilarityScore: number | undefined;
+    if (
+      localQueryCompatible &&
+      fact.localSimilarity &&
+      isCurrentLocalSimilarityVector(fact.localSimilarity)
+    ) {
+      localSimilarityScore = cosineSimilarity(input.queryVector.values, fact.localSimilarity.values);
+    }
+    if (providerSimilarityScore === undefined && localSimilarityScore === undefined) continue;
+    const primaryScore = providerSimilarityScore ?? localSimilarityScore!;
+    if (primaryScore < minimumSimilarity) continue;
+    scored.push({
       fact,
-      localSimilarityScore: cosineSimilarity(
-        input.queryVector.values,
-        fact.localSimilarity?.values ?? [],
-      ),
-    }))
-    .filter((entry) => entry.localSimilarityScore >= minimumSimilarity)
-    .sort(
-      (left, right) =>
-        right.localSimilarityScore - left.localSimilarityScore ||
-        compareFacts(left.fact, right.fact),
-    )
-    .slice(0, RECALL_CANDIDATE_LIMITS.localSimilarityLane);
+      ...(localSimilarityScore !== undefined ? { localSimilarityScore } : {}),
+      ...(providerSimilarityScore !== undefined ? { providerSimilarityScore } : {}),
+      primaryScore,
+    });
+  }
+  if (scored.length === 0) return { entries: [], outcome: 'unavailable' };
+  scored.sort(
+    (left, right) => right.primaryScore - left.primaryScore || compareFacts(left.fact, right.fact),
+  );
+  const entries = scored
+    .slice(0, RECALL_CANDIDATE_LIMITS.localSimilarityLane)
+    .map(({ fact, localSimilarityScore, providerSimilarityScore }) => ({
+      fact,
+      ...(localSimilarityScore !== undefined ? { localSimilarityScore } : {}),
+      ...(providerSimilarityScore !== undefined ? { providerSimilarityScore } : {}),
+    }));
   return { entries, outcome: 'applied' };
 }
 

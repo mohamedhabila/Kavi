@@ -5,6 +5,10 @@ import {
   type MemoryFactSensitivity,
 } from './applicabilityProvenance';
 import { parseCurrentLocalSimilarityVector, type LocalSimilarityVector } from '../localSimilarity';
+import {
+  parseStoredProviderEmbeddingVector,
+  type ProviderEmbeddingVector,
+} from '../providerSimilarity';
 import { MEMORY_FACT_SENSITIVITY_POLICY_VERSION } from '../memorySensitivityPolicy';
 
 export type MemoryFactScope = 'global' | 'project' | 'conversation' | 'session' | 'persona';
@@ -55,6 +59,7 @@ export interface MemoryFact {
   expiresAt: number | null;
   contentHash: string;
   localSimilarity: LocalSimilarityVector | null;
+  providerEmbedding: ProviderEmbeddingVector | null;
   validAt: number;
   invalidAt: number | null;
   createdAt: number;
@@ -106,6 +111,10 @@ export interface FactRow {
   local_similarity_dimensions?: number | null;
   local_similarity_vector?: string | null;
   local_similarity_updated_at?: number | null;
+  provider_embedding_model?: string | null;
+  provider_embedding_dimensions?: number | null;
+  provider_embedding_vector?: string | null;
+  provider_embedding_updated_at?: number | null;
   valid_at: number;
   invalid_at: number | null;
   created_at: number;
@@ -201,6 +210,11 @@ export function rowToFact(row: FactRow): MemoryFact {
       model: row.local_similarity_model,
       dimensions: row.local_similarity_dimensions,
       serializedValues: row.local_similarity_vector,
+    }),
+    providerEmbedding: parseStoredProviderEmbeddingVector({
+      model: row.provider_embedding_model,
+      dimensions: row.provider_embedding_dimensions,
+      serializedValues: row.provider_embedding_vector,
     }),
     validAt: row.valid_at,
     invalidAt: row.invalid_at,

@@ -1,9 +1,21 @@
 import type { MemoryEpisode } from './types';
+import {
+  isProviderEmbeddingVector,
+  providerEmbeddingCosineSimilarity,
+  sameProviderEmbeddingModel,
+  type ProviderEmbeddingVector,
+} from '../providerSimilarity';
 
 const WORD_LIKE_SEQUENCE_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
 export const EPISODE_QUERY_UNIT_LIMIT = 32;
 export const EPISODE_INDEX_UNIT_LIMIT = 256;
 export const EPISODE_UNIT_CHAR_LIMIT = 128;
+// Provider cosine is the primary semantic signal once both the query and the
+// episode carry a compatible same-model vector; lexical overlap only adds a
+// smaller secondary boost. Without a compatible vector, scoring falls back
+// unchanged to the plain lexical-hit ratio below.
+const EPISODE_PROVIDER_SIMILARITY_PRIMARY_WEIGHT = 0.7;
+const EPISODE_PROVIDER_SIMILARITY_LEXICAL_SECONDARY_WEIGHT = 0.2;
 
 export interface ScoredMemoryEpisode {
   episode: MemoryEpisode;
@@ -36,10 +48,7 @@ export function episodeIndexUnits(
   ]);
 }
 
-export function scoreEpisodeForQuery(
-  episode: MemoryEpisode,
-  queryUnits: ReadonlySet<string>,
-): number {
+function lexicalHitRatio(episode: MemoryEpisode, queryUnits: ReadonlySet<string>): number {
   if (queryUnits.size === 0) return 0;
   const searchable = episodeIndexUnits(episode);
   if (searchable.size === 0) return 0;
@@ -48,12 +57,64 @@ export function scoreEpisodeForQuery(
   return hits / queryUnits.size;
 }
 
+function episodeProviderVector(episode: MemoryEpisode): ProviderEmbeddingVector | null {
+  if (!episode.embedding || !episode.embeddingModel || !episode.embeddingDimensions) return null;
+  const candidate: ProviderEmbeddingVector = {
+    model: episode.embeddingModel,
+    dimensions: episode.embeddingDimensions,
+    values: episode.embedding,
+  };
+  return isProviderEmbeddingVector(candidate) ? candidate : null;
+}
+
+/**
+ * Lexical-only fallback score, unchanged from the pre-provider behaviour.
+ * Exported for callers that never carry a query vector.
+ */
+export function scoreEpisodeForQuery(
+  episode: MemoryEpisode,
+  queryUnits: ReadonlySet<string>,
+): number {
+  return lexicalHitRatio(episode, queryUnits);
+}
+
+/**
+ * Vector-first, lexical-second episode score. When `queryProviderVector` is
+ * supplied and the episode carries a compatible (same-model) provider
+ * vector, cosine similarity is the primary signal and lexical overlap only
+ * adds a smaller secondary boost. Otherwise this is identical to
+ * `scoreEpisodeForQuery`.
+ */
+export function scoreEpisodeForQueryWithProvider(
+  episode: MemoryEpisode,
+  queryUnits: ReadonlySet<string>,
+  queryProviderVector: ProviderEmbeddingVector | undefined,
+): number {
+  const lexicalScore = lexicalHitRatio(episode, queryUnits);
+  if (!queryProviderVector || !isProviderEmbeddingVector(queryProviderVector)) {
+    return lexicalScore;
+  }
+  const candidateVector = episodeProviderVector(episode);
+  if (!candidateVector || !sameProviderEmbeddingModel(queryProviderVector, candidateVector)) {
+    return lexicalScore;
+  }
+  const cosine = Math.max(0, providerEmbeddingCosineSimilarity(queryProviderVector, candidateVector));
+  return (
+    cosine * EPISODE_PROVIDER_SIMILARITY_PRIMARY_WEIGHT +
+    lexicalScore * EPISODE_PROVIDER_SIMILARITY_LEXICAL_SECONDARY_WEIGHT
+  );
+}
+
 export function scoreEpisodesForQuery(
   episodes: ReadonlyArray<MemoryEpisode>,
   queryUnits: ReadonlySet<string>,
+  queryProviderVector?: ProviderEmbeddingVector,
 ): ScoredMemoryEpisode[] {
   return episodes
-    .map((episode) => ({ episode, score: scoreEpisodeForQuery(episode, queryUnits) }))
+    .map((episode) => ({
+      episode,
+      score: scoreEpisodeForQueryWithProvider(episode, queryUnits, queryProviderVector),
+    }))
     .filter((entry) => entry.score > 0);
 }
 

@@ -153,7 +153,13 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
           : Array.from(new Set(input.toolNames)).slice(0, 64),
       importance:
         input.importance === undefined ? persistedEpisode.importance : clamp01(input.importance),
+      // This generic write path never updates the provider vector — real
+      // provider embeddings are written only by the maintenance backfill
+      // (`providerEpisodeEmbeddingBackfill.ts`), which pairs the vector with
+      // its model/dimensions atomically. Preserve the persisted pairing here.
       embedding: input.embedding === undefined ? persistedEpisode.embedding : input.embedding,
+      embeddingModel: persistedEpisode.embeddingModel,
+      embeddingDimensions: persistedEpisode.embeddingDimensions,
     } satisfies MemoryEpisode;
     const episodeChanged = JSON.stringify(episode) !== JSON.stringify(persistedEpisode);
     if (episodeChanged) {
@@ -213,7 +219,11 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     messageIds,
     toolNames: Array.from(new Set(input.toolNames ?? [])).slice(0, 64),
     importance: clamp01(input.importance),
+    // Provider embeddings are populated later, off the hot path, by the
+    // maintenance backfill — never at episode creation time.
     embedding: input.embedding ?? null,
+    embeddingModel: null,
+    embeddingDimensions: null,
     createdAt: now,
     deletedAt: null,
     sourceStartMessageId,

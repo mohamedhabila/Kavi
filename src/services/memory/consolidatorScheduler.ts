@@ -50,6 +50,8 @@ import {
 } from './memoryScopeIdentity';
 import type { TurnProviderOutcome } from './turnProcessor';
 import { resolveTurnEpisodeShareability } from './episodes/shareability';
+import { maintainProviderFactEmbeddings } from './providerEmbeddingBackfill';
+import { maintainProviderEpisodeEmbeddings } from './providerEpisodeEmbeddingBackfill';
 
 const logger = createLogger('memory.consolidatorScheduler');
 
@@ -288,6 +290,14 @@ export async function maybeRunConsolidation(
       providerOutcome: ingestionResult.providerOutcome,
     };
   }
+
+  // Off the hot path: embed newly-consolidated facts/episodes through the
+  // currently-configured provider, if any. Both maintenance calls are
+  // batched, rate-limited, and never throw — a provider outage or missing
+  // configuration degrades to a no-op, leaving the on-device fallback lane
+  // as retrieval's semantic signal.
+  await maintainProviderFactEmbeddings({ now: input.now });
+  await maintainProviderEpisodeEmbeddings({ now: input.now });
 
   return {
     ran: true,

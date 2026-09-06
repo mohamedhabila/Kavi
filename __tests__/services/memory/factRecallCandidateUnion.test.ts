@@ -31,7 +31,10 @@ describe('hybrid recall candidate fusion', () => {
         { reason: 'entity', entries: [{ fact: first }, { fact: second }] },
         {
           reason: 'local_similarity',
-          entries: [{ fact: first, localSimilarityScore: 0.91 }],
+          entries: [
+            { fact: first, localSimilarityScore: 0.91 },
+            { fact: second, localSimilarityScore: 0.4, providerSimilarityScore: 0.82 },
+          ],
         },
       ],
       8,
@@ -43,6 +46,13 @@ describe('hybrid recall candidate fusion', () => {
       reasons: ['lexical', 'entity', 'local_similarity'],
       fusionScore: 1,
       localSimilarityScore: 0.91,
+      providerSimilarityScore: null,
+    });
+    expect(result.candidates[1]?.provenance).toEqual({
+      reasons: ['lexical', 'entity', 'local_similarity'],
+      fusionScore: expect.any(Number),
+      localSimilarityScore: 0.4,
+      providerSimilarityScore: 0.82,
     });
   });
 

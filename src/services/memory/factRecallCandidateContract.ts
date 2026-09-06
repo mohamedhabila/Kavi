@@ -1,4 +1,5 @@
 import type { LocalSimilarityVector } from './localSimilarity';
+import type { ProviderEmbeddingVector } from './providerSimilarity';
 
 export const RECALL_CANDIDATE_STRATEGIES = ['lexical', 'hybrid'] as const;
 export type RecallCandidateStrategy = (typeof RECALL_CANDIDATE_STRATEGIES)[number];
@@ -36,6 +37,14 @@ export const RECALL_CANDIDATE_LIMITS = Object.freeze({
 export interface RecallLocalSimilarityInput {
   queryVector: LocalSimilarityVector;
   minimumSimilarity?: number;
+  /**
+   * One provider query vector, already resolved and embedded once per turn
+   * by the memory-access gateway. Retrieval never creates or fetches one —
+   * when present and a candidate has a compatible (same-model) vector, it is
+   * the primary semantic signal; otherwise the local n-gram vector above is
+   * the fallback.
+   */
+  providerQueryVector?: ProviderEmbeddingVector;
 }
 
 export interface RecallCandidateStageTelemetry {
@@ -56,5 +65,8 @@ export interface RecallCandidateStageTelemetry {
 export interface RecallCandidateProvenance {
   reasons: ReadonlyArray<RecallCandidateReasonCode>;
   fusionScore: number;
+  /** The semantic lane's selection score — provider cosine when compatible, else local n-gram cosine. */
   localSimilarityScore: number | null;
+  /** Non-null only when a same-model provider vector was compared for this candidate. */
+  providerSimilarityScore: number | null;
 }

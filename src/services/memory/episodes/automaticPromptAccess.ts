@@ -21,6 +21,7 @@ import {
   sortScoredEpisodes,
 } from './queryScoring';
 import { rowToEpisode, type EpisodeRow } from './types';
+import type { ProviderEmbeddingVector } from '../providerSimilarity';
 
 export const AUTOMATIC_CURRENT_EPISODE_CANDIDATE_LIMIT = 80;
 
@@ -224,6 +225,7 @@ export function loadAuthorizedCurrentThreadEpisodes(input: {
   query: string;
   resultLimit: number;
   maxAgeMs?: number;
+  providerQueryVector?: ProviderEmbeddingVector;
 }): {
   selections: AuthorizedCurrentThreadEpisodeSelection[];
   timing: AutomaticCurrentEpisodeRecallTiming;
@@ -278,6 +280,7 @@ export function loadAuthorizedCurrentThreadEpisodes(input: {
       ? scoreEpisodesForQuery(
           authorized.map((selection) => selection.episode),
           queryUnits,
+          input.providerQueryVector,
         )
       : authorized.map((selection) => ({ episode: selection.episode, score: 0 }));
   const scoreMs = Date.now() - scoreStarted;

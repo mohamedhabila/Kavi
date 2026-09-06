@@ -23,6 +23,7 @@ import {
   sortScoredEpisodes,
 } from './queryScoring';
 import { rowToEpisode, type EpisodeRow } from './types';
+import type { ProviderEmbeddingVector } from '../providerSimilarity';
 
 export const CROSS_THREAD_EPISODE_INDEXED_CANDIDATE_LIMIT = 80;
 export const CROSS_THREAD_EPISODE_CANDIDATE_LIMIT = 12;
@@ -210,6 +211,7 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
   currentScope: MemoryAccessScopeIdentity;
   now: number;
   query: string;
+  providerQueryVector?: ProviderEmbeddingVector;
 }): CrossThreadEpisodeCandidateResult {
   const totalStarted = Date.now();
   const scope = requireMemoryAccessScopeIdentity(input.currentScope);
@@ -284,6 +286,7 @@ export function loadAuthorizedCrossThreadEpisodeCandidates(input: {
   const scored = scoreEpisodesForQuery(
     authorized.map((candidate) => candidate.episode),
     queryUnits,
+    input.providerQueryVector,
   );
   const scoreMs = Date.now() - scoreStarted;
   const sortStarted = Date.now();

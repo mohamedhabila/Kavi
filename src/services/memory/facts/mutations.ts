@@ -11,7 +11,6 @@ import {
 } from '../factContributionStore';
 import { loadVerifiedFactContributionReplay } from '../factContributionReplay';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
-import { isExactMemoryScopeId } from '../memoryScopeIdentity';
 import { overlayFactExplicitProjectionInTransaction } from '../factExplicitOverrideState';
 import {
   classifyMemoryFactSensitivity,
@@ -31,7 +30,7 @@ import {
   normalizeRecordFactMutation,
 } from './mutationNormalization';
 import { hasPersistedSourceEvidence } from './sourceEvidence';
-import { buildSupersedePriorQuery } from './supersessionQuery';
+import { buildSupersedePriorQuery, hasExactSupersessionScopeIdentity } from './supersessionQuery';
 import {
   buildFactLocalSimilarityText,
   createCurrentLocalSimilarityVector,
@@ -61,46 +60,6 @@ import {
   advanceMemoryProjectionInTransaction,
   advanceRestrictiveMemoryAuthorityInTransaction,
 } from '../memoryAuthority';
-
-function hasExactSupersessionScopeIdentity(
-  fact: FactRow,
-  input: RecordFactInput,
-  scope: NonNullable<RecordFactInput['scope']>,
-  memoryOwnerId: string,
-  personaId: string | null,
-): boolean {
-  if (fact.memory_owner_id !== memoryOwnerId || fact.scope !== scope) return false;
-  if (scope === 'global') {
-    return (
-      fact.persona_id === null &&
-      fact.origin_conversation_id === null &&
-      fact.origin_thread_id === null &&
-      fact.origin_task_id === null
-    );
-  }
-  if (scope === 'persona') {
-    return (
-      fact.persona_id === personaId &&
-      fact.origin_conversation_id === null &&
-      fact.origin_thread_id === null &&
-      fact.origin_task_id === null
-    );
-  }
-  if (fact.persona_id !== null || fact.origin_conversation_id !== input.originConversationId) {
-    return false;
-  }
-  if (scope === 'conversation' || scope === 'project') {
-    return (
-      fact.origin_task_id === null &&
-      (fact.origin_thread_id === null || isExactMemoryScopeId(fact.origin_thread_id))
-    );
-  }
-  return (
-    fact.origin_thread_id === input.originThreadId &&
-    fact.origin_task_id === input.originTaskId &&
-    isExactMemoryScopeId(fact.origin_task_id)
-  );
-}
 
 /**
  * Record (or dedupe) a fact. When `supersedePrior` is true any currently-valid
@@ -618,6 +577,9 @@ function recordNormalizedFactInTransaction(
     expiresAt,
     contentHash: hash,
     localSimilarity,
+    // Provider embeddings are populated later, off the hot path, by the
+    // maintenance backfill — never synchronously at fact creation.
+    providerEmbedding: null,
     validAt,
     invalidAt: null,
     createdAt: now,

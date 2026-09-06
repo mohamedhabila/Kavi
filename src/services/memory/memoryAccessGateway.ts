@@ -21,6 +21,7 @@ import {
   type MemoryRetrievalStrategy,
 } from './memoryAccessPolicy';
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
+import { getQueryProviderEmbeddingVector } from './providerQueryEmbedding';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
@@ -137,9 +138,17 @@ export async function buildUnifiedMemoryAccessContext(
   if (!memoryAuthoritySnapshot) return unavailableResult();
 
   const localSimilarityQuery = buildRecentUserRetrievalQuery(scopedMessages);
+  const providerQueryVector =
+    retrievalStrategy === 'production' && localSimilarityQuery
+      ? await getQueryProviderEmbeddingVector(localSimilarityQuery)
+      : null;
+  if (!isMemoryReadEpochCurrent(memoryReadEpoch)) return optOutResult();
   const localSimilarity =
     retrievalStrategy === 'production' && localSimilarityQuery
-      ? { queryVector: createCurrentLocalSimilarityVector(localSimilarityQuery) }
+      ? {
+          queryVector: createCurrentLocalSimilarityVector(localSimilarityQuery),
+          ...(providerQueryVector ? { providerQueryVector } : {}),
+        }
       : undefined;
 
   const livingMemoryResult = await buildLivingMemorySections({

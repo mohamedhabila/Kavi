@@ -9,6 +9,7 @@ import {
 export interface RecallCandidateLaneEntry {
   fact: MemoryFact;
   localSimilarityScore?: number;
+  providerSimilarityScore?: number;
 }
 
 export interface RecallCandidateLane {
@@ -82,6 +83,7 @@ export function fuseRecallCandidateLanes(
       rawScore: number;
       reasons: Set<RecallCandidateReasonCode>;
       localSimilarityScore: number | null;
+      providerSimilarityScore: number | null;
     }
   >();
   for (const lane of lanes) {
@@ -96,6 +98,7 @@ export function fuseRecallCandidateLanes(
         rawScore: 0,
         reasons: new Set<RecallCandidateReasonCode>(),
         localSimilarityScore: null,
+        providerSimilarityScore: null,
       };
       current.rawScore +=
         LANE_WEIGHTS[lane.reason] / (RECALL_CANDIDATE_LIMITS.reciprocalRankConstant + rank + 1);
@@ -107,6 +110,15 @@ export function fuseRecallCandidateLanes(
         current.localSimilarityScore = Math.max(
           current.localSimilarityScore ?? -1,
           entry.localSimilarityScore,
+        );
+      }
+      if (
+        typeof entry.providerSimilarityScore === 'number' &&
+        Number.isFinite(entry.providerSimilarityScore)
+      ) {
+        current.providerSimilarityScore = Math.max(
+          current.providerSimilarityScore ?? -1,
+          entry.providerSimilarityScore,
         );
       }
       byId.set(entry.fact.id, current);
@@ -128,6 +140,7 @@ export function fuseRecallCandidateLanes(
         reasons: orderedReasons(entry.reasons),
         fusionScore: maxRawScore > 0 ? entry.rawScore / maxRawScore : 0,
         localSimilarityScore: entry.localSimilarityScore,
+        providerSimilarityScore: entry.providerSimilarityScore,
       },
     }));
 

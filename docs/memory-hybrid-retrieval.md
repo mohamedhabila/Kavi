@@ -1,10 +1,10 @@
 # Measured Hybrid Memory Retrieval
 
-Research snapshot: 2026-07-10.
+Research snapshot: 2026-07-10. Updated 2026-09-05: provider-backed semantic vectors (see "Provider-backed semantic lane" below).
 
 ## Product decision
 
-Kavi keeps its local SQLite memory store and provider-neutral request path. Hybrid retrieval is a bounded union of local candidate lanes, not a new memory backend, service, reranking model, or network call. Every lane must apply the existing scope, validity, deletion, expiry, and opt-out rules before a candidate can be ranked.
+Kavi keeps its local SQLite memory store and provider-neutral request path. Hybrid retrieval is a bounded union of local candidate lanes, not a new memory backend, service, reranking model, or network call. Every lane must apply the existing scope, validity, deletion, expiry, and opt-out rules before a candidate can be ranked. The semantic lane's vectors may now come from a configured embedding provider (see below), but the lane structure, union, and scoring still run entirely against local SQLite rows — no candidate lane itself performs a network call.
 
 Recall eligibility is enforced in SQL before every lane's `ORDER BY` and `LIMIT`: project facts are exact to the active root, conversation facts are root-wide, and session facts are exact to root plus task and source thread when the thread is available. Raw unknown scopes never normalize into a visible recall branch. Exact persona ownership remains gated on the owner/persona identity schema rather than being inferred from content.
 
@@ -23,17 +23,35 @@ This is architectural research only. No third-party implementation is copied or 
 
 ## Frozen candidate contract
 
-Candidate reasons are closed and content-free: `pinned`, `exact_quoted`, `lexical`, `entity`, `temporal`, and `local_semantic`. A candidate can have multiple reasons and lane ranks. Weighted reciprocal-rank fusion orders the union; one diversity pass protects distinct run, task, turn, conversation, subject, and predicate groups before remaining capacity is filled.
+Candidate reasons are closed and content-free: `pinned`, `exact_quoted`, `lexical`, `entity`, `temporal`, and `local_semantic` (code identifier `local_similarity`) — one semantic reason covering both the on-device fallback vector and, when available, a provider-backed vector; a candidate's provenance carries whichever score(s) actually matched. A candidate can have multiple reasons and lane ranks. Weighted reciprocal-rank fusion orders the union; one diversity pass protects distinct run, task, turn, conversation, subject, and predicate groups before remaining capacity is filled.
 
 Bounds:
 
 - default union: 128 facts; existing hard maximum: 2,000;
 - supplemental eligible scan: 256 facts, hard maximum 500;
-- exact/quoted: 24; entity: 32; temporal: 24; local semantic: 32;
+- exact/quoted: 24; entity: 32; temporal: 24; semantic (local and/or provider): 32 — one lane, not two: a candidate surfaces here once, carrying whichever score(s) are available;
 - local semantic vectors: caller-supplied, finite, dimension-compatible, maximum 2,048;
+- provider semantic vectors: caller-supplied, finite, dimension-compatible, maximum 3,072 dimensions, model id up to 128 characters, serialized storage capped at 40,000 characters per vector;
 - no candidate lane changes prompt limits; selected facts still pass through the existing scorer, selector, and prompt caps.
 
-Semantic input is optional and provider-neutral. Retrieval never creates an embedding, calls an embedding provider, calls an LLM, or falls back to a remote service. It consumes a compatible query vector only when the caller already has one and compares it only with stored vectors of the same dimension.
+Semantic input is optional and provider-neutral. Retrieval and its scoring never create an embedding, call an embedding provider, call an LLM, or fall back to a remote service — every candidate lane and scorer only reads vectors that already exist. It consumes a compatible query vector only when the caller already has one and compares it only with stored vectors of the same model and dimension (`src/services/memory/providerSimilarity.ts`, `localSimilarity.ts`). Two independent query vectors can be supplied per turn: the always-available on-device n-gram vector, and an optional provider vector (see below). When both exist for a candidate, provider cosine is the primary semantic signal and lexical overlap is a smaller secondary boost (`factRecallScoring.ts`, `episodes/queryScoring.ts`); when only the on-device vector is available, lexical and semantic scores compete via `Math.max`, unchanged from the pre-provider design.
+
+## Provider-backed semantic lane
+
+The on-device hashed character n-gram vector (`unicode-char-ngram-v1`) cannot recognize a paraphrase or a cross-lingual match — it is a structural fallback, not a semantic model. When the user has an embedding-capable LLM provider enabled, retrieval's semantic signal can instead be a real provider embedding, while remaining fully functional offline and keyless when it is not.
+
+**Provider selection** (`embeddingProviderSelection.ts`) mirrors the existing memory-consolidation provider cascade and tries, in order, the first *enabled* provider of each family: OpenAI (`text-embedding-3-small`), Gemini (`text-embedding-004`), Voyage (`voyage-3-lite`), Mistral (`mistral-embed`), then Ollama (`nomic-embed-text`, using the user's own configured host). OpenAI and Gemini reuse the same API key already configured for chat; Voyage and Mistral are only selected when their own credential resolves to a non-empty key; Ollama is only selected when an enabled Ollama provider entry exists. No dedicated embedding setting exists — selection is entirely derived from the user's existing provider configuration. (OpenRouter also exposes a documented `POST /api/v1/embeddings` endpoint, but wiring it in requires adding `'openrouter'` to the `EmbeddingProvider` union in `src/types/memory.ts` and a corresponding fetcher in `embeddings.ts`; that is a follow-up, not part of this change.)
+
+**Gating.** Provider embedding calls (both the batched fact/episode backfill and the per-turn query embedding) are gated exactly the way the existing memory-consolidation provider setting and the `disableLongTermMemory` opt-out already gate provider calls: `disableLongTermMemory` disables them outright, and memory-consolidation enrichment mode `off` disables them too. No new settings field was introduced.
+
+**Asynchrony and the hot path.** Provider embeddings never run inside retrieval:
+
+- *Fact/episode vectors* are produced only by maintenance — `providerEmbeddingBackfill.ts` (facts) and `providerEpisodeEmbeddingBackfill.ts` (episodes) — invoked from the consolidation scheduler after a turn closes (`consolidatorScheduler.ts`), batched (≤24 items/pass) and rate-limited (`providerEmbeddingRateLimiter.ts`, ≥120 ms between calls). A provider failure on one item is isolated and retried on the next maintenance pass; it never fails the batch.
+- *The query vector* is embedded at most once per turn by the memory-access gateway (`memoryAccessGateway.ts`, via `providerQueryEmbedding.ts`), backed by the shared bounded in-memory embedding cache and a hard 1.5 s wall-clock timeout. On any failure, gating, or timeout this resolves to `null` and retrieval proceeds on the on-device lane — it never blocks or degrades a turn waiting on a provider.
+
+**Storage.** Facts store a provider vector in `memory_facts.provider_embedding_{model,dimensions,vector,updated_at}`, mirroring the existing `local_similarity_*` column pattern (`schema.ts`). Episodes reuse the previously-unpopulated `memory_episodes.embedding` column for the serialized vector, paired with new `embedding_model`/`embedding_dimensions`/`embedding_updated_at` columns. A vector is only ever compared against another vector from the exact same `model` — comparing across two different embedding models is never attempted.
+
+**Privacy.** Enabling a provider for consolidation already sends conversation content to that provider; enabling the same provider for memory embeddings additionally sends turn query text (per turn) and stored fact/episode text (once, during backfill) to it for embedding. This is gated identically to consolidation and never happens with `disableLongTermMemory` set or consolidation enrichment off — retrieval remains a fully local, offline, keyless SQLite read in that case.
 
 ## Episodic sharing boundary
 

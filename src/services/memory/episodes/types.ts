@@ -17,6 +17,8 @@ export interface MemoryEpisode {
   toolNames: string[];
   importance: number;
   embedding: number[] | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
   createdAt: number;
   deletedAt: number | null;
   sourceStartMessageId: string | null;
@@ -47,6 +49,8 @@ export interface EpisodeRow {
   tool_names_json: string;
   importance: number;
   embedding: string | null;
+  embedding_model?: string | null;
+  embedding_dimensions?: number | null;
   created_at: number;
   deleted_at: number | null;
   source_start_message_id: string | null;
@@ -93,7 +97,15 @@ export function rowToEpisode(row: EpisodeRow): MemoryEpisode {
     messageIds: safeParseArray<string>(row.message_ids_json),
     toolNames: safeParseArray<string>(row.tool_names_json),
     importance: clamp01(row.importance),
+    // The raw array is preserved as-is, matching the pre-provider behaviour,
+    // so legacy/generic writers that never set embedding_model/dimensions
+    // keep working. `embeddingModel`/`embeddingDimensions` are passed
+    // through independently; scoring code (`episodeProviderVector` in
+    // `queryScoring.ts`) is what cross-validates the triple together before
+    // ever treating it as a usable provider vector.
     embedding: parseEmbedding(row.embedding),
+    embeddingModel: row.embedding_model ?? null,
+    embeddingDimensions: row.embedding_dimensions ?? null,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
     sourceStartMessageId: row.source_start_message_id,

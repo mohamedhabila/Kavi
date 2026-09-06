@@ -9,6 +9,12 @@ const QUOTED_ANCHOR_MATCH_BOOST = 0.18;
 const QUOTED_ANCHOR_FULL_MATCH_BOOST = 0.12;
 const EXPLICIT_TEMPORAL_RELEVANCE = 0.12;
 const LOCAL_SIMILARITY_CANDIDATE_WEIGHT = 0.5;
+// When a provider vector matched on both sides, its cosine is the primary
+// semantic signal and lexical overlap only adds a smaller secondary boost —
+// as opposed to the local-only fallback below, where lexical and semantic
+// scores simply compete via `Math.max`.
+const PROVIDER_SIMILARITY_PRIMARY_WEIGHT = 0.65;
+const PROVIDER_SIMILARITY_LEXICAL_SECONDARY_WEIGHT = 0.2;
 const FUSION_SCORE_WEIGHT = 0.025;
 
 export function buildQueryUnitWeightsFromHits(
@@ -54,7 +60,12 @@ export function buildScoredFact(params: {
     queryUnits,
     factUnitHits,
     anchorUnitSets,
-    candidateProvenance = { reasons: [], fusionScore: 0, localSimilarityScore: null },
+    candidateProvenance = {
+      reasons: [],
+      fusionScore: 0,
+      localSimilarityScore: null,
+      providerSimilarityScore: null,
+    },
     explicitTemporalSignal,
     alwaysIncludePinned,
     options,
@@ -62,16 +73,23 @@ export function buildScoredFact(params: {
   } = params;
   const lexicalScore = lexicalOverlapFromUnitHits(queryUnits, factUnitHits, params.unitWeights);
   const textScore = lexicalScore;
+  const isSemanticCandidate = candidateProvenance.reasons.includes('local_similarity');
   const localSimilarityRelevance =
-    candidateProvenance.reasons.includes('local_similarity') &&
-    candidateProvenance.localSimilarityScore !== null
+    isSemanticCandidate && candidateProvenance.localSimilarityScore !== null
       ? Math.max(0, candidateProvenance.localSimilarityScore) * LOCAL_SIMILARITY_CANDIDATE_WEIGHT
       : 0;
+  // Provider cosine is only meaningful once both query and candidate carry a
+  // compatible same-model vector — `providerSimilarityScore` is null otherwise.
+  const providerSimilarityRelevance =
+    isSemanticCandidate && candidateProvenance.providerSimilarityScore !== null
+      ? Math.max(0, candidateProvenance.providerSimilarityScore) * PROVIDER_SIMILARITY_PRIMARY_WEIGHT
+      : null;
   const candidateRelevanceScore = Math.max(
     explicitTemporalSignal && candidateProvenance.reasons.includes('temporal')
       ? EXPLICIT_TEMPORAL_RELEVANCE
       : 0,
     localSimilarityRelevance,
+    providerSimilarityRelevance ?? 0,
   );
   const pinnedBoost = alwaysIncludePinned && fact.pinned ? PINNED_BOOST : 0;
   const decayMultiplier = scoreDecay(fact, now);
@@ -79,16 +97,26 @@ export function buildScoredFact(params: {
   const reinforcementBoost = scoreReinforcement(fact);
   const importanceScore = fact.importance * 0.04;
   const retrievabilityScore = scoreRetrievability(fact);
+  // Provider vector present on both sides: cosine is the primary semantic
+  // signal, lexical overlap only adds a smaller secondary boost. Otherwise
+  // (the on-device/offline fallback), lexical and semantic scores compete
+  // via `Math.max`, unchanged from the pre-provider behaviour.
   const relevanceScore =
-    Math.max(textScore, candidateRelevanceScore) *
-    fact.confidence *
-    decayMultiplier *
-    retrievabilityScore;
+    providerSimilarityRelevance !== null
+      ? (providerSimilarityRelevance + textScore * PROVIDER_SIMILARITY_LEXICAL_SECONDARY_WEIGHT) *
+        fact.confidence *
+        decayMultiplier *
+        retrievabilityScore
+      : Math.max(textScore, candidateRelevanceScore) *
+        fact.confidence *
+        decayMultiplier *
+        retrievabilityScore;
   const anchorBoost = anchorMatchBoost(anchorUnitSets, factUnitHits);
   const hasRelevance = relevanceScore > RELEVANCE_EPSILON;
   const localSimilarityAddsRelevance = localSimilarityRelevance > lexicalScore + RELEVANCE_EPSILON;
   const hasApplicableFusionSignal =
     candidateProvenance.reasons.includes('entity') ||
+    providerSimilarityRelevance !== null ||
     localSimilarityAddsRelevance ||
     (explicitTemporalSignal && candidateProvenance.reasons.includes('temporal'));
   const score =

@@ -28,6 +28,7 @@ import {
   sortScoredEpisodes,
 } from './episodes/queryScoring';
 import { rowToEpisode, type EpisodeRow, type MemoryEpisode } from './episodes/types';
+import type { ProviderEmbeddingVector } from './providerSimilarity';
 
 export interface RecallEpisodesOptions {
   threadId?: string;
@@ -242,6 +243,8 @@ export function recallScopedEpisodesForQuery(
     limit?: number;
     maxAgeMs?: number;
     now: number;
+    /** One provider query vector, already resolved once per turn. Optional. */
+    providerQueryVector?: ProviderEmbeddingVector;
     onTiming?: (timing: RecallEpisodesTiming) => void;
   },
 ): RecallScopedEpisodesResult {
@@ -257,12 +260,14 @@ export function recallScopedEpisodesForQuery(
     query,
     now: options.now,
     ...(options.maxAgeMs === undefined ? {} : { maxAgeMs: options.maxAgeMs }),
+    ...(options.providerQueryVector ? { providerQueryVector: options.providerQueryVector } : {}),
   });
   const crossThread = loadAuthorizedCrossThreadEpisodeCandidates({
     db: getMemoryDb(),
     currentScope: scope,
     now: options.now,
     query,
+    ...(options.providerQueryVector ? { providerQueryVector: options.providerQueryVector } : {}),
   });
   const merged = mergeCurrentAndCrossThreadEpisodes(current.selections, crossThread, resultLimit);
   options.onTiming?.({
