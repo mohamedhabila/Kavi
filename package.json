@@ -119,6 +119,9 @@
   },
   "dependencies": {
     "@dylankenneally/react-native-ssh-sftp": "^1.6.8",
+    "@formatjs/intl-getcanonicallocales": "3.2.11",
+    "@formatjs/intl-locale": "5.3.10",
+    "@formatjs/intl-pluralrules": "6.3.13",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/drawer": "^7.8.1",
@@ -178,6 +181,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@babel/plugin-transform-class-static-block": "7.29.7",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.11",
@@ -207,6 +211,7 @@
     "@xterm/xterm": "5.5.0",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
+    "babel-preset-expo": "55.0.25",
     "better-sqlite3": "^12.9.0",
     "codemirror": "^6.0.2",
     "cross-env": "^10.1.0",
@@ -227,7 +232,7 @@
     "preset": "jest-expo",
     "testTimeout": 30000,
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|lucide-react-native|zustand|react-native-marked|marked|github-slugger|html-entities|@jsamr/react-native-li|@jsamr/counter-style|react-native-reanimated-table|react-native-gesture-handler|react-native-screens|react-native-safe-area-context|react-native-sse|react-native-get-random-values|react-native-url-polyfill|react-native-uuid)"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|lucide-react-native|zustand|react-native-marked|marked|github-slugger|html-entities|@jsamr/react-native-li|@jsamr/counter-style|react-native-reanimated-table|react-native-gesture-handler|react-native-screens|react-native-safe-area-context|react-native-sse|react-native-get-random-values|react-native-url-polyfill|react-native-uuid|@formatjs/.*)"
     ],
     "setupFiles": [
       "<rootDir>/jest.setup.ts"

@@ -5,6 +5,8 @@ import {
   type PersonaSwitchMarker,
 } from '../../components/chat/personaSwitchMarkers';
 import { getAvailablePersonasForConfig } from '../../services/agents/registry';
+import { useTranslation } from '../../i18n/useTranslation';
+import { getLocaleBcp47Tag } from '../../i18n/localeBcp47';
 import {
   cloneSubAgentSnapshot,
   collectSubAgentSnapshotsFromMessages,
@@ -137,9 +139,11 @@ export function useChatScreenPresentationState(
       visibleDisplayMessages,
     ],
   );
+  const { locale } = useTranslation();
   const temporalMarkersByMessageId = useMemo(() => {
     const markers = computeTemporalMarkers(
       resolvedDisplayMessages.map((item) => item.resolvedMessage),
+      { locale: getLocaleBcp47Tag(locale) },
     );
     const markerMap = new Map<string, TemporalMarker>();
 
@@ -148,7 +152,7 @@ export function useChatScreenPresentationState(
     }
 
     return markerMap;
-  }, [resolvedDisplayMessages]);
+  }, [locale, resolvedDisplayMessages]);
   const personaDisplayResolver = useMemo(() => {
     const personas = getAvailablePersonasForConfig(
       params.personaOverrides,

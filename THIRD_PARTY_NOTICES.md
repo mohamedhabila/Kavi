@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 897 |
+| MIT | 904 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -122,7 +122,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @babel/plugin-transform-async-to-generator | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-block-scoping | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-class-properties | 7.27.1 | transitive | MIT |
-| @babel/plugin-transform-class-static-block | 7.29.7 | transitive | MIT |
+| @babel/plugin-transform-class-static-block | 7.29.7 | development | MIT |
 | @babel/plugin-transform-classes | 7.28.4 | transitive | MIT |
 | @babel/plugin-transform-computed-properties | 7.29.7 | transitive | MIT |
 | @babel/plugin-transform-destructuring | 7.29.7 | transitive | MIT |
@@ -248,6 +248,13 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @expo/vector-icons | 15.1.1 | transitive | MIT |
 | @expo/ws-tunnel | 1.0.6 | transitive | MIT |
 | @expo/xcpretty | 4.4.4 | transitive | BSD-3-Clause |
+| @formatjs/bigdecimal | 0.2.7 | transitive | MIT |
+| @formatjs/fast-memoize | 3.1.7 | transitive | MIT |
+| @formatjs/intl-getcanonicallocales | 3.2.11 | runtime | MIT |
+| @formatjs/intl-locale | 5.3.10 | runtime | MIT |
+| @formatjs/intl-localematcher | 0.8.13 | transitive | MIT |
+| @formatjs/intl-pluralrules | 6.3.13 | runtime | MIT |
+| @formatjs/intl-supportedvaluesof | 2.3.9 | transitive | MIT |
 | @hono/node-server | 2.0.12 | transitive | MIT |
 | @humanfs/core | 0.19.2 | transitive | Apache-2.0 |
 | @humanfs/node | 0.16.8 | transitive | Apache-2.0 |
@@ -401,7 +408,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | babel-plugin-syntax-hermes-parser | 0.32.0 | transitive | MIT |
 | babel-plugin-transform-flow-enums | 0.0.2 | transitive | MIT |
 | babel-preset-current-node-syntax | 1.2.0 | transitive | MIT |
-| babel-preset-expo | 55.0.25 | transitive | MIT |
+| babel-preset-expo | 55.0.25 | development | MIT |
 | babel-preset-jest | 29.6.3 | transitive | MIT |
 | badgin | 1.2.3 | transitive | MIT |
 | balanced-match | 1.0.2 | transitive | MIT |
