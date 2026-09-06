@@ -1195,6 +1195,21 @@ export const en: TranslationMap = {
       one: '{count} source',
       other: '{count} sources',
     }),
+    episodeStructuralMessages: plural({
+      one: 'Conversation turn with {count} message',
+      other: 'Conversation turn with {count} messages',
+    }),
+    episodeStructuralToolCalls: plural({
+      one: '{count} tool call',
+      other: '{count} tool calls',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      one: '{completed} of {count} tool call completed',
+      other: '{completed} of {count} tool calls completed',
+    }),
+    episodeStructuralHasCode: 'Includes code',
+    episodeStructuralHasAttachments: 'Includes attachments',
+    episodeStructuralFallback: 'Conversation activity',
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────

@@ -17,12 +17,24 @@ import type {
   ConsolidatorTurnInput,
 } from './consolidator';
 import { codeOwnedMemorySensitivityDeclaration } from './memorySensitivityPolicy';
+import {
+  STRUCTURAL_TURN_DESCRIPTOR_KIND,
+  STRUCTURAL_TURN_DESCRIPTOR_VERSION,
+  serializeStructuralTurnDescriptor,
+  type StructuralTurnDescriptor,
+} from './episodes/structuralTurnDescriptor';
+
+export type { StructuralTurnDescriptor } from './episodes/structuralTurnDescriptor';
 
 const MAX_STRUCTURAL_FACTS = 5;
 
 export interface StructuralExtraction {
   /** Content-free descriptor used until semantic provider enrichment succeeds. */
   episodeSummary: string;
+  /** Always 'structural_turn': this extractor never produces narrative prose. */
+  summaryKind: typeof STRUCTURAL_TURN_DESCRIPTOR_KIND;
+  /** Same content as `episodeSummary`, already parsed — callers never re-parse it. */
+  structuralDescriptor: StructuralTurnDescriptor;
   /** Facts extracted from universal structural signals only */
   facts: ConsolidatorFact[];
 }
@@ -61,17 +73,20 @@ export function extractStructuralMemory(input: ConsolidatorTurnInput): Structura
     input.sourceUserMessageId,
     input.sourceAssistantMessageId,
   );
-  const episodeSummary = buildStructuralEpisodeSummary(messages);
+  const structuralDescriptor = buildStructuralTurnDescriptor(messages);
+  const episodeSummary = serializeStructuralTurnDescriptor(structuralDescriptor);
 
   // Facts: only from structural signals that are language-independent
   const facts = extractStructuralFacts(messages);
 
-  return { episodeSummary, facts };
+  return { episodeSummary, summaryKind: STRUCTURAL_TURN_DESCRIPTOR_KIND, structuralDescriptor, facts };
 }
 
 // ── Episode summary (language-agnostic) ────────────────────────────────────
 
-function buildStructuralEpisodeSummary(messages: ConsolidatorSourceMessage[]): string {
+function buildStructuralTurnDescriptor(
+  messages: ConsolidatorSourceMessage[],
+): StructuralTurnDescriptor {
   const completedToolCallIds = new Set(
     messages.flatMap((message) =>
       message.role === 'tool' && message.toolCallId ? [message.toolCallId] : [],
@@ -81,9 +96,9 @@ function buildStructuralEpisodeSummary(messages: ConsolidatorSourceMessage[]): s
   const hasAttachments = messages.some(
     (message) => message.hasAttachments === true || (message.attachments ?? []).length > 0,
   );
-  return JSON.stringify({
-    kind: 'structural_turn',
-    version: 1,
+  return {
+    kind: STRUCTURAL_TURN_DESCRIPTOR_KIND,
+    version: STRUCTURAL_TURN_DESCRIPTOR_VERSION,
     messageCount: messages.length,
     toolCallCount: toolCalls.length,
     completedToolCallCount: toolCalls.filter(
@@ -91,7 +106,7 @@ function buildStructuralEpisodeSummary(messages: ConsolidatorSourceMessage[]): s
     ).length,
     hasCodeBlock: messages.some((message) => (message.content ?? '').includes('```')),
     hasAttachments,
-  });
+  };
 }
 
 // ── Structural facts (language-agnostic) ───────────────────────────────────

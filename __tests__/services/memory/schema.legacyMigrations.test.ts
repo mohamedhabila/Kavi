@@ -96,6 +96,64 @@ describe('ensureFactSchema legacy migrations', () => {
     ).toBe('sensitive');
   });
 
+  it('backfills summary_kind for legacy structural-turn episodes only', () => {
+    const db = getMemoryDb();
+    db.execSync(`
+      CREATE TABLE memory_episodes (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT,
+        thread_id TEXT,
+        task_id TEXT,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER NOT NULL,
+        summary TEXT NOT NULL,
+        entities_json TEXT NOT NULL DEFAULT '[]',
+        message_ids_json TEXT NOT NULL DEFAULT '[]',
+        tool_names_json TEXT NOT NULL DEFAULT '[]',
+        importance REAL NOT NULL DEFAULT 0.5,
+        embedding TEXT,
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER,
+        source_start_message_id TEXT,
+        source_end_message_id TEXT
+      );
+      INSERT INTO memory_episodes (
+        id, conversation_id, thread_id, started_at, ended_at, summary,
+        message_ids_json, created_at, source_start_message_id, source_end_message_id
+      ) VALUES
+        ('legacy-structural', 'conv', 'thread', 1, 2,
+         '{"kind":"structural_turn","version":1,"messageCount":2,"toolCallCount":0,"completedToolCallCount":0,"hasCodeBlock":false,"hasAttachments":false}',
+         '["u1","a1"]', 2, 'u1', 'a1'),
+        ('legacy-narrative', 'conv', 'thread', 1, 2, 'User asked about the release plan.',
+         '["u2","a2"]', 2, 'u2', 'a2'),
+        ('legacy-future-version', 'conv', 'thread', 1, 2,
+         '{"kind":"structural_turn","version":2,"messageCount":1}',
+         '["u3","a3"]', 2, 'u3', 'a3');
+    `);
+
+    ensureFactSchema();
+
+    expect(columnNames('memory_episodes')).toContain('summary_kind');
+    expect(
+      db
+        .getAllSync<{ id: string; summary_kind: string }>(
+          `SELECT id, summary_kind FROM memory_episodes ORDER BY id`,
+        )
+    ).toEqual([
+      { id: 'legacy-future-version', summary_kind: 'narrative' },
+      { id: 'legacy-narrative', summary_kind: 'narrative' },
+      { id: 'legacy-structural', summary_kind: 'structural_turn' },
+    ]);
+
+    resetFactSchemaCacheForTests();
+    ensureFactSchema();
+    expect(
+      db.getFirstSync<{ summary_kind: string }>(
+        `SELECT summary_kind FROM memory_episodes WHERE id = 'legacy-structural'`,
+      )?.summary_kind,
+    ).toBe('structural_turn');
+  });
+
   it('destroys legacy provider-editable raw blocks without recreating the table', () => {
     const db = getMemoryDb();
     db.execSync(`

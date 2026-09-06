@@ -1227,6 +1227,24 @@ export const fr: TranslationMap = mergeTranslations(en, {
       many: '{count} sources',
       other: '{count} sources',
     }),
+    episodeStructuralMessages: plural({
+      one: 'Échange avec {count} message',
+      many: 'Échange avec {count} messages',
+      other: 'Échange avec {count} messages',
+    }),
+    episodeStructuralToolCalls: plural({
+      one: '{count} appel d’outil',
+      many: '{count} appels d’outils',
+      other: '{count} appels d’outils',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      one: '{completed} sur {count} appel d’outil terminé',
+      many: '{completed} sur {count} appels d’outils terminés',
+      other: '{completed} sur {count} appels d’outils terminés',
+    }),
+    episodeStructuralHasCode: 'Contient du code',
+    episodeStructuralHasAttachments: 'Contient des pièces jointes',
+    episodeStructuralFallback: 'Activité de la conversation',
   },
   scheduler: {
     title: 'Rappels et automatisations',

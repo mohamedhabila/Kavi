@@ -1154,6 +1154,18 @@ export const ja: TranslationMap = mergeTranslations(en, {
     episodeSources: plural({
       other: '{count} 件のソース',
     }),
+    episodeStructuralMessages: plural({
+      other: 'メッセージ{count}件のやり取り',
+    }),
+    episodeStructuralToolCalls: plural({
+      other: 'ツール呼び出し{count}件',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      other: 'ツール呼び出し{count}件中{completed}件完了',
+    }),
+    episodeStructuralHasCode: 'コードを含む',
+    episodeStructuralHasAttachments: '添付ファイルを含む',
+    episodeStructuralFallback: '会話のアクティビティ',
   },
   scheduler: {
     title: 'リマインダーと自動化',

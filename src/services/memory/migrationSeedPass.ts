@@ -460,7 +460,7 @@ async function seedClaimedConversation(
         );
       }
       const admittedResult = mergeProviderIntoStructural(
-        { episodeSummary: '', facts: [] },
+        { episodeSummary: '', summaryKind: 'structural_turn', facts: [] },
         outcome.result,
         {
           currentUserMessageId: turn.userMessage.id,

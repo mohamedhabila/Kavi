@@ -35,6 +35,7 @@ import {
 } from './semanticFactProposal';
 import type { MemoryFactSensitivity } from './facts/applicabilityProvenance';
 import type { MemorySensitivityDeclarationV1 } from './memorySensitivityPolicy';
+import type { MemoryEpisodeSummaryKind } from './episodes/types';
 export {
   applyConsolidatorResult,
   applyThreadLocalConsolidatorResult,
@@ -108,6 +109,13 @@ export interface ConsolidatorFact {
 
 export interface ConsolidatorResult {
   episodeSummary: string | null;
+  /**
+   * How `episodeSummary` should be rendered. Optional and defaults to
+   * 'narrative' — the deterministic structural producer always sets
+   * 'structural_turn' explicitly; every other producer writes real prose and
+   * can rely on the default rather than restating it.
+   */
+  summaryKind?: MemoryEpisodeSummaryKind;
   episodeSensitivityDeclaration: MemorySensitivityDeclarationV1;
   newFacts: ConsolidatorFact[];
   activeFocus: string | null;
@@ -118,7 +126,7 @@ export interface ConsolidatorResult {
 /** Parsed provider output. Proposals remain distinct from persistable facts. */
 export interface ProviderConsolidatorResult extends Omit<
   ConsolidatorResult,
-  'newFacts' | 'episodeSensitivityDeclaration'
+  'newFacts' | 'episodeSensitivityDeclaration' | 'summaryKind'
 > {
   newFacts: SemanticFactProposalV1[];
   episodeSensitivity: MemoryFactSensitivity;

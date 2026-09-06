@@ -162,6 +162,7 @@ function applyConsolidatorResultInTransaction(
         startedAt: timestamps.length ? Math.min(...timestamps) : now,
         endedAt: timestamps.length ? Math.max(...timestamps) : now,
         summary: episodeSummary,
+        summaryKind: result.summaryKind,
         messageIds,
         sourceStartMessageId: options.sourceUserMessageId ?? messageIds[0] ?? null,
         sourceEndMessageId:

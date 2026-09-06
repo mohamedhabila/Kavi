@@ -38,11 +38,20 @@ export function episodeQueryUnits(value: string): Set<string> {
   return episodeTextUnits(value, EPISODE_QUERY_UNIT_LIMIT);
 }
 
+/**
+ * A structural-turn episode's `summary` is our own versioned JSON descriptor,
+ * never prose, so it must never be tokenized as searchable text — only its
+ * entities and tool names (both already language-independent) are indexable.
+ */
 export function episodeIndexUnits(
-  episode: Pick<MemoryEpisode, 'summary' | 'entities' | 'toolNames'>,
+  episode: Pick<MemoryEpisode, 'summary' | 'summaryKind' | 'entities' | 'toolNames'>,
 ): Set<string> {
+  const summaryUnits =
+    episode.summaryKind === 'structural_turn'
+      ? new Set<string>()
+      : episodeTextUnits(episode.summary, EPISODE_INDEX_UNIT_LIMIT - 64);
   return new Set([
-    ...episodeTextUnits(episode.summary, EPISODE_INDEX_UNIT_LIMIT - 64),
+    ...summaryUnits,
     ...episodeTextUnits(episode.entities.join(' '), 32),
     ...episodeTextUnits(episode.toolNames.join(' '), 32),
   ]);

@@ -150,6 +150,27 @@ describe('extractStructuralMemory — episode summary', () => {
       hasAttachments: false,
     });
   });
+
+  it('exposes the same descriptor as a typed object alongside the serialized summary', () => {
+    const result = extractStructuralMemory({
+      ...baseInput,
+      messages: [
+        msg({
+          role: 'assistant',
+          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: '{}' }],
+        }),
+        msg({ role: 'tool', toolCallId: 'call-1', content: 'ok' }),
+      ],
+    });
+    expect(result.summaryKind).toBe('structural_turn');
+    expect(result.structuralDescriptor).toEqual(JSON.parse(result.episodeSummary));
+    expect(result.structuralDescriptor).toMatchObject({
+      kind: 'structural_turn',
+      version: 1,
+      toolCallCount: 1,
+      completedToolCallCount: 1,
+    });
+  });
 });
 
 // ── Turn window slicing ─────────────────────────────────────────────────────

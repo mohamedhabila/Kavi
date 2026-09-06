@@ -75,6 +75,12 @@ export function ensureFactColumns(db: ReturnType<typeof getMemoryDb>): void {
   ensureColumn(
     db,
     'memory_episodes',
+    'summary_kind',
+    "summary_kind TEXT NOT NULL DEFAULT 'narrative' CHECK(summary_kind IN ('narrative', 'structural_turn'))",
+  );
+  ensureColumn(
+    db,
+    'memory_episodes',
     'source_identity_manifest_json',
     `source_identity_manifest_json TEXT NOT NULL DEFAULT '{"version":1,"sources":[]}'`,
   );

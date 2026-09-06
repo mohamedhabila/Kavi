@@ -1120,6 +1120,18 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     episodeSources: plural({
       other: '{count} 个来源',
     }),
+    episodeStructuralMessages: plural({
+      other: '包含 {count} 条消息的对话轮次',
+    }),
+    episodeStructuralToolCalls: plural({
+      other: '{count} 次工具调用',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      other: '{count} 次工具调用中已完成 {completed} 次',
+    }),
+    episodeStructuralHasCode: '包含代码',
+    episodeStructuralHasAttachments: '包含附件',
+    episodeStructuralFallback: '对话活动',
   },
   scheduler: {
     title: '提醒与自动化',

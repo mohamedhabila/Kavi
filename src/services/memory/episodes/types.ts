@@ -3,6 +3,22 @@ import type { MemorySensitivityInput } from '../memorySensitivityPolicy';
 import { closedEpisodeSensitivity } from './accessPolicyTypes';
 import type { EpisodeSensitivity, EpisodeShareability } from './accessPolicyTypes';
 
+/**
+ * How `MemoryEpisode.summary` should be rendered to a person or a model:
+ * `narrative` is prose (provider- or legacy-written); `structural_turn` is
+ * our own versioned JSON descriptor (see `structuralTurnDescriptor.ts`) and
+ * must never be shown or tokenized as text. Optional on the type itself so
+ * hand-built fixtures that predate this field keep compiling — every real
+ * row read via `rowToEpisode` always gets a definite value.
+ */
+export type MemoryEpisodeSummaryKind = 'narrative' | 'structural_turn';
+
+export function closedMemoryEpisodeSummaryKind(
+  value: string | undefined,
+): MemoryEpisodeSummaryKind {
+  return value === 'structural_turn' ? 'structural_turn' : 'narrative';
+}
+
 export interface MemoryEpisode {
   id: string;
   conversationId: string | null;
@@ -11,6 +27,7 @@ export interface MemoryEpisode {
   startedAt: number;
   endedAt: number;
   summary: string;
+  summaryKind?: MemoryEpisodeSummaryKind;
   sensitivity: EpisodeSensitivity;
   entities: string[];
   messageIds: string[];
@@ -43,6 +60,7 @@ export interface EpisodeRow {
   started_at: number;
   ended_at: number;
   summary: string;
+  summary_kind?: string;
   sensitivity: string;
   entities_json: string;
   message_ids_json: string;
@@ -92,6 +110,7 @@ export function rowToEpisode(row: EpisodeRow): MemoryEpisode {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     summary: row.summary,
+    summaryKind: closedMemoryEpisodeSummaryKind(row.summary_kind),
     sensitivity: closedEpisodeSensitivity(row.sensitivity) ?? 'sensitive',
     entities: safeParseArray<string>(row.entities_json),
     messageIds: safeParseArray<string>(row.message_ids_json),
@@ -132,6 +151,8 @@ export interface RecordEpisodeInput {
   startedAt?: number;
   endedAt?: number;
   summary: string;
+  /** Defaults to 'narrative' when omitted, matching the column's default. */
+  summaryKind?: MemoryEpisodeSummaryKind;
   entities?: string[];
   messageIds?: string[];
   toolNames?: string[];

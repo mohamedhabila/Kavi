@@ -6,13 +6,14 @@ import {
 } from '../memoryAuthorityState';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
 import { episodeIndexUnits } from './queryScoring';
-import type { MemoryEpisode } from './types';
+import { closedMemoryEpisodeSummaryKind, type MemoryEpisode } from './types';
 
 export const EPISODE_RETRIEVAL_INDEX_VERSION = 1;
 
 interface EpisodeIndexSourceRow {
   id: string;
   summary: string;
+  summary_kind?: string;
   entities_json: string;
   tool_names_json: string;
 }
@@ -30,7 +31,7 @@ function stringArray(raw: string): string[] {
 
 function replaceEpisodeRetrievalTermsUnchecked(
   db: MemoryDatabase,
-  episode: Pick<MemoryEpisode, 'id' | 'summary' | 'entities' | 'toolNames'>,
+  episode: Pick<MemoryEpisode, 'id' | 'summary' | 'summaryKind' | 'entities' | 'toolNames'>,
 ): void {
   db.runSync('DELETE FROM memory_episode_terms WHERE episode_id = ?', episode.id);
   for (const unit of episodeIndexUnits(episode)) {
@@ -45,7 +46,7 @@ function replaceEpisodeRetrievalTermsUnchecked(
 /** Caller owns the surrounding transaction and its matching authority revision. */
 export function replaceEpisodeRetrievalTermsInTransaction(
   db: MemoryDatabase,
-  episode: Pick<MemoryEpisode, 'id' | 'summary' | 'entities' | 'toolNames'>,
+  episode: Pick<MemoryEpisode, 'id' | 'summary' | 'summaryKind' | 'entities' | 'toolNames'>,
 ): void {
   assertMemoryTransactionActive('episode_retrieval_index_transaction_required');
   if (db !== getSchemaReadyMemoryDb()) {
@@ -83,7 +84,7 @@ export function ensureEpisodeRetrievalIndexSchema(db: MemoryDatabase): void {
   try {
     db.runSync('DELETE FROM memory_episode_terms');
     const episodes = db.getAllSync<EpisodeIndexSourceRow>(
-      `SELECT id, summary, entities_json, tool_names_json
+      `SELECT id, summary, summary_kind, entities_json, tool_names_json
          FROM memory_episodes
         WHERE deleted_at IS NULL
         ORDER BY id`,
@@ -93,6 +94,7 @@ export function ensureEpisodeRetrievalIndexSchema(db: MemoryDatabase): void {
       replaceEpisodeRetrievalTermsUnchecked(db, {
         id: episode.id,
         summary: episode.summary,
+        summaryKind: closedMemoryEpisodeSummaryKind(episode.summary_kind),
         entities: stringArray(episode.entities_json),
         toolNames: stringArray(episode.tool_names_json),
       });

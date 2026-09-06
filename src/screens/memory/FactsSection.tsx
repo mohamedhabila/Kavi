@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, Switch, Text, TextInput, View } from 'react-native';
 
 import { MemoryFactCard } from './MemoryFactCard';
+import { presentEpisodeSummary } from '../../services/memory/episodes/episodeSummaryPresentation';
 
 import type {
   MemoryEpisodeRow,
@@ -88,7 +89,7 @@ export function FactsSection({
         ) : (
           episodes.map((episode) => (
             <View key={episode.id} style={styles.factRow} testID={`memory-episode-${episode.id}`}>
-              <Text style={styles.factSubject}>{episode.summary}</Text>
+              <Text style={styles.factSubject}>{presentEpisodeSummary(episode, t)}</Text>
               <Text style={styles.factMeta}>
                 {t('memory.episodeSources', {
                   count: (episode.messageIds?.length ?? 0) + (episode.toolNames?.length ?? 0),

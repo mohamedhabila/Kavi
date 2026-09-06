@@ -48,6 +48,7 @@ import { ensureFactExplicitOverrideSchema } from './factExplicitOverrideSchema';
 import { ensureCanonicalFactTable } from './schema/canonicalFactTable';
 import { ensureFactContentIdentityV3 } from './schema/factContentIdentityV3';
 import { ensureColumn, ensureFactColumns } from './schema/factColumnMigrations';
+import { ensureEpisodeSummaryKindBackfill } from './schema/episodeSummaryKindBackfill';
 import { runAfterMemoryTransactionCommit } from './access/transaction';
 import { ensureMemoryVaultIdentitySchema, getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import {
@@ -318,9 +319,12 @@ export function ensureFactSchema(): void {
   ensureMemoryVaultIdentitySchema(db);
   ensureRetrievalOutcomeSchema(db);
   ensureVerifiedProcedureObservationSchema(db);
+  // Must run before ensureEpisodeRetrievalIndexSchema: its full-rebuild path
+  // selects memory_episodes.summary_kind, which only exists once this has run.
+  ensureFactColumns(db);
+  ensureEpisodeSummaryKindBackfill(db);
   ensureEpisodeAccessPolicySchema(db);
   ensureEpisodeRetrievalIndexSchema(db);
-  ensureFactColumns(db);
   ensureIngestionQueueSchema(db);
   ensureColumn(
     db,

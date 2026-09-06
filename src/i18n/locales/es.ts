@@ -1223,6 +1223,24 @@ export const es: TranslationMap = mergeTranslations(en, {
       many: '{count} fuentes',
       other: '{count} fuentes',
     }),
+    episodeStructuralMessages: plural({
+      one: 'Turno de conversación con {count} mensaje',
+      many: 'Turno de conversación con {count} mensajes',
+      other: 'Turno de conversación con {count} mensajes',
+    }),
+    episodeStructuralToolCalls: plural({
+      one: '{count} llamada a herramienta',
+      many: '{count} llamadas a herramientas',
+      other: '{count} llamadas a herramientas',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      one: '{completed} de {count} llamada a herramienta completada',
+      many: '{completed} de {count} llamadas a herramientas completadas',
+      other: '{completed} de {count} llamadas a herramientas completadas',
+    }),
+    episodeStructuralHasCode: 'Incluye código',
+    episodeStructuralHasAttachments: 'Incluye archivos adjuntos',
+    episodeStructuralFallback: 'Actividad de la conversación',
   },
   scheduler: {
     title: 'Recordatorios y automatizaciones',

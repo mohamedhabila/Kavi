@@ -61,6 +61,13 @@ function buildEpisodeEmbeddingText(row: EpisodeBackfillRow): string {
     .join('\n');
 }
 
+/**
+ * Structural-turn episodes carry no natural-language content — their
+ * `summary` is our own versioned JSON descriptor, never prose — so they are
+ * excluded here rather than merely skipped after selection. They can never
+ * gain a provider embedding, and leaving them in the candidate set would let
+ * them permanently occupy backfill slots on every future pass.
+ */
 function selectCandidateRows(
   db: MemoryDatabase,
   now: number,
@@ -73,6 +80,7 @@ function selectCandidateRows(
        FROM memory_episodes
       WHERE deleted_at IS NULL
         AND ended_at <= ?
+        AND summary_kind != 'structural_turn'
         AND NOT (
           embedding_model IS ?
           AND embedding_dimensions IS ?

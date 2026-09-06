@@ -1215,6 +1215,24 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       many: '{count} fontes',
       other: '{count} fontes',
     }),
+    episodeStructuralMessages: plural({
+      one: 'Turno de conversa com {count} mensagem',
+      many: 'Turno de conversa com {count} mensagens',
+      other: 'Turno de conversa com {count} mensagens',
+    }),
+    episodeStructuralToolCalls: plural({
+      one: '{count} chamada de ferramenta',
+      many: '{count} chamadas de ferramenta',
+      other: '{count} chamadas de ferramenta',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      one: '{completed} de {count} chamada de ferramenta concluída',
+      many: '{completed} de {count} chamadas de ferramenta concluídas',
+      other: '{completed} de {count} chamadas de ferramenta concluídas',
+    }),
+    episodeStructuralHasCode: 'Inclui código',
+    episodeStructuralHasAttachments: 'Inclui anexos',
+    episodeStructuralFallback: 'Atividade da conversa',
   },
   scheduler: {
     title: 'Lembretes e automações',

@@ -256,6 +256,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   }
   const structuralResult: ConsolidatorResult = {
     episodeSummary: structural.episodeSummary || null,
+    summaryKind: structural.summaryKind,
     episodeSensitivityDeclaration: codeOwnedMemorySensitivityDeclaration(),
     newFacts: structural.facts,
     activeFocus: null,

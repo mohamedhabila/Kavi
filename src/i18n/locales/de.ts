@@ -1202,6 +1202,21 @@ export const de: TranslationMap = mergeTranslations(en, {
       one: '{count} Quelle',
       other: '{count} Quellen',
     }),
+    episodeStructuralMessages: plural({
+      one: 'Gesprächsrunde mit {count} Nachricht',
+      other: 'Gesprächsrunde mit {count} Nachrichten',
+    }),
+    episodeStructuralToolCalls: plural({
+      one: '{count} Toolaufruf',
+      other: '{count} Toolaufrufe',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      one: '{completed} von {count} Toolaufruf abgeschlossen',
+      other: '{completed} von {count} Toolaufrufen abgeschlossen',
+    }),
+    episodeStructuralHasCode: 'Enthält Code',
+    episodeStructuralHasAttachments: 'Enthält Anhänge',
+    episodeStructuralFallback: 'Unterhaltungsaktivität',
   },
   scheduler: {
     title: 'Erinnerungen & Automationen',

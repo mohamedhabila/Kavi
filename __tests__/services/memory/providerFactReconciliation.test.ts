@@ -41,7 +41,7 @@ function merge(
   sameSourceExplicitMemoryAuthority = false,
 ) {
   return mergeProviderIntoStructural(
-    { episodeSummary: 'structural', facts: [] },
+    { episodeSummary: 'structural', summaryKind: 'structural_turn', facts: [] },
     { ...EMPTY_PROVIDER_RESULT, newFacts: proposals },
     {
       currentUserMessageId: 'user-current',
@@ -294,7 +294,7 @@ describe('passive provider fact reconciliation', () => {
       },
     };
     const result = mergeProviderIntoStructural(
-      { episodeSummary: 'tool completed', facts: [structuralFact] },
+      { episodeSummary: 'tool completed', summaryKind: 'structural_turn', facts: [structuralFact] },
       { ...EMPTY_PROVIDER_RESULT, newFacts: [proposal({ assertionClass: 'quoted' })] },
       {
         currentUserMessageId: 'user-current',
@@ -306,5 +306,37 @@ describe('passive provider fact reconciliation', () => {
     );
 
     expect(result.newFacts).toEqual([structuralFact]);
+  });
+
+  it('classifies the merged episode as narrative when the provider supplies real prose', () => {
+    const result = mergeProviderIntoStructural(
+      { episodeSummary: '{"kind":"structural_turn","version":1}', summaryKind: 'structural_turn', facts: [] },
+      { ...EMPTY_PROVIDER_RESULT, episodeSummary: 'User confirmed the deploy window.', newFacts: [] },
+      {
+        currentUserMessageId: 'user-current',
+        currentUserMessage: 'Ship it.',
+        memoryConversationId: 'conversation-current',
+        threadId: 'thread-current',
+        sameSourceExplicitMemoryAuthority: false,
+      },
+    );
+    expect(result.summaryKind).toBe('narrative');
+    expect(result.episodeSummary).toBe('User confirmed the deploy window.');
+  });
+
+  it('keeps the structural classification when the provider has nothing to add', () => {
+    const result = mergeProviderIntoStructural(
+      { episodeSummary: '{"kind":"structural_turn","version":1}', summaryKind: 'structural_turn', facts: [] },
+      { ...EMPTY_PROVIDER_RESULT, episodeSummary: null, newFacts: [] },
+      {
+        currentUserMessageId: 'user-current',
+        currentUserMessage: 'Ship it.',
+        memoryConversationId: 'conversation-current',
+        threadId: 'thread-current',
+        sameSourceExplicitMemoryAuthority: false,
+      },
+    );
+    expect(result.summaryKind).toBe('structural_turn');
+    expect(result.episodeSummary).toBe('{"kind":"structural_turn","version":1}');
   });
 });

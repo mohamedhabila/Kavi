@@ -73,6 +73,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
   const db = getSchemaReadyMemoryDb();
   const summary = input.summary.trim();
   if (!summary) return null;
+  const summaryKind = input.summaryKind ?? 'narrative';
   const now = input.now ?? Date.now();
   const startedAt = input.startedAt ?? input.endedAt ?? now;
   const endedAt = input.endedAt ?? startedAt;
@@ -145,6 +146,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     const episode = {
       ...persistedEpisode,
       summary: normalizedSummary,
+      summaryKind,
       sensitivity,
       entities:
         input.entities === undefined
@@ -169,6 +171,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
       db.runSync(
         `UPDATE memory_episodes
             SET summary = ?,
+                summary_kind = ?,
                 entities_json = ?,
                 tool_names_json = ?,
                 importance = ?,
@@ -176,6 +179,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
                 sensitivity = ?
           WHERE id = ?`,
         episode.summary,
+        episode.summaryKind,
         JSON.stringify(episode.entities),
         JSON.stringify(episode.toolNames),
         episode.importance,
@@ -217,6 +221,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     startedAt,
     endedAt,
     summary: normalizedSummary,
+    summaryKind,
     sensitivity,
     entities: Array.from(new Set(input.entities ?? [])).slice(0, 24),
     messageIds,
@@ -234,10 +239,11 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
   };
   db.runSync(
     `INSERT INTO memory_episodes
-       (id, conversation_id, thread_id, task_id, started_at, ended_at, summary, sensitivity,
-        entities_json, message_ids_json, tool_names_json, importance, embedding, created_at,
-        deleted_at, source_start_message_id, source_end_message_id, source_identity_manifest_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+       (id, conversation_id, thread_id, task_id, started_at, ended_at, summary, summary_kind,
+        sensitivity, entities_json, message_ids_json, tool_names_json, importance, embedding,
+        created_at, deleted_at, source_start_message_id, source_end_message_id,
+        source_identity_manifest_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
     episode.id,
     episode.conversationId,
     episode.threadId,
@@ -245,6 +251,7 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
     episode.startedAt,
     episode.endedAt,
     episode.summary,
+    episode.summaryKind ?? 'narrative',
     episode.sensitivity,
     JSON.stringify(episode.entities),
     JSON.stringify(episode.messageIds),

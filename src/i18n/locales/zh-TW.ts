@@ -1119,6 +1119,18 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     episodeSources: plural({
       other: '{count} 個來源',
     }),
+    episodeStructuralMessages: plural({
+      other: '包含 {count} 則訊息的對話輪次',
+    }),
+    episodeStructuralToolCalls: plural({
+      other: '{count} 次工具呼叫',
+    }),
+    episodeStructuralToolCallsPartial: plural({
+      other: '{count} 次工具呼叫中已完成 {completed} 次',
+    }),
+    episodeStructuralHasCode: '包含程式碼',
+    episodeStructuralHasAttachments: '包含附件',
+    episodeStructuralFallback: '對話活動',
   },
   scheduler: {
     title: '提醒與自動化',

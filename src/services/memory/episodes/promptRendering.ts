@@ -1,5 +1,7 @@
 import type { EpisodeRecallSelection } from './accessPolicyTypes';
 import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
+import { presentEpisodeSummary } from './episodeSummaryPresentation';
+import { i18n } from '../../../i18n/manager';
 
 export const MAX_RENDERED_EPISODE_SUMMARY_CHARS = 200;
 export const MAX_RENDERED_EPISODE_TOOL_NAMES = 8;
@@ -56,7 +58,9 @@ function hasAutomaticPromptAuthorization(selection: EpisodePromptSelection): boo
 
 function episodePromptRecord(selection: EpisodePromptSelection): EpisodePromptRecord | null {
   if (!hasAutomaticPromptAuthorization(selection)) return null;
-  const summary = fitEpisodeSummary(selection.episode.summary);
+  const summary = fitEpisodeSummary(
+    presentEpisodeSummary(selection.episode, (key, params) => i18n.t(key, params)),
+  );
   if (!summary) return null;
   const tools = selection.episode.toolNames
     .map((toolName) => toolName.trim())

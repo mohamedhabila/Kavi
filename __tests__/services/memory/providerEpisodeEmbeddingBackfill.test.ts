@@ -193,6 +193,47 @@ describe('maintainProviderEpisodeEmbeddings', () => {
     await expect(maintainProviderEpisodeEmbeddings({ now: 10 })).resolves.toBeNull();
   });
 
+  it('never embeds a structural-turn episode (its summary is JSON, not prose)', async () => {
+    const structural = recordThreadLocalEpisode({
+      conversationId: 'conv-root',
+      threadId: 'thread-1',
+      summary: JSON.stringify({
+        kind: 'structural_turn',
+        version: 1,
+        messageCount: 2,
+        toolCallCount: 0,
+        completedToolCallCount: 0,
+        hasCodeBlock: false,
+        hasAttachments: false,
+      }),
+      summaryKind: 'structural_turn',
+      ...codeOwnedClosedTurnEpisodeFields({
+        sourceUserMessageId: 'structural-user',
+        sourceAssistantMessageId: 'structural-assistant',
+        userContent: 'structural',
+        assistantContent: 'Acknowledged.',
+      }),
+      now: 10,
+    });
+    expect(structural).not.toBeNull();
+    const narrative = makeEpisode('ep-narrative', 'User asked about the release plan.', 20);
+    expect(narrative).not.toBeNull();
+
+    const result = await maintainProviderEpisodeEmbeddings({ now: 100 });
+    expect(result).toMatchObject({ attempted: 1, processedCount: 1, hasMore: false });
+    expect(getEmbeddingMock).toHaveBeenCalledTimes(1);
+    expect(providerColumns(structural!.id)).toMatchObject({
+      embedding_model: null,
+      embedding_dimensions: null,
+      embedding: null,
+    });
+    expect(providerColumns(narrative!.id).embedding).not.toBeNull();
+
+    // A later pass never revisits the structural episode either.
+    const secondPass = await maintainProviderEpisodeEmbeddings({ now: 200 });
+    expect(secondPass).toMatchObject({ attempted: 0, processedCount: 0, hasMore: false });
+  });
+
   it('never embeds an episode that has not ended yet', async () => {
     const episode = makeEpisode('ep-future', 'Not yet ended.', 500);
     expect(episode).not.toBeNull();

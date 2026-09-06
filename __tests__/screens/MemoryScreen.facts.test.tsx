@@ -513,4 +513,31 @@ describe('MemoryScreen — Facts & Episodes', () => {
       expect(getByText('Fresh episode')).toBeTruthy();
     });
   });
+
+  it('renders a localized sentence instead of raw JSON for a structural-turn episode', async () => {
+    mockRecallRecentEpisodes.mockReturnValue([
+      {
+        id: 'ep-structural',
+        summary: JSON.stringify({
+          kind: 'structural_turn',
+          version: 1,
+          messageCount: 4,
+          toolCallCount: 2,
+          completedToolCallCount: 2,
+          hasCodeBlock: false,
+          hasAttachments: false,
+        }),
+        summaryKind: 'structural_turn',
+        messageIds: ['m1', 'm2', 'm3', 'm4'],
+        toolNames: ['write_file', 'read_file'],
+      },
+    ]);
+
+    const { getByText, getByTestId, toJSON } = render(<MemoryScreen />);
+    fireEvent.press(getByText('All memories'));
+
+    await waitFor(() => expect(getByTestId('memory-episode-ep-structural')).toBeTruthy());
+    expect(getByText('Conversation turn with 4 messages · 2 tool calls')).toBeTruthy();
+    expect(JSON.stringify(toJSON())).not.toContain('{\\"kind\\"');
+  });
 });

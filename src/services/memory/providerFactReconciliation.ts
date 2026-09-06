@@ -4,6 +4,7 @@ import type {
   ProviderConsolidatorResult,
 } from './consolidator';
 import type { StructuralExtraction } from './deterministicExtractor';
+import type { MemoryEpisodeSummaryKind } from './episodes/types';
 import { resolveCurrentFactsForReplacement } from './facts/currentReplacementResolution';
 import { evaluateGroundedReplacement } from './groundedFactReplacement';
 import { CANONICAL_SELF_MEMORY_SUBJECT } from './memorySubjectIdentity';
@@ -119,11 +120,18 @@ function ambiguousReplacementKeys(facts: readonly ResolvedProviderFact[]): Set<s
 }
 
 export function mergeProviderIntoStructural(
-  structural: StructuralExtraction,
+  structural: Pick<StructuralExtraction, 'episodeSummary' | 'summaryKind' | 'facts'>,
   provider: ProviderConsolidatorResult,
   context: ProviderMergeContext,
 ): ConsolidatorResult {
   const episodeSummary = provider.episodeSummary ?? structural.episodeSummary;
+  // The provider's own text wins the "narrative" classification only when it
+  // actually supplied one; a null provider summary falls back to the
+  // deterministic structural descriptor above, so the merged result must
+  // inherit that descriptor's kind rather than assuming prose.
+  const summaryKind: MemoryEpisodeSummaryKind = provider.episodeSummary
+    ? 'narrative'
+    : structural.summaryKind;
   const seen = new Set(structural.facts.map(factKey));
   const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
   const resolvedProviderFacts = context.sameSourceExplicitMemoryAuthority
@@ -146,6 +154,7 @@ export function mergeProviderIntoStructural(
 
   return {
     episodeSummary: episodeSummary || null,
+    summaryKind,
     episodeSensitivityDeclaration: providerMemorySensitivityDeclaration(
       provider.episodeSensitivity,
     ),
