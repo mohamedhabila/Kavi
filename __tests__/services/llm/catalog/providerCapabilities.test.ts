@@ -6,6 +6,7 @@ import {
   getAnthropicModelGeneration,
   isAnthropicClaude4Model,
   isAnthropicClaude4OpusModel,
+  keepsThinkingOnWhenOmitted,
   rejectsForcedToolChoice,
   rejectsSamplingParams,
   rejectsThinkingParam,
@@ -178,6 +179,24 @@ describe('supportedEffortLevels', () => {
 
   it('is permissive (full range) when no model is supplied at all', () => {
     expect(supportedEffortLevels(undefined)).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+  });
+});
+
+describe('keepsThinkingOnWhenOmitted', () => {
+  it('is true for Opus/Sonnet 5.x and newer, including a hosted namespace variant', () => {
+    expect(keepsThinkingOnWhenOmitted('claude-opus-5')).toBe(true);
+    expect(keepsThinkingOnWhenOmitted('claude-sonnet-5')).toBe(true);
+    expect(keepsThinkingOnWhenOmitted('claude-opus-5-5')).toBe(true);
+    expect(keepsThinkingOnWhenOmitted('anthropic/claude-opus-5-latest')).toBe(true);
+  });
+
+  it('is false for Opus/Sonnet 4.8/4.7, Sonnet 4.6, non-Anthropic models, and undefined', () => {
+    expect(keepsThinkingOnWhenOmitted('claude-opus-4-8')).toBe(false);
+    expect(keepsThinkingOnWhenOmitted('claude-opus-4-7')).toBe(false);
+    expect(keepsThinkingOnWhenOmitted('claude-sonnet-4-6')).toBe(false);
+    expect(keepsThinkingOnWhenOmitted('claude-fable-5-1')).toBe(false);
+    expect(keepsThinkingOnWhenOmitted('gpt-5.4')).toBe(false);
+    expect(keepsThinkingOnWhenOmitted(undefined)).toBe(false);
   });
 });
 

@@ -5,6 +5,7 @@
 import type { AnthropicEffortLevel } from '../services/llm/catalog/providerCapabilities';
 import {
   isOpenAIReasoningModel,
+  keepsThinkingOnWhenOmitted,
   rejectsThinkingParam,
   supportedEffortLevels,
   supportsAdaptiveThinking,
@@ -206,6 +207,18 @@ export function getThinkingParams(
       thinking: {
         thinkingBudget: resolveGeminiThinkingBudget(level, lower),
       },
+    };
+  }
+
+  // Opus/Sonnet 5.x+ never fully turn thinking off by omission — the model runs
+  // adaptive thinking at its own default effort regardless. Send explicit adaptive +
+  // low effort instead of `{type:'disabled'}`, which 400s on claude-opus-5-5 at every
+  // effort level and has documented failure modes (leaked tags, tool calls in text) on
+  // claude-opus-5.
+  if ((level === 'off' || level === 'minimal') && hostedFamily === 'anthropic' && keepsThinkingOnWhenOmitted(model)) {
+    return {
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'low' },
     };
   }
 

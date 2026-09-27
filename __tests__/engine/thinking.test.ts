@@ -119,9 +119,26 @@ describe('getThinkingParams', () => {
       },
     );
 
-    it('keeps minimal turns on the provider default path', () => {
-      expect(getThinkingParams('minimal', 'claude-opus-5')).toEqual({});
-    });
+    it.each<ThinkingLevel>(['off', 'minimal'])(
+      'level %s maps to adaptive thinking at low effort for claude-opus-5, claude-sonnet-5, and claude-opus-5-5 (omission still runs default-effort thinking on these models)',
+      (level) => {
+        for (const model of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-5-5']) {
+          expect(getThinkingParams(level, model)).toEqual({
+            thinking: { type: 'adaptive' },
+            output_config: { effort: 'low' },
+          });
+        }
+      },
+    );
+
+    it.each<ThinkingLevel>(['off', 'minimal'])(
+      'level %s stays on the provider default path ({}) for claude-opus-4-8 and claude-opus-4-7 (omission means no thinking there)',
+      (level) => {
+        for (const model of ['claude-opus-4-8', 'claude-opus-4-7']) {
+          expect(getThinkingParams(level, model)).toEqual({});
+        }
+      },
+    );
 
     it('ignores maxTokens because adaptive thinking uses max_tokens as a hard cap', () => {
       expect(getThinkingParams('high', 'claude-opus-5', { maxTokens: 900 })).toEqual({

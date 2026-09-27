@@ -119,6 +119,19 @@ export function requiresAdaptiveThinkingOnly(model: string | undefined): boolean
 }
 
 /**
+ * True when omitting the `thinking` param still runs adaptive thinking at the model's
+ * default effort — Opus/Sonnet 5.x and newer. Opus/Sonnet 4.7 and 4.8 are the opposite:
+ * they run with no thinking at all when the param is absent.
+ */
+export function keepsThinkingOnWhenOmitted(model: string | undefined): boolean {
+  const generation = getAnthropicModelGeneration(model);
+  if (!generation || !isOpusOrSonnet(generation)) {
+    return false;
+  }
+  return generation.major >= 5;
+}
+
+/**
  * True when the model 400s on any sampling param (`temperature`, `top_p`, `top_k`) —
  * Fable (always-on thinking leaves no room for sampling) and every Opus/Sonnet 4.7+.
  * 4.6 and older still allow sampling normally.
