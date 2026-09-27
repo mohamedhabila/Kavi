@@ -212,7 +212,8 @@ export const AGENTS_TOOL: ToolDefinition = {
       temperature: { type: 'number', description: 'Temperature 0-2 (action=configure).' },
       thinkingLevel: {
         type: 'string',
-        description: 'Thinking level override: off, low, medium, or high (action=configure).',
+        description:
+          'Thinking level override: off, minimal, low, medium, high, or xhigh (action=configure).',
       },
     },
     required: ['action'],
