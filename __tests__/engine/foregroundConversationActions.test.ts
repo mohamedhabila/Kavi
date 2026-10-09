@@ -110,7 +110,9 @@ describe('useForegroundConversationActions', () => {
       }),
     );
     expect(clearComposerDraft).toHaveBeenCalledWith(getComposerDraftKey(sideId));
-    expect(runChat).toHaveBeenCalledWith(sideId);
+    expect(runChat).toHaveBeenCalledWith(sideId, {
+      latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
+    });
   });
 
   it('does not append the user turn until recovery and the current projection owner release', async () => {
@@ -155,7 +157,9 @@ describe('useForegroundConversationActions', () => {
     });
 
     expect(addMessage).toHaveBeenCalledTimes(1);
-    expect(runChat).toHaveBeenCalledWith(conversationId);
+    expect(runChat).toHaveBeenCalledWith(conversationId, {
+      latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
+    });
   });
 
   it('coalesces concurrent writes to one conversation before either can append', async () => {
@@ -232,6 +236,7 @@ describe('useForegroundConversationActions', () => {
 
     expect(runChat).toHaveBeenCalledWith(conversationId, {
       additionalSystemPrompt: 'Keep this spoken response concise.',
+      latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
     });
   });
 

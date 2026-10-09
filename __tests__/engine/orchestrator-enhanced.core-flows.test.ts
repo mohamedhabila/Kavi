@@ -186,6 +186,24 @@ describe('runOrchestrator — simple text response', () => {
     expect(callbacks.onStateChange).toHaveBeenCalledWith('idle');
   });
 
+  it('reports each orchestrator latency stage once, in the order the turn reaches it', async () => {
+    const { isSlashCommand } = require('../../src/services/commands/parser');
+    isSlashCommand.mockReturnValue(false);
+    mockStreamMessage.mockReturnValue(
+      makeStream([{ type: 'token', content: 'Hello' }, { type: 'done' }], 'text'),
+    );
+    const callbacks = { ...makeCallbacks(), onTurnLatencyMark: jest.fn(() => undefined) };
+
+    await runOrchestrator(makeOptions([makeMsg('user', 'Hi')]), callbacks);
+
+    expect(callbacks.onTurnLatencyMark.mock.calls.map(([stage]) => stage)).toEqual([
+      'session_bootstrapped',
+      'request_context_prepared',
+      'model_request_dispatched',
+      'first_model_output',
+    ]);
+  });
+
   it('forces a no-tools clarification turn for structurally empty user input', async () => {
     const { isSlashCommand } = require('../../src/services/commands/parser');
     isSlashCommand.mockReturnValue(false);

@@ -35,6 +35,7 @@ import { transitionForegroundClarificationAdmission } from './clarificationReply
 import { resolveForegroundRequestProviderReadiness } from './requestProviderReadiness';
 import { reserveForegroundRunRequest } from './requestReservation';
 import { withAndroidLongHorizonExecutionLease } from '../../../services/androidLongHorizonExecution';
+import { createTurnLatencyTimeline } from '../../turnLatencyTimeline';
 
 export async function executeForegroundConversationRun(
   params: ExecuteForegroundConversationRunParams,
@@ -72,6 +73,7 @@ async function executeReservedForegroundConversationRun(
   requestClaim: ForegroundRunRequestClaim,
 ): Promise<void> {
   const { context, conversationId, options } = params;
+  const latencyTimeline = options?.latencyTimeline ?? createTurnLatencyTimeline();
 
   const { abortController, foregroundRequestId } = requestClaim;
 
@@ -111,6 +113,7 @@ async function executeReservedForegroundConversationRun(
     clearForegroundRequestIfCurrent();
     return;
   }
+  latencyTimeline.mark('recovery_ready');
   let runConversation = context.helpers.getConversation(conversationId);
   const mobileOutcomeGate = await resolveForegroundMobileControllerOutcomeGate({
     context,
@@ -140,6 +143,7 @@ async function executeReservedForegroundConversationRun(
     context.helpers.setChatError(requestReservation.message);
     return;
   }
+  latencyTimeline.mark('request_reserved');
   let preparedBootstrap = requestReservation.preparedBootstrap;
   let bootstrap = preparedBootstrap.bootstrap;
   let resumePreparation = requestReservation.resumePreparation;
@@ -182,6 +186,7 @@ async function executeReservedForegroundConversationRun(
     return;
   }
   const { preflight } = providerReadiness;
+  latencyTimeline.mark('provider_ready');
 
   let admissionTransition;
   try {
@@ -556,6 +561,7 @@ async function executeReservedForegroundConversationRun(
     executionLease = await context.durability.activateModelExecution({
       lease: executionLease,
     });
+    latencyTimeline.mark('journal_active');
   } catch (error: unknown) {
     if (closingSupersededGeneration) {
       throw error;
@@ -649,7 +655,10 @@ async function executeReservedForegroundConversationRun(
               }
             : {}),
         },
-        runtime.callbacks,
+        {
+          ...runtime.callbacks,
+          onTurnLatencyMark: (stage) => latencyTimeline.mark(stage),
+        },
       );
       orchestratorTerminalDisposition = orchestratorResult.terminalDisposition;
       pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;

@@ -6,7 +6,12 @@ import type {
   ToolCall,
 } from '../../types/message';
 import type { Attachment } from '../../types/attachment';
-import type { AgentRunAsyncOperation, AgentRunControlGraphState } from '../../types/agentRun';
+import type {
+  AgentRunAsyncOperation,
+  AgentRunControlGraphState,
+  AgentRunTurnLatency,
+  AgentRunTurnLatencyStage,
+} from '../../types/agentRun';
 import type { ToolDefinition } from '../../types/tool';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { OrchestratorState } from '../../types/conversation';
@@ -61,6 +66,11 @@ export interface OrchestratorCallbacks {
   onDone: () => void;
   onCommandResult?: (result: { response?: string; action?: string }) => void;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
+  /**
+   * The run reached a send-to-first-output milestone. Returns the breakdown so far when
+   * this call recorded the stage for the first time, so the caller can persist it once.
+   */
+  onTurnLatencyMark?: (stage: AgentRunTurnLatencyStage) => AgentRunTurnLatency | undefined;
 }
 
 export interface OrchestratorOptions {

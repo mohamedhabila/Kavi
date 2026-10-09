@@ -1,5 +1,6 @@
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
+import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/agentRun';
 import { createAgentRunAbortError } from '../../services/runtimeError';
 import { upsertPendingToolCall } from '../orchestratorToolTranscript';
 import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
@@ -177,6 +178,12 @@ export async function executeAgentControlGraphModelTurnStreaming(
     params.isForegroundRun ? FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS : undefined,
   );
   let streamIterator: AsyncIterator<any> | undefined;
+  // Only the call that first records a stage returns a breakdown, so a later model turn
+  // of the same run leaves the persisted send-to-first-output breakdown untouched.
+  let turnLatency: AgentRunTurnLatency | undefined;
+  const markTurnLatency = (stage: AgentRunTurnLatencyStage) => {
+    turnLatency = params.callbacks.onTurnLatencyMark?.(stage) ?? turnLatency;
+  };
 
   try {
     params.applyGraphEvents([
@@ -195,6 +202,12 @@ export async function executeAgentControlGraphModelTurnStreaming(
     const iterator = stream[Symbol.asyncIterator]();
     streamIterator = iterator;
     let observedNext = observeIteratorNext(Promise.resolve(iterator.next()));
+    markTurnLatency('model_request_dispatched');
+    const markFirstModelOutput = () => {
+      if (firstModelOutputAt !== undefined) return;
+      firstModelOutputAt = Date.now();
+      markTurnLatency('first_model_output');
+    };
 
     params.callbacks.onStateChange('responding');
 
@@ -237,18 +250,21 @@ export async function executeAgentControlGraphModelTurnStreaming(
         case 'token': {
           const content = event.content || '';
           fullContent += content;
-          firstModelOutputAt = firstModelOutputAt ?? Date.now();
+          markFirstModelOutput();
           projectionPublisher.enqueueToken(content);
           break;
         }
         case 'reasoning': {
           const content = event.content || '';
           reasoning += content;
-          firstModelOutputAt = firstModelOutputAt ?? Date.now();
+          markFirstModelOutput();
           projectionPublisher.enqueueReasoning(content);
           break;
         }
         case 'tool_call':
+          if (event.toolCall) {
+            markTurnLatency('first_model_output');
+          }
           if (event.toolCall && params.allowQueuedToolCalls) {
             const queuedToolCall = upsertPendingToolCall(pendingToolCalls, event.toolCall);
             projectionPublisher.enqueueToolCall({
@@ -288,6 +304,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
         ...(firstModelOutputAt !== undefined
           ? { timeToFirstTokenMs: firstModelOutputAt - modelStreamStartedAt }
           : {}),
+        ...(turnLatency ? { turnLatency } : {}),
       },
       'model_turn_completed',
     );
@@ -313,6 +330,7 @@ export async function executeAgentControlGraphModelTurnStreaming(
     params.recordPerformanceMetrics(
       {
         modelTurnCount: 1,
+        ...(turnLatency ? { turnLatency } : {}),
       },
       'model_turn_failed',
     );

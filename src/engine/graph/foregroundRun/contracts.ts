@@ -7,6 +7,7 @@ import type {
 import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
 import type { MobileControllerOutcome } from '../../mobileController/contracts';
 import type { AgentRunMobileControllerHandoffRef } from '../../../types/agentRun';
+import type { TurnLatencyTimeline } from '../../turnLatencyTimeline';
 
 export type ResolvedFinalizationProviderContext = {
   provider: LlmProviderConfig;
@@ -40,6 +41,11 @@ export type RunChatOptions = {
   mobileController?: MobileControllerHostPort;
   /** The published handoff identity paired with correlated host-observed facts. */
   mobileControllerOutcome?: MobileControllerOutcomeSubmission;
+  /**
+   * Started when the user sent this turn, so its marks include the send-path waits.
+   * A run started without one (a resume, retry, or recovery) times from its own start.
+   */
+  latencyTimeline?: TurnLatencyTimeline;
 };
 
 export type EnsureAgentRunFinalResponse = (params: {

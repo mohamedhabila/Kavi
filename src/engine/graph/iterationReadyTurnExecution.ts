@@ -118,6 +118,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
         onStateChange: iterationParams.callbacks.onStateChange,
         onToken: iterationParams.callbacks.onToken,
         onToolCallQueued: iterationParams.callbacks.onToolCallQueued,
+        onTurnLatencyMark: iterationParams.callbacks.onTurnLatencyMark,
       },
       compactionEngine: iterationParams.compactionEngine,
       compactionContext: {

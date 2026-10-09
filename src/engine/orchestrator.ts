@@ -73,6 +73,7 @@ export async function runOrchestrator(
     isForegroundRun: options.isForegroundRun,
     ...(options.mobileController ? { mobileController: options.mobileController } : {}),
   });
+  callbacks.onTurnLatencyMark?.('session_bootstrapped');
 
   return runOrchestratorGraphSession({
     options,

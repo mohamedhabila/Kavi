@@ -11,7 +11,9 @@ import type {
   AgentRunControlGraphToolResultRef,
   AgentRunControlGraphTurnDirectives,
   AgentRunMobileControllerRecoveryState,
+  AgentRunTurnLatency,
 } from '../../types/agentRun';
+import { AGENT_RUN_TURN_LATENCY_STAGES } from '../../types/agentRun';
 import {
   normalizeGoalCompletionPolicy,
   resolveDefaultGoalCompletionPolicy,
@@ -180,15 +182,33 @@ function normalizeMobileControllerRecoveryState(
     : undefined;
 }
 
+/** Keeps only known stages with finite, non-negative offsets; an empty breakdown is absent. */
+export function normalizeAgentRunTurnLatency(value: unknown): AgentRunTurnLatency | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const source = value as Record<string, unknown>;
+  const normalized: AgentRunTurnLatency = {};
+  for (const stage of AGENT_RUN_TURN_LATENCY_STAGES) {
+    const offset = source[stage];
+    if (typeof offset === 'number' && Number.isFinite(offset) && offset >= 0) {
+      normalized[stage] = Math.floor(offset);
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export function normalizeAgentRunControlGraphPerformance(
   performance: Partial<AgentRunControlGraphPerformance> | undefined,
 ): AgentRunControlGraphPerformance {
   const timeToFirstTokenMs = normalizePositiveInteger(performance?.timeToFirstTokenMs);
+  const turnLatency = normalizeAgentRunTurnLatency(performance?.turnLatency);
 
   return {
     modelTurnCount: normalizeNonNegativeInteger(performance?.modelTurnCount),
     modelDurationMs: normalizeNonNegativeInteger(performance?.modelDurationMs),
     ...(timeToFirstTokenMs ? { timeToFirstTokenMs } : {}),
+    ...(turnLatency ? { turnLatency } : {}),
     toolExecutionCount: normalizeNonNegativeInteger(performance?.toolExecutionCount),
     toolExecutionDurationMs: normalizeNonNegativeInteger(performance?.toolExecutionDurationMs),
     lastCandidateToolCount: normalizeNonNegativeInteger(performance?.lastCandidateToolCount),

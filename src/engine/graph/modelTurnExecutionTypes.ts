@@ -13,6 +13,7 @@ import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
+import type { OrchestratorCallbacks } from '../orchestrator/types';
 import type { CompactionContext } from '../../services/context/types';
 import type { ThinkingLevel } from '../thinking';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
@@ -30,6 +31,7 @@ export interface AgentModelTurnCallbacks {
   onStateChange: (state: OrchestratorState) => void;
   onToken: (token: string) => void;
   onToolCallQueued?: (toolCall: ToolCall) => void;
+  onTurnLatencyMark?: OrchestratorCallbacks['onTurnLatencyMark'];
 }
 
 export interface ExecuteAgentControlGraphModelTurnParams {

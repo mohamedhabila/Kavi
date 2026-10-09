@@ -1,5 +1,6 @@
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
+import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/agentRun';
 import { isPlainRecord } from '../../services/llm/core/json';
 import {
   createCompletionMetadata,
@@ -128,7 +129,14 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
   ]);
 
   const modelTurnStartedAt = Date.now();
+  // Only the call that first records a stage returns a breakdown, so a later model turn
+  // of the same run leaves the persisted send-to-first-output breakdown untouched.
+  let turnLatency: AgentRunTurnLatency | undefined;
+  const markTurnLatency = (stage: AgentRunTurnLatencyStage) => {
+    turnLatency = params.callbacks.onTurnLatencyMark?.(stage) ?? turnLatency;
+  };
   try {
+    markTurnLatency('model_request_dispatched');
     const response = await waitForPromiseOrAbort(
       params.llm.sendMessage(params.requestMessages, {
         ...params.streamOptions,
@@ -138,6 +146,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       activityGuard.signal,
     );
     activityGuard.markActivity();
+    markTurnLatency('first_model_output');
     const usage = isPlainRecord(response?.usage) ? response.usage : undefined;
     if (usage) {
       usageTracker.mergeSnapshot({
@@ -194,6 +203,7 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       {
         modelTurnCount: 1,
         modelDurationMs: Date.now() - modelTurnStartedAt,
+        ...(turnLatency ? { turnLatency } : {}),
       },
       'model_turn_completed',
     );
@@ -215,7 +225,10 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       requestMessages: params.requestMessages,
       budgetTools: params.budgetTools,
     });
-    params.recordPerformanceMetrics({ modelTurnCount: 1 }, 'model_turn_failed');
+    params.recordPerformanceMetrics(
+      { modelTurnCount: 1, ...(turnLatency ? { turnLatency } : {}) },
+      'model_turn_failed',
+    );
     const reason = effectiveError.message;
     params.applyGraphEvents([
       {

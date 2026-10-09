@@ -8,6 +8,7 @@
 
 import { executeForegroundConversationSend } from '../../src/engine/graph/foregroundRun/sendExecution';
 import type { ForegroundConversationSendContext } from '../../src/engine/graph/foregroundRun/sendExecution';
+import type { RunChatOptions } from '../../src/engine/graph/foregroundRun/contracts';
 
 jest.mock('../../src/store/modelProjectionIntentCoordinator', () => ({
   beginModelProjectionIntent: jest.fn(() => ({ release: jest.fn() })),
@@ -19,9 +20,10 @@ jest.mock('../../src/services/conversationWorkspace/attachments', () => ({
   })),
 }));
 
-function createContext(
-  overrides: Partial<ForegroundConversationSendContext> = {},
-): { context: ForegroundConversationSendContext; calls: string[] } {
+function createContext(overrides: Partial<ForegroundConversationSendContext> = {}): {
+  context: ForegroundConversationSendContext;
+  calls: string[];
+} {
   const calls: string[] = [];
   const context: ForegroundConversationSendContext = {
     addMessage: jest.fn(() => {
@@ -86,8 +88,24 @@ describe('executeForegroundConversationSend', () => {
     await executeForegroundConversationSend({ context, text: 'hello' });
 
     expect(context.ensureCanonicalConversation).not.toHaveBeenCalled();
-    // Matches the chat screen exactly: no options means a single-argument call.
-    expect(context.runChat).toHaveBeenCalledWith('active-conversation');
+    // Without caller options the only run option is the send's latency timeline.
+    expect(context.runChat).toHaveBeenCalledWith('active-conversation', {
+      latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
+    });
+  });
+
+  it('hands the run a latency timeline that already marked the user message', async () => {
+    const { context } = createContext();
+
+    await executeForegroundConversationSend({ context, text: 'hello' });
+
+    const runOptions = (context.runChat as jest.Mock).mock.calls[0][1] as RunChatOptions;
+    const timeline = runOptions.latencyTimeline!;
+    expect(timeline.mark('user_message_added')).toBeUndefined();
+    expect(timeline.mark('recovery_ready')).toEqual({
+      user_message_added: expect.any(Number),
+      recovery_ready: expect.any(Number),
+    });
   });
 
   it('creates a canonical conversation when none is active, using the agentic persona', async () => {
@@ -102,7 +120,9 @@ describe('executeForegroundConversationSend', () => {
     expect(context.ensureCanonicalConversation).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'agentic', reportMissingProvider: true }),
     );
-    expect(context.runChat).toHaveBeenCalledWith('created-conversation');
+    expect(context.runChat).toHaveBeenCalledWith('created-conversation', {
+      latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
+    });
   });
 
   it('does not send when the conversation write cannot be reserved', async () => {
@@ -172,9 +192,9 @@ describe('executeForegroundConversationSend', () => {
       }),
     });
 
-    await expect(
-      executeForegroundConversationSend({ context, text: 'hello' }),
-    ).rejects.toThrow('run failed');
+    await expect(executeForegroundConversationSend({ context, text: 'hello' })).rejects.toThrow(
+      'run failed',
+    );
     expect(context.releaseConversationWrite).toHaveBeenCalledWith('active-conversation');
   });
 

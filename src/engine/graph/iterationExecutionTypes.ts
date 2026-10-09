@@ -25,6 +25,7 @@ import type {
 } from './agentControlGraph';
 import type { PrepareAgentControlGraphModelTurnParams } from './prepareAgentControlGraphModelTurn';
 import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
+import type { AgentModelTurnCallbacks } from './modelTurnExecutionTypes';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
@@ -50,6 +51,7 @@ export type IterationCallbacks = {
   onToolCallStart: (toolCall: ToolCall) => void;
   onToolCallComplete: (toolCall: ToolCall) => void;
   onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
+  onTurnLatencyMark?: AgentModelTurnCallbacks['onTurnLatencyMark'];
 };
 
 export interface AgentControlGraphIterationRuntimeState {

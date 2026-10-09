@@ -17,6 +17,7 @@ import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
 import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
+import { createTurnLatencyTimeline } from '../../turnLatencyTimeline';
 import type { RunChatOptions } from './contracts';
 import type { ForegroundConversationRunHelpers } from './executionTypes';
 
@@ -62,6 +63,7 @@ export async function executeForegroundConversationSend(
   input: ForegroundConversationSendInput,
 ): Promise<void> {
   const { attachments, context, runOptions, text } = input;
+  const latencyTimeline = createTurnLatencyTimeline();
   context.setChatError(null);
 
   const resolvedConversationId =
@@ -94,7 +96,9 @@ export async function executeForegroundConversationSend(
       }
     }
 
-    if (!(await context.waitForConversationWriteAvailability(conversationId, SUPERSEDING_TURN_REASON))) {
+    if (
+      !(await context.waitForConversationWriteAvailability(conversationId, SUPERSEDING_TURN_REASON))
+    ) {
       return;
     }
 
@@ -107,10 +111,10 @@ export async function executeForegroundConversationSend(
       attachments: preparedAttachments,
     } as Partial<Message> & Pick<Message, 'content' | 'id' | 'role'>);
 
+    latencyTimeline.mark('user_message_added');
+
     context.clearComposerDraft(getComposerDraftKey(conversationId));
-    const execution = runOptions
-      ? context.runChat(conversationId, runOptions)
-      : context.runChat(conversationId);
+    const execution = context.runChat(conversationId, { ...runOptions, latencyTimeline });
     writeIntent.release();
     writeIntent = undefined;
     context.releaseConversationWrite(conversationId);

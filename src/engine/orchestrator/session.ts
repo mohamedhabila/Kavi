@@ -164,6 +164,7 @@ export async function runOrchestratorGraphSession(params: {
     memoryRetrievalStrategy: options.memoryRetrievalStrategy,
     memoryContextStrategy: options.memoryContextStrategy,
   });
+  callbacks.onTurnLatencyMark?.('request_context_prepared');
   const requestFrame = resolveGraphEntryRequestDecision({
     frame: structuralRequestFrame,
     graphSnapshot: options.initialAgentControlGraphState,

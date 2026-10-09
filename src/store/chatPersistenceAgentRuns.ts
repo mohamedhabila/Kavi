@@ -8,7 +8,10 @@ import type {
   AgentRunPlan,
   AgentRunSummary,
 } from '../types/agentRun';
-import { normalizeAgentRunControlGraphState } from '../services/agents/agentControlGraphState';
+import {
+  normalizeAgentRunControlGraphState,
+  normalizeAgentRunTurnLatency,
+} from '../services/agents/agentControlGraphState';
 import { qualifyAgentRunMobileControllerHandoffRef } from '../services/agents/mobileControllerAsyncOperation';
 import {
   MAX_PERSISTED_AGENT_RUN_CHECKPOINTS,
@@ -165,12 +168,14 @@ function sanitizeAgentRunControlGraph(
 function sanitizeAgentRunControlGraphPerformance(
   performance: AgentRunControlGraphPerformance,
 ): AgentRunControlGraphPerformance {
+  const turnLatency = normalizeAgentRunTurnLatency(performance.turnLatency);
   return {
     modelTurnCount: sanitizeNonNegativeNumber(performance.modelTurnCount),
     modelDurationMs: sanitizeNonNegativeNumber(performance.modelDurationMs),
     ...(performance.timeToFirstTokenMs !== undefined
       ? { timeToFirstTokenMs: sanitizeNonNegativeNumber(performance.timeToFirstTokenMs) }
       : {}),
+    ...(turnLatency ? { turnLatency } : {}),
     toolExecutionCount: sanitizeNonNegativeNumber(performance.toolExecutionCount),
     toolExecutionDurationMs: sanitizeNonNegativeNumber(performance.toolExecutionDurationMs),
     lastCandidateToolCount: sanitizeNonNegativeNumber(performance.lastCandidateToolCount),

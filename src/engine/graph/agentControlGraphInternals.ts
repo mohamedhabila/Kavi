@@ -175,11 +175,13 @@ export function mergePerformanceMetrics(
   });
   const timeToFirstTokenMs =
     patch.timeToFirstTokenMs !== undefined ? incoming.timeToFirstTokenMs : base.timeToFirstTokenMs;
+  const turnLatency = patch.turnLatency !== undefined ? incoming.turnLatency : base.turnLatency;
 
   return normalizeAgentRunControlGraphPerformance({
     modelTurnCount: base.modelTurnCount + incoming.modelTurnCount,
     modelDurationMs: base.modelDurationMs + incoming.modelDurationMs,
     ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
+    ...(turnLatency !== undefined ? { turnLatency } : {}),
     toolExecutionCount: base.toolExecutionCount + incoming.toolExecutionCount,
     toolExecutionDurationMs: base.toolExecutionDurationMs + incoming.toolExecutionDurationMs,
     lastCandidateToolCount:

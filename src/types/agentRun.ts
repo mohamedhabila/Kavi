@@ -210,10 +210,34 @@ export interface AgentRunControlGraphAuditEvent {
   detail?: string;
 }
 
+/**
+ * Milestones a foreground turn passes between the user's send and the model's first
+ * output, in the order the turn reaches them. {@link AgentRunTurnLatency} stores each as
+ * elapsed milliseconds since the send, so the cost of a stage is the gap to its
+ * predecessor and a missing mark means the turn never reached that stage.
+ */
+export const AGENT_RUN_TURN_LATENCY_STAGES = [
+  'user_message_added',
+  'recovery_ready',
+  'request_reserved',
+  'provider_ready',
+  'journal_active',
+  'session_bootstrapped',
+  'request_context_prepared',
+  'model_request_dispatched',
+  'first_model_output',
+] as const;
+
+export type AgentRunTurnLatencyStage = (typeof AGENT_RUN_TURN_LATENCY_STAGES)[number];
+
+export type AgentRunTurnLatency = Partial<Record<AgentRunTurnLatencyStage, number>>;
+
 export interface AgentRunControlGraphPerformance {
   modelTurnCount: number;
   modelDurationMs: number;
   timeToFirstTokenMs?: number;
+  /** Send-to-first-output breakdown of the latest foreground turn of this run. */
+  turnLatency?: AgentRunTurnLatency;
   toolExecutionCount: number;
   toolExecutionDurationMs: number;
   lastCandidateToolCount: number;
