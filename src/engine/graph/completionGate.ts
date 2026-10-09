@@ -11,7 +11,6 @@ import {
 } from './completionGateHolds';
 import {
   evaluateGraphMutationErrorHold,
-  evaluateNoToolProgressRetry,
   evaluateToolErrorRepairHold,
 } from './completionGateRecoveryHolds';
 import type { CompletionGateDecision } from './completionGateTypes';
@@ -34,7 +33,6 @@ export function evaluateCompletionGate(params: {
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
   completion?: AssistantCompletionMetadata;
   nextFinalizationMaxTokens: number;
-  requiresAgenticProgressValidation?: boolean;
 }): CompletionGateDecision {
   const asyncCommand = buildAgentControlGraphPendingAsyncFinalizationCommand({
     trackedOperations: params.trackedOperations,
@@ -94,21 +92,6 @@ export function evaluateCompletionGate(params: {
   });
   if (toolErrorRepairHold) {
     return toolErrorRepairHold;
-  }
-
-  const noToolProgressRetry = evaluateNoToolProgressRetry({
-    consecutiveNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
-    goals: params.goals,
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    selectedToolNames: params.selectedToolNames,
-    forceTextThisTurn: params.forceTextThisTurn,
-    toolCallHistory: params.toolCallHistory,
-    requiresAgenticProgressValidation: params.requiresAgenticProgressValidation,
-    candidateCompletionIsComplete: params.completion?.completionStatus === 'complete',
-  });
-  if (noToolProgressRetry) {
-    return noToolProgressRetry;
   }
 
   const goalsHold = evaluateGoalsIncompleteHold({

@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
 import type { ToolCallRecord } from '../loopDetection';
 import type { CompletionGateDecision } from './completionGateTypes';
@@ -47,31 +46,6 @@ function buildToolErrorRepairHoldPrompt(repairHints: ReadonlyArray<string>): str
   }
   lines.push(
     'Do not finalize. Follow repair.retryArguments or repair.expectedShape using corrected top-level arguments and available tool results. If repair.tool is update_goals, commit that graph mutation first, then retry the original effect on the following iteration. Use discovery tools for any missing capability. If repair is impossible, report the concrete blocker on the next pass.',
-  );
-  return lines.join('\n');
-}
-
-function buildNoToolProgressRetryPrompt(
-  selectedToolNames: ReadonlySet<string> | undefined,
-): string {
-  const toolNames = Array.from(selectedToolNames ?? [])
-    .filter(Boolean)
-    .sort();
-  const canRequestClarification = toolNames.includes('request_clarification');
-  const lines: string[] = ['[SYSTEM HOLD]'];
-  lines.push(
-    'The previous response was a first-pass candidate, but no code-owned progress was recorded. Code-owned progress is required only when the original request actually requires app, device, file, memory, or external-state work.',
-  );
-  if (toolNames.length > 0) {
-    lines.push(`Available tools: ${toolNames.join(', ')}.`);
-  }
-  if (canRequestClarification) {
-    lines.push(
-      'If user-owned information is required before execution can continue, call request_clarification now; a prose-only question does not register the blocked request.',
-    );
-  }
-  lines.push(
-    'Re-evaluate the original request and available paths. Do not manufacture an external action, consent need, or required user detail merely because a compatible tool exists. Advice or information grounded entirely in visible context can be complete. If the prior candidate already provides that useful, proportionate response, preserve its substance and return it directly instead of replacing it with optional-action clarification. If the request does depend on app state, device state, files, memory, or another external effect, use the appropriate discovery or action tool now; do not ask the user for an internal identifier that a read-only tool can resolve. Otherwise report a concrete blocker only after the available paths have been exhausted.',
   );
   return lines.join('\n');
 }
@@ -132,43 +106,6 @@ export function evaluateToolErrorRepairHold(params: {
     systemPrompts: [
       buildToolErrorRepairHoldPrompt(extractRecentToolRepairHints(params.toolCallHistory)),
     ],
-    missingRequiredEvidenceLabels: [],
-    nextConsecutivePendingAsyncNoToolTurns: params.consecutiveNoToolTurns + 1,
-  };
-}
-
-export function evaluateNoToolProgressRetry(params: {
-  consecutiveNoToolTurns: number;
-  goals: ReadonlyArray<AgentGoal>;
-  toolingEnabledForProvider: boolean;
-  selectedToolCount: number;
-  selectedToolNames?: ReadonlySet<string>;
-  forceTextThisTurn: boolean;
-  toolCallHistory?: ReadonlyArray<ToolCallRecord>;
-  requiresAgenticProgressValidation?: boolean;
-  candidateCompletionIsComplete?: boolean;
-}): CompletionGateDecision | null {
-  if (
-    params.requiresAgenticProgressValidation !== true ||
-    params.candidateCompletionIsComplete !== true ||
-    !params.toolingEnabledForProvider ||
-    params.selectedToolCount <= 0 ||
-    params.forceTextThisTurn ||
-    params.consecutiveNoToolTurns > 0 ||
-    params.goals.length > 0 ||
-    (params.toolCallHistory?.length ?? 0) > 0
-  ) {
-    return null;
-  }
-
-  return {
-    type: 'hold',
-    reason: 'no_tool_progress_retry',
-    graphEvent: {
-      type: 'FINALIZATION_HELD',
-      reason: 'no_tool_progress_retry',
-    },
-    systemPrompts: [buildNoToolProgressRetryPrompt(params.selectedToolNames)],
     missingRequiredEvidenceLabels: [],
     nextConsecutivePendingAsyncNoToolTurns: params.consecutiveNoToolTurns + 1,
   };

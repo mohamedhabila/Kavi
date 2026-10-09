@@ -15,7 +15,7 @@ import {
 
 describe('Orchestrator', () => {
   describe('Direct response routing', () => {
-    it('revalidates a standalone super-agent response without inflating its first-pass prompt', async () => {
+    it('delivers a standalone super-agent answer in one call without inflating its prompt', async () => {
       const mockSendMessage = jest.fn();
 
       (LlmService as any).mockImplementation(() => ({
@@ -27,25 +27,15 @@ describe('Orchestrator', () => {
         name: 'SuperAgent',
       });
 
-      mockStreamMessage
-        .mockImplementationOnce(() =>
-          createStreamGenerator(
-            [
-              { type: 'token', content: 'CHECKNO42' },
-              { type: 'done', content: 'CHECKNO42' },
-            ],
-            'text',
-          ),
-        )
-        .mockImplementationOnce(() =>
-          createStreamGenerator(
-            [
-              { type: 'token', content: 'CHECKNO42' },
-              { type: 'done', content: 'CHECKNO42' },
-            ],
-            'text',
-          ),
-        );
+      mockStreamMessage.mockImplementationOnce(() =>
+        createStreamGenerator(
+          [
+            { type: 'token', content: 'CHECKNO42' },
+            { type: 'done', content: 'CHECKNO42' },
+          ],
+          'text',
+        ),
+      );
 
       const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
@@ -71,7 +61,8 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       expect(mockSendMessage).not.toHaveBeenCalled();
-      expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+      // One model call: the first-pass answer is delivered, not regenerated under a hold.
+      expect(mockStreamMessage).toHaveBeenCalledTimes(1);
       const requestMessages = mockStreamMessage.mock.calls[0][0] as Array<{
         role: string;
         content: string;
@@ -94,14 +85,6 @@ describe('Orchestrator', () => {
       // device capability is unavailable without checking. Orchestration sections
       // stay excluded above.
       expect(requestMessages[0].content.length).toBeLessThan(6600);
-      const recoveryMessages = mockStreamMessage.mock.calls[1][0] as Array<{
-        role: string;
-        content: string;
-      }>;
-      expect(recoveryMessages.at(-1)?.content).toContain('no code-owned progress was recorded');
-      expect(recoveryMessages.at(-1)?.content).toContain(
-        'preserve its substance and return it directly',
-      );
       expect(callbacks.calls.onAssistantMessage.at(-1)).toEqual(
         expect.objectContaining({
           content: 'CHECKNO42',

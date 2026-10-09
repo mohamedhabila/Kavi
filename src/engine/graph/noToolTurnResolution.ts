@@ -40,13 +40,6 @@ type NoToolTurnResolutionResult =
       status: 'finalized';
     };
 
-function requiresAgenticProgressValidation(controlGraph: AgentControlGraphSnapshot): boolean {
-  const routing = controlGraph.requestUnderstanding?.routing;
-  return (
-    routing?.status === 'known' && routing.mode === 'agentic' && routing.decisionAction === 'act'
-  );
-}
-
 function appendTrailingSystemMessage(
   workingMessages: Message[],
   content: string,
@@ -393,7 +386,6 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
       toolCallHistory: params.toolCallHistory,
       completion: params.completion,
       nextFinalizationMaxTokens: params.nextFinalizationMaxTokens,
-      requiresAgenticProgressValidation: requiresAgenticProgressValidation(params.controlGraph),
     });
 
   let gateDecision = evaluateGate(params.controlGraph.goals);

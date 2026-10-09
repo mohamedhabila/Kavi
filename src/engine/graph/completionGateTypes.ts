@@ -11,7 +11,6 @@ export type CompletionGateHoldReason =
   | 'incomplete_delivery_continuation'
   | 'incomplete_tool_continuation'
   | 'malformed_tool_call_retry'
-  | 'no_tool_progress_retry'
   | 'unsettled_tool_results';
 
 export type CompletionGateDecision =
