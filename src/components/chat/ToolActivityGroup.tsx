@@ -6,7 +6,8 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
 import type { ToolCall } from '../../types/message';
 import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
-import { humanizeToolName, summarizeToolCall } from './toolCallPresentation';
+import { humanizeToolName } from '../../utils/toolDisplayName';
+import { summarizeToolCall } from './toolCallPresentation';
 import { summarizeToolActivity } from './toolActivityTimeline';
 
 type Props = {

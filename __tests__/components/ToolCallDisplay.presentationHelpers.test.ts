@@ -14,9 +14,9 @@ import {
   formatHumanDuration,
   getElapsedMs,
   getWaitingPresentation,
-  humanizeToolName,
   pickWaitingPhrase,
 } from '../../src/components/chat/toolCallPresentation';
+import { humanizeToolName } from '../../src/utils/toolDisplayName';
 import { i18n } from '../../src/i18n/manager';
 import { makeToolCall } from '../helpers/toolCallDisplayFixtures';
 

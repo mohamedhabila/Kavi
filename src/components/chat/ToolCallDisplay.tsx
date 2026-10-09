@@ -15,10 +15,10 @@ import {
   formatHumanDuration,
   getElapsedMs,
   getWaitingPresentation,
-  humanizeToolName,
   pickWaitingPhrase,
   summarizeToolCall,
 } from './toolCallPresentation';
+import { humanizeToolName } from '../../utils/toolDisplayName';
 
 export { humanizeToolName, summarizeToolCall };
 

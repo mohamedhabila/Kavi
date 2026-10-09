@@ -1,6 +1,7 @@
 import { parse as shellParse } from 'shell-quote';
 
 import { i18n } from '../../i18n/manager';
+import { humanizeToolName } from '../../utils/toolDisplayName';
 import { formatZonedIso } from '../scheduler/reminders/format';
 import { computeReminderNextFireAtMs } from '../scheduler/reminders/recurrence';
 import { parseReminderWhen, resolveReminderTimezone } from '../scheduler/reminders/input';
@@ -91,13 +92,7 @@ function getReminderTitle(args: Record<string, unknown>): string {
   }
 }
 
-function humanizeToolName(toolName: string): string {
-  return toolName
-    .split('_')
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(' ');
-}
+const translate = (key: string, params?: Record<string, string | number>) => i18n.t(key, params);
 
 function pushDetail(details: string[], key: string, params?: Record<string, string | number>) {
   details.push(i18n.t(key, params));
@@ -195,7 +190,7 @@ function getToolTitle(toolName: string): string {
     case 'expo_eas_build':
       return i18n.t('toolApproval.actions.expoBuildTitle');
     default:
-      return humanizeToolName(toolName);
+      return humanizeToolName(toolName, translate);
   }
 }
 
@@ -669,7 +664,7 @@ export function describeToolInvocation(
   return {
     category,
     title: getToolTitle(toolName),
-    description: `${humanizeToolName(toolName)}. ${i18n.t('toolApproval.redactedNotice')}`,
+    description: `${humanizeToolName(toolName, translate)}. ${i18n.t('toolApproval.redactedNotice')}`,
     redactedArguments: stringifyRedactedArguments({ argumentCount: Object.keys(args).length }),
     piiRedacted: Object.keys(args).length > 0,
   };

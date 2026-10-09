@@ -1,4 +1,5 @@
 import type { ToolCall } from '../../types/message';
+import { humanizeToolName } from '../../utils/toolDisplayName';
 
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -169,17 +170,6 @@ function formatDisplayUrl(url: string, maxLength = 52): string {
   } catch {
     return url.length <= maxLength ? url : `${url.slice(0, maxLength - 3)}...`;
   }
-}
-
-export function humanizeToolName(name: string, t?: TranslateFn): string {
-  const translated = t ? t(`toolCall.tools.${name}`) : `toolCall.tools.${name}`;
-  if (translated && translated !== `toolCall.tools.${name}`) {
-    return translated;
-  }
-  return name
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function translateOrFallback(
