@@ -1818,6 +1818,21 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView indisponível',
     webviewUnavailableHint: 'O componente WebView não está disponível neste dispositivo.',
   },
+  toolActivity: {
+    completedSteps: plural({
+      one: "{count} etapa concluída",
+      many: "{count} etapas concluídas",
+      other: "{count} etapas concluídas",
+    }),
+    failedSteps: plural({
+      one: "{count} etapa não funcionou",
+      many: "{count} etapas não funcionaram",
+      other: "{count} etapas não funcionaram",
+    }),
+    progress: "{done} de {total} concluídas",
+    showSteps: "Mostrar etapas",
+    hideSteps: "Ocultar etapas",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: 'A chamada da ferramenta foi interrompida porque o aplicativo reiniciou antes da conclusão.',

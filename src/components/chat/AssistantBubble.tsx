@@ -11,7 +11,13 @@ import { AgentWorkflowSummary } from './AgentWorkflowSummary';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallDisplay, humanizeToolName, summarizeToolCall } from './ToolCallDisplay';
 import { FetchBatchProgress } from './FetchBatchProgress';
-import { groupAssistantToolCalls } from './fetchBatchGrouping';
+import {
+  buildFetchBatchTargets,
+  groupAssistantToolCalls,
+  isFetchOnlyToolRun,
+} from './fetchBatchGrouping';
+import { ToolActivityGroup } from './ToolActivityGroup';
+import type { CompressedTimelineItem, ToolActivityTimelineItem } from './toolActivityTimeline';
 import TypingIndicator from './TypingIndicator';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageContentRenderer } from './MessageContentRenderer';
@@ -19,11 +25,7 @@ import {
   buildAssistantBubbleTranscriptFileName,
   buildAssistantBubbleTranscriptMarkdown,
 } from './assistantBubbleTranscript';
-import {
-  AssistantBubbleSegment,
-  AssistantBubbleTimelineItem,
-  buildAssistantBubbleViewModel,
-} from './assistantBubbleModel';
+import { AssistantBubbleSegment, buildAssistantBubbleViewModel } from './assistantBubbleModel';
 import { DisplayResponseSegment } from './messageGrouping';
 import { shareTextExport } from '../../services/share/localShare';
 import { createAssistantBubbleStyles } from './AssistantBubble.styles';
@@ -185,6 +187,29 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
         ),
       );
 
+    // Folded steps render flat inside their single group, so the work is one expansion
+    // away — never a group nested inside another group.
+    const renderToolActivity = (item: ToolActivityTimelineItem) => {
+      const steps = item.steps.map((step) =>
+        step.kind === 'reasoning' ? (
+          <ThinkingBlock
+            key={step.id}
+            reasoning={step.item.reasoning}
+            isStreaming={step.item.isStreaming}
+          />
+        ) : (
+          <React.Fragment key={step.id}>{step.toolCalls.map(renderToolCall)}</React.Fragment>
+        ),
+      );
+      return isFetchOnlyToolRun(item.toolCalls) ? (
+        <FetchBatchProgress targets={buildFetchBatchTargets(item.toolCalls)}>
+          {steps}
+        </FetchBatchProgress>
+      ) : (
+        <ToolActivityGroup toolCalls={item.toolCalls}>{steps}</ToolActivityGroup>
+      );
+    };
+
     const renderContentSegment = (segment: AssistantBubbleSegment) => {
       if (segment.subAgentEvent) {
         return (
@@ -236,7 +261,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       );
     };
 
-    const renderTimelineItem = (item: AssistantBubbleTimelineItem, index: number) => {
+    const renderTimelineItem = (item: CompressedTimelineItem, index: number) => {
       const previousItem = bubbleModel.timelineItems[index - 1];
       const startsNewSegment =
         !!previousItem && previousItem.sourceSegmentId !== item.sourceSegmentId;
@@ -249,6 +274,8 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
         >
           {item.kind === 'reasoning' ? (
             <ThinkingBlock reasoning={item.reasoning} isStreaming={item.isStreaming} />
+          ) : item.kind === 'tool_activity' ? (
+            renderToolActivity(item)
           ) : (
             renderContentSegment(item.segment)
           )}

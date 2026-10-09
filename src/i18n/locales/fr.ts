@@ -1840,6 +1840,21 @@ export const fr: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView indisponible',
     webviewUnavailableHint: 'Le composant WebView n est pas disponible sur cet appareil.',
   },
+  toolActivity: {
+    completedSteps: plural({
+      one: "{count} étape terminée",
+      many: "{count} étapes terminées",
+      other: "{count} étapes terminées",
+    }),
+    failedSteps: plural({
+      one: "{count} étape n'a pas fonctionné",
+      many: "{count} étapes n'ont pas fonctionné",
+      other: "{count} étapes n'ont pas fonctionné",
+    }),
+    progress: "{done} sur {total} terminées",
+    showSteps: "Afficher les étapes",
+    hideSteps: "Masquer les étapes",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: "L'appel à l'outil a été interrompu car l'application a redémarré avant la fin de l'exécution.",

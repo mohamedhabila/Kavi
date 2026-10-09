@@ -64,6 +64,18 @@ function toTarget(toolCall: ToolCall): FetchBatchTarget {
   };
 }
 
+/** Progress targets for a run of fetches, in call order. */
+export function buildFetchBatchTargets(toolCalls: ReadonlyArray<ToolCall>): FetchBatchTarget[] {
+  return toolCalls.map(toTarget);
+}
+
+/** True when every call is a page fetch, so the run reads best as a fetch batch. */
+export function isFetchOnlyToolRun(toolCalls: ReadonlyArray<ToolCall>): boolean {
+  return (
+    toolCalls.length > 0 && toolCalls.every((toolCall) => toolCall.name === WEB_FETCH_TOOL_NAME)
+  );
+}
+
 export function groupAssistantToolCalls(
   toolCalls: ReadonlyArray<ToolCall> | undefined,
 ): AssistantToolCallGroup[] {

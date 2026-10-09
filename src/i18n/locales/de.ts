@@ -1801,6 +1801,19 @@ export const de: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView nicht verfuegbar',
     webviewUnavailableHint: 'Die WebView-Komponente ist auf diesem Geraet nicht verfuegbar.',
   },
+  toolActivity: {
+    completedSteps: plural({
+      one: "{count} Schritt erledigt",
+      other: "{count} Schritte erledigt",
+    }),
+    failedSteps: plural({
+      one: "{count} Schritt hat nicht funktioniert",
+      other: "{count} Schritte haben nicht funktioniert",
+    }),
+    progress: "{done} von {total} erledigt",
+    showSteps: "Schritte anzeigen",
+    hideSteps: "Schritte ausblenden",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: 'Der Tool-Aufruf wurde unterbrochen, da die App vor Abschluss neu gestartet wurde.',

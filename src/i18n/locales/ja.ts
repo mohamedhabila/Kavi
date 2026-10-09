@@ -1724,6 +1724,17 @@ export const ja: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView を利用できません',
     webviewUnavailableHint: 'この端末では WebView コンポーネントを利用できません。',
   },
+  toolActivity: {
+    completedSteps: plural({
+      other: "{count} 件の手順を完了",
+    }),
+    failedSteps: plural({
+      other: "{count} 件の手順がうまくいきませんでした",
+    }),
+    progress: "{total} 件中 {done} 件完了",
+    showSteps: "手順を表示",
+    hideSteps: "手順を隠す",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: '完了前にアプリが再起動したため、ツール呼び出しが中断されました。',

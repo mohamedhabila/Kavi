@@ -1661,6 +1661,17 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView 無法使用',
     webviewUnavailableHint: '此裝置無法使用 WebView 元件。',
   },
+  toolActivity: {
+    completedSteps: plural({
+      other: "已完成 {count} 個步驟",
+    }),
+    failedSteps: plural({
+      other: "{count} 個步驟未成功",
+    }),
+    progress: "已完成 {done}/{total}",
+    showSteps: "顯示步驟",
+    hideSteps: "隱藏步驟",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: '由於應用程式在完成前重新啟動，工具呼叫被中斷。',

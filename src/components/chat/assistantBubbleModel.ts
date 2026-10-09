@@ -13,6 +13,7 @@ import {
 import { getRenderableThinkingText } from './ThinkingBlock';
 import { DisplayResponseSegment } from './messageGrouping';
 import { buildContentRenderPlan } from './messageContent';
+import { compressToolActivityTimeline, type CompressedTimelineItem } from './toolActivityTimeline';
 
 export type AssistantBubbleSegment = DisplayResponseSegment & { isStreaming?: boolean };
 
@@ -33,7 +34,8 @@ export type AssistantBubbleTimelineItem = {
 );
 
 export interface AssistantBubbleViewModel {
-  timelineItems: AssistantBubbleTimelineItem[];
+  /** Ordered render items; consecutive tool steps arrive folded into one activity item. */
+  timelineItems: CompressedTimelineItem[];
   contentSegments: AssistantBubbleSegment[];
   activeToolCall?: ToolCall;
   copyText: string;
@@ -382,7 +384,7 @@ export function buildAssistantBubbleViewModel(params: {
   const contentWarnings = resolveContentWarnings(contentSegments);
 
   return {
-    timelineItems: buildTimelineItems(orderedSegments),
+    timelineItems: compressToolActivityTimeline(buildTimelineItems(orderedSegments)),
     contentSegments,
     activeToolCall: resolveActiveToolCall(contentSegments, params.message.toolCalls),
     copyText: contentSegments

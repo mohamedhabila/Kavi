@@ -1663,6 +1663,17 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView 不可用',
     webviewUnavailableHint: '此设备上无法使用 WebView 组件。',
   },
+  toolActivity: {
+    completedSteps: plural({
+      other: "已完成 {count} 个步骤",
+    }),
+    failedSteps: plural({
+      other: "{count} 个步骤未成功",
+    }),
+    progress: "已完成 {done}/{total}",
+    showSteps: "显示步骤",
+    hideSteps: "隐藏步骤",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: '由于应用在完成前重启，工具调用被中断。',

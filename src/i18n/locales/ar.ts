@@ -1890,6 +1890,27 @@ export const ar: TranslationMap = mergeTranslations(en, {
     webviewUnavailableTitle: 'WebView غير متاح',
     webviewUnavailableHint: 'مكون WebView غير متاح على هذا الجهاز.',
   },
+  toolActivity: {
+    completedSteps: plural({
+      zero: "لم تكتمل أي خطوة",
+      one: "اكتملت خطوة واحدة",
+      two: "اكتملت خطوتان",
+      few: "اكتملت {count} خطوات",
+      many: "اكتملت {count} خطوة",
+      other: "اكتملت {count} خطوة",
+    }),
+    failedSteps: plural({
+      zero: "لم تتعثر أي خطوة",
+      one: "لم تنجح خطوة واحدة",
+      two: "لم تنجح خطوتان",
+      few: "لم تنجح {count} خطوات",
+      many: "لم تنجح {count} خطوة",
+      other: "لم تنجح {count} خطوة",
+    }),
+    progress: "اكتمل {done} من {total}",
+    showSteps: "عرض الخطوات",
+    hideSteps: "إخفاء الخطوات",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: 'تم مقاطعة استدعاء الأداة بسبب إعادة تشغيل التطبيق قبل اكتمالها.',

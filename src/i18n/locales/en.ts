@@ -1794,6 +1794,19 @@ export const en: TranslationMap = {
   },
 
   // ── Tool Call Display ─────────────────────────────────────────────────
+  toolActivity: {
+    completedSteps: plural({
+      one: "Completed {count} step",
+      other: "Completed {count} steps",
+    }),
+    failedSteps: plural({
+      one: "{count} step didn't work",
+      other: "{count} steps didn't work",
+    }),
+    progress: "{done} of {total} done",
+    showSteps: "Show steps",
+    hideSteps: "Hide steps",
+  },
   toolCall: {
     errors: {
       interruptedByAppRestart: 'Tool call was interrupted because the app restarted before completion.',
