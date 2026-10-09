@@ -3,6 +3,7 @@ import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 import type { ConversationMode } from '../../types/conversation';
 import { normalizeToolName } from '../tools/toolNameNormalization';
+import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
@@ -24,7 +25,7 @@ function getMessagesSinceLatestUserMessage(
   workingMessages: ReadonlyArray<Message>,
 ): ReadonlyArray<Message> {
   for (let index = workingMessages.length - 1; index >= 0; index -= 1) {
-    if (workingMessages[index]?.role === 'user') {
+    if (isTurnOpeningUserMessage(workingMessages[index])) {
       return workingMessages.slice(index + 1);
     }
   }
@@ -38,7 +39,7 @@ function getMessagesFromPreviousUserTurn(
   let latestUserIndex = -1;
 
   for (let index = workingMessages.length - 1; index >= 0; index -= 1) {
-    if (workingMessages[index]?.role !== 'user') {
+    if (!isTurnOpeningUserMessage(workingMessages[index])) {
       continue;
     }
     if (latestUserIndex < 0) {

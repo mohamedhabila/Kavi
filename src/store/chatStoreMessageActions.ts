@@ -351,9 +351,11 @@ export function createMessageStoreActions(
 
         const rewindTimestamp = message.timestamp;
         const replacementTimestamp = Date.now();
+        // A resent message opens a new turn, even one that had steered a run.
         const {
           enrichedContent: _discardedEnrichedContent,
           memoryPublication: _discardedMemoryPublication,
+          steerOfRunId: _discardedSteerOfRunId,
           ...preservedMessage
         } = message;
         const replacementMessage: Message = {

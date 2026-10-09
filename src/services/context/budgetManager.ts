@@ -21,6 +21,7 @@ import {
   type WorkingContextWindowOptions,
 } from './tokenCounter';
 import { estimateApiMessageCost, estimateApiMessagesTokens } from './contentTokens';
+import { continuesToolResultTurn } from '../../utils/toolResultTurn';
 import {
   compressToolDefinitions,
   enforceToolTokenBudget,
@@ -336,15 +337,16 @@ export function windowMessages(
     usedTokens += lastGroup.cost;
   }
 
-  // Pin the latest user message group (keeps the current request coherent)
+  // Pin the latest user message group (keeps the current request coherent). A user
+  // message that continued a tool-result turn steered the running request, so keep
+  // pinning back to the message that opened it.
   for (let g = groups.length - 1; g >= 0; g--) {
     if (groups[g].pinned) continue;
-    const firstMsg = messages[groups[g].indices[0]];
-    if (firstMsg.role === 'user') {
-      groups[g].pinned = true;
-      usedTokens += groups[g].cost;
-      break;
-    }
+    const firstIndex = groups[g].indices[0];
+    if (messages[firstIndex].role !== 'user') continue;
+    groups[g].pinned = true;
+    usedTokens += groups[g].cost;
+    if (!continuesToolResultTurn(messages, firstIndex)) break;
   }
 
   // Walk backwards through non-pinned groups, keep as many as budget allows

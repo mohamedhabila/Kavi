@@ -9,6 +9,7 @@ import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';
 import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
+import { findTurnOpeningUserIndex } from '../../../utils/steeringMessages';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
 import {
@@ -47,14 +48,11 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     getPendingTrackedAsyncOperationToolNames(params.trackedAsyncOperations),
   );
   const goals = params.goals ?? [];
-  const messagesSinceLatestUserMessage = (() => {
-    for (let index = params.workingMessages.length - 1; index >= 0; index -= 1) {
-      if (params.workingMessages[index]?.role === 'user') {
-        return params.workingMessages.slice(index + 1);
-      }
-    }
-    return params.workingMessages;
-  })();
+  // The turn opens at its request; a message that steered the run does not reset the
+  // tools the run already activated.
+  const messagesSinceLatestUserMessage = params.workingMessages.slice(
+    findTurnOpeningUserIndex(params.workingMessages, params.workingMessages.length) + 1,
+  );
   const turnActivatedCatalogToolNames = extractDiscoveryActivatedToolNames(
     messagesSinceLatestUserMessage,
   );

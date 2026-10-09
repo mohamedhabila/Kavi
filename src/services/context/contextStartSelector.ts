@@ -1,4 +1,5 @@
 import type { Message } from '../../types/message';
+import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import {
   resolvePersonaContextPolicy,
   type ContextAccessMode,
@@ -52,10 +53,11 @@ export interface ContextStartSelectionOptions {
 // isn't invented here — see the task report for that limitation.
 // ---------------------------------------------------------------------------
 
+/** Turn boundaries: a message that steered a run continues that run's turn. */
 function getUserMessageIndices(messages: Message[]): number[] {
   const indices: number[] = [];
   for (let i = 0; i < messages.length; i += 1) {
-    if (messages[i].role === 'user') {
+    if (isTurnOpeningUserMessage(messages[i])) {
       indices.push(i);
     }
   }
@@ -86,14 +88,18 @@ function getPreviousMessageTimestamp(
   return undefined;
 }
 
+/** The user's last word before the latest turn, including any message that steered it. */
 function getPreviousUserMessageTimestamp(
   messages: Message[],
-  userIndices: number[],
+  latestUserIndex: number,
 ): number | undefined {
-  for (let i = userIndices.length - 2; i >= 0; i -= 1) {
-    const messageIndex = userIndices[i];
-    const timestamp = messages[messageIndex]?.timestamp;
-    if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+  for (let i = latestUserIndex - 1; i >= 0; i -= 1) {
+    const timestamp = messages[i]?.timestamp;
+    if (
+      messages[i]?.role === 'user' &&
+      typeof timestamp === 'number' &&
+      Number.isFinite(timestamp)
+    ) {
       return timestamp;
     }
   }
@@ -121,7 +127,7 @@ export function selectContextStartIndex(
   }
 
   const latestUserIndex = userIndices[userIndices.length - 1];
-  const previousUserTimestamp = getPreviousUserMessageTimestamp(messages, userIndices);
+  const previousUserTimestamp = getPreviousUserMessageTimestamp(messages, latestUserIndex);
   const previousTimestamp =
     previousUserTimestamp ?? getPreviousMessageTimestamp(messages, latestUserIndex);
   const latestTimestamp = messages[latestUserIndex].timestamp;

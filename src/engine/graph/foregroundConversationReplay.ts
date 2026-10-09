@@ -1,5 +1,6 @@
 import type { Conversation } from '../../types/conversation';
 import type { RewindUserMessageForResendResult } from '../../store/chatStoreTypes';
+import { findTurnOpeningUserIndex, isSteeringUserMessage } from '../../utils/steeringMessages';
 
 export const FOREGROUND_EDIT_RESEND_REWIND_REASON =
   'Cancelled because the active run was rewound for an edited resend.';
@@ -20,10 +21,14 @@ type RewindConversationActions = {
   ) => RewindUserMessageForResendResult;
 };
 
-function findRetryUserMessageId(
+/**
+ * The request a retry resends: the user message that opened the answer's turn, carrying
+ * the words of every message that steered it, since the answer being retried read them.
+ */
+function findRetryRequest(
   conversation: Conversation,
   assistantMessageId: string,
-): string | undefined {
+): { id: string; content: string } | undefined {
   const assistantMessageIndex = conversation.messages.findIndex(
     (message) => message.id === assistantMessageId,
   );
@@ -31,13 +36,19 @@ function findRetryUserMessageId(
     return undefined;
   }
 
-  for (let index = assistantMessageIndex - 1; index >= 0; index -= 1) {
-    if (conversation.messages[index]?.role === 'user') {
-      return conversation.messages[index]?.id;
-    }
+  const requestIndex = findTurnOpeningUserIndex(conversation.messages, assistantMessageIndex);
+  const request = conversation.messages[requestIndex];
+  if (!request) {
+    return undefined;
   }
-
-  return undefined;
+  const steeringContent = conversation.messages
+    .slice(requestIndex + 1, assistantMessageIndex)
+    .filter(isSteeringUserMessage)
+    .map((message) => message.content);
+  return {
+    id: request.id,
+    content: [request.content, ...steeringContent].filter((text) => text.trim()).join('\n\n'),
+  };
 }
 
 export function applyForegroundEditedResend(params: {
@@ -80,15 +91,8 @@ export function applyForegroundRetryResend(params: {
     return false;
   }
 
-  const retryUserMessageId = findRetryUserMessageId(params.conversation, params.assistantMessageId);
-  if (!retryUserMessageId) {
-    return false;
-  }
-
-  const retryUserMessage = params.conversation.messages.find(
-    (message) => message.id === retryUserMessageId,
-  );
-  if (!retryUserMessage || retryUserMessage.role !== 'user') {
+  const retryUserMessage = findRetryRequest(params.conversation, params.assistantMessageId);
+  if (!retryUserMessage) {
     return false;
   }
 

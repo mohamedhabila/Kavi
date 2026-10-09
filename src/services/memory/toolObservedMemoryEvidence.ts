@@ -8,6 +8,7 @@ import type { Message, ToolCall } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 import { sha256HexUtf8 } from '../../utils/sha256';
 import { isToolResultPlaceholder } from '../../utils/toolResultSummary';
+import { findTurnOpeningUserIndex } from '../../utils/steeringMessages';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
 const CAPABILITY_KIND = 'tool_observed_memory_evidence' as const;
@@ -404,6 +405,11 @@ function matchesCompleteCurrentRunResult(
   );
 }
 
+/**
+ * Where the current turn opens, given that `currentUserMessageId` is its latest user
+ * message. A message that steered the run continues the turn its request opened, so
+ * results observed before the steer still belong to this turn.
+ */
 function findCurrentUserIndex(
   messages: ReadonlyArray<Message>,
   currentUserMessageId: string,
@@ -419,7 +425,8 @@ function findCurrentUserIndex(
       if (message.role === 'user') matchingUserIndex = index;
     }
   }
-  return idMatches === 1 && matchingUserIndex === latestUserIndex ? latestUserIndex : -1;
+  if (idMatches !== 1 || matchingUserIndex !== latestUserIndex || latestUserIndex < 0) return -1;
+  return findTurnOpeningUserIndex(messages, latestUserIndex + 1);
 }
 
 function findUniquePlannedCall(
