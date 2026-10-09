@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import { prepareComposerImageAttachment } from '../../services/media/composerImage';
 import type { Attachment } from '../../types/attachment';
 import { generateId } from '../../utils/id';
 
@@ -37,18 +38,12 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      onChangeAttachments([
-        ...attachments,
-        {
-          id: generateId(),
-          type: 'image',
-          uri: asset.uri,
-          name: asset.fileName || 'image.jpg',
-          mimeType: asset.mimeType || 'image/jpeg',
-          size: asset.fileSize || 0,
-        },
-      ]);
+      const attachment = await prepareComposerImageAttachment(
+        result.assets[0],
+        generateId(),
+        'image.jpg',
+      );
+      onChangeAttachments([...attachments, attachment]);
     }
   }, [attachments, clearVoiceError, onChangeAttachments]);
 
@@ -65,18 +60,12 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      onChangeAttachments([
-        ...attachments,
-        {
-          id: generateId(),
-          type: 'image',
-          uri: asset.uri,
-          name: asset.fileName || 'photo.jpg',
-          mimeType: asset.mimeType || 'image/jpeg',
-          size: asset.fileSize || 0,
-        },
-      ]);
+      const attachment = await prepareComposerImageAttachment(
+        result.assets[0],
+        generateId(),
+        'photo.jpg',
+      );
+      onChangeAttachments([...attachments, attachment]);
     }
   }, [attachments, clearVoiceError, onChangeAttachments, t]);
 
