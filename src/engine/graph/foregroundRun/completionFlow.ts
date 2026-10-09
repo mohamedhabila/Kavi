@@ -67,6 +67,15 @@ export async function handleForegroundRunCompletionFlow(params: {
   }
 
   if (!params.finalizeCompletion(completionReview)) {
+    // The tracked run refused this outcome — it is no longer running, or its graph cannot
+    // settle as requested. Record it: a silent refusal leaves nothing to trace when the
+    // run's state and the delivered answer disagree.
+    params.appendConversationLog({
+      kind: 'state',
+      level: 'warning',
+      title: 'Run completion not applied',
+      detail: `${params.turnSummary} · The run did not accept the ${completionReview.completionStatus} outcome (${completionReview.checkpointTitle}).`,
+    });
     return;
   }
   params.appendConversationLog({

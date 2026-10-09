@@ -6,7 +6,9 @@ import { RecoverAgentRunFinalPreview, ResumeAgentRun } from './contracts';
 import { handleForegroundRunReviewFinalDelivery } from './reviewFinalDelivery';
 import { buildForegroundRunReviewContext } from './reviewContext';
 import { buildAgentControlGraphTerminalReviewCompletion } from './completionReviewTerminal';
-import { hasBlockedBlockingGoals } from '../../goals/types';
+import { hasBlockedBlockingGoals, isBlockingGoal } from '../../goals/types';
+import { areBlockingGoalsStructurallyComplete } from '../../goals/completionEvidence';
+import { isBlockingGoalClosedWithoutProof } from '../../goals/goalProof';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -151,8 +153,47 @@ function buildForegroundRunDirectCompletion(
     return undefined;
   }
 
-  if (hasBlockedBlockingGoals(reviewContext.reviewRun.controlGraph?.goals ?? [])) {
+  const goals = reviewContext.reviewRun.controlGraph?.goals ?? [];
+  if (hasBlockedBlockingGoals(goals)) {
     const detail = 'The workflow delivered a blocker report, but a required goal remains blocked.';
+    return {
+      handled: false,
+      completionStatus: 'failed',
+      latestSummary: reviewContext.finalReviewGate.candidatePreview,
+      checkpointTitle: 'Run blocked',
+      checkpointDetail: detail,
+      completionTerminalReason: 'terminal_blocked',
+      completionLogLevel: 'error',
+      completionLogTitle: 'Run blocked',
+      completionLogDetail: detail,
+    };
+  }
+
+  // Finalization settles a run as completed only when every blocking goal is closed
+  // *and* proven by its success criteria. A goal the model closed without that proof is
+  // accepted as its bookkeeping, so this review must not offer the run a success that
+  // finalization will refuse: the refusal used to leave the run running behind a
+  // delivered answer, and closing the generation then failed on it.
+  if (!areBlockingGoalsStructurallyComplete(goals)) {
+    const unfinished = goals.filter(
+      (goal) => isBlockingGoal(goal) && !areBlockingGoalsStructurallyComplete([goal]),
+    );
+    const closedWithoutProof = unfinished.filter(isBlockingGoalClosedWithoutProof);
+    const stillOpen = unfinished.filter((goal) => !isBlockingGoalClosedWithoutProof(goal));
+    const detail =
+      [
+        'The workflow delivered an answer, but',
+        [
+          closedWithoutProof.length > 0
+            ? `a required goal was closed without the evidence its success criteria require: ${closedWithoutProof.map((goal) => goal.id).join(', ')}`
+            : '',
+          stillOpen.length > 0
+            ? `a required goal is still open: ${stillOpen.map((goal) => goal.id).join(', ')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('; and '),
+      ].join(' ') + '.';
     return {
       handled: false,
       completionStatus: 'failed',

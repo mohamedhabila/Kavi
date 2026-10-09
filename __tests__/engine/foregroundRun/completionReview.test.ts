@@ -224,6 +224,87 @@ describe('foregroundRun completion review', () => {
     );
   });
 
+  it('does not offer success for a goal the model closed without its proof', async () => {
+    // The traced shape: the model closed a read-only verification goal whose criterion
+    // needs an artifact write receipt. Offering `completed` here was refused by
+    // finalization, which left the run running behind the delivered answer.
+    const run = buildRun();
+    run.controlGraph = {
+      ...run.controlGraph!,
+      status: 'awaiting_review',
+      goals: [
+        {
+          id: 'gate-followup',
+          title: 'Verify the gate file',
+          status: 'completed',
+          completionPolicy: 'blocking',
+          dependencies: [],
+          evidence: [],
+          successCriteria: ['evidence.min:1', 'evidence.artifact:artifacts/e2e-follow-gate.txt'],
+          createdAt: 10,
+          updatedAt: 50,
+          completedAt: 50,
+        },
+      ],
+    };
+    const finalAnswer = 'Verified: the file holds E2E-GATE-FU-42.';
+    useChatStore.setState((state) => ({
+      ...state,
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Unproven close',
+          messages: [
+            buildMessage({ id: 'msg-user', role: 'user', content: 'Verify it.', timestamp: 10 }),
+            buildMessage({
+              id: 'msg-assistant-final',
+              content: finalAnswer,
+              timestamp: 50,
+              assistantMetadata: {
+                kind: 'final',
+                completionStatus: 'complete',
+                finishReason: 'stop',
+              },
+            }),
+          ],
+          createdAt: 10,
+          updatedAt: 50,
+          logs: [],
+          agentRuns: [run],
+        } as never,
+      ],
+      activeConversationId: 'conversation-1',
+    }));
+
+    await expect(
+      reviewForegroundRunCompletion({
+        appendConversationLog: jest.fn(),
+        assertNotAborted: jest.fn(),
+        conversationId: 'conversation-1',
+        finalizeTrackedRun: jest.fn().mockReturnValue(true),
+        flushChatState: jest.fn().mockResolvedValue(undefined),
+        recoverAgentRunFinalPreview: jest.fn(async () => ({ recovered: false })),
+        resumeAgentRun: null,
+        runId: 'run-1',
+        signal: new AbortController().signal,
+        turnSummary: 'Verified',
+        updateAgentRunControlGraph: jest.fn(),
+        updateAgentRunSummary: jest.fn(),
+        updateMessageAssistantMetadata: jest.fn(),
+        setAgentRunPhase: jest.fn(),
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        handled: false,
+        completionStatus: 'failed',
+        completionTerminalReason: 'terminal_blocked',
+        latestSummary: finalAnswer,
+        checkpointDetail:
+          'The workflow delivered an answer, but a required goal was closed without the evidence its success criteria require: gate-followup.',
+      }),
+    );
+  });
+
   it('finalizes a delivered approval rejection as cancellation without response recovery', async () => {
     const run = buildRun();
     run.controlGraph = {

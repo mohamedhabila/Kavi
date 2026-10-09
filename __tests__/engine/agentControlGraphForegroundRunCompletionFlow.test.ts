@@ -299,7 +299,7 @@ describe('foregroundRun completion flow', () => {
     expect(enterAsyncMonitoringPhase).not.toHaveBeenCalled();
   });
 
-  it('does not log success when the completion boundary rejects terminalization', async () => {
+  it('records the refusal, not success, when the completion boundary rejects terminalization', async () => {
     const appendConversationLog = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(false);
 
@@ -324,6 +324,12 @@ describe('foregroundRun completion flow', () => {
     });
 
     expect(finalizeCompletion).toHaveBeenCalledTimes(1);
-    expect(appendConversationLog).not.toHaveBeenCalled();
+    expect(appendConversationLog).toHaveBeenCalledTimes(1);
+    expect(appendConversationLog).toHaveBeenCalledWith({
+      kind: 'state',
+      level: 'warning',
+      title: 'Run completion not applied',
+      detail: 'Turn summary · The run did not accept the completed outcome (Turn completed).',
+    });
   });
 });
