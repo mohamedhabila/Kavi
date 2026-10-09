@@ -2,6 +2,7 @@ import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../t
 import type { ToolDefinition } from '../../types/tool';
 import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/agentRun';
 import { isPlainRecord } from '../../services/llm/core/json';
+import { normalizeStreamUsage } from '../../services/llm/core/streaming/metadataBuilder';
 import {
   createCompletionMetadata,
   normalizeGeminiCompletion,
@@ -147,16 +148,12 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     );
     activityGuard.markActivity();
     markTurnLatency('first_model_output');
-    const usage = isPlainRecord(response?.usage) ? response.usage : undefined;
+    // The same normalizer the streaming path uses: reading only Anthropic's
+    // `cache_read_input_tokens` here reported zero cache reads for every OpenAI-shaped
+    // response, which carries them in `prompt_tokens_details.cached_tokens`.
+    const usage = normalizeStreamUsage(isPlainRecord(response?.usage) ? response.usage : undefined);
     if (usage) {
-      usageTracker.mergeSnapshot({
-        inputTokens: Number(usage.prompt_tokens ?? usage.input_tokens ?? 0),
-        outputTokens: Number(usage.completion_tokens ?? usage.output_tokens ?? 0),
-        cacheReadTokens: Number(usage.cache_read_input_tokens ?? 0),
-        cacheWriteTokens: Number(usage.cache_creation_input_tokens ?? 0),
-        totalTokens: Number(usage.total_tokens ?? 0),
-        model: params.requestModel,
-      });
+      usageTracker.mergeSnapshot({ ...usage, model: params.requestModel });
     }
     assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     const choice = isPlainRecord(response?.choices?.[0]) ? response.choices[0] : undefined;
