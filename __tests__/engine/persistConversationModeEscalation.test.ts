@@ -35,7 +35,7 @@ describe('persistConversationModeEscalation', () => {
 
     persistConversationModeEscalation({
       conversationId,
-      reason: 'side_effect_capability_discovered',
+      reason: 'agentic_capability_discovered',
       blockedToolNames: ['calendar_create_event'],
     });
 
@@ -49,7 +49,7 @@ describe('persistConversationModeEscalation', () => {
 
     persistConversationModeEscalation({
       conversationId,
-      reason: 'side_effect_capability_discovered',
+      reason: 'agentic_capability_discovered',
       blockedToolNames: ['calendar_create_event'],
     });
 
@@ -66,7 +66,7 @@ describe('persistConversationModeEscalation', () => {
 
     persistConversationModeEscalation({
       conversationId,
-      reason: 'side_effect_capability_discovered',
+      reason: 'agentic_capability_discovered',
       blockedToolNames: ['calendar_create_event'],
     });
 
@@ -81,7 +81,7 @@ describe('persistConversationModeEscalation', () => {
     expect(() =>
       persistConversationModeEscalation({
         conversationId: '   ',
-        reason: 'side_effect_capability_discovered',
+        reason: 'agentic_capability_discovered',
         blockedToolNames: [],
       }),
     ).not.toThrow();
@@ -89,7 +89,7 @@ describe('persistConversationModeEscalation', () => {
     expect(() =>
       persistConversationModeEscalation({
         conversationId: 'not-a-real-conversation',
-        reason: 'side_effect_capability_discovered',
+        reason: 'agentic_capability_discovered',
         blockedToolNames: [],
       }),
     ).not.toThrow();

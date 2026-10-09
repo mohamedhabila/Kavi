@@ -1,26 +1,32 @@
 // ---------------------------------------------------------------------------
 // Kavi — Conversation Mode Escalation
 // ---------------------------------------------------------------------------
-// Chitchat is the cheap path: no graph goals, no delegation, and no authority to
-// mutate non-memory state. That boundary is correct for actual chitchat, but it
-// used to fail silently — the assistant would discover `calendar_create_event`,
-// have it dropped from the surface, and answer as though the capability did not
-// exist. Detection here is purely structural: it reports that a chitchat turn has
-// reached for a capability only an agentic run may use, so the graph can escalate
-// the conversation instead of quietly degrading it.
+// Chitchat is the cheap path: no graph goals, no delegation, and no authority over
+// the capabilities agentic orchestration owns (sub-agent sessions, goal mutation,
+// remote shells, build tooling, source control, browser automation, arbitrary code,
+// and open-world tools that can act on what they reach). Everyday actions such as
+// calendar, contacts, messaging, and reminders stay inside chitchat's authority.
+//
+// Detection here is purely structural and uses the same contract predicate as
+// chitchat's execution authority and tool surface (`isChitchatAuthorizedTool`): a
+// chitchat turn escalates only when it discovers a tool chitchat may not call. A
+// discovered tool chitchat may already call needs no escalation — escalating for it
+// would move the conversation onto the agentic surface and goal bootstrap for good,
+// at the cost of extra model turns, with no new authority actually needed.
 //
 // This module is pure. It records no state and performs no mutation.
 // ---------------------------------------------------------------------------
 
 import type { ConversationMode } from '../../../types/conversation';
 import type { ToolDefinition } from '../../../types/tool';
+import { isChitchatAuthorizedTool } from '../../goals/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 
 export type ConversationModeEscalation =
   | Readonly<{ required: false }>
   | Readonly<{
       required: true;
-      reason: 'side_effect_capability_discovered' | 'iteration_budget_exhausted';
+      reason: 'agentic_capability_discovered';
       /** Tools the turn discovered but chitchat may not call. Bounded for logging. */
       blockedToolNames: ReadonlyArray<string>;
     }>;
@@ -28,18 +34,9 @@ export type ConversationModeEscalation =
 const NOT_REQUIRED: ConversationModeEscalation = { required: false };
 const MAX_REPORTED_TOOL_NAMES = 6;
 
-function isMemoryResourceTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
-  return (tool?.contract?.resourceKinds ?? []).includes('memory');
-}
-
-function isSideEffectfulTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
-  return (tool?.contract?.sideEffects ?? []).some((sideEffect) => sideEffect !== 'none');
-}
-
 /**
- * Mirrors the chitchat drop rule in `resolveTurnToolSurface`: a discovered tool that
- * would mutate non-memory state. Keeping the predicate here means the surface can
- * report the escalation without changing what it is allowed to expose.
+ * Reports that a chitchat turn discovered a tool outside chitchat's authority, so the
+ * graph can escalate the conversation instead of quietly degrading it.
  */
 export function detectChitchatModeEscalation(params: {
   conversationMode: ConversationMode | undefined;
@@ -60,7 +57,7 @@ export function detectChitchatModeEscalation(params: {
   for (const activatedToolName of params.activatedCatalogToolNames) {
     const toolName = normalizeToolName(activatedToolName);
     const tool = toolByName.get(toolName);
-    if (!tool || !isSideEffectfulTool(tool) || isMemoryResourceTool(tool)) {
+    if (!tool || isChitchatAuthorizedTool(tool)) {
       continue;
     }
     blockedToolNames.push(toolName);
@@ -72,33 +69,8 @@ export function detectChitchatModeEscalation(params: {
 
   return {
     required: true,
-    reason: 'side_effect_capability_discovered',
+    reason: 'agentic_capability_discovered',
     blockedToolNames: blockedToolNames.slice(0, MAX_REPORTED_TOOL_NAMES),
-  };
-}
-
-/**
- * A chitchat run that exhausts its iteration budget with work still open is the
- * second silent cliff: chitchat has no goal state, so nothing else reports it.
- */
-export function detectChitchatBudgetEscalation(params: {
-  conversationMode: ConversationMode | undefined;
-  iteration: number;
-  maxToolIterations: number;
-  hasUnfinishedWork: boolean;
-}): ConversationModeEscalation {
-  if (
-    params.conversationMode !== 'chitchat' ||
-    !params.hasUnfinishedWork ||
-    params.iteration < params.maxToolIterations
-  ) {
-    return NOT_REQUIRED;
-  }
-
-  return {
-    required: true,
-    reason: 'iteration_budget_exhausted',
-    blockedToolNames: [],
   };
 }
 

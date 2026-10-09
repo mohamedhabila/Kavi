@@ -1,6 +1,5 @@
 import {
   buildConversationModeEscalationDetail,
-  detectChitchatBudgetEscalation,
   detectChitchatModeEscalation,
 } from '../../src/engine/graph/conversation/modeEscalation';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -41,20 +40,87 @@ const calendarRead: ToolDefinition = {
   },
 };
 
-const allTools = [calendarCreate, memoryWrite, calendarRead];
+const sessionSpawn: ToolDefinition = {
+  name: 'sessions_spawn',
+  description: 'Start a delegated worker session.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  contract: {
+    category: 'sessions',
+    capabilities: ['coordinate'],
+    resourceKinds: ['session'],
+    sideEffects: ['external_state'],
+  },
+};
+
+const openWorldDeviceAutomation: ToolDefinition = {
+  name: 'device_automation',
+  description: 'Drive an arbitrary device action.',
+  input_schema: { type: 'object', properties: {}, required: [] },
+  contract: {
+    category: 'device',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['external_state'],
+    riskHints: ['open_world'],
+  },
+};
+
+const allTools = [
+  calendarCreate,
+  memoryWrite,
+  calendarRead,
+  sessionSpawn,
+  openWorldDeviceAutomation,
+];
 
 describe('detectChitchatModeEscalation', () => {
-  it('escalates when chitchat discovers a tool that mutates non-memory state', () => {
+  it('escalates when chitchat discovers a tool only an agentic run may call', () => {
     const result = detectChitchatModeEscalation({
       conversationMode: 'chitchat',
       allTools,
-      activatedCatalogToolNames: new Set(['calendar_create_event']),
+      activatedCatalogToolNames: new Set(['sessions_spawn']),
     });
 
     expect(result.required).toBe(true);
     if (!result.required) throw new Error('expected escalation');
-    expect(result.reason).toBe('side_effect_capability_discovered');
-    expect(result.blockedToolNames).toEqual(['calendar_create_event']);
+    expect(result.reason).toBe('agentic_capability_discovered');
+    expect(result.blockedToolNames).toEqual(['sessions_spawn']);
+  });
+
+  it('escalates for an open-world tool that can act on what it reaches', () => {
+    const result = detectChitchatModeEscalation({
+      conversationMode: 'chitchat',
+      allTools,
+      activatedCatalogToolNames: new Set(['device_automation']),
+    });
+
+    expect(result.required).toBe(true);
+    if (!result.required) throw new Error('expected escalation');
+    expect(result.blockedToolNames).toEqual(['device_automation']);
+  });
+
+  it('does not escalate for an everyday action chitchat is already authorized to call', () => {
+    // Regression: escalating here moved the conversation to the agentic surface and goal
+    // bootstrap for good, although chitchat's own authority already permitted the call.
+    expect(
+      detectChitchatModeEscalation({
+        conversationMode: 'chitchat',
+        allTools,
+        activatedCatalogToolNames: new Set(['calendar_create_event']),
+      }).required,
+    ).toBe(false);
+  });
+
+  it('reports only the discovered tools that need agentic authority', () => {
+    const result = detectChitchatModeEscalation({
+      conversationMode: 'chitchat',
+      allTools,
+      activatedCatalogToolNames: new Set(['calendar_create_event', 'sessions_spawn']),
+    });
+
+    expect(result.required).toBe(true);
+    if (!result.required) throw new Error('expected escalation');
+    expect(result.blockedToolNames).toEqual(['sessions_spawn']);
   });
 
   it('does not escalate for grounded memory writes, which chitchat already owns', () => {
@@ -82,7 +148,7 @@ describe('detectChitchatModeEscalation', () => {
       detectChitchatModeEscalation({
         conversationMode: 'agentic',
         allTools,
-        activatedCatalogToolNames: new Set(['calendar_create_event']),
+        activatedCatalogToolNames: new Set(['sessions_spawn']),
       }).required,
     ).toBe(false);
   });
@@ -98,53 +164,16 @@ describe('detectChitchatModeEscalation', () => {
   });
 });
 
-describe('detectChitchatBudgetEscalation', () => {
-  it('escalates a chitchat run that exhausts its budget with work still open', () => {
-    const result = detectChitchatBudgetEscalation({
-      conversationMode: 'chitchat',
-      iteration: 25,
-      maxToolIterations: 25,
-      hasUnfinishedWork: true,
-    });
-
-    expect(result.required).toBe(true);
-    if (!result.required) throw new Error('expected escalation');
-    expect(result.reason).toBe('iteration_budget_exhausted');
-  });
-
-  it('does not escalate when the run finished inside its budget', () => {
-    expect(
-      detectChitchatBudgetEscalation({
-        conversationMode: 'chitchat',
-        iteration: 25,
-        maxToolIterations: 25,
-        hasUnfinishedWork: false,
-      }).required,
-    ).toBe(false);
-  });
-
-  it('does not escalate before the budget is actually exhausted', () => {
-    expect(
-      detectChitchatBudgetEscalation({
-        conversationMode: 'chitchat',
-        iteration: 10,
-        maxToolIterations: 25,
-        hasUnfinishedWork: true,
-      }).required,
-    ).toBe(false);
-  });
-});
-
 describe('buildConversationModeEscalationDetail', () => {
   it('records the transition and cause for the graph audit trail', () => {
     const detail = buildConversationModeEscalationDetail({
       required: true,
-      reason: 'side_effect_capability_discovered',
-      blockedToolNames: ['calendar_create_event'],
+      reason: 'agentic_capability_discovered',
+      blockedToolNames: ['sessions_spawn'],
     });
 
     expect(detail).toBe(
-      'from:chitchat,to:agentic,reason:side_effect_capability_discovered,tools:calendar_create_event',
+      'from:chitchat,to:agentic,reason:agentic_capability_discovered,tools:sessions_spawn',
     );
   });
 });
