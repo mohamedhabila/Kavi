@@ -1,9 +1,15 @@
+import { estimateTokens } from '../../services/context/tokenCounter';
 import type { Attachment } from '../../types/attachment';
 import type { Message } from '../../types/message';
 import type {
   WorkflowTaskAnchor,
   WorkflowTaskAttachmentIdentity,
 } from '../../types/workflowTaskAnchor';
+import {
+  graphemeLength,
+  truncateGraphemesFromEnd,
+  truncateGraphemesTo,
+} from '../../utils/graphemes';
 
 export type { WorkflowTaskAnchor, WorkflowTaskAttachmentIdentity };
 
@@ -146,6 +152,36 @@ export function resolveWorkflowTaskAnchor(params: {
   return { kind: 'resolved', anchor: createWorkflowTaskAnchor(sourceMessage) };
 }
 
+/**
+ * Upper bound on the request text the rendered anchor carries. The anchor is a
+ * protected system-prompt section — never truncated by the budget — so an unbounded
+ * copy of a long paste (a 36K-character first message, traced live) could not fit the
+ * system-prompt budget and failed the whole run, and its recovery failed the same way.
+ * The full request stays in the transcript; the anchor keeps its opening and closing,
+ * which is where a request states what it wants.
+ */
+const WORKFLOW_TASK_ANCHOR_MAX_CONTENT_TOKENS = 3_000;
+const ANCHOR_EXCERPT_HEAD_SHARE = 0.6;
+
+function boundAnchorForPrompt(anchor: WorkflowTaskAnchor): WorkflowTaskAnchor & {
+  contentTruncated?: true;
+} {
+  const contentTokens = estimateTokens(anchor.content);
+  if (contentTokens <= WORKFLOW_TASK_ANCHOR_MAX_CONTENT_TOKENS) {
+    return anchor;
+  }
+  const keptGraphemes = Math.max(
+    1,
+    Math.floor(
+      graphemeLength(anchor.content) * (WORKFLOW_TASK_ANCHOR_MAX_CONTENT_TOKENS / contentTokens),
+    ),
+  );
+  const headGraphemes = Math.ceil(keptGraphemes * ANCHOR_EXCERPT_HEAD_SHARE);
+  const head = truncateGraphemesTo(anchor.content, headGraphemes).trimEnd();
+  const tail = truncateGraphemesFromEnd(anchor.content, keptGraphemes - headGraphemes).trimStart();
+  return { ...anchor, content: `${head}\n…\n${tail}`, contentTruncated: true };
+}
+
 export function renderWorkflowTaskAnchorPromptSection(anchor: WorkflowTaskAnchor): string {
-  return `${WORKFLOW_TASK_ANCHOR_PREFIX}${serializeWorkflowTaskAnchor(anchor)}${WORKFLOW_TASK_ANCHOR_SUFFIX}`;
+  return `${WORKFLOW_TASK_ANCHOR_PREFIX}${serializeWorkflowTaskAnchor(boundAnchorForPrompt(anchor))}${WORKFLOW_TASK_ANCHOR_SUFFIX}`;
 }
