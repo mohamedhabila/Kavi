@@ -40,6 +40,7 @@ import {
 } from './foregroundScenarioMemorySettlement';
 import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import { validateForegroundScenarioInput } from './foregroundScenarioInputValidation';
+import { scheduleForegroundScenarioSteer } from './foregroundScenarioSteering';
 import {
   cloneAndFreeze,
   resolveForegroundScenarioAllowedToolNames,
@@ -258,6 +259,28 @@ async function runScenarioIsolated(
         input.allowedToolNames,
         turn.allowedToolNames,
       );
+      const runOptions = {
+        maxTokens: turn.maxTokens ?? input.maxTokens,
+        disableTools: input.disableTools,
+        ...(allowedToolNames ? { allowedToolNames } : {}),
+        memoryRetrievalStrategy: input.memoryRetrievalStrategy,
+        memoryContextStrategy: input.memoryContextStrategy,
+        enableCompaction: input.enableCompaction,
+      };
+      // A mid-run message goes through the same composer path, so it steers the run.
+      const steer = turn.steer
+        ? scheduleForegroundScenarioSteer({
+            conversationId: currentConversationId,
+            messageStartIndex,
+            steer: turn.steer,
+            send: (text) =>
+              executeForegroundConversationSend({
+                text,
+                context: runtime.buildSendContext(currentConversationId),
+                runOptions,
+              }),
+          })
+        : null;
       // Enter through the chat screen's composer path so the scenario exercises
       // conversation resolution, write reservation, attachment import, and the
       // user-message append exactly as the app does.
@@ -273,15 +296,9 @@ async function runScenarioIsolated(
               .getState()
               .addMessage(conversationId, { ...message, timestamp: turn.timestamp }),
         }),
-        runOptions: {
-          maxTokens: turn.maxTokens ?? input.maxTokens,
-          disableTools: input.disableTools,
-          ...(allowedToolNames ? { allowedToolNames } : {}),
-          memoryRetrievalStrategy: input.memoryRetrievalStrategy,
-          memoryContextStrategy: input.memoryContextStrategy,
-          enableCompaction: input.enableCompaction,
-        },
+        runOptions,
       })
+        .then(() => steer?.settle())
         .catch((error) => {
           if (!timedOut) throw error;
         })

@@ -44,13 +44,14 @@ const PRODUCT_ROUTE_SCENARIO_IDS = new Set([
   'failure-gotcha-reuse',
   'relaunch-profile-continuity',
   'organic-mobile-assistant-continuity',
+  'steer-midrun-memory',
 ]);
 
 describe('E2E scenario taxonomy', () => {
   it('covers all registered scenarios without duplicate ids', () => {
-    expect(E2E_AGENT_SCENARIOS).toHaveLength(61);
+    expect(E2E_AGENT_SCENARIOS).toHaveLength(62);
     expect(DELEGATION_E2E_SCENARIOS).toHaveLength(2);
-    expect(ALL_SCENARIOS).toHaveLength(63);
+    expect(ALL_SCENARIOS).toHaveLength(64);
     expect(new Set(ALL_SCENARIOS.map((scenario) => scenario.id)).size).toBe(ALL_SCENARIOS.length);
   });
 

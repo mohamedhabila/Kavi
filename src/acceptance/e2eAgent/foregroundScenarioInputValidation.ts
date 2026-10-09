@@ -119,5 +119,13 @@ export function validateForegroundScenarioInput(input: ForegroundScenarioDriverI
     if (turn.selectedMode !== undefined && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
       throw new Error(`turns[${index}].selectedMode must be agentic or chitchat.`);
     }
+    if (
+      turn.steer !== undefined &&
+      (!Number.isSafeInteger(turn.steer.afterToolResults) ||
+        turn.steer.afterToolResults <= 0 ||
+        !turn.steer.content.trim())
+    ) {
+      throw new Error(`turns[${index}].steer needs a positive tool-result count and text.`);
+    }
   }
 }

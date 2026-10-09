@@ -65,6 +65,15 @@ export type ForegroundScenarioLifecycleSnapshot =
       newConversationInitialMessageCount: 0;
     }>;
 
+/**
+ * Evaluator-owned: the user sends `content` while the turn's run is still working, once
+ * the run has returned `afterToolResults` tool results — the composer's steering path.
+ */
+export type ForegroundScenarioSteerDirective = Readonly<{
+  afterToolResults: number;
+  content: string;
+}>;
+
 export type ForegroundScenarioTurnInput = {
   content: string;
   attachments?: ReadonlyArray<Attachment>;
@@ -78,6 +87,7 @@ export type ForegroundScenarioTurnInput = {
   /** Evaluator-owned exact tool surface for this turn; overrides the scenario-level surface. */
   allowedToolNames?: ReadonlyArray<string>;
   timestamp?: number;
+  steer?: ForegroundScenarioSteerDirective;
 };
 
 export function resolveForegroundScenarioAllowedToolNames(

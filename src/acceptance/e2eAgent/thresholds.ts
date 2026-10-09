@@ -76,6 +76,7 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'agent-outcome-to-chitchat': 220_000,
   'failure-gotcha-reuse': 260_000,
   'relaunch-profile-continuity': 200_000,
+  'steer-midrun-memory': 240_000,
   'organic-mobile-assistant-continuity': 240_000,
   'paired-causal-global-preference': 240_000,
   'bench-gaia-file-hop-chain': 180_000,

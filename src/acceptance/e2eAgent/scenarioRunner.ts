@@ -139,6 +139,7 @@ export async function runE2EScenario(
         route: options.routeOverride ?? turn.route ?? scenario.execution.route,
         selectedMode: turn.selectedMode,
         timeoutMs: perTurnTimeoutMs,
+        ...(turn.steer ? { steer: turn.steer } : {}),
       })),
       maxTokens: options.maxTokens ?? scenario.maxTokens ?? E2E_DEFAULT_MAX_TOKENS,
       ...(options.memoryTimeoutMs !== undefined

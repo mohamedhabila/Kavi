@@ -25,6 +25,7 @@ import type {
   ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
+  ForegroundScenarioSteerDirective,
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
 import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
@@ -169,6 +170,8 @@ export type E2EUserTurn = {
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
   /** Simulates the user choosing a chat mode in the product UI before this turn. */
   selectedMode?: ConversationMode;
+  /** Simulates the user sending another message while this turn's run works. */
+  steer?: ForegroundScenarioSteerDirective;
 };
 
 export type E2EScenarioContentClass = 'private' | 'synthetic_public';
