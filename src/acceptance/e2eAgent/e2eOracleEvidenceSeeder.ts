@@ -3,7 +3,7 @@ import { createConversationFileContext } from '../../engine/tools/toolWorkspaceF
 import { getFactById } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
 import type { MemoryRememberArgs } from '../../services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV4Input } from '../../services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV4Input } from '../../services/memory/memoryRememberSemanticContract';
 import { isCanonicalSelfMemorySubject } from '../../services/memory/memorySubjectIdentity';
 import {
   validateE2EOracleEvidenceDeclaration,

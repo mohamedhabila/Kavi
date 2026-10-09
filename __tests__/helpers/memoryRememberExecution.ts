@@ -2,7 +2,7 @@ import type {
   MemoryRememberArgs,
   MemoryRememberExecutionContext,
 } from '../../src/services/memory/memoryTools';
-import type { MemoryRememberSemanticEvidenceV4Input } from '../../src/services/memory/memoryRememberSemanticEvidence';
+import type { MemoryRememberSemanticEvidenceV4Input } from '../../src/services/memory/memoryRememberSemanticContract';
 import type {
   SemanticFactAssertionClass,
   SemanticFactProposalOperation,

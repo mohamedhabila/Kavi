@@ -476,7 +476,13 @@ describe('typed memory_remember semantic authority', () => {
         ...request,
         userMessageText: `${subject}😀⇢${value}`,
       }),
-    ).toEqual({ valid: false, code: 'invalid_contract' });
+    ).toEqual({
+      valid: false,
+      code: 'invalid_contract',
+      violations: [
+        'subject.label must be a non-empty string of at most 80 characters with no surrounding whitespace',
+      ],
+    });
   });
 
   it('finds the nearest exact pair without retaining repeated occurrence arrays', () => {

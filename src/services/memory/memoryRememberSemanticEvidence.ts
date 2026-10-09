@@ -1,74 +1,15 @@
 import type { EntityType } from './entities';
-import {
-  MEMORY_FACT_SENSITIVITY_LEVELS,
-  type MemoryFactSensitivity,
-} from './facts/applicabilityProvenance';
 import type { MemoryRememberRequestEvidence } from './memoryRememberPersistence';
 import { sha256HexUtf8 } from '../../utils/sha256';
-import {
-  SEMANTIC_FACT_ASSERTION_CLASSES,
-  SEMANTIC_FACT_PROPOSAL_OPERATIONS,
-  SEMANTIC_FACT_PROPOSAL_SCOPES,
-  SEMANTIC_FACT_PROPOSAL_VERSION,
-  type SemanticFactAssertionClass,
-  type SemanticFactProposalOperation,
-  type SemanticFactProposalScope,
-  type SemanticFactProposalV1,
-  type SemanticFactSubjectRef,
-} from './semanticFactProposal';
+import type { SemanticFactProposalV1, SemanticFactSubjectRef } from './semanticFactProposal';
+import { decodeMemoryRememberSemanticContract } from './memoryRememberSemanticContract';
 import {
   deriveExactToolObservedMemoryEvidenceSpan,
   resolveToolObservedMemoryEvidenceBinding,
   type ToolObservedMemoryEvidenceCapability,
 } from './toolObservedMemoryEvidence';
 
-export const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION = 4 as const;
 const MAX_MEMORY_REMEMBER_EVIDENCE_SPAN_LENGTH = 600;
-
-export type MemoryRememberSemanticSubjectV4 =
-  | Readonly<{ kind: 'self' }>
-  | Readonly<{
-      kind: 'named';
-      label: string;
-      type: Exclude<EntityType, 'self'>;
-    }>;
-
-export interface MemoryRememberSemanticEvidenceV4Input {
-  readonly version: typeof MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION;
-  readonly subject: MemoryRememberSemanticSubjectV4;
-  readonly predicate: string;
-  readonly value: string;
-  readonly scope: SemanticFactProposalScope;
-  readonly importance: number;
-  readonly confidence: number;
-  readonly operation: SemanticFactProposalOperation;
-  readonly assertion_class: SemanticFactAssertionClass;
-  readonly sensitivity: MemoryFactSensitivity;
-}
-
-const MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS = new Set([
-  'version',
-  'subject',
-  'predicate',
-  'value',
-  'scope',
-  'importance',
-  'confidence',
-  'operation',
-  'assertion_class',
-  'sensitivity',
-]);
-const NAMED_SUBJECT_TYPES = new Set<EntityType>([
-  'person',
-  'place',
-  'org',
-  'project',
-  'thing',
-  'concept',
-  'event',
-]);
-const SUBJECT_SELF_FIELDS = new Set(['kind']);
-const SUBJECT_NAMED_FIELDS = new Set(['kind', 'label', 'type']);
 
 export interface BoundMemoryRememberSemanticEvidence {
   readonly kind: 'bound_memory_remember_semantic_evidence';
@@ -97,10 +38,10 @@ export interface MemoryRememberSemanticEvidenceBinding {
 
 export type BindMemoryRememberSemanticEvidenceResult =
   | { valid: true; evidence: BoundMemoryRememberSemanticEvidence }
+  | { valid: false; code: 'invalid_contract'; violations: readonly string[] }
   | {
       valid: false;
       code:
-        | 'invalid_contract'
         | 'non_current_assertion'
         | 'subject_not_grounded'
         | 'value_not_grounded'
@@ -118,20 +59,11 @@ export function bindMemoryRememberSemanticEvidence(
   request: MemoryRememberRequestEvidence,
   toolObservedEvidence: ReadonlyArray<ToolObservedMemoryEvidenceCapability> = [],
 ): BindMemoryRememberSemanticEvidenceResult {
-  if (!isPlainRecord(raw) || !hasExactFields(raw, MEMORY_REMEMBER_SEMANTIC_EVIDENCE_FIELDS)) {
-    return { valid: false, code: 'invalid_contract' };
+  const contract = decodeMemoryRememberSemanticContract(raw, request.userMessageId);
+  if (!contract.ok) {
+    return { valid: false, code: 'invalid_contract', violations: contract.violations };
   }
-  if (raw.version !== MEMORY_REMEMBER_SEMANTIC_EVIDENCE_VERSION) {
-    return { valid: false, code: 'invalid_contract' };
-  }
-  const subject = decodeMemoryRememberSubject(raw.subject);
-  if (!subject) {
-    return { valid: false, code: 'invalid_contract' };
-  }
-  const decoded = decodeMemoryRememberSemanticProposal(raw, request.userMessageId, subject.ref);
-  if (!decoded) {
-    return { valid: false, code: 'invalid_contract' };
-  }
+  const { proposal: decoded, subjectType } = contract.decoded;
   if (decoded.assertionClass === 'current_direct') {
     const grounding = deriveExactEvidenceSpan(
       decoded.subjectRef,
@@ -141,7 +73,7 @@ export function bindMemoryRememberSemanticEvidence(
     if (grounding.valid) {
       return bindEvidence({
         proposal: decoded,
-        subjectType: subject.type,
+        subjectType,
         evidenceSpan: grounding.evidenceSpan,
         source: {
           kind: 'current_user',
@@ -187,7 +119,7 @@ export function bindMemoryRememberSemanticEvidence(
       scope: decoded.scope === 'global' || decoded.scope === 'persona' ? 'project' : decoded.scope,
       assertionClass: 'quoted',
     },
-    subjectType: subject.type,
+    subjectType,
     evidenceSpan: candidate.evidenceSpan,
     source: {
       kind: 'tool_observed',
@@ -209,75 +141,6 @@ function bindEvidence(
   });
   bindings.set(evidence, binding);
   return { valid: true, evidence };
-}
-
-function decodeMemoryRememberSemanticProposal(
-  raw: Record<string, unknown>,
-  sourceMessageId: string,
-  subjectRef: SemanticFactSubjectRef,
-): Omit<SemanticFactProposalV1, 'evidenceQuote'> | null {
-  const predicate = exactString(raw.predicate, 80);
-  const value = exactString(raw.value, 200);
-  if (
-    predicate === null ||
-    value === null ||
-    !isUnitNumber(raw.importance) ||
-    !isUnitNumber(raw.confidence) ||
-    !includes(SEMANTIC_FACT_PROPOSAL_SCOPES, raw.scope) ||
-    !includes(SEMANTIC_FACT_PROPOSAL_OPERATIONS, raw.operation) ||
-    !includes(SEMANTIC_FACT_ASSERTION_CLASSES, raw.assertion_class) ||
-    !includes(MEMORY_FACT_SENSITIVITY_LEVELS, raw.sensitivity)
-  ) {
-    return null;
-  }
-  return {
-    version: SEMANTIC_FACT_PROPOSAL_VERSION,
-    subjectRef,
-    predicate,
-    value,
-    scope: raw.scope,
-    importance: raw.importance,
-    confidence: raw.confidence,
-    sourceMessageId,
-    operation: raw.operation,
-    assertionClass: raw.assertion_class,
-    sensitivity: raw.sensitivity,
-  };
-}
-
-function decodeMemoryRememberSubject(
-  raw: unknown,
-): { ref: SemanticFactSubjectRef; type: EntityType } | null {
-  if (!isPlainRecord(raw)) return null;
-  if (raw.kind === 'self') {
-    return hasExactFields(raw, SUBJECT_SELF_FIELDS)
-      ? { ref: { kind: 'self' }, type: 'self' }
-      : null;
-  }
-  if (raw.kind !== 'named' || !hasExactFields(raw, SUBJECT_NAMED_FIELDS)) return null;
-  const label = exactString(raw.label, 80);
-  const type =
-    typeof raw.type === 'string' && NAMED_SUBJECT_TYPES.has(raw.type as EntityType)
-      ? (raw.type as Exclude<EntityType, 'self'>)
-      : null;
-  return label === null || type === null ? null : { ref: { kind: 'named', label }, type };
-}
-
-function exactString(raw: unknown, maximumLength: number): string | null {
-  return typeof raw === 'string' &&
-    raw.length > 0 &&
-    raw === raw.trim() &&
-    Array.from(raw).length <= maximumLength
-    ? raw
-    : null;
-}
-
-function isUnitNumber(raw: unknown): raw is number {
-  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 1;
-}
-
-function includes<T extends string>(values: readonly T[], raw: unknown): raw is T {
-  return typeof raw === 'string' && values.includes(raw as T);
 }
 
 type ExactEvidenceSpanResult =
@@ -371,15 +234,4 @@ export function resolveBoundMemoryRememberSemanticEvidence(
         },
       }
     : null;
-}
-
-function hasExactFields(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
-  const keys = Object.keys(value);
-  return keys.length === expected.size && keys.every((key) => expected.has(key));
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }

@@ -603,7 +603,7 @@ export function executeMemoryRemember(
       case 'invalid_contract':
         return err(
           'invalid_args',
-          'memory_remember semanticEvidence must match the declared schema exactly; include no undeclared fields.',
+          `memory_remember semanticEvidence does not match the declared schema: ${semantic.violations.join('; ')}.`,
         );
       case 'value_not_grounded':
         return err(
