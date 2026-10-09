@@ -1176,6 +1176,24 @@ export const ja: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: '添付ファイルを含む',
     episodeStructuralFallback: '会話のアクティビティ',
   },
+  reminders: {
+    sectionTitle: "リマインダー",
+    next: "次回: {when}",
+    repeat: {
+      once: "1 回のみ",
+      daily: "毎日",
+      weekdays: "平日",
+      weekly: "毎週",
+      monthly: "毎月",
+    },
+    cancel: "取り消す",
+    cancelAccessibility: "リマインダーを取り消す: {title}",
+    cancelConfirmTitle: "このリマインダーを取り消しますか？",
+    cancelConfirmMessage: "「{title}」の通知は届かなくなります。",
+    keep: "残す",
+    loadFailed: "リマインダーを読み込めませんでした。",
+    cancelFailed: "このリマインダーを取り消せませんでした。もう一度お試しください。",
+  },
   scheduler: {
     title: 'リマインダーと自動化',
     intro:

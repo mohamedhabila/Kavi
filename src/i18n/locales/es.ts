@@ -1250,6 +1250,24 @@ export const es: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Incluye archivos adjuntos',
     episodeStructuralFallback: 'Actividad de la conversación',
   },
+  reminders: {
+    sectionTitle: "Recordatorios",
+    next: "Próximo: {when}",
+    repeat: {
+      once: "Una vez",
+      daily: "Todos los días",
+      weekdays: "Cada día laborable",
+      weekly: "Cada semana",
+      monthly: "Cada mes",
+    },
+    cancel: "Cancelar",
+    cancelAccessibility: "Cancelar recordatorio: {title}",
+    cancelConfirmTitle: "¿Cancelar este recordatorio?",
+    cancelConfirmMessage: "«{title}» ya no te avisará.",
+    keep: "Conservar",
+    loadFailed: "No se pudieron cargar tus recordatorios.",
+    cancelFailed: "No se pudo cancelar este recordatorio. Vuelve a intentarlo.",
+  },
   scheduler: {
     title: 'Recordatorios y automatizaciones',
     intro:

@@ -1221,6 +1221,24 @@ export const en: TranslationMap = {
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────
+  reminders: {
+    sectionTitle: "Reminders",
+    next: "Next: {when}",
+    repeat: {
+      once: "One time",
+      daily: "Every day",
+      weekdays: "Every weekday",
+      weekly: "Every week",
+      monthly: "Every month",
+    },
+    cancel: "Cancel",
+    cancelAccessibility: "Cancel reminder: {title}",
+    cancelConfirmTitle: "Cancel this reminder?",
+    cancelConfirmMessage: "\"{title}\" will no longer notify you.",
+    keep: "Keep",
+    loadFailed: "Couldn't load your reminders.",
+    cancelFailed: "Couldn't cancel this reminder. Please try again.",
+  },
   scheduler: {
     title: 'Reminders & automations',
     intro:

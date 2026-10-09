@@ -1295,6 +1295,24 @@ export const ar: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'يتضمن مرفقات',
     episodeStructuralFallback: 'نشاط في المحادثة',
   },
+  reminders: {
+    sectionTitle: "التذكيرات",
+    next: "التالي: {when}",
+    repeat: {
+      once: "مرة واحدة",
+      daily: "كل يوم",
+      weekdays: "كل يوم عمل",
+      weekly: "كل أسبوع",
+      monthly: "كل شهر",
+    },
+    cancel: "إلغاء",
+    cancelAccessibility: "إلغاء التذكير: {title}",
+    cancelConfirmTitle: "هل تريد إلغاء هذا التذكير؟",
+    cancelConfirmMessage: "لن يُرسل «{title}» إشعارات بعد الآن.",
+    keep: "الإبقاء",
+    loadFailed: "تعذّر تحميل تذكيراتك.",
+    cancelFailed: "تعذّر إلغاء هذا التذكير. يُرجى إعادة المحاولة.",
+  },
   scheduler: {
     title: 'التذكيرات والأتمتة',
     intro:

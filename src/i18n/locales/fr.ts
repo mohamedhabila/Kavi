@@ -1254,6 +1254,24 @@ export const fr: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Contient des pièces jointes',
     episodeStructuralFallback: 'Activité de la conversation',
   },
+  reminders: {
+    sectionTitle: "Rappels",
+    next: "Prochain : {when}",
+    repeat: {
+      once: "Une fois",
+      daily: "Tous les jours",
+      weekdays: "Chaque jour ouvré",
+      weekly: "Chaque semaine",
+      monthly: "Chaque mois",
+    },
+    cancel: "Annuler",
+    cancelAccessibility: "Annuler le rappel : {title}",
+    cancelConfirmTitle: "Annuler ce rappel ?",
+    cancelConfirmMessage: "« {title} » ne vous notifiera plus.",
+    keep: "Conserver",
+    loadFailed: "Impossible de charger vos rappels.",
+    cancelFailed: "Impossible d'annuler ce rappel. Veuillez réessayer.",
+  },
   scheduler: {
     title: 'Rappels et automatisations',
     intro:

@@ -30,6 +30,10 @@ import {
   type SchedulerPermissionState,
 } from '../components/scheduler/SchedulerPermissionCard';
 import { createSchedulerStyles } from '../components/scheduler/Scheduler.styles';
+import {
+  SchedulerReminderList,
+  usePendingReminders,
+} from '../components/scheduler/SchedulerReminderList';
 import { useAppTheme } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 
@@ -78,6 +82,7 @@ export const SchedulerScreen: React.FC = () => {
   >({});
   const [jobFeedback, setJobFeedback] = useState<Record<string, SchedulerJobFeedback>>({});
   const [notice, setNotice] = useState<ScreenNotice | null>(null);
+  const pendingReminders = usePendingReminders();
   const [highlightedJobId, setHighlightedJobId] = useState<string | undefined>();
   const [permissionState, setPermissionState] = useState<SchedulerPermissionState>({
     status: 'loading',
@@ -346,29 +351,38 @@ export const SchedulerScreen: React.FC = () => {
                 </Text>
               </View>
             ) : null}
+            <SchedulerReminderList
+              loadFailed={pendingReminders.loadFailed}
+              onChanged={pendingReminders.reload}
+              reminders={pendingReminders.reminders}
+              styles={styles}
+            />
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View
-              style={styles.emptyIcon}
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-            >
-              <AlarmClock color={colors.primary} size={27} />
+          // Reminders are listed in the header; "nothing scheduled" would contradict them.
+          pendingReminders.reminders.length > 0 ? null : (
+            <View style={styles.emptyState}>
+              <View
+                style={styles.emptyIcon}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              >
+                <AlarmClock color={colors.primary} size={27} />
+              </View>
+              <Text style={styles.emptyTitle}>{t('scheduler.noJobs')}</Text>
+              <Text style={styles.emptyHint}>{t('scheduler.noJobsHint')}</Text>
+              <TouchableOpacity
+                accessibilityLabel={t('scheduler.emptyAction')}
+                accessibilityRole="button"
+                onPress={() => setShowCreateSheet(true)}
+                style={styles.emptyAction}
+                testID="scheduler-empty-create"
+              >
+                <Text style={styles.emptyActionText}>{t('scheduler.emptyAction')}</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.emptyTitle}>{t('scheduler.noJobs')}</Text>
-            <Text style={styles.emptyHint}>{t('scheduler.noJobsHint')}</Text>
-            <TouchableOpacity
-              accessibilityLabel={t('scheduler.emptyAction')}
-              accessibilityRole="button"
-              onPress={() => setShowCreateSheet(true)}
-              style={styles.emptyAction}
-              testID="scheduler-empty-create"
-            >
-              <Text style={styles.emptyActionText}>{t('scheduler.emptyAction')}</Text>
-            </TouchableOpacity>
-          </View>
+          )
         }
         maxToRenderPerBatch={10}
         onScrollToIndexFailed={(info) => {

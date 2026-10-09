@@ -1242,6 +1242,24 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Inclui anexos',
     episodeStructuralFallback: 'Atividade da conversa',
   },
+  reminders: {
+    sectionTitle: "Lembretes",
+    next: "Próximo: {when}",
+    repeat: {
+      once: "Uma vez",
+      daily: "Todos os dias",
+      weekdays: "Todo dia útil",
+      weekly: "Toda semana",
+      monthly: "Todo mês",
+    },
+    cancel: "Cancelar",
+    cancelAccessibility: "Cancelar lembrete: {title}",
+    cancelConfirmTitle: "Cancelar este lembrete?",
+    cancelConfirmMessage: "\"{title}\" não vai mais notificar você.",
+    keep: "Manter",
+    loadFailed: "Não foi possível carregar seus lembretes.",
+    cancelFailed: "Não foi possível cancelar este lembrete. Tente novamente.",
+  },
   scheduler: {
     title: 'Lembretes e automações',
     intro:

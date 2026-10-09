@@ -1226,6 +1226,24 @@ export const de: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Enthält Anhänge',
     episodeStructuralFallback: 'Unterhaltungsaktivität',
   },
+  reminders: {
+    sectionTitle: "Erinnerungen",
+    next: "Nächste: {when}",
+    repeat: {
+      once: "Einmalig",
+      daily: "Jeden Tag",
+      weekdays: "Jeden Werktag",
+      weekly: "Jede Woche",
+      monthly: "Jeden Monat",
+    },
+    cancel: "Löschen",
+    cancelAccessibility: "Erinnerung löschen: {title}",
+    cancelConfirmTitle: "Diese Erinnerung löschen?",
+    cancelConfirmMessage: "„{title}“ wird nicht mehr benachrichtigen.",
+    keep: "Behalten",
+    loadFailed: "Die Erinnerungen konnten nicht geladen werden.",
+    cancelFailed: "Diese Erinnerung konnte nicht gelöscht werden. Bitte erneut versuchen.",
+  },
   scheduler: {
     title: 'Erinnerungen & Automationen',
     intro:
