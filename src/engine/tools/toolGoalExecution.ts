@@ -89,6 +89,34 @@ function omitAdapterNullOptionals(args: Record<string, unknown>): Record<string,
   return normalized;
 }
 
+/**
+ * Fields that say something about how to treat a goal rather than which goal is meant.
+ * A call carrying only these (plus its action) names no goal at all.
+ */
+const GOAL_FREE_ROOT_FIELDS: ReadonlySet<string> = new Set([
+  'action',
+  'goals',
+  'retainCurrentUserConstraint',
+]);
+
+/**
+ * True when the arguments name no goal: no goal entries and no goal fields, only the
+ * action (and flags about goals). There is nothing in such a call to apply, so it is
+ * answered as a no-op instead of rejected — a rejection gave the model nothing it could
+ * fix, and in a measured run (z-ai/glm-5.3-flash, 2026-10-09) 21 of 23 rejected
+ * update_goals calls were bare `{"action":"add"}` repeated until loop detection
+ * blocked the run before any of the requested work was done.
+ */
+export function isGoallessUpdateGoalsCall(args: Record<string, unknown>): boolean {
+  const normalized = omitAdapterNullOptionals(args);
+  if (
+    Array.isArray(normalized.goals) ? normalized.goals.length > 0 : normalized.goals !== undefined
+  ) {
+    return false;
+  }
+  return Object.keys(normalized).every((field) => GOAL_FREE_ROOT_FIELDS.has(field));
+}
+
 function readStringList(value: unknown): string[] | undefined {
   return Array.isArray(value) ? (value as string[]).slice() : undefined;
 }
@@ -543,6 +571,10 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
         ),
       ],
     };
+  }
+
+  if (isGoallessUpdateGoalsCall(normalizedArgs)) {
+    return { mutation: { action, goals: [] }, errors: [] };
   }
 
   const completionPolicy = normalizeGoalCompletionPolicy(normalizedArgs.completionPolicy);

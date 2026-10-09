@@ -34,6 +34,11 @@ function buildRejectedMutationGoalState(goal: AgentGoal): Record<string, unknown
   };
 }
 
+export const GOALLESS_UPDATE_GOALS_NOTE =
+  'This call named no goal, so nothing was recorded. Each action you take records its own ' +
+  'completion evidence, so continue with the task. To track a multi-step task, send ' +
+  'update_goals with the goal itself: id, name, completionPolicy, and successCriteria.';
+
 export function buildCanonicalUpdateGoalsContent(params: {
   status: 'ok' | 'error';
   action?: string;
@@ -41,12 +46,14 @@ export function buildCanonicalUpdateGoalsContent(params: {
   errors?: ReadonlyArray<string>;
   structuredErrors?: ReadonlyArray<Record<string, unknown>>;
   attemptedArguments?: unknown;
+  note?: string;
 }): string {
   const repair = buildUpdateGoalsRepair(params);
   return JSON.stringify(
     {
       status: params.status,
       ...(params.action ? { action: params.action } : {}),
+      ...(params.note ? { note: params.note } : {}),
       ...(params.goals
         ? {
             goals: params.goals.map(

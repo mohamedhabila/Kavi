@@ -27,6 +27,7 @@ import { TOOL_DEFINITIONS } from '../tools/definitions';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 import {
   buildCanonicalUpdateGoalsContent,
+  GOALLESS_UPDATE_GOALS_NOTE,
   serializeParsedUpdateGoalsErrors,
 } from './updateGoalsCanonicalContent';
 
@@ -329,6 +330,20 @@ export function canonicalizeToolExecutionOutcome(params: {
       return {
         ...params.outcome,
         canonicalized: false,
+        graphApplied: false,
+      };
+    }
+
+    if (parsed.mutation.goals.length === 0) {
+      const content = buildCanonicalUpdateGoalsContent({
+        status: 'ok',
+        action: parsed.mutation.action,
+        goals: currentGoals,
+        note: GOALLESS_UPDATE_GOALS_NOTE,
+      });
+      return {
+        ...cloneToolExecutionOutcomeWithContent(params.outcome, content),
+        canonicalized: true,
         graphApplied: false,
       };
     }
