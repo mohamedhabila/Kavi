@@ -88,6 +88,7 @@ function buildUsageEvents(turn: ForegroundScenarioTurnSnapshot): TokenUsage[] {
     ...(entry.tokenDetails ? { tokenDetails: { ...entry.tokenDetails } } : {}),
     ...(entry.tokenBuckets ? { tokenBuckets: { ...entry.tokenBuckets } } : {}),
     ...(entry.promptCache ? { promptCache: { ...entry.promptCache } } : {}),
+    ...(entry.upstreamProvider ? { upstreamProvider: entry.upstreamProvider } : {}),
   }));
 }
 

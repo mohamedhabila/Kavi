@@ -238,7 +238,7 @@ export function estimateE2EEligibleCacheReadStats(
 }
 
 export function estimateUsageProviderManagedCacheReadinessTokens(
-  usage: E2ETokenUsageSummary,
+  usage: Pick<E2ETokenUsageSummary, 'inputTokens' | 'promptCache'>,
 ): number {
   return usage.promptCache
     ? Math.min(

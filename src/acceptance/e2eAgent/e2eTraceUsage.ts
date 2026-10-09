@@ -72,7 +72,8 @@ export type E2ERedactedPromptCacheTrace = {
   events: E2ERedactedPromptCacheEvent[];
 };
 
-export type E2ERedactedUsageTrace = Omit<E2ETokenUsageSummary, 'promptCache'> & {
+// Per-call rows carry digests and router upstream names: private evidence only.
+export type E2ERedactedUsageTrace = Omit<E2ETokenUsageSummary, 'promptCache' | 'calls'> & {
   tokenBuckets?: UsageTokenBuckets;
   promptCache?: E2ERedactedPromptCacheTrace;
 };

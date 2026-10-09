@@ -7,6 +7,7 @@ import {
   createCompletionMetadata,
   normalizeOpenAiCompatibleCompletion,
   normalizeStreamUsage,
+  readUpstreamProvider,
 } from '../../core/streaming/metadataBuilder';
 import { iterateSseData } from '../../core/streaming/sseReader';
 import { createGeminiCompatibleReplayState } from './geminiReplay';
@@ -46,7 +47,8 @@ export async function* streamOpenAICompatibleChat(args: {
       const parsed = JSON.parse(data);
       const usage = normalizeStreamUsage(parsed.usage);
       if (usage) {
-        yield { type: 'usage', usage };
+        const upstreamProvider = readUpstreamProvider(parsed);
+        yield { type: 'usage', usage: upstreamProvider ? { ...usage, upstreamProvider } : usage };
       }
 
       const choice = parsed.choices?.[0];

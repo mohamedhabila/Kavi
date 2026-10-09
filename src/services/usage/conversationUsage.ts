@@ -185,6 +185,7 @@ export function recordConversationUsageEvent(options: ConversationUsageRecordOpt
     ...(options.usage.tokenDetails ? { tokenDetails: options.usage.tokenDetails } : {}),
     ...(options.usage.tokenBuckets ? { tokenBuckets: options.usage.tokenBuckets } : {}),
     ...(options.usage.promptCache ? { promptCache: options.usage.promptCache } : {}),
+    ...(options.usage.upstreamProvider ? { upstreamProvider: options.usage.upstreamProvider } : {}),
   };
   const estimatedCost = isZeroCostModel(usage.model)
     ? 0

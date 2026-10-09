@@ -43,6 +43,17 @@ export type E2EToolResultRecord = {
   isError: boolean;
 };
 
+/** One model call's usage, in call order, so cache behavior can be read per call. */
+export type E2EModelCallUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  /** 0 on a call that declared no tools — a forced-text turn. */
+  toolDeclarationTokens?: number;
+  toolDeclarationDigest?: string;
+  upstreamProvider?: string;
+};
+
 export type E2ETokenUsageSummary = {
   inputTokens: number;
   outputTokens: number;
@@ -52,6 +63,7 @@ export type E2ETokenUsageSummary = {
   eventCount: number;
   tokenBuckets?: UsageTokenBuckets;
   promptCache?: E2EPromptCacheSummary;
+  calls: E2EModelCallUsage[];
 };
 
 export type E2EEstimatedCostSummary =

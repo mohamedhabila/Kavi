@@ -97,6 +97,8 @@ export type StreamUsage = {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   totalTokens?: number;
+  /** The upstream that served the call, when a router reports it (OpenRouter `provider`). */
+  upstreamProvider?: string;
 };
 
 export type StreamedToolCall = {

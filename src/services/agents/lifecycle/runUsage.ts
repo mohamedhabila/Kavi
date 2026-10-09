@@ -22,6 +22,13 @@ export function createSubAgentUsageRecorder(params: {
         cacheReadTokens: usage.cacheReadTokens ?? 0,
         cacheWriteTokens: usage.cacheWriteTokens ?? 0,
         totalTokens: usage.totalTokens,
+        // Forward the diagnostics the engine computes, as the foreground recorder does;
+        // rebuilding field by field dropped them, so worker calls priced and traced as
+        // text-only calls with no cache attribution or upstream.
+        ...(usage.tokenDetails ? { tokenDetails: usage.tokenDetails } : {}),
+        ...(usage.tokenBuckets ? { tokenBuckets: usage.tokenBuckets } : {}),
+        ...(usage.promptCache ? { promptCache: usage.promptCache } : {}),
+        ...(usage.upstreamProvider ? { upstreamProvider: usage.upstreamProvider } : {}),
       },
       providerId: params.provider.id,
       source,

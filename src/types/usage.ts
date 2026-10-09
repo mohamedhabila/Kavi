@@ -1,6 +1,8 @@
 export interface ConversationUsageEntry {
   model: string;
   providerId?: string;
+  /** The upstream a router served the call from (OpenRouter `provider`). */
+  upstreamProvider?: string;
   source?: ConversationUsageSource;
   modality?: 'image';
   toolCallId?: string;
@@ -40,6 +42,8 @@ export interface TokenUsage {
   cacheWriteTokens?: number;
   totalTokens?: number;
   model: string;
+  /** The upstream that served the call, when a router reports it (OpenRouter `provider`). */
+  upstreamProvider?: string;
   tokenDetails?: UsageTokenDetails;
   tokenBuckets?: UsageTokenBuckets;
   promptCache?: UsagePromptCacheTelemetry;

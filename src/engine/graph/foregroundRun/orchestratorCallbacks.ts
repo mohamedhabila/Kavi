@@ -246,6 +246,7 @@ export function createForegroundRunOrchestratorCallbacks(params: {
           ...(usage.tokenDetails ? { tokenDetails: usage.tokenDetails } : {}),
           ...(usage.tokenBuckets ? { tokenBuckets: usage.tokenBuckets } : {}),
           ...(usage.promptCache ? { promptCache: usage.promptCache } : {}),
+          ...(usage.upstreamProvider ? { upstreamProvider: usage.upstreamProvider } : {}),
         },
         providerId: params.providerId,
         source: 'primary',

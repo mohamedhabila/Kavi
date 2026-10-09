@@ -154,8 +154,10 @@ export function createModelTurnUsageTracker(
         inputTokens + outputTokens,
       );
 
+      const upstreamProvider = usage.upstreamProvider ?? latestUsage?.upstreamProvider;
       latestUsage = {
         model: usage.model || latestUsage?.model || params.requestModel,
+        ...(upstreamProvider ? { upstreamProvider } : {}),
         inputTokens,
         outputTokens,
         cacheReadTokens,

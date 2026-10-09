@@ -30,6 +30,21 @@ export function normalizeStreamUsage(usage: any): StreamUsage | undefined {
   };
 }
 
+const MAX_UPSTREAM_PROVIDER_LENGTH = 80;
+
+/**
+ * The upstream a router served the call from. OpenRouter reports it as a top-level
+ * `provider` string on each completion chunk; a router can send one model to many
+ * upstreams, and prompt caching and tool parsing differ between them.
+ */
+export function readUpstreamProvider(response: unknown): string | undefined {
+  if (!response || typeof response !== 'object') return undefined;
+  const provider = (response as { provider?: unknown }).provider;
+  if (typeof provider !== 'string') return undefined;
+  const trimmed = provider.trim();
+  return trimmed && trimmed.length <= MAX_UPSTREAM_PROVIDER_LENGTH ? trimmed : undefined;
+}
+
 export function normalizeOpenAiCompatibleCompletion(
   reason: unknown,
 ): AssistantCompletionMetadata | undefined {

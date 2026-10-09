@@ -2,7 +2,10 @@ import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../t
 import type { ToolDefinition } from '../../types/tool';
 import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/agentRun';
 import { isPlainRecord } from '../../services/llm/core/json';
-import { normalizeStreamUsage } from '../../services/llm/core/streaming/metadataBuilder';
+import {
+  normalizeStreamUsage,
+  readUpstreamProvider,
+} from '../../services/llm/core/streaming/metadataBuilder';
 import {
   createCompletionMetadata,
   normalizeGeminiCompletion,
@@ -153,7 +156,12 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     // response, which carries them in `prompt_tokens_details.cached_tokens`.
     const usage = normalizeStreamUsage(isPlainRecord(response?.usage) ? response.usage : undefined);
     if (usage) {
-      usageTracker.mergeSnapshot({ ...usage, model: params.requestModel });
+      const upstreamProvider = readUpstreamProvider(response);
+      usageTracker.mergeSnapshot({
+        ...usage,
+        model: params.requestModel,
+        ...(upstreamProvider ? { upstreamProvider } : {}),
+      });
     }
     assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     const choice = isPlainRecord(response?.choices?.[0]) ? response.choices[0] : undefined;

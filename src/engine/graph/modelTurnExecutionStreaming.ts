@@ -240,6 +240,9 @@ export async function executeAgentControlGraphModelTurnStreaming(
             cacheWriteTokens: event.usage.cacheWriteTokens,
             totalTokens: event.usage.totalTokens,
             model: params.requestModel,
+            ...(event.usage.upstreamProvider
+              ? { upstreamProvider: event.usage.upstreamProvider }
+              : {}),
           });
         }
         continue;

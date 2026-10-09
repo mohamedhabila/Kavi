@@ -10,6 +10,8 @@ const USAGE_TOKEN_BUCKET_KEYS = [
   'toolResultTokens',
 ] as const;
 
+/** Router upstream names are short labels; anything longer is not one. */
+const MAX_PERSISTED_UPSTREAM_PROVIDER_CHARS = 80;
 const PROMPT_CACHE_EVENTS = new Set(['create', 'reuse', 'skip', 'provider_managed']);
 const PROMPT_CACHE_MODES = new Set([
   'openai_native',
@@ -153,10 +155,17 @@ function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEnt
     : undefined;
   const tokenBuckets = sanitizeUsageTokenBuckets(entry.tokenBuckets);
   const promptCache = sanitizeUsagePromptCacheTelemetry(entry.promptCache);
+  const upstreamProvider =
+    typeof entry.upstreamProvider === 'string' &&
+    entry.upstreamProvider.trim().length > 0 &&
+    entry.upstreamProvider.length <= MAX_PERSISTED_UPSTREAM_PROVIDER_CHARS
+      ? entry.upstreamProvider.trim()
+      : undefined;
 
   return {
     model: entry.model,
     ...(entry.providerId ? { providerId: entry.providerId } : {}),
+    ...(upstreamProvider ? { upstreamProvider } : {}),
     ...(entry.source ? { source: entry.source } : {}),
     ...(entry.modality ? { modality: entry.modality } : {}),
     ...(entry.toolCallId ? { toolCallId: entry.toolCallId } : {}),

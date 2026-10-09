@@ -204,11 +204,17 @@ describe('foreground run orchestrator callbacks', () => {
       tokenBuckets,
       promptCache,
       tokenDetails,
+      upstreamProvider: 'DigitalOcean',
     } as never);
 
     expect(usageSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        usage: expect.objectContaining({ tokenBuckets, promptCache, tokenDetails }),
+        usage: expect.objectContaining({
+          tokenBuckets,
+          promptCache,
+          tokenDetails,
+          upstreamProvider: 'DigitalOcean',
+        }),
       }),
     );
   });
@@ -232,6 +238,7 @@ describe('foreground run orchestrator callbacks', () => {
     expect('tokenBuckets' in recorded).toBe(false);
     expect('promptCache' in recorded).toBe(false);
     expect('tokenDetails' in recorded).toBe(false);
+    expect('upstreamProvider' in recorded).toBe(false);
   });
 
   it('suppresses streamed tokens while surfaced worker output is locked', () => {

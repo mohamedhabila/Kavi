@@ -4,6 +4,7 @@
 
 import type { TokenUsage } from '../../types/usage';
 import type {
+  E2EModelCallUsage,
   E2EPromptCachePrefixStability,
   E2EPromptCacheSummary,
   E2ETokenUsageSummary,
@@ -115,6 +116,20 @@ export function buildPromptCachePrefixStability(
   };
 }
 
+function toModelCallUsage(event: TokenUsage): E2EModelCallUsage {
+  const toolDigest = event.promptCache?.toolDeclarationDigest?.trim();
+  return {
+    inputTokens: event.inputTokens ?? 0,
+    outputTokens: event.outputTokens ?? 0,
+    cacheReadTokens: event.cacheReadTokens ?? 0,
+    ...(event.tokenBuckets
+      ? { toolDeclarationTokens: event.tokenBuckets.toolDeclarationTokens }
+      : {}),
+    ...(toolDigest ? { toolDeclarationDigest: toolDigest } : {}),
+    ...(event.upstreamProvider ? { upstreamProvider: event.upstreamProvider } : {}),
+  };
+}
+
 export function aggregateE2ETokenUsage(events: ReadonlyArray<TokenUsage>): E2ETokenUsageSummary {
   let inputTokens = 0;
   let outputTokens = 0;
@@ -150,5 +165,6 @@ export function aggregateE2ETokenUsage(events: ReadonlyArray<TokenUsage>): E2ETo
     eventCount: events.length,
     ...(sawTokenBuckets ? { tokenBuckets } : {}),
     ...(promptCache ? { promptCache } : {}),
+    calls: events.map(toModelCallUsage),
   };
 }

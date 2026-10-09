@@ -238,6 +238,13 @@ function buildRubricSummary(
   };
 }
 
+function omitModelCallRows(
+  usage: E2EScenarioResult['usage'],
+): Omit<E2EScenarioResult['usage'], 'calls'> {
+  const { calls: _calls, ...reported } = usage;
+  return reported;
+}
+
 export function buildE2ERunReportScenarioEntry(params: {
   suite: string;
   result: E2EScenarioResult;
@@ -260,7 +267,7 @@ export function buildE2ERunReportScenarioEntry(params: {
     toolCallCount: params.result.toolCalls.length,
     turnCount: params.result.turnTraces?.length ?? params.result.userTurnCount,
     graphStatus: lastGraph?.status ?? null,
-    usage: params.result.usage,
+    usage: omitModelCallRows(params.result.usage),
     tokenBuckets: resolveUsageTokenBuckets(params.result.usage),
     cache: buildScenarioCacheSummary(params.result),
     ...(params.result.usage.promptCache ? { promptCache: params.result.usage.promptCache } : {}),
