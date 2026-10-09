@@ -1,7 +1,7 @@
 import { appForegroundRequestRegistry } from '../engine/graph/foregroundRun/requestRegistry';
-import { stopForegroundConversationRuns } from '../engine/graph/foregroundConversationCancellation';
 import { requestChatStorePersistenceCheckpoint } from '../store/chatStorePersistence';
 import { useChatStore } from '../store/useChatStore';
+import { stopConversationWork } from './conversationWorkStop';
 
 /**
  * Reconciles a notification Stop request with the same durable graph state used by the Chat UI.
@@ -24,27 +24,7 @@ export async function terminalizeAndroidLongHorizonConversation(
     return false;
   }
 
-  await stopForegroundConversationRuns({
-    abortForegroundRequestForConversation: (targetConversationId, reason) =>
-      appForegroundRequestRegistry.abortForConversation(targetConversationId, reason),
-    actions: {
-      appendConversationLog: (targetConversationId, entry) =>
-        useChatStore.getState().addConversationLog(targetConversationId, entry),
-      clearForegroundRequestForConversation: (targetConversationId) =>
-        appForegroundRequestRegistry.clearForConversation(targetConversationId),
-      clearPendingRunState: () => undefined,
-      completeAgentRun: (targetConversationId, effect, runId) =>
-        useChatStore.getState().completeAgentRun(targetConversationId, effect, runId),
-      getLatestConversation: (targetConversationId) =>
-        useChatStore
-          .getState()
-          .conversations.find((candidate) => candidate.id === targetConversationId),
-      updateAgentRunControlGraph: (targetConversationId, graph, runId) =>
-        useChatStore.getState().updateAgentRunControlGraph(targetConversationId, graph, runId),
-    },
-    conversation,
-    conversationId,
-  });
+  await stopConversationWork(conversation);
   requestChatStorePersistenceCheckpoint(0);
 
   const latestConversation = useChatStore
