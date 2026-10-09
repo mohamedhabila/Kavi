@@ -36,6 +36,7 @@ import {
 import {
   isExactMemoryRememberExecutionClaim,
   isExactMemoryRememberRequestEvidence,
+  listMemoryRememberUserStatements,
 } from './memoryRememberExecutionAuthority';
 import {
   resolveBoundMemoryRememberSemanticEvidence,
@@ -56,6 +57,8 @@ export interface MemoryRememberRequestEvidence {
   taskId: string | null;
   userMessageId: string;
   userMessageText: string;
+  /** The turn's earlier user messages (its request and earlier steers), oldest first. */
+  earlierUserMessages?: ReadonlyArray<Readonly<{ id: string; text: string }>>;
 }
 
 export interface MemoryRememberPersistenceContext {
@@ -207,11 +210,17 @@ export function persistMemoryRemember(
   const semanticProposal = semantic.proposal;
   const source = semantic.source;
   const evidenceSourceSha256 = source.sourceContentSha256;
+  // The quoted user message: the current one or an earlier message of the same turn.
+  const quotedStatement =
+    source.kind === 'current_user'
+      ? listMemoryRememberUserStatements(requestEvidence).find(
+          (statement) => statement.id === source.sourceMessageId,
+        )
+      : undefined;
   if (
     semanticProposal.sourceMessageId !== source.sourceMessageId ||
     (source.kind === 'current_user' &&
-      (source.sourceMessageId !== requestEvidence.userMessageId ||
-        evidenceSourceSha256 !== sha256HexUtf8(requestEvidence.userMessageText)))
+      (!quotedStatement || evidenceSourceSha256 !== sha256HexUtf8(quotedStatement.text)))
   ) {
     throw new Error('memory_remember_bound_evidence_changed');
   }
@@ -315,8 +324,8 @@ export function persistMemoryRemember(
       evidenceQuote: semantic.evidenceSpan,
     };
     const decision = evaluateGroundedReplacement(proposal, {
-      currentUserMessageId: requestEvidence.userMessageId,
-      currentUserMessage: requestEvidence.userMessageText,
+      currentUserMessageId: source.sourceMessageId,
+      currentUserMessage: quotedStatement?.text ?? '',
       memoryConversationId: resolutionContext.memoryConversationId,
       threadId: resolutionContext.sourceThreadId,
       taskId: resolutionContext.taskId,

@@ -74,6 +74,7 @@ import type { AuthorizedToolEffectExecutionClaim } from '../executionJournal/aut
 import {
   isExactMemoryRememberExecutionClaim,
   isExactMemoryRememberRequestEvidence,
+  listMemoryRememberUserStatements,
 } from './memoryRememberExecutionAuthority';
 import { bindMemoryRememberSemanticEvidence } from './memoryRememberSemanticEvidence';
 import { preservedSourceProviderText } from './preservedSourceRecord';
@@ -580,7 +581,9 @@ export function executeMemoryRemember(
   if (typeof suppliedPredicate === 'string') {
     const userSuppliedPredicateIdentity = findUserSuppliedPredicateIdentity({
       predicate: suppliedPredicate,
-      userMessageText: context.requestEvidence.userMessageText,
+      userMessageText: listMemoryRememberUserStatements(context.requestEvidence)
+        .map((statement) => statement.text)
+        .join('\n'),
     });
     if (userSuppliedPredicateIdentity) {
       return err(

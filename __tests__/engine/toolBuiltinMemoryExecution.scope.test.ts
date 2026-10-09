@@ -123,6 +123,37 @@ describe('builtin memory execution scope', () => {
     expect(providerArgs).not.toHaveProperty('sourceRunId');
   });
 
+  it('lets a memory write quote earlier user messages of a steered turn', async () => {
+    const executionClaim = Object.freeze({
+      executionRunId: 'execution-remember-steered',
+      toolCallId: 'tool-call-remember-steered',
+      claimedAt: 2_000_000_000_000,
+    });
+
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      authorizedEffectExecutionClaim: executionClaim,
+      context: {
+        ...BASE_PARAMS.context,
+        currentUserMessage: {
+          id: 'steer',
+          text: 'Book it for Friday.',
+          earlierInTurn: [{ id: 'request', text: 'Plan dinner. Amira is vegetarian.' }],
+        },
+        agentRunId: 'agent-run-remember',
+      },
+      name: 'memory_remember',
+      args: { semanticEvidence: {} },
+    });
+
+    expect(mockExecuteMemoryRemember.mock.calls[0]?.[1].requestEvidence).toEqual(
+      expect.objectContaining({
+        userMessageId: 'steer',
+        earlierUserMessages: [{ id: 'request', text: 'Plan dinner. Amira is vegetarian.' }],
+      }),
+    );
+  });
+
   it('copies source authority from the current turn instead of provider arguments', async () => {
     const executionClaim = Object.freeze({
       executionRunId: 'execution-preserve-source',

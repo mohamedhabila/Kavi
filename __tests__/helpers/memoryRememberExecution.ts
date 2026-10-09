@@ -22,6 +22,7 @@ export function memoryRememberExecution(input: {
   taskId?: string | null;
   userMessageId: string;
   userMessageText: string;
+  earlierUserMessages?: ReadonlyArray<{ id: string; text: string }>;
   executionRunId?: string;
   toolCallId?: string;
   claimedAt?: number;
@@ -51,6 +52,7 @@ export function memoryRememberExecution(input: {
       taskId: input.taskId ?? null,
       userMessageId: input.userMessageId,
       userMessageText: input.userMessageText,
+      ...(input.earlierUserMessages ? { earlierUserMessages: input.earlierUserMessages } : {}),
     },
     ...(input.toolObservedEvidence?.length
       ? { toolObservedEvidence: input.toolObservedEvidence }

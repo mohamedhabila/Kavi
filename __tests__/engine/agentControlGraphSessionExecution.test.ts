@@ -453,6 +453,7 @@ describe('agentControlGraphSessionExecution', () => {
       expect(second!.toolRuntime.currentUserMessage).toEqual({
         id: 'steer',
         text: 'Make it vegetarian.',
+        earlierInTurn: [{ id: 'request', text: 'Plan a dinner.' }],
       });
       expect(second!.toolRuntime.toolCallHistory).toBe(params.toolRuntime.toolCallHistory);
       expect(params.graph.recordObservability).toHaveBeenCalledWith({

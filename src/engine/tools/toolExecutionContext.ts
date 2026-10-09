@@ -9,6 +9,11 @@ import type { MobileControllerExecutionBinding } from '../mobileController/runti
 export interface CodeOwnedCurrentUserMessage {
   id: string;
   text: string;
+  /**
+   * The turn's user messages before this one, oldest first: its request and any message
+   * that steered the run before the current one. Absent when this message opened the turn.
+   */
+  earlierInTurn?: ReadonlyArray<Readonly<{ id: string; text: string }>>;
 }
 
 export interface ToolExecutionContext {

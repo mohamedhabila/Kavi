@@ -20,6 +20,13 @@ export function deliverSteeringMessages(params: {
   const latest = steering.at(-1);
   if (!latest) return { runtime: params.runtime, toolRuntime: params.toolRuntime };
   params.recordDelivery(steering.length);
+  // Everything the person said earlier in this turn stays quotable for memory writes.
+  const previous = params.toolRuntime.currentUserMessage;
+  const earlierInTurn = [
+    ...(previous?.earlierInTurn ?? []),
+    ...(previous ? [{ id: previous.id, text: previous.text }] : []),
+    ...steering.slice(0, -1).map((message) => ({ id: message.id, text: message.content })),
+  ];
   return {
     runtime: {
       ...params.runtime,
@@ -27,7 +34,11 @@ export function deliverSteeringMessages(params: {
     },
     toolRuntime: {
       ...params.toolRuntime,
-      currentUserMessage: { id: latest.id, text: latest.content },
+      currentUserMessage: {
+        id: latest.id,
+        text: latest.content,
+        ...(earlierInTurn.length > 0 ? { earlierInTurn } : {}),
+      },
     },
   };
 }

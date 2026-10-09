@@ -149,6 +149,14 @@ function buildMemoryWriteExecutionContext(
       taskId,
       userMessageId: currentUserMessage.id,
       userMessageText: currentUserMessage.text,
+      ...(currentUserMessage.earlierInTurn?.length
+        ? {
+            earlierUserMessages: currentUserMessage.earlierInTurn.map(({ id, text }) => ({
+              id,
+              text,
+            })),
+          }
+        : {}),
     },
     ...(context?.toolObservedMemoryEvidence?.length
       ? { toolObservedEvidence: context.toolObservedMemoryEvidence }

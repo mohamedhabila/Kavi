@@ -1,5 +1,6 @@
 import type { EntityType } from './entities';
 import type { MemoryRememberRequestEvidence } from './memoryRememberPersistence';
+import { listMemoryRememberUserStatements } from './memoryRememberExecutionAuthority';
 import { sha256HexUtf8 } from '../../utils/sha256';
 import type { SemanticFactProposalV1, SemanticFactSubjectRef } from './semanticFactProposal';
 import { decodeMemoryRememberSemanticContract } from './memoryRememberSemanticContract';
@@ -65,24 +66,27 @@ export function bindMemoryRememberSemanticEvidence(
   }
   const { proposal: decoded, subjectType } = contract.decoded;
   if (decoded.assertionClass === 'current_direct') {
-    const grounding = deriveExactEvidenceSpan(
-      decoded.subjectRef,
-      decoded.value,
-      request.userMessageText,
-    );
-    if (grounding.valid) {
-      return bindEvidence({
-        proposal: decoded,
-        subjectType,
-        evidenceSpan: grounding.evidenceSpan,
-        source: {
-          kind: 'current_user',
-          sourceMessageId: request.userMessageId,
-          sourceContentSha256: sha256HexUtf8(request.userMessageText),
-        },
-      });
+    // The latest message first, then the turn's earlier ones: a fact stated in the request
+    // can still be remembered after the person steered the run with another message.
+    let firstFailure: Exclude<ReturnType<typeof deriveExactEvidenceSpan>, { valid: true }> | null =
+      null;
+    for (const statement of listMemoryRememberUserStatements(request)) {
+      const grounding = deriveExactEvidenceSpan(decoded.subjectRef, decoded.value, statement.text);
+      if (grounding.valid) {
+        return bindEvidence({
+          proposal: { ...decoded, sourceMessageId: statement.id },
+          subjectType,
+          evidenceSpan: grounding.evidenceSpan,
+          source: {
+            kind: 'current_user',
+            sourceMessageId: statement.id,
+            sourceContentSha256: sha256HexUtf8(statement.text),
+          },
+        });
+      }
+      firstFailure ??= grounding;
     }
-    return grounding;
+    return firstFailure!;
   }
   if (decoded.assertionClass !== 'quoted') {
     return { valid: false, code: 'non_current_assertion' };
