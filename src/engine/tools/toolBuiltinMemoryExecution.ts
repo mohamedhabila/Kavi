@@ -18,7 +18,7 @@ import type {
 } from '../../services/memory/memoryTools';
 import type { MemoryPreserveSourceArgs } from '../../services/memory/memoryPreserveSource';
 import { resolveLocalMemoryAccessScope } from '../../services/memory/memoryScopeStore';
-import { createExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
+import { issueExplicitMemoryRecallGrant } from '../../services/memory/explicitMemoryRecallGrant';
 import type { BuiltinToolExecutionParams } from './toolBuiltinExecutionTypes';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import type { AuthorizedToolEffectExecutionClaim } from '../../services/executionJournal/authorizedToolEffectExecutionClaim';
@@ -86,10 +86,10 @@ function withRecallExecutionContext(
   const executionRunId = context?.executionRunId;
   const toolCallId = context?.toolCallId;
   if (!currentUserMessage || !executionRunId || !toolCallId) return execution;
-  const explicitRequestEvidence =
+  const recallArgs =
     args && typeof args === 'object' && !Array.isArray(args)
-      ? (args as { explicitRequestEvidence?: unknown }).explicitRequestEvidence
-      : undefined;
+      ? (args as Record<string, unknown>)
+      : {};
 
   const requestIdentity = {
     currentUserMessageId: currentUserMessage.id,
@@ -98,10 +98,23 @@ function withRecallExecutionContext(
     toolCallId,
     agentRunId: context?.agentRunId ?? null,
   };
+  // The simple form names only the words that ask; everything else is code-owned. The
+  // typed object stays accepted for callers that fill every field.
+  const evidence =
+    recallArgs.relation_quote !== undefined
+      ? {
+          relationQuote: recallArgs.relation_quote,
+          requestedSubject: recallArgs.subject,
+          requestedPredicate: recallArgs.predicate,
+        }
+      : recallArgs.explicitRequestEvidence !== undefined
+        ? { explicitRequestEvidence: recallArgs.explicitRequestEvidence }
+        : null;
+  if (!evidence) return { ...execution, requestIdentity };
   try {
-    const explicitUserRequestGrant = createExplicitMemoryRecallGrant({
+    const issued = issueExplicitMemoryRecallGrant({
       ...requestIdentity,
-      explicitRequestEvidence,
+      ...evidence,
       scope: resolveLocalMemoryAccessScope({
         memoryConversationId: execution.memoryConversationId,
         sourceThreadId: execution.sourceThreadId,
@@ -112,7 +125,9 @@ function withRecallExecutionContext(
     return {
       ...execution,
       requestIdentity,
-      ...(explicitUserRequestGrant ? { explicitUserRequestGrant } : {}),
+      ...('grant' in issued
+        ? { explicitUserRequestGrant: issued.grant }
+        : { explicitUserRequestGrantFailure: issued.failure }),
     };
   } catch {
     return execution;

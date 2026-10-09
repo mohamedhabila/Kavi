@@ -1,4 +1,5 @@
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { CANONICAL_SELF_MEMORY_SUBJECT } from './memorySubjectIdentity';
 import {
   requireMemoryAccessScopeIdentity,
   type RequiredMemoryAccessScopeIdentity,
@@ -23,15 +24,48 @@ interface ExplicitMemoryRecallGrantBinding {
   replayIdentity: string;
 }
 
-export interface ExplicitMemoryRecallGrantRequest {
+type ExplicitMemoryRecallGrantIdentity = {
   currentUserMessageId: string;
   currentUserMessageText: string;
   executionRunId: string;
   toolCallId: string;
   agentRunId: string | null;
   scope: RequiredMemoryAccessScopeIdentity;
-  explicitRequestEvidence: unknown;
-}
+};
+
+/**
+ * Evidence that the person's current message asks for one sensitive subject and
+ * predicate: either the typed object a provider fills in, or just the words of the
+ * message that ask for the relation, with everything else taken from code-owned values.
+ */
+export type ExplicitMemoryRecallGrantRequest = ExplicitMemoryRecallGrantIdentity &
+  (
+    | { explicitRequestEvidence: unknown }
+    | { relationQuote: unknown; requestedSubject: unknown; requestedPredicate: unknown }
+  );
+
+/** Why a request could not authorize sensitive recall; returned to the caller to correct. */
+export type ExplicitMemoryRecallGrantFailure =
+  | 'request_identity_invalid'
+  | 'evidence_malformed'
+  | 'subject_missing'
+  | 'predicate_missing'
+  | 'relation_quote_missing'
+  | 'source_message_mismatch'
+  | 'evidence_quote_not_in_message'
+  | 'subject_quote_mismatch'
+  | 'subject_not_in_message'
+  | 'relation_quote_not_in_message'
+  | 'already_used';
+
+type NormalizedRecallEvidence = {
+  sourceMessageId: unknown;
+  evidenceQuote: string;
+  subject: { kind: 'self' } | { kind: 'named'; label: string };
+  subjectQuote: string | null;
+  predicate: string;
+  relationQuote: string;
+};
 
 export interface ExplicitMemoryRecallGrantValidation {
   grant: ExplicitMemoryRecallGrant | undefined;
@@ -64,21 +98,35 @@ const MAX_CONSUMED_REPLAY_IDENTITIES = 4_096;
 export function createExplicitMemoryRecallGrant(
   request: ExplicitMemoryRecallGrantRequest,
 ): ExplicitMemoryRecallGrant | null {
+  const issued = issueExplicitMemoryRecallGrant(request);
+  return 'grant' in issued ? issued.grant : null;
+}
+
+/** Issue one-use sensitive-recall authority, or say exactly why the request does not grant it. */
+export function issueExplicitMemoryRecallGrant(
+  request: ExplicitMemoryRecallGrantRequest,
+): { grant: ExplicitMemoryRecallGrant } | { failure: ExplicitMemoryRecallGrantFailure } {
   try {
     if (
       !isExactMemoryProvenanceId(request.currentUserMessageId) ||
+      typeof request.currentUserMessageText !== 'string' ||
       !isExactMemoryProvenanceId(request.executionRunId) ||
       !isExactMemoryProvenanceId(request.toolCallId) ||
       !exactNullableProvenanceId(request.agentRunId)
     ) {
-      return null;
+      return { failure: 'request_identity_invalid' };
     }
-    const target = bindExplicitRequestEvidence(
-      request.explicitRequestEvidence,
+    const evidence =
+      'explicitRequestEvidence' in request
+        ? decodeTypedEvidence(request.explicitRequestEvidence)
+        : buildCodeOwnedEvidence(request);
+    if ('failure' in evidence) return evidence;
+    const target = bindRequestEvidence(
+      evidence,
       request.currentUserMessageId,
       request.currentUserMessageText,
     );
-    if (!target) return null;
+    if ('failure' in target) return target;
     const scope = requireMemoryAccessScopeIdentity(request.scope);
     const replayIdentity = JSON.stringify([
       request.executionRunId,
@@ -94,7 +142,7 @@ export function createExplicitMemoryRecallGrant(
       issuedReplayIdentities.has(replayIdentity) ||
       consumedReplayIdentities.has(replayIdentity)
     ) {
-      return null;
+      return { failure: 'already_used' };
     }
     const grant = Object.freeze({ kind: 'explicit_memory_recall_grant' as const });
     grantBindings.set(grant, {
@@ -109,9 +157,9 @@ export function createExplicitMemoryRecallGrant(
       replayIdentity,
     });
     issuedReplayIdentities.add(replayIdentity);
-    return grant;
+    return { grant };
   } catch {
-    return null;
+    return { failure: 'request_identity_invalid' };
   }
 }
 
@@ -154,38 +202,91 @@ export function resetExplicitMemoryRecallGrantStateForTests(): void {
   consumedReplayIdentityOrder.splice(0);
 }
 
-function bindExplicitRequestEvidence(
+/** The typed object a provider fills in; every field must be present and exact. */
+function decodeTypedEvidence(
   raw: unknown,
-  currentUserMessageId: string,
-  currentUserMessageText: string,
-): Readonly<{ subject: string; predicate: string }> | null {
-  if (!isPlainRecord(raw) || !hasExactFields(raw, EVIDENCE_FIELDS)) return null;
-  if (raw.version !== EXPLICIT_MEMORY_RECALL_EVIDENCE_VERSION) return null;
-  if (raw.source_message_id !== currentUserMessageId) return null;
+): NormalizedRecallEvidence | { failure: ExplicitMemoryRecallGrantFailure } {
+  if (!isPlainRecord(raw) || !hasExactFields(raw, EVIDENCE_FIELDS)) {
+    return { failure: 'evidence_malformed' };
+  }
+  if (raw.version !== EXPLICIT_MEMORY_RECALL_EVIDENCE_VERSION) {
+    return { failure: 'evidence_malformed' };
+  }
   const evidenceQuote = exactString(raw.evidence_quote, 600);
   const predicate = exactString(raw.predicate, 80);
   const subjectQuote = exactString(raw.subject_quote, 160);
   const relationQuote = exactString(raw.relation_quote, 200);
   const subject = decodeSubjectRef(raw.subject_ref);
-  if (
-    !evidenceQuote ||
-    !predicate ||
-    !subjectQuote ||
-    !relationQuote ||
-    !subject ||
-    !currentUserMessageText.includes(evidenceQuote)
-  ) {
-    return null;
+  if (!evidenceQuote || !predicate || !subjectQuote || !relationQuote || !subject) {
+    return { failure: 'evidence_malformed' };
   }
-  if (!evidenceQuote.includes(subjectQuote) || !evidenceQuote.includes(relationQuote)) {
-    return null;
+  return {
+    sourceMessageId: raw.source_message_id,
+    evidenceQuote,
+    subject,
+    subjectQuote,
+    predicate,
+    relationQuote,
+  };
+}
+
+/**
+ * The simple form: the provider names only the words that ask for the relation. The
+ * message, its id, the subject and the predicate are the code-owned request and the
+ * recall's own filters, so nothing else has to be copied.
+ */
+function buildCodeOwnedEvidence(request: {
+  currentUserMessageId: string;
+  currentUserMessageText: string;
+  relationQuote: unknown;
+  requestedSubject: unknown;
+  requestedPredicate: unknown;
+}): NormalizedRecallEvidence | { failure: ExplicitMemoryRecallGrantFailure } {
+  const subjectLabel = exactString(request.requestedSubject, 80);
+  if (!subjectLabel) return { failure: 'subject_missing' };
+  const predicate = exactString(request.requestedPredicate, 80);
+  if (!predicate) return { failure: 'predicate_missing' };
+  const relationQuote = exactString(request.relationQuote, 200);
+  if (!relationQuote) return { failure: 'relation_quote_missing' };
+  const self = subjectLabel === CANONICAL_SELF_MEMORY_SUBJECT;
+  return {
+    sourceMessageId: request.currentUserMessageId,
+    evidenceQuote: request.currentUserMessageText,
+    subject: self ? { kind: 'self' } : { kind: 'named', label: subjectLabel },
+    // The person is the subject of their own message in any language; only a named
+    // subject has a label that must appear in it.
+    subjectQuote: self ? null : subjectLabel,
+    predicate,
+    relationQuote,
+  };
+}
+
+function bindRequestEvidence(
+  evidence: NormalizedRecallEvidence,
+  currentUserMessageId: string,
+  currentUserMessageText: string,
+):
+  | Readonly<{ subject: string; predicate: string }>
+  | { failure: ExplicitMemoryRecallGrantFailure } {
+  if (evidence.sourceMessageId !== currentUserMessageId) {
+    return { failure: 'source_message_mismatch' };
   }
-  if (subject.kind === 'named' && subjectQuote !== subject.label) {
-    return null;
+  if (!evidence.evidenceQuote || !currentUserMessageText.includes(evidence.evidenceQuote)) {
+    return { failure: 'evidence_quote_not_in_message' };
+  }
+  if (evidence.subject.kind === 'named' && evidence.subjectQuote !== evidence.subject.label) {
+    return { failure: 'subject_quote_mismatch' };
+  }
+  if (evidence.subjectQuote !== null && !evidence.evidenceQuote.includes(evidence.subjectQuote)) {
+    return { failure: 'subject_not_in_message' };
+  }
+  if (!evidence.evidenceQuote.includes(evidence.relationQuote)) {
+    return { failure: 'relation_quote_not_in_message' };
   }
   return Object.freeze({
-    subject: subject.kind === 'self' ? 'user' : subject.label,
-    predicate,
+    subject:
+      evidence.subject.kind === 'self' ? CANONICAL_SELF_MEMORY_SUBJECT : evidence.subject.label,
+    predicate: evidence.predicate,
   });
 }
 
