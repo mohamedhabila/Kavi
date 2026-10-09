@@ -1,7 +1,8 @@
 import type { Message } from '../../types/message';
+import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
-export type MemoryMessageIdentity = Pick<Message, 'id' | 'role'>;
+export type MemoryMessageIdentity = Pick<Message, 'id' | 'role' | 'steerOfRunId'>;
 
 export type UniqueMessageIdentityResolution<T extends MemoryMessageIdentity = Message> =
   | { status: 'resolved'; index: number; message: T }
@@ -82,7 +83,7 @@ export function resolvePriorUserMessageIdentity(
 
   for (let index = current.index - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message?.role !== 'user') continue;
+    if (!isTurnOpeningUserMessage(message)) continue;
     const prior = resolveUniqueMessageIdentity(messages, message.id);
     if (prior.status === 'invalid') {
       return {

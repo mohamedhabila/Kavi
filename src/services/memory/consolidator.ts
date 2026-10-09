@@ -206,10 +206,10 @@ Return STRICT JSON only — no prose, no markdown fences. Schema:
       "scope": "global" | "project" | "conversation" | "session" | "persona",
       "importance": 0.0,
       "confidence": 0.0,
-      "source_message_id": "exact id of the current user message",
+      "source_message_id": "exact id of the current user message that states the fact",
       "operation": "record" | "replace_current",
       "assertion_class": "current_direct" | "historical" | "hypothetical" | "quoted" | "third_party" | "uncertain",
-      "evidence_quote": "verbatim quote from the current user message",
+      "evidence_quote": "verbatim quote from that message",
       "sensitivity": "normal" | "personal" | "sensitive" | "restricted"
     }
   ],
@@ -230,9 +230,12 @@ Rules:
   Never propose facts sourced from assistant text or tool output.
 - Use subject_ref kind self only when the current user is the subject. For a
   named subject, copy label exactly from evidence_quote.
-- source_message_id must exactly equal the current user message id.
-- evidence_quote must be an exact substring of the current user message. value
-  must be an exact substring of evidence_quote.
+- The current user messages are the user's request and any message the user
+  sent while the assistant was still working on it, so a turn may have several.
+- source_message_id must exactly equal the id of the current user message that
+  states the fact.
+- evidence_quote must be an exact substring of that message. value must be an
+  exact substring of evidence_quote.
 - Use record for a newly asserted current fact. Use replace_current only when
   the current user directly states a new current value for an existing fact.
 - Classify history, hypotheticals, quotations, third-party claims, and

@@ -1,5 +1,6 @@
 import type { Message, MessageMemoryPublicationDisposition, ToolCall } from '../types/message';
 import { isExactMemoryProvenanceId } from '../services/memory/memoryProvenanceIdentity';
+import { findTurnOpeningUserIndex } from '../utils/steeringMessages';
 import {
   isEligibleMessageMemoryPublicationSource,
   normalizeMessageMemoryPublication,
@@ -42,10 +43,7 @@ function assertCompletePublicationFinal(messages: readonly Message[], finalIndex
 }
 
 function findTurnStartIndex(messages: readonly Message[], finalIndex: number): number {
-  for (let index = finalIndex - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'user') return index;
-  }
-  return 0;
+  return Math.max(findTurnOpeningUserIndex(messages, finalIndex), 0);
 }
 
 function getPublicationTurnMessageIds(

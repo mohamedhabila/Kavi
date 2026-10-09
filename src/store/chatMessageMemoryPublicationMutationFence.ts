@@ -1,5 +1,6 @@
 import type { Message } from '../types/message';
 import { normalizeMessageMemoryPublication } from '../utils/messageMemoryPublication';
+import { findTurnOpeningUserIndex } from '../utils/steeringMessages';
 import {
   areMemoryIngestionSnapshotRelevantFieldsEqual,
   getMemoryPublicationMutationLockedMessageIds,
@@ -29,13 +30,7 @@ function getPublicationSourceWindows(
       continue;
     }
 
-    let startIndex = 0;
-    for (let index = finalIndex - 1; index >= 0; index -= 1) {
-      if (messages[index]?.role === 'user') {
-        startIndex = index;
-        break;
-      }
-    }
+    const startIndex = Math.max(findTurnOpeningUserIndex(messages, finalIndex), 0);
     windows.push({
       finalId: final.id,
       disposition: publication.disposition,

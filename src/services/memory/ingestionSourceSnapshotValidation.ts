@@ -14,6 +14,7 @@ import {
   utf8IngestionSourceSnapshotByteLength,
 } from './ingestionSourceSnapshotProjection';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
+import { isSteeringUserMessage, isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 
 const MESSAGE_ROLES = new Set<Message['role']>(['system', 'user', 'assistant', 'tool']);
 const TOOL_CALL_STATUSES = new Set<ToolCall['status']>(
@@ -97,6 +98,7 @@ function validateMessage(
         'hasAttachments',
         'isError',
         'assistantMetadata',
+        'steerOfRunId',
       ],
     ) ||
     !isExactMemoryProvenanceId(value.id) ||
@@ -109,6 +111,8 @@ function validateMessage(
     (value.toolCallId !== undefined && !isExactMemoryProvenanceId(value.toolCallId)) ||
     (value.hasAttachments !== undefined && value.hasAttachments !== true) ||
     (value.isError !== undefined && value.isError !== true) ||
+    (value.steerOfRunId !== undefined &&
+      (value.role !== 'user' || !isExactMemoryProvenanceId(value.steerOfRunId))) ||
     (value.assistantMetadata !== undefined &&
       (value.role !== 'assistant' ||
         !validateAssistantMetadata(
@@ -200,9 +204,12 @@ export function validateIngestionSourceSnapshotPayload(
   ]);
   for (const candidate of messages) {
     const candidateId = isRecord(candidate) && typeof candidate.id === 'string' ? candidate.id : '';
-    const textLimit = anchorIds.has(candidateId)
-      ? truncation.anchorTextByteLimit
-      : truncation.supplementalTextByteLimit;
+    // A message that steered the run is part of the turn's request, so it is an anchor too.
+    const isSteering = isRecord(candidate) && candidate.steerOfRunId !== undefined;
+    const textLimit =
+      anchorIds.has(candidateId) || isSteering
+        ? truncation.anchorTextByteLimit
+        : truncation.supplementalTextByteLimit;
     if (!validateMessage(candidate, textLimit, limits) || ids.has(candidate.id)) return false;
     ids.add(candidate.id);
     totalToolCalls += candidate.toolCalls?.length ?? 0;
@@ -211,11 +218,13 @@ export function validateIngestionSourceSnapshotPayload(
   const first = messages[0] as IngestionSourceSnapshotMessage;
   const last = messages.at(-1) as IngestionSourceSnapshotMessage;
   const hasUnexpectedUser = messages.some(
-    (message, index) => message.role === 'user' && index !== 0,
+    (message, index) => index !== 0 && isTurnOpeningUserMessage(message),
   );
   if (
     (value.sourceStartMessageId !== null &&
-      (first.id !== value.sourceStartMessageId || first.role !== 'user')) ||
+      (first.id !== value.sourceStartMessageId ||
+        first.role !== 'user' ||
+        isSteeringUserMessage(first))) ||
     (value.sourceStartMessageId === null && messages.some((message) => message.role === 'user')) ||
     hasUnexpectedUser ||
     last.id !== value.sourceEndMessageId ||

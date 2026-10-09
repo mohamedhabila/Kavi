@@ -1,5 +1,10 @@
 import type { Message } from '../../types/message';
 import { hasTerminalAssistantCompletionMetadata } from '../../utils/assistantMessageMetadata';
+import {
+  findTurnOpeningUserIndex,
+  isSteeringUserMessage,
+  isTurnOpeningUserMessage,
+} from '../../utils/steeringMessages';
 import { resolveUniqueMessageIdentity } from './priorUserMessageIdentity';
 
 export type ExactClosedTurnFailureReason =
@@ -14,6 +19,8 @@ export type ExactClosedTurnResolution =
       status: 'resolved';
       assistant: Message;
       user: Message | undefined;
+      /** User messages that steered the turn's run after its request, in order. */
+      steeringUsers: Message[];
       sourceStartMessageId: string | null;
       sourceEndMessageId: string;
       priorUserMessageId: string | null;
@@ -42,13 +49,9 @@ export function resolveClosedTurnEndingAt(
     }
   }
 
-  let sourceUserIndex = -1;
-  for (let index = sourceEnd.index - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'user') {
-      sourceUserIndex = index;
-      break;
-    }
-  }
+  // A message that steered the run continues its turn: the turn, and so the memory
+  // source, opens at the request that started the run, not at the steering message.
+  const sourceUserIndex = findTurnOpeningUserIndex(messages, sourceEnd.index);
   const user = sourceUserIndex >= 0 ? messages[sourceUserIndex] : undefined;
   if (user && resolveUniqueMessageIdentity(messages, user.id).status === 'invalid') {
     return { status: 'invalid', reason: 'source_user_identity_invalid' };
@@ -57,7 +60,7 @@ export function resolveClosedTurnEndingAt(
   let priorUserMessageId: string | null = null;
   for (let index = sourceUserIndex - 1; index >= 0; index -= 1) {
     const candidate = messages[index];
-    if (candidate?.role !== 'user') continue;
+    if (!isTurnOpeningUserMessage(candidate)) continue;
     if (resolveUniqueMessageIdentity(messages, candidate.id).status === 'invalid') {
       return { status: 'invalid', reason: 'prior_user_identity_invalid' };
     }
@@ -69,6 +72,9 @@ export function resolveClosedTurnEndingAt(
     status: 'resolved',
     assistant: sourceEnd.message,
     user,
+    steeringUsers: messages
+      .slice(sourceUserIndex + 1, sourceEnd.index)
+      .filter((message) => isSteeringUserMessage(message)),
     sourceStartMessageId: user?.id ?? null,
     sourceEndMessageId: sourceEnd.message.id,
     priorUserMessageId,
@@ -104,7 +110,7 @@ function findLastUserBefore(
   if (!beforeId) return undefined;
   const index = messages.findIndex((message) => message.id === beforeId);
   for (let current = Math.max(index, 0); current >= 0; current -= 1) {
-    if (messages[current]?.role === 'user') return messages[current];
+    if (isTurnOpeningUserMessage(messages[current])) return messages[current];
   }
   return undefined;
 }

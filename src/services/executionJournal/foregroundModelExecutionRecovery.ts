@@ -6,6 +6,7 @@ import {
   mergeAssistantMessageMetadata,
 } from '../../utils/assistantMessageMetadata';
 import { generateId } from '../../utils/id';
+import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import { normalizeMessageMemoryPublication } from '../../utils/messageMemoryPublication';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
@@ -149,7 +150,8 @@ function assistantMessagesInRequestSlice(
   requestIndex: number,
 ): Message[] {
   const followingMessages = conversation.messages.slice(requestIndex + 1);
-  const nextUserOffset = followingMessages.findIndex((message) => message.role === 'user');
+  // Steering messages continue the request's turn; only a turn-opening message ends it.
+  const nextUserOffset = followingMessages.findIndex(isTurnOpeningUserMessage);
   const requestSlice =
     nextUserOffset < 0 ? followingMessages : followingMessages.slice(0, nextUserOffset);
   return requestSlice.filter((message) => message.role === 'assistant');

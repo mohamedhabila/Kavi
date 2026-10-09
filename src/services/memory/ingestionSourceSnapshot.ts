@@ -49,6 +49,8 @@ export interface IngestionSourceSnapshotMessage {
   hasAttachments?: true;
   isError?: true;
   assistantMetadata?: IngestionSourceSnapshotAssistantMetadata;
+  /** On a user message that steered the turn's run: that run's id (see `Message`). */
+  steerOfRunId?: string;
 }
 export interface IngestionSourceSnapshotTruncation {
   anchorTextByteLimit: number;

@@ -1,6 +1,7 @@
 import type { Message, MessageProviderReplay, ToolCall } from '../types/message';
 import type { SubAgentActivityEntry, SubAgentSnapshot } from '../types/subAgent';
 import { stripAttachmentPayload } from '../utils/messageAttachments';
+import { isSteeringUserMessage } from '../utils/steeringMessages';
 import {
   MAX_PERSISTED_ENRICHED_CONTENT_CHARS,
   MAX_PERSISTED_LIST_ITEMS,
@@ -250,6 +251,7 @@ export function sanitizeMessage(
     ...(assistantMetadata ? { assistantMetadata } : {}),
     ...(memoryPublication ? { memoryPublication } : {}),
     ...(message.effectId ? { effectId: message.effectId } : {}),
+    ...(isSteeringUserMessage(message) ? { steerOfRunId: message.steerOfRunId } : {}),
     ...(message.subAgentEvent
       ? {
           subAgentEvent: {

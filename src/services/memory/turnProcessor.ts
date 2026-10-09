@@ -238,7 +238,7 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (closedTurn.status === 'invalid') {
     return skippedProcessTurnResult(exactClosedTurnSkipReason(closedTurn.reason));
   }
-  const { user, assistant } = closedTurn;
+  const { user, assistant, steeringUsers } = closedTurn;
   if (!input.episodeAccess) {
     throw new Error('episode_access_policy_required');
   }
@@ -329,17 +329,14 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
     enriched = outcome.status === 'valid';
     const mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
-      userStatements: user
-        ? [
-            {
-              id: user.id,
-              content: user.content ?? '',
-              hasExplicitMemoryAuthority: hasSameSourceExplicitMemoryAuthority({
-                sourceMessageId: user.id,
-              }),
-            },
-          ]
-        : [],
+      // The request and every message that steered its run are the user's own words.
+      userStatements: [...(user ? [user] : []), ...steeringUsers].map((message) => ({
+        id: message.id,
+        content: message.content ?? '',
+        hasExplicitMemoryAuthority: hasSameSourceExplicitMemoryAuthority({
+          sourceMessageId: message.id,
+        }),
+      })),
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,

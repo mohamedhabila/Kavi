@@ -1,6 +1,7 @@
 import type { ModelProjectionOwner } from '../types/conversation';
 import type { Message } from '../types/message';
 import { hasSettledFinalAssistantMetadata } from '../utils/assistantMessageMetadata';
+import { findTurnOpeningUserIndex } from '../utils/steeringMessages';
 import { claimModelProjection, type ModelProjectionClaimResult } from './modelProjectionOwnership';
 import { useChatStore } from './useChatStore';
 
@@ -62,13 +63,8 @@ function hasUnsettledForeignTail(
   messages: readonly Message[],
   allowedRequestMessageId: string,
 ): boolean {
-  let lastUserIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role === 'user') {
-      lastUserIndex = index;
-      break;
-    }
-  }
+  // A steering message is part of the turn its run is projecting, not a newer turn.
+  const lastUserIndex = findTurnOpeningUserIndex(messages, messages.length);
   if (lastUserIndex < 0 || messages[lastUserIndex].id === allowedRequestMessageId) return false;
   const tail = messages.slice(lastUserIndex + 1);
   let terminalAssistantIndex = -1;

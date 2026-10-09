@@ -5,6 +5,7 @@ import {
 } from '../../utils/assistantMessageMetadata';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import { segmentGraphemes } from '../../utils/graphemes';
+import { isSteeringUserMessage, isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import {
   resolvePriorUserMessageIdentity,
   resolveUniqueMessageIdentity,
@@ -174,7 +175,7 @@ export function prepareIngestionSourceSnapshot(
     const sourceStart = resolveUniqueMessageIdentity(input.messages, input.sourceStartMessageId);
     if (
       sourceStart.status === 'invalid' ||
-      sourceStart.message.role !== 'user' ||
+      !isTurnOpeningUserMessage(sourceStart.message) ||
       sourceStart.index >= sourceEnd.index
     ) {
       fail('memory_ingestion_source_snapshot_source_start_unavailable');
@@ -182,10 +183,15 @@ export function prepareIngestionSourceSnapshot(
     sourceStartIndex = sourceStart.index;
   }
   const firstPossibleLaterUser = input.sourceStartMessageId === null ? 0 : sourceStartIndex + 1;
+  // Only a message steering the run may follow the turn's request inside its source.
   if (
     input.messages
       .slice(firstPossibleLaterUser, sourceEnd.index + 1)
-      .some((message) => message.role === 'user')
+      .some((message) =>
+        input.sourceStartMessageId === null
+          ? message.role === 'user'
+          : isTurnOpeningUserMessage(message),
+      )
   ) {
     fail('memory_ingestion_source_snapshot_order_invalid');
   }
@@ -205,7 +211,7 @@ export function prepareIngestionSourceSnapshot(
     const prior = resolveUniqueMessageIdentity(input.messages, input.priorUserMessageId);
     if (
       prior.status === 'invalid' ||
-      prior.message.role !== 'user' ||
+      !isTurnOpeningUserMessage(prior.message) ||
       prior.index >= sourceStartIndex
     ) {
       fail('memory_ingestion_source_snapshot_prior_user_unavailable');
@@ -234,12 +240,12 @@ export function prepareIngestionSourceSnapshot(
   }
   const graphGoalEvidence = evidenceInput.slice(-limits.graphGoalEvidenceEntries);
   const anchorMessageIds = new Set<string>([input.sourceEndMessageId]);
+  // Every user message of the turn is an anchor: its request and anything that steered it.
   for (let index = turnMessages.length - 1; index >= 0; index -= 1) {
     const message = turnMessages[index];
-    if (message?.role === 'user') {
-      anchorMessageIds.add(message.id);
-      break;
-    }
+    if (message?.role !== 'user') continue;
+    anchorMessageIds.add(message.id);
+    if (isTurnOpeningUserMessage(message)) break;
   }
   return {
     turnMessages,
@@ -316,7 +322,8 @@ function projectMessage(
   if (
     !isExactMemoryProvenanceId(message.id) ||
     !MESSAGE_ROLES.has(message.role) ||
-    typeof message.content !== 'string'
+    typeof message.content !== 'string' ||
+    (isSteeringUserMessage(message) && !isExactMemoryProvenanceId(message.steerOfRunId))
   ) {
     fail('memory_ingestion_source_snapshot_message_invalid');
   }
@@ -369,6 +376,7 @@ function projectMessage(
     fail('memory_ingestion_source_snapshot_message_invalid');
   }
   if (message.isError) projected.isError = true;
+  if (isSteeringUserMessage(message)) projected.steerOfRunId = message.steerOfRunId;
   const metadata = projectAssistantMetadata(message, limits);
   if (metadata) projected.assistantMetadata = metadata;
   return projected;

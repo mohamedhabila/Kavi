@@ -3,6 +3,7 @@ import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import type { SubAgentCompletionState, SubAgentSnapshot } from '../../../types/subAgent';
 import { hasCompleteFinalAssistantMetadata } from '../../../utils/assistantMessageMetadata';
+import { isSteeringUserMessage } from '../../../utils/steeringMessages';
 
 export type AgentRunMessageScope = {
   userMessageId: string;
@@ -95,6 +96,10 @@ export function getAgentRunMessageSlice(
   let acceptsClarificationResponse = false;
   for (let index = startIndex + 1; index < messages.length; index += 1) {
     const message = messages[index];
+    if (isSteeringUserMessage(message)) {
+      // The run read this message at its next step; its turn continues past it.
+      continue;
+    }
     if (message.role === 'user') {
       if (acceptsClarificationResponse) {
         acceptsClarificationResponse = false;

@@ -1,5 +1,6 @@
 import type { Conversation } from '../types/conversation';
 import type { Message } from '../types/message';
+import { isSteeringUserMessage } from '../utils/steeringMessages';
 
 type ExecutionProtectionConversation = Pick<
   Conversation,
@@ -8,13 +9,19 @@ type ExecutionProtectionConversation = Pick<
 
 /** Transcript rows required to prove and mutate active model/agent executions. */
 export function getProtectedExecutionMessageIds(
-  conversation: Pick<ExecutionProtectionConversation, 'agentRuns' | 'modelProjectionOwner'>,
+  conversation: ExecutionProtectionConversation,
 ): Set<string> {
   const protectedIds = new Set<string>();
   const projectionOwner = conversation.modelProjectionOwner;
   if (projectionOwner) {
     protectedIds.add(projectionOwner.requestMessageId);
     protectedIds.add(projectionOwner.assistantMessageId);
+    // The run has read the messages that steered it; they are part of its request.
+    for (const message of conversation.messages) {
+      if (isSteeringUserMessage(message) && message.steerOfRunId === projectionOwner.runId) {
+        protectedIds.add(message.id);
+      }
+    }
   }
 
   for (const run of conversation.agentRuns ?? []) {

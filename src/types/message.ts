@@ -153,4 +153,10 @@ export interface Message {
   compactionProvenance?: MessageCompactionProvenance;
   effectId?: 'confetti' | 'balloons' | 'spotlight';
   subAgentEvent?: SubAgentMessageEvent;
+  /**
+   * On a user message sent while a foreground run was already working: that run's id
+   * (its model projection owner's `runId`). The run read the message at its next step
+   * ("steering"), so it belongs to that run's turn instead of opening a new one.
+   */
+  steerOfRunId?: string;
 }
