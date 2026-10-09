@@ -14,6 +14,7 @@ import {
   parseToolEffectReceiptEvidence,
 } from '../goals/effectCompletionEvidence';
 import { isBlockingGoal, isCodeOwnedEffectCompletionGoal, type AgentGoal } from '../goals/types';
+import { isBlockingGoalClosedWithoutProof } from '../goals/goalProof';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 
 export function updateToolCallHistoryResult(params: {
@@ -54,17 +55,38 @@ export function collectCompletedBlockingGoalIds(
   );
 }
 
-export function hasNewlyCompletedBlockingGoal(params: {
-  before: ReadonlySet<string>;
-  after: ReadonlyArray<AgentGoal> | undefined;
-}): boolean {
-  return (params.after ?? []).some(
-    (goal) =>
-      isBlockingGoal(goal) &&
-      !isCodeOwnedEffectCompletionGoal(goal) &&
-      goal.status === 'completed' &&
-      !params.before.has(goal.id),
-  );
+export type PostToolGoalRoute = {
+  hasActivePersistentGoal: boolean;
+  hasCompletedBlockingGoal: boolean;
+  hasIncompleteBlockingGoal: boolean;
+};
+
+/** What the goal list says about the route once a batch of tool results has landed. */
+export function summarizePostToolGoalRoute(params: {
+  completedBefore: ReadonlySet<string>;
+  goals: ReadonlyArray<AgentGoal>;
+}): PostToolGoalRoute {
+  return {
+    hasActivePersistentGoal: params.goals.some(
+      (goal) => goal.status === 'active' && !isBlockingGoal(goal),
+    ),
+    hasCompletedBlockingGoal: params.goals.some(
+      (goal) =>
+        isBlockingGoal(goal) &&
+        !isCodeOwnedEffectCompletionGoal(goal) &&
+        goal.status === 'completed' &&
+        !params.completedBefore.has(goal.id),
+    ),
+    // A goal closed without the evidence its criteria require is not finished work: its
+    // result tells the model to prove it, correct its criteria, or say what is
+    // unconfirmed, and the route must keep the tools that make the first two reachable
+    // rather than forcing a text-only turn the way a proven close does.
+    hasIncompleteBlockingGoal: params.goals.some(
+      (goal) =>
+        (isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending')) ||
+        isBlockingGoalClosedWithoutProof(goal),
+    ),
+  };
 }
 
 export function buildTerminalFailedEffectGuardRemovalEvent(params: {

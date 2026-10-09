@@ -17,7 +17,6 @@ import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameN
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
 import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
-import { isBlockingGoal } from '../goals/types';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import { collectDelegatedArtifactEvidence } from './delegatedToolEvidence';
 import {
@@ -48,7 +47,7 @@ import {
   buildClarificationRequestUnderstanding,
   buildTerminalFailedEffectGuardRemovalEvent,
   collectCompletedBlockingGoalIds,
-  hasNewlyCompletedBlockingGoal,
+  summarizePostToolGoalRoute,
   updateToolCallHistoryResult,
 } from './toolExecutionOutcomeResolutionSupport';
 import {
@@ -381,9 +380,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     }
 
     if (toolResultCanAdvanceWorkflow) {
-      const evidenceRoutableGoals = (params.getGraphSnapshot().goals ?? []).filter(
-        (goal) => goal.status === 'active' || goal.status === 'blocked',
-      );
+      // The router owns which goals may receive evidence — focused goals, declared pending
+      // goals, and closes that still lack their proof. Pre-filtering here to active and
+      // blocked goals silently disabled the latter two.
+      const evidenceRoutableGoals = params.getGraphSnapshot().goals ?? [];
       // Delegated artifacts route on both paths: the delegation branch is exactly the
       // case that produces them, so excluding them there would drop the only evidence a
       // supervisor goal can close its artifact criterion on.
@@ -614,17 +614,10 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     );
   }
 
-  const latestGoals = params.getGraphSnapshot().goals ?? [];
-  const hasActivePersistentGoal = latestGoals.some(
-    (goal) => goal.status === 'active' && !isBlockingGoal(goal),
-  );
-  const hasCompletedBlockingGoal = hasNewlyCompletedBlockingGoal({
-    before: completedBlockingGoalIdsBeforeTools,
-    after: latestGoals,
+  const goalRoute = summarizePostToolGoalRoute({
+    completedBefore: completedBlockingGoalIdsBeforeTools,
+    goals: params.getGraphSnapshot().goals ?? [],
   });
-  const hasIncompleteBlockingGoal = latestGoals.some(
-    (goal) => isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'pending'),
-  );
 
   return finalizeAgentControlGraphToolExecutionOutcomes({
     iteration: params.iteration,
@@ -654,9 +647,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       params.executableToolCalls.some((toolCall) =>
         params.pendingAsyncMonitorToolNames.has(normalizeToolName(toolCall.name)),
       ),
-    hasActivePersistentGoal,
-    hasCompletedBlockingGoal,
-    hasIncompleteBlockingGoal,
+    ...goalRoute,
     workingMessages,
   });
 }

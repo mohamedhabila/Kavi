@@ -7,6 +7,7 @@ import {
   parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
 import { isDelegationOwnedGoal } from './delegation';
+import { isBlockingGoalClosedWithoutProof } from './goalProof';
 import { isCodeOwnedEffectCompletionGoal, type AgentGoal } from './types';
 
 export type RoutedGoalEvidence = {
@@ -215,13 +216,23 @@ export function routeToolEvidenceToActiveGoals(params: {
   const declaredPendingGoals = params.goals.filter(
     (goal) => goal.status === 'pending' && !isDelegationOwnedGoal(goal),
   );
+  /**
+   * A blocking goal the model closed before its criteria held still needs that proof, and
+   * its result tells the model to produce it. Routing only to open goals made that move
+   * unreachable: the re-run's evidence landed nowhere, the close stayed unproven, and the
+   * run spent its remaining steps on work that could not count. Like a pending goal, it
+   * receives only evidence its own criteria name.
+   */
+  const unprovenClosedGoals = params.goals.filter(
+    (goal) => isBlockingGoalClosedWithoutProof(goal) && !isDelegationOwnedGoal(goal),
+  );
   const modelDeclaredGoalCount = focusedGoals.filter(
     (goal) => !isCodeOwnedEffectCompletionGoal(goal),
   ).length;
   const routed: RoutedGoalEvidence[] = [];
   const seen = new Set<string>();
 
-  for (const goal of [...focusedGoals, ...declaredPendingGoals]) {
+  for (const goal of [...focusedGoals, ...declaredPendingGoals, ...unprovenClosedGoals]) {
     for (const evidence of params.evidenceStrings) {
       if (
         !routeEvidenceToGoal({
@@ -229,7 +240,7 @@ export function routeToolEvidenceToActiveGoals(params: {
           activeGoalCount: modelDeclaredGoalCount,
           toolDefinition,
           evidence,
-          allowUnnamedEvidence: goal.status !== 'pending',
+          allowUnnamedEvidence: goal.status === 'active' || goal.status === 'blocked',
         })
       ) {
         continue;
