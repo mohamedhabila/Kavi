@@ -8,6 +8,7 @@ import { LlmService } from '../llm/LlmService';
 import { extractResponseTokenUsage } from '../usage/conversationUsage';
 import { createLogger } from '../../utils/logger';
 import { normalizeFinalizationOutputText } from './finalizationText';
+import { resolveHelperReasoningEffort } from '../llm/support/reasoningEffortResolution';
 
 const logger = createLogger('SubAgentFinalization');
 
@@ -148,13 +149,14 @@ export async function synthesizeSubAgentFinalAnswer(params: {
     params.reportUsage(latestUsage);
   };
 
+  const reasoningEffort = resolveHelperReasoningEffort(params.provider, params.model);
   try {
     const llm = new LlmService(params.provider);
     const response = await llm.sendMessage(requestMessages, {
       model: params.model,
       maxTokens: resolveFinalizationMaxTokens(params.model),
       signal: controller.signal,
-      reasoning_effort: 'none',
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       structuredOutput: SUB_AGENT_FINALIZATION_OUTPUT,
     });
     const usage = extractResponseTokenUsage(response, params.model);

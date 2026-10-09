@@ -53,6 +53,7 @@ import {
   MemoryPromptEpochExpiredError,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
+import { getDeclaredReasoningCapability } from '../../services/llm/support/reasoningEffortResolution';
 
 export type ExecuteAgentControlGraphModelTurnAttemptResult =
   | {
@@ -158,6 +159,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
   const budgetResult = preparedRequestBudget.budgetResult;
   const requestedThinkingParams = getThinkingParams(params.thinkingLevel, params.requestModel, {
     maxTokens: params.requestMaxTokens,
+    reasoningCapability: getDeclaredReasoningCapability(params.activeProvider, params.requestModel),
   });
   const anthropicToolLoopInProgress = anthropicTarget && toolLoopInProgress;
   const anthropicReplayableThinking =

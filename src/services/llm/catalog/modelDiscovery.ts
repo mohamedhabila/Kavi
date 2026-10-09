@@ -1,5 +1,5 @@
 import type { LlmProviderConfig } from '../../../types/provider';
-import type { ModelCapabilities } from '../../../types/tool';
+import type { ModelCapabilities, ModelReasoningCapability } from '../../../types/tool';
 import { inferModelCapabilities } from '../../../constants/api';
 import { createLogger } from '../../../utils/logger';
 import { getSelectableLocalLlmModels } from '../../localLlm/modelArtifacts';
@@ -40,6 +40,19 @@ function declaredStringArray(value: unknown): string[] | null {
     return null;
   }
   return value.map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * The reasoning controls a model entry declares (OpenRouter's `reasoning` object:
+ * `mandatory` plus `supported_efforts`). Anything malformed or partial is treated as
+ * undeclared, so a request falls back to the form every model accepts.
+ */
+function declaredReasoningCapability(value: unknown): ModelReasoningCapability | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  const supportedEfforts = declaredStringArray(candidate.supported_efforts);
+  if (typeof candidate.mandatory !== 'boolean' || !supportedEfforts?.length) return undefined;
+  return { mandatory: candidate.mandatory, supportedEfforts };
 }
 
 function resolveAnthropicModelCapabilities(entry: unknown, model: string): ModelCapabilities {
@@ -185,7 +198,11 @@ function anthropicFallbackModels(
       mergedCapabilities[model] = { vision: true, tools: true, fileInput: true };
     }
   }
-  return { models: [...ANTHROPIC_FALLBACK_MODELS], capabilities: mergedCapabilities, contextWindows };
+  return {
+    models: [...ANTHROPIC_FALLBACK_MODELS],
+    capabilities: mergedCapabilities,
+    contextWindows,
+  };
 }
 
 function resolveDiscoveredModelCapabilities(entry: unknown, model: string): ModelCapabilities {
@@ -200,11 +217,13 @@ function resolveDiscoveredModelCapabilities(entry: unknown, model: string): Mode
       : null;
   const inputModalities = declaredStringArray(architecture?.input_modalities);
   const supportedParameters = declaredStringArray(candidate.supported_parameters);
+  const reasoning = declaredReasoningCapability(candidate.reasoning);
 
   return {
     vision: inputModalities ? inputModalities.includes('image') : inferred.vision,
     tools: supportedParameters ? supportedParameters.includes('tools') : inferred.tools,
     fileInput: inputModalities ? inputModalities.includes('file') : inferred.fileInput,
+    ...(reasoning ? { reasoning } : {}),
   };
 }
 

@@ -12,7 +12,7 @@ import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
 import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
 import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
-import { buildE2EProvider, isE2EAgentEvalEnabled } from './providerConfig';
+import { buildE2EProviderWithDiscoveredCatalog, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
 import { resolveScenarioProviderOutcomeEvidenceRequirements } from './scenarioProviderOutcomeEvidence';
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
@@ -113,7 +113,7 @@ export async function runE2EScenario(
   resetAndVerifyE2EScenarioSandboxes();
   seedE2EWorkspaceSandbox(conversationId, scenario.initialWorkspaceFiles ?? []);
 
-  const provider = options.provider ?? buildE2EProvider();
+  const provider = options.provider ?? (await buildE2EProviderWithDiscoveredCatalog());
   const userTurns = resolveScenarioUserTurns(scenario);
   const scenarioTimeoutMs = options.scenarioTimeoutMs ?? resolveE2EScenarioTimeoutMs(scenario);
   const perTurnTimeoutMs =

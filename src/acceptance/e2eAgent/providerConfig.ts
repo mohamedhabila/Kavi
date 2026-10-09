@@ -10,6 +10,9 @@ import {
   finalizeProviderConfig,
 } from '../../constants/api';
 import type { LlmProviderConfig, LlmProviderFamily } from '../../types/provider';
+import { mergeDiscoveredModelCatalog } from '../../services/llm/catalog/providerCatalogSync';
+import { performLlmFetch } from '../../services/llm/core/fetchTransport';
+import { fetchLlmProviderModels } from '../../services/llm/modelService';
 
 export const DEFAULT_E2E_GEMINI_MODEL = 'gemini-3.5-flash';
 export const DEFAULT_E2E_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
@@ -186,4 +189,31 @@ export function buildE2EProviderForKey(key: E2EProviderKey): LlmProviderConfig {
 
 export function buildE2EProvider(): LlmProviderConfig {
   return buildE2EProviderForKey(resolveE2EProviderKey());
+}
+
+let discoveredE2EProvider: Promise<LlmProviderConfig> | null = null;
+
+/**
+ * The selected provider as the app holds it once its background model catalog sync
+ * has run (`providerCatalogSync.ts`): request building reads the model's declared
+ * capabilities from that catalog. Discovered once per process; a failed discovery
+ * leaves the provider as configured, exactly as it would on a device.
+ */
+export function buildE2EProviderWithDiscoveredCatalog(): Promise<LlmProviderConfig> {
+  discoveredE2EProvider ??= (async () => {
+    const provider = buildE2EProvider();
+    try {
+      const discovered = await fetchLlmProviderModels({ provider, performFetch: performLlmFetch });
+      return discovered.models.length > 0
+        ? mergeDiscoveredModelCatalog(provider, discovered)
+        : provider;
+    } catch (error: unknown) {
+      console.warn(
+        '[e2e] model catalog discovery failed; using the configured provider:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return provider;
+    }
+  })();
+  return discoveredE2EProvider;
 }

@@ -67,6 +67,7 @@ const MOCK_E2E_PROVIDER: LlmProviderConfig = {
 
 jest.mock('../../src/acceptance/e2eAgent/providerConfig', () => ({
   buildE2EProvider: () => ({ ...MOCK_E2E_PROVIDER }),
+  buildE2EProviderWithDiscoveredCatalog: async () => ({ ...MOCK_E2E_PROVIDER }),
   isE2EAgentEvalEnabled: () => process.env.RUN_E2E_AGENT_EVAL === '1',
 }));
 

@@ -11,6 +11,8 @@ import {
   supportsAdaptiveThinking,
 } from '../services/llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
+import type { ModelReasoningCapability } from '../types/tool';
+import { resolveThinkingLevelReasoningEffort } from '../services/llm/support/reasoningEffortResolution';
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -20,6 +22,8 @@ export interface ThinkingConfig {
 
 export interface ThinkingParamsOptions {
   maxTokens?: number;
+  /** Reasoning efforts the provider declares for this model, when discovery recorded them. */
+  reasoningCapability?: ModelReasoningCapability;
 }
 
 type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
@@ -194,6 +198,15 @@ export function getThinkingParams(
   const lower = normalizeModel(model);
   const hostedFamily = resolveModelHostedFamily(model);
 
+  // A model whose provider declares its reasoning efforts (OpenRouter) is driven by those
+  // declarations. The level maps to the nearest effort the model accepts, so `off` turns
+  // reasoning off where the model allows it and asks for its least deliberation where it
+  // does not — instead of leaving the model at its own default, which is often its highest.
+  if (options.reasoningCapability) {
+    const effort = resolveThinkingLevelReasoningEffort(options.reasoningCapability, level);
+    return effort ? { reasoning_effort: effort } : {};
+  }
+
   if (hostedFamily === 'gemini') {
     if (isGemini3Model(model)) {
       return {
@@ -215,7 +228,11 @@ export function getThinkingParams(
   // low effort instead of `{type:'disabled'}`, which 400s on claude-opus-5-5 at every
   // effort level and has documented failure modes (leaked tags, tool calls in text) on
   // claude-opus-5.
-  if ((level === 'off' || level === 'minimal') && hostedFamily === 'anthropic' && keepsThinkingOnWhenOmitted(model)) {
+  if (
+    (level === 'off' || level === 'minimal') &&
+    hostedFamily === 'anthropic' &&
+    keepsThinkingOnWhenOmitted(model)
+  ) {
     return {
       thinking: { type: 'adaptive' },
       output_config: { effort: 'low' },

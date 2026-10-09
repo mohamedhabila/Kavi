@@ -57,6 +57,7 @@ import { abortAllScheduledJobExecutions } from './scheduler/executionLifecycle';
 import { abortAllHookExecutions, registerHookExecution } from './hooks/executionLifecycle';
 import { generateId } from '../utils/id';
 import { initializeAndroidLongHorizonCancellationHandler } from './androidLongHorizonExecution';
+import { startActiveProviderModelCatalogSync } from './llm/catalog/providerCatalogSync';
 
 let initialized = false;
 let hookRegistrationPromise: Promise<void> | null = null;
@@ -243,6 +244,7 @@ function initializeDeferredStartupServices(): void {
     void runHydratedMemoryMaintenance(true).catch((e) =>
       console.warn('[startup] hydrated memory maintenance failed:', e),
     );
+    startActiveProviderModelCatalogSync();
   });
 }
 

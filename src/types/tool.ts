@@ -9,10 +9,23 @@ export type WebSearchProvider =
   | 'openai'
   | 'openrouter';
 
+/**
+ * Reasoning controls a provider declares for one model (OpenRouter publishes these on
+ * each entry of its models API). Absent when the provider declares nothing, so callers
+ * can tell "unknown" apart from "reasoning cannot be turned off".
+ */
+export interface ModelReasoningCapability {
+  /** Reasoning always runs; a request asking to turn it off is rejected. */
+  mandatory: boolean;
+  /** Effort levels the model accepts, exactly as the provider names them. */
+  supportedEfforts: string[];
+}
+
 export interface ModelCapabilities {
   vision: boolean;
   tools: boolean;
   fileInput: boolean;
+  reasoning?: ModelReasoningCapability;
 }
 
 export interface ToolDefinition {

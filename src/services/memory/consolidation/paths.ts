@@ -20,6 +20,7 @@ import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { resolveConversationModel, resolveProviderApiKey } from '../../llm/support/providerSupport';
 import { UnsupportedConsolidatorResponseError, type ConsolidatorExtractor } from '../consolidator';
 import { MEMORY_CONSOLIDATION_OUTPUT_SCHEMA } from './outputSchema';
+import { resolveHelperReasoningEffort } from '../../llm/support/reasoningEffortResolution';
 
 const MEMORY_EXTRACTOR_TIMEOUT_MS = 30_000;
 const MEMORY_EXTRACTOR_MAX_TOKENS = 4_096;
@@ -69,6 +70,7 @@ function buildProviderExtractor(
   model: string,
 ): ConsolidatorExtractor {
   const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
+  const reasoningEffort = resolveHelperReasoningEffort(provider, model);
   return async (
     prompt: string,
     externalSignal?: AbortSignal,
@@ -88,7 +90,7 @@ function buildProviderExtractor(
         model,
         maxTokens: MEMORY_EXTRACTOR_MAX_TOKENS,
         temperature: 0,
-        reasoning_effort: 'none',
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         structuredOutput: MEMORY_CONSOLIDATION_OUTPUT_SCHEMA,
         signal: controller.signal,
         requestDispatchGuard,

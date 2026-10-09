@@ -73,6 +73,17 @@ jest.mock('../../src/acceptance/e2eAgent/providerConfig', () => ({
     model: 'test-model',
     baseUrl: 'https://example.com',
   }),
+  buildE2EProviderWithDiscoveredCatalog: async () => ({
+    id: 'e2e-structural-provider',
+    name: 'E2E structural provider',
+    enabled: true,
+    kind: 'remote',
+    protocol: 'openai-chat',
+    providerFamily: 'custom',
+    apiKey: 'test-key',
+    model: 'test-model',
+    baseUrl: 'https://example.com',
+  }),
   isE2EAgentEvalEnabled: () => process.env.RUN_E2E_AGENT_EVAL === '1',
 }));
 

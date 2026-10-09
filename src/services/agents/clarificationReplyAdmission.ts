@@ -5,6 +5,7 @@ import type { TokenUsage } from '../../types/usage';
 import { LlmService } from '../llm/LlmService';
 import { extractResponseTokenUsage } from '../usage/conversationUsage';
 import { truncateGraphemesTo } from '../../utils/graphemes';
+import { resolveHelperReasoningEffort } from '../llm/support/reasoningEffortResolution';
 
 const CLARIFICATION_REPLY_ADMISSION_TIMEOUT_MS = 15_000;
 const CLARIFICATION_REPLY_ADMISSION_MAX_TOKENS = 256;
@@ -239,6 +240,7 @@ export async function admitPendingClarificationReply(params: {
     { role: 'user', content: payload },
   ];
   const linkedAbort = linkedAbortController(params.signal);
+  const reasoningEffort = resolveHelperReasoningEffort(params.provider, params.model);
   try {
     params.requestDispatchGuard?.();
     const llm = new LlmService(params.provider);
@@ -247,7 +249,7 @@ export async function admitPendingClarificationReply(params: {
       model: params.model,
       maxTokens: CLARIFICATION_REPLY_ADMISSION_MAX_TOKENS,
       temperature: 0,
-      reasoning_effort: 'none',
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       signal: linkedAbort.controller.signal,
       structuredOutput: admissionSchema(requiredInformationKeys),
       requestDispatchGuard: params.requestDispatchGuard,
@@ -278,7 +280,7 @@ export async function admitPendingClarificationReply(params: {
           model: params.model,
           maxTokens: CLARIFICATION_REPLY_ADMISSION_MAX_TOKENS,
           temperature: 0,
-          reasoning_effort: 'none',
+          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           signal: linkedAbort.controller.signal,
           structuredOutput: admissionSchema(
             requiredInformationKeys,

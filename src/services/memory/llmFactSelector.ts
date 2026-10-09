@@ -20,6 +20,7 @@ import {
   isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
   type MemoryAuthoritySnapshot,
 } from './memoryAuthority';
+import { resolveHelperReasoningEffort } from '../llm/support/reasoningEffortResolution';
 
 const logger = createLogger('memory.llmFactSelector');
 
@@ -444,6 +445,7 @@ export function createLlmMemoryFactSelector(
       throw new Error('memory_fact_selector_authority_revoked');
     }
   };
+  const reasoningEffort = resolveHelperReasoningEffort(provider, model);
 
   return async ({ query, limit, candidates }) => {
     if (!isSelectorAuthorityCurrent()) return { factIds: [] };
@@ -478,7 +480,7 @@ export function createLlmMemoryFactSelector(
           model,
           maxTokens: config.maxTokens ?? DEFAULT_SELECTOR_MAX_TOKENS,
           temperature: 0,
-          reasoning_effort: 'none',
+          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           signal: createTimeoutSignal(config.timeoutMs ?? DEFAULT_SELECTOR_TIMEOUT_MS),
           structuredOutput: SELECTION_SCHEMA,
           requestDispatchGuard: assertSelectorDispatchAuthorized,

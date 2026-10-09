@@ -105,6 +105,41 @@ describe('resolveConsolidationPath', () => {
     );
   });
 
+  it.each([
+    [
+      'asks a model that cannot turn reasoning off for its least deliberation',
+      { mandatory: true, supportedEfforts: ['max', 'high', 'low'] },
+      { reasoning_effort: 'low' },
+    ],
+    ['omits the control for an OpenRouter model that declares nothing', undefined, {}],
+  ])('%s', async (_label, reasoning, expectedControl) => {
+    // Regression: `reasoning_effort: 'none'` is rejected with a 400 by every OpenRouter
+    // model whose reasoning is mandatory, so each turn's extraction failed and retried.
+    mockSendMessage.mockResolvedValue({ choices: [{ message: { content: '{}' } }] });
+    const provider = makeProvider({
+      providerFamily: 'openrouter',
+      protocol: 'openai-chat',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'z-ai/glm-5.3-flash',
+      ...(reasoning
+        ? {
+            modelCapabilities: {
+              'z-ai/glm-5.3-flash': { vision: false, tools: true, fileInput: false, reasoning },
+            },
+          }
+        : {}),
+    });
+
+    const path = await resolveConsolidationPath(provider);
+    await path.extractor?.('consolidate this turn');
+
+    const options = mockSendMessage.mock.calls[0][1] as Record<string, unknown>;
+    expect(options).toEqual(expect.objectContaining(expectedControl));
+    if (!('reasoning_effort' in expectedControl)) {
+      expect(options).not.toHaveProperty('reasoning_effort');
+    }
+  });
+
   it('keeps the job-scoped model instead of substituting the current global model', async () => {
     const provider = makeProvider({ model: 'persisted-conversation-model' });
     useSettingsStore.setState({

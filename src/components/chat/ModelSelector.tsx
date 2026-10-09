@@ -25,6 +25,7 @@ import { getLocalLlmModelDisplayName } from '../../services/localLlm/catalog';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ModelCapabilities } from '../../types/tool';
 import { createModelSelectorStyles } from './ModelSelector.styles';
+import { mergeDiscoveredModelCatalog } from '../../services/llm/catalog/providerCatalogSync';
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -128,21 +129,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = React.memo(
           if (result.models.length > 0) {
             commit(() => {
               setModels((prev) => ({ ...prev, [provider.id]: result.models }));
-              updateProvider({
-                ...provider,
-                availableModels: result.models,
-                modelCapabilities: {
-                  ...(provider.modelCapabilities ?? {}),
-                  ...result.capabilities,
-                },
-                // Persisted so the window survives a relaunch: discovery only runs when
-                // this picker is opened, and getContextWindow otherwise falls back to a
-                // static table that defaults unlisted models to 128k.
-                modelContextWindows: {
-                  ...(provider.modelContextWindows ?? {}),
-                  ...result.contextWindows,
-                },
-              });
+              // Persisted so declarations survive a relaunch: getContextWindow otherwise
+              // falls back to a static table that defaults unlisted models to 128k, and
+              // request building reads each model's declared reasoning rules.
+              updateProvider(mergeDiscoveredModelCatalog(provider, result));
             });
           } else {
             const fallbackModels = getKnownProviderFallbackModels(provider);
