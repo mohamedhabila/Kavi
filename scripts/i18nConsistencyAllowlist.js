@@ -94,6 +94,7 @@ const GLOBAL_IDENTICAL_ALLOWLIST = new Set([
 const PER_LOCALE_COGNATE_VALUES = {
   de: new Set([
     'Name',
+    'Timer',
     'Audio',
     'Code',
     'Screenshot',
@@ -151,6 +152,7 @@ const PER_LOCALE_COGNATE_VALUES = {
     'Terminal',
   ]),
   'pt-BR': new Set([
+    'Timer',
     'Persona: {to}',
     'Chat',
     'Cache',
