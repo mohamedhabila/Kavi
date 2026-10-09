@@ -24,7 +24,13 @@ import { resolveHelperReasoningEffort } from '../llm/support/reasoningEffortReso
 
 const logger = createLogger('memory.llmFactSelector');
 
-const DEFAULT_SELECTOR_TIMEOUT_MS = 18_000;
+/**
+ * The selector runs before the user's request is sent, so its wait is the user's wait.
+ * Measured over 177 live selector calls (2026-10-09): median 0.9 s, p90 2.8 s, and a
+ * tail to the old 18 s ceiling. Five calls ran past 8 s; past this bound the turn uses
+ * the deterministic selection rather than holding the user's request.
+ */
+const DEFAULT_SELECTOR_TIMEOUT_MS = 8_000;
 const DEFAULT_SELECTOR_MAX_TOKENS = 1_024;
 const MAX_CANDIDATE_TEXT_CHARS = 1_800;
 const MAX_QUERY_CHARS = 2_000;
