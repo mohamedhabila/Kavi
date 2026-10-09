@@ -11,13 +11,20 @@ import { CANONICAL_SELF_MEMORY_SUBJECT } from './memorySubjectIdentity';
 import type { SemanticFactProposalV1 } from './semanticFactProposal';
 import { providerMemorySensitivityDeclaration } from './memorySensitivityPolicy';
 
+/** A code-owned user message of the current turn that a provider fact may cite. */
+export interface ProviderMergeUserStatement {
+  id: string;
+  content: string;
+  /** An explicit memory write already used this message; it outranks provider facts. */
+  hasExplicitMemoryAuthority: boolean;
+}
+
 export interface ProviderMergeContext {
-  currentUserMessageId?: string;
-  currentUserMessage: string;
+  /** The current turn's user messages a fact may be grounded in. */
+  userStatements: readonly ProviderMergeUserStatement[];
   memoryConversationId: string;
   threadId: string;
   taskId?: string;
-  sameSourceExplicitMemoryAuthority: boolean;
 }
 
 interface ResolvedProviderFact {
@@ -28,13 +35,10 @@ interface ResolvedProviderFact {
 /** Bind provider semantics to exact, code-owned current-user evidence. */
 function bindExactProposalEvidence(
   proposal: SemanticFactProposalV1,
-  context: ProviderMergeContext,
+  statement: ProviderMergeUserStatement,
 ): ConsolidatorFact | null {
   if (proposal.assertionClass !== 'current_direct') return null;
-  if (!context.currentUserMessageId || proposal.sourceMessageId !== context.currentUserMessageId) {
-    return null;
-  }
-  if (!context.currentUserMessage.includes(proposal.evidenceQuote)) return null;
+  if (!statement.content.includes(proposal.evidenceQuote)) return null;
   if (!proposal.evidenceQuote.includes(proposal.value)) return null;
   if (
     proposal.subjectRef.kind === 'named' &&
@@ -56,7 +60,7 @@ function bindExactProposalEvidence(
     sensitivityDeclaration: providerMemorySensitivityDeclaration(proposal.sensitivity),
     operation: 'replace_current',
     assertionClass: 'current_direct',
-    evidenceMessageIds: [context.currentUserMessageId],
+    evidenceMessageIds: [statement.id],
     evidenceQuote: proposal.evidenceQuote,
   };
 }
@@ -65,7 +69,9 @@ function resolveProviderFact(
   proposal: SemanticFactProposalV1,
   context: ProviderMergeContext,
 ): ResolvedProviderFact | null {
-  const fact = bindExactProposalEvidence(proposal, context);
+  const statement = context.userStatements.find(({ id }) => id === proposal.sourceMessageId);
+  if (!statement || statement.hasExplicitMemoryAuthority) return null;
+  const fact = bindExactProposalEvidence(proposal, statement);
   if (!fact) return null;
 
   const resolution = resolveCurrentFactsForReplacement(
@@ -77,7 +83,11 @@ function resolveProviderFact(
     },
   );
   const decision = evaluateGroundedReplacement(fact, {
-    ...context,
+    currentUserMessageId: statement.id,
+    currentUserMessage: statement.content,
+    memoryConversationId: context.memoryConversationId,
+    threadId: context.threadId,
+    taskId: context.taskId,
     currentFacts: resolution.currentFacts,
     hasAnyCurrentFact: resolution.hasAnyCurrentFact,
   });
@@ -134,12 +144,10 @@ export function mergeProviderIntoStructural(
     : structural.summaryKind;
   const seen = new Set(structural.facts.map(factKey));
   const structuralSubjectsAndPredicates = new Set(structural.facts.map(subjectPredicateKey));
-  const resolvedProviderFacts = context.sameSourceExplicitMemoryAuthority
-    ? []
-    : provider.newFacts.flatMap((proposal) => {
-        const resolved = resolveProviderFact(proposal, context);
-        return resolved ? [resolved] : [];
-      });
+  const resolvedProviderFacts = provider.newFacts.flatMap((proposal) => {
+    const resolved = resolveProviderFact(proposal, context);
+    return resolved ? [resolved] : [];
+  });
   const ambiguous = ambiguousReplacementKeys(resolvedProviderFacts);
   const mergedFacts = [...structural.facts];
 

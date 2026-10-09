@@ -463,11 +463,15 @@ async function seedClaimedConversation(
         { episodeSummary: '', summaryKind: 'structural_turn', facts: [] },
         outcome.result,
         {
-          currentUserMessageId: turn.userMessage.id,
-          currentUserMessage: turn.userMessage.content?.toString() ?? '',
+          userStatements: [
+            {
+              id: turn.userMessage.id,
+              content: turn.userMessage.content?.toString() ?? '',
+              hasExplicitMemoryAuthority: false,
+            },
+          ],
           memoryConversationId: conv.id,
           threadId: conv.id,
-          sameSourceExplicitMemoryAuthority: false,
         },
       );
       if (!input.dryRun) {

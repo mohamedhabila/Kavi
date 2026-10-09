@@ -44,11 +44,15 @@ function merge(
     { episodeSummary: 'structural', summaryKind: 'structural_turn', facts: [] },
     { ...EMPTY_PROVIDER_RESULT, newFacts: proposals },
     {
-      currentUserMessageId: 'user-current',
-      currentUserMessage,
+      userStatements: [
+        {
+          id: 'user-current',
+          content: currentUserMessage,
+          hasExplicitMemoryAuthority: sameSourceExplicitMemoryAuthority,
+        },
+      ],
       memoryConversationId: 'conversation-current',
       threadId: 'thread-current',
-      sameSourceExplicitMemoryAuthority,
     },
   );
 }
@@ -297,11 +301,15 @@ describe('passive provider fact reconciliation', () => {
       { episodeSummary: 'tool completed', summaryKind: 'structural_turn', facts: [structuralFact] },
       { ...EMPTY_PROVIDER_RESULT, newFacts: [proposal({ assertionClass: 'quoted' })] },
       {
-        currentUserMessageId: 'user-current',
-        currentUserMessage: 'My city is Rotterdam',
+        userStatements: [
+          {
+            id: 'user-current',
+            content: 'My city is Rotterdam',
+            hasExplicitMemoryAuthority: false,
+          },
+        ],
         memoryConversationId: 'conversation-current',
         threadId: 'thread-current',
-        sameSourceExplicitMemoryAuthority: false,
       },
     );
 
@@ -313,11 +321,15 @@ describe('passive provider fact reconciliation', () => {
       { episodeSummary: '{"kind":"structural_turn","version":1}', summaryKind: 'structural_turn', facts: [] },
       { ...EMPTY_PROVIDER_RESULT, episodeSummary: 'User confirmed the deploy window.', newFacts: [] },
       {
-        currentUserMessageId: 'user-current',
-        currentUserMessage: 'Ship it.',
+        userStatements: [
+          {
+            id: 'user-current',
+            content: 'Ship it.',
+            hasExplicitMemoryAuthority: false,
+          },
+        ],
         memoryConversationId: 'conversation-current',
         threadId: 'thread-current',
-        sameSourceExplicitMemoryAuthority: false,
       },
     );
     expect(result.summaryKind).toBe('narrative');
@@ -329,11 +341,15 @@ describe('passive provider fact reconciliation', () => {
       { episodeSummary: '{"kind":"structural_turn","version":1}', summaryKind: 'structural_turn', facts: [] },
       { ...EMPTY_PROVIDER_RESULT, episodeSummary: null, newFacts: [] },
       {
-        currentUserMessageId: 'user-current',
-        currentUserMessage: 'Ship it.',
+        userStatements: [
+          {
+            id: 'user-current',
+            content: 'Ship it.',
+            hasExplicitMemoryAuthority: false,
+          },
+        ],
         memoryConversationId: 'conversation-current',
         threadId: 'thread-current',
-        sameSourceExplicitMemoryAuthority: false,
       },
     );
     expect(result.summaryKind).toBe('structural_turn');

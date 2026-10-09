@@ -329,16 +329,20 @@ export async function processIngestionTurn(input: ProcessTurnInput): Promise<Pro
   if (outcome.status === 'valid' || outcome.status === 'empty_valid') {
     enriched = outcome.status === 'valid';
     const mergedResult = mergeProviderIntoStructural(structural, outcome.result, {
-      currentUserMessageId: user?.id,
-      currentUserMessage: user?.content ?? '',
+      userStatements: user
+        ? [
+            {
+              id: user.id,
+              content: user.content ?? '',
+              hasExplicitMemoryAuthority: hasSameSourceExplicitMemoryAuthority({
+                sourceMessageId: user.id,
+              }),
+            },
+          ]
+        : [],
       memoryConversationId,
       threadId: input.threadId,
       taskId: input.taskId,
-      sameSourceExplicitMemoryAuthority: user
-        ? hasSameSourceExplicitMemoryAuthority({
-            sourceMessageId: user.id,
-          })
-        : false,
     });
     providerResult = {
       ...mergedResult,
