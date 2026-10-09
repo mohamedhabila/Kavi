@@ -180,17 +180,22 @@ export function estimateTokens(text: string, family?: string | null): number {
   return Math.ceil(rawTokens * calibration * SAFETY_MARGIN);
 }
 
+/** Per-message framing overhead the providers add around role and content. */
+export const MESSAGE_FRAMING_TOKENS = 4;
+/** Fixed priming overhead per request. */
+export const CONVERSATION_PRIMING_TOKENS = 2;
+
 export function estimateMessageTokens(
   messages: Array<{ role: string; content: string }>,
   family?: string | null,
 ): number {
   let total = 0;
   for (const msg of messages) {
-    total += 4; // message framing overhead
+    total += MESSAGE_FRAMING_TOKENS;
     total += estimateTokens(msg.role, family);
     total += estimateTokens(msg.content, family);
   }
-  total += 2; // conversation priming
+  total += CONVERSATION_PRIMING_TOKENS;
   return total;
 }
 

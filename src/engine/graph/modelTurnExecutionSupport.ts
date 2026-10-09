@@ -1,5 +1,6 @@
 import { estimateAllToolTokens } from '../tools/toolManagerTokenBudget';
-import { estimateMessageTokens, estimateTokens } from '../../services/context/tokenCounter';
+import { estimateTokens } from '../../services/context/tokenCounter';
+import { estimateApiMessagesTokens } from '../../services/context/contentTokens';
 import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCalibration';
 import { recordAndPersistTokenCalibrationObservation } from '../../services/usage/tracker';
 import type { TokenUsage, UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
@@ -184,16 +185,7 @@ export function createModelTurnUsageTracker(
         latestUsage = {
           model: params.requestModel,
           inputTokens:
-            estimateMessageTokens(
-              options.requestMessages.map((message) => ({
-                role: message.role,
-                content:
-                  typeof message.content === 'string'
-                    ? message.content
-                    : JSON.stringify(message.content),
-              })),
-              params.calibrationFamily,
-            ) +
+            estimateApiMessagesTokens(options.requestMessages, params.calibrationFamily) +
             estimateAllToolTokens([...options.budgetTools], { family: params.calibrationFamily }),
           outputTokens:
             estimateTokens(snapshot.fullContent, params.calibrationFamily) +

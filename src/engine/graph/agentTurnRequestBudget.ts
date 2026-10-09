@@ -7,7 +7,12 @@ import type {
   ContextEngine,
   ForcedCompactionTier,
 } from '../../services/context/types';
-import { estimateTokens, getWorkingContextWindow } from '../../services/context/tokenCounter';
+import {
+  estimateTokens,
+  getWorkingContextWindow,
+  MESSAGE_FRAMING_TOKENS,
+} from '../../services/context/tokenCounter';
+import { estimateContentTokens } from '../../services/context/contentTokens';
 import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -178,9 +183,7 @@ function estimateApiMessageTokens(
   },
   family: string | undefined,
 ): number {
-  const content =
-    typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-  return estimateTokens(content, family) + 4;
+  return estimateContentTokens(message.content, family) + MESSAGE_FRAMING_TOKENS;
 }
 
 function buildMessageTokenBuckets(

@@ -17,10 +17,10 @@
 import { resolveModelOutputTokenBudget } from './outputTokenBudget';
 import {
   estimateTokens,
-  estimateMessageTokens,
   getWorkingContextWindow,
   type WorkingContextWindowOptions,
 } from './tokenCounter';
+import { estimateApiMessageCost, estimateApiMessagesTokens } from './contentTokens';
 import {
   compressToolDefinitions,
   enforceToolTokenBudget,
@@ -180,26 +180,7 @@ function estimateBudgetMessageTokens(
   messages: Array<{ role: string; content: string | any[]; [key: string]: any }>,
   family?: string,
 ): number {
-  return estimateMessageTokens(
-    messages.map((message) => ({
-      role: message.role,
-      content: serializeBudgetMessageContent(message),
-    })),
-    family,
-  );
-}
-
-function serializeBudgetMessageContent(message: {
-  content: string | any[];
-  [key: string]: any;
-}): string {
-  const content =
-    typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-  const toolCalls =
-    Array.isArray(message.tool_calls) && message.tool_calls.length > 0
-      ? JSON.stringify(message.tool_calls)
-      : '';
-  return toolCalls ? `${content}\n${toolCalls}` : content;
+  return estimateApiMessagesTokens(messages, family);
 }
 
 // ── Budget computation ───────────────────────────────────────────────────
@@ -314,9 +295,7 @@ export function windowMessages(
   type MsgGroup = { indices: number[]; cost: number; pinned: boolean };
   const groups: MsgGroup[] = [];
 
-  const costs = messages.map((msg) => {
-    return estimateTokens(serializeBudgetMessageContent(msg), family) + 4; // +4 for message framing
-  });
+  const costs = messages.map((msg) => estimateApiMessageCost(msg, family));
 
   const totalTokens = costs.reduce((a, b) => a + b, 0);
   if (totalTokens <= budgetTokens) return messages;
