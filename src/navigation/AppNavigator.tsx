@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -41,10 +41,15 @@ import {
 } from '../store/persistHydration';
 import { useChatStore } from '../store/useChatStore';
 import {
+  getNotificationPermissionReadiness,
   getPendingNotificationRoute,
   type NotificationRouteData,
+  sendLocalNotification,
   subscribeToNotificationRoutes,
 } from '../services/notifications/service';
+import { startRunCompletionNotifications } from '../services/notifications/runCompletionNotifications';
+import { appForegroundRequestRegistry } from '../engine/graph/foregroundRun/requestRegistry';
+import { i18n } from '../i18n/manager';
 import { runJobNow } from '../services/scheduler/engine';
 import { consumeSchedulerJobWake } from '../services/scheduler/wakeNotifications';
 import {
@@ -107,6 +112,22 @@ export const AppNavigator: React.FC = () => {
     refreshHydrationState();
     return unsubscribe;
   }, [chatHydrated]);
+
+  useEffect(
+    () =>
+      startRunCompletionNotifications({
+        requests: appForegroundRequestRegistry,
+        isAppInForeground: () => AppState.currentState === 'active',
+        getConversation: (conversationId) =>
+          useChatStore
+            .getState()
+            .conversations.find((conversation) => conversation.id === conversationId),
+        canNotify: async () => (await getNotificationPermissionReadiness()).status === 'granted',
+        notify: (notice) => sendLocalNotification(notice),
+        t: (key, params) => i18n.t(key, params),
+      }),
+    [],
+  );
 
   useEffect(() => {
     const activateRoute = (route?: NotificationRouteData | null) => {

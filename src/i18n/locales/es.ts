@@ -1285,6 +1285,12 @@ export const es: TranslationMap = mergeTranslations(en, {
     loadFailed: "No se pudieron cargar tus recordatorios.",
     cancelFailed: "No se pudo cancelar este recordatorio. Vuelve a intentarlo.",
   },
+  notifications: {
+    runAnswerReady: 'Tu respuesta está lista',
+    runNeedsInput: 'Kavi necesita tu respuesta',
+    runUnfinished: 'Kavi no pudo terminar',
+    runOpenConversation: 'Toca para abrir la conversación',
+  },
   scheduler: {
     title: 'Recordatorios y automatizaciones',
     intro:

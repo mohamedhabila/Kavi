@@ -15,7 +15,7 @@ export interface NotificationRouteData extends Record<string, unknown> {
   conversationId?: string;
   jobId?: string;
   reminderId?: string;
-  source?: 'scheduled_task' | 'scheduled_task_wake' | 'reminder';
+  source?: 'scheduled_task' | 'scheduled_task_wake' | 'reminder' | 'chat_run_completed';
 }
 
 let lastHandledNotificationKey: string | null = null;

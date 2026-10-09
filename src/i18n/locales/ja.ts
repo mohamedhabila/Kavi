@@ -1211,6 +1211,12 @@ export const ja: TranslationMap = mergeTranslations(en, {
     loadFailed: "リマインダーを読み込めませんでした。",
     cancelFailed: "このリマインダーを取り消せませんでした。もう一度お試しください。",
   },
+  notifications: {
+    runAnswerReady: '回答の準備ができました',
+    runNeedsInput: 'Kaviがあなたの返信を待っています',
+    runUnfinished: 'Kaviは最後まで完了できませんでした',
+    runOpenConversation: 'タップして会話を開く',
+  },
   scheduler: {
     title: 'リマインダーと自動化',
     intro:

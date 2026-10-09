@@ -1256,6 +1256,12 @@ export const en: TranslationMap = {
     loadFailed: "Couldn't load your reminders.",
     cancelFailed: "Couldn't cancel this reminder. Please try again.",
   },
+  notifications: {
+    runAnswerReady: 'Your answer is ready',
+    runNeedsInput: 'Kavi needs your reply',
+    runUnfinished: "Kavi couldn't finish",
+    runOpenConversation: 'Tap to open the conversation',
+  },
   scheduler: {
     title: 'Reminders & automations',
     intro:

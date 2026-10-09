@@ -1277,6 +1277,12 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     loadFailed: "Não foi possível carregar seus lembretes.",
     cancelFailed: "Não foi possível cancelar este lembrete. Tente novamente.",
   },
+  notifications: {
+    runAnswerReady: 'Sua resposta está pronta',
+    runNeedsInput: 'O Kavi precisa da sua resposta',
+    runUnfinished: 'O Kavi não conseguiu terminar',
+    runOpenConversation: 'Toque para abrir a conversa',
+  },
   scheduler: {
     title: 'Lembretes e automações',
     intro:

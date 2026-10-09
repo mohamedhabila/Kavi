@@ -1329,6 +1329,12 @@ export const ar: TranslationMap = mergeTranslations(en, {
     loadFailed: "تعذّر تحميل تذكيراتك.",
     cancelFailed: "تعذّر إلغاء هذا التذكير. يُرجى إعادة المحاولة.",
   },
+  notifications: {
+    runAnswerReady: 'إجابتك جاهزة',
+    runNeedsInput: 'يحتاج Kavi إلى ردّك',
+    runUnfinished: 'لم يتمكن Kavi من الإنهاء',
+    runOpenConversation: 'اضغط لفتح المحادثة',
+  },
   scheduler: {
     title: 'التذكيرات والأتمتة',
     intro:

@@ -1289,6 +1289,12 @@ export const fr: TranslationMap = mergeTranslations(en, {
     loadFailed: "Impossible de charger vos rappels.",
     cancelFailed: "Impossible d'annuler ce rappel. Veuillez réessayer.",
   },
+  notifications: {
+    runAnswerReady: 'Votre réponse est prête',
+    runNeedsInput: 'Kavi a besoin de votre réponse',
+    runUnfinished: 'Kavi n’a pas pu terminer',
+    runOpenConversation: 'Touchez pour ouvrir la conversation',
+  },
   scheduler: {
     title: 'Rappels et automatisations',
     intro:

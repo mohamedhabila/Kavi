@@ -1176,6 +1176,12 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     loadFailed: "无法加载你的提醒。",
     cancelFailed: "无法取消这个提醒。请重试。",
   },
+  notifications: {
+    runAnswerReady: '你的回答已准备好',
+    runNeedsInput: 'Kavi 需要你的回复',
+    runUnfinished: 'Kavi 未能完成',
+    runOpenConversation: '点按以打开对话',
+  },
   scheduler: {
     title: '提醒与自动化',
     intro: '设置 Kavi 稍后要提醒或处理的事情。你可以随时暂停或立即运行。',

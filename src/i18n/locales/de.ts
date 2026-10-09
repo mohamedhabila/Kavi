@@ -1261,6 +1261,12 @@ export const de: TranslationMap = mergeTranslations(en, {
     loadFailed: "Die Erinnerungen konnten nicht geladen werden.",
     cancelFailed: "Diese Erinnerung konnte nicht gelöscht werden. Bitte erneut versuchen.",
   },
+  notifications: {
+    runAnswerReady: 'Ihre Antwort ist fertig',
+    runNeedsInput: 'Kavi braucht Ihre Antwort',
+    runUnfinished: 'Kavi konnte nicht fertig werden',
+    runOpenConversation: 'Tippen Sie, um das Gespräch zu öffnen',
+  },
   scheduler: {
     title: 'Erinnerungen & Automationen',
     intro:
