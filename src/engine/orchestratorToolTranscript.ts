@@ -2,6 +2,7 @@ import type { Message, ToolCall } from '../types/message';
 import { normalizeToolName } from './tools/index';
 import { ensureToolResultPairing, deduplicateToolResults } from './toolResultPairingGuard';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
+import { continuesToolResultTurn } from '../utils/toolResultTurn';
 
 type PendingToolCall = {
   id: string;
@@ -160,6 +161,9 @@ export function isToolLoopInProgress(messages: Message[]): boolean {
       continue;
     }
     if (message.role === 'user') {
+      // Sent inside the tool-result turn (a message that steered the run), so the loop
+      // is still open.
+      if (continuesToolResultTurn(messages, index)) continue;
       return false;
     }
     if (message.role === 'tool') {

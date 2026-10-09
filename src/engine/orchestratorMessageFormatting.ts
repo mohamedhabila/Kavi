@@ -11,6 +11,7 @@ import {
   type DocumentInputDecision,
 } from '../services/llm/catalog/documentCapabilities';
 import { filterModelVisibleAttachments } from '../utils/messageAttachments';
+import { continuesToolResultTurn } from '../utils/toolResultTurn';
 import { i18n } from '../i18n/manager';
 import { normalizeToolName } from './tools/index';
 import { Attachment } from '../types/attachment';
@@ -297,6 +298,7 @@ export function canContinueAnthropicThinking(messages: Message[]): boolean {
       continue;
     }
     if (message.role === 'user') {
+      if (continuesToolResultTurn(messages, index)) continue;
       return false;
     }
     if (message.role === 'assistant') {

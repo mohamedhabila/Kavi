@@ -2,6 +2,7 @@ import type { ChatCompletionMessage } from '../../support/contracts';
 import { isPlainRecord, safeJsonParse } from '../../core/json';
 import { readTrimmedString } from '../../core/toolCallNormalization';
 import { normalizeAnthropicAssistantBlock, stringifyAnthropicContent } from './contentBlocks';
+import { continuesToolResultTurn } from '../../../../utils/toolResultTurn';
 
 function getAnthropicAssistantBlocksFromProviderReplay(providerReplay: unknown): any[] | undefined {
   const replay = isPlainRecord(providerReplay) ? providerReplay : undefined;
@@ -196,6 +197,8 @@ export function isAnthropicToolLoopInProgress(messages: ChatCompletionMessage[])
       continue;
     }
     if (message.role === 'user') {
+      // Sent inside the tool-result turn, so the loop is still open.
+      if (continuesToolResultTurn(messages, index)) continue;
       return false;
     }
     if (message.role === 'tool') {
@@ -219,6 +222,7 @@ function getAnthropicToolLoopAssistantBlocks(messages: ChatCompletionMessage[]):
       continue;
     }
     if (message.role === 'user') {
+      if (continuesToolResultTurn(messages, index)) continue;
       return undefined;
     }
     if (message.role === 'assistant') {
