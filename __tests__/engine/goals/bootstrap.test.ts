@@ -43,11 +43,20 @@ describe('goals/bootstrap', () => {
     expect(section).toContain('multiple deliverables');
     expect(section).toContain('explicit success conditions');
     expect(section).toContain('MUST establish the task');
-    expect(section).toContain('genuinely single-step answer or observation');
+    expect(section).toContain('genuinely single-step answer, observation, or action');
     expect(section).toContain('initial incomplete blocking goal');
     expect(section).toContain('retainCurrentUserConstraint:true');
     expect(section).toContain('automatically retains');
     expect(section).toContain('survive compaction and recovery');
+  });
+
+  it('lets the goal declaration travel with the first action instead of costing its own turn', () => {
+    // Regression: "in a separate turn before effects" spent one model call per multi-step
+    // task, although an effect batched after the update_goals that admits it already runs
+    // in the same turn (goalMutationBatchAdmission.ts).
+    const section = renderGoalBootstrapPromptSection();
+    expect(section).not.toContain('separate turn');
+    expect(section).toContain('in the same response as the first action');
   });
 
   it('renders the required add contract during bootstrap', () => {
