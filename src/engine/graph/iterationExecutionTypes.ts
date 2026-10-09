@@ -52,6 +52,12 @@ export type IterationCallbacks = {
   onToolCallComplete: (toolCall: ToolCall) => void;
   onToolMessage: (outcome: ToolMessageOutcome) => void | Promise<void>;
   onTurnLatencyMark?: AgentModelTurnCallbacks['onTurnLatencyMark'];
+  /**
+   * Messages the person sent while this run was working ("steering"), already persisted
+   * and ready for the run's next step. Asked before every model step; a run that cannot
+   * be steered leaves it unset.
+   */
+  takeSteeringMessages?: () => ReadonlyArray<Message>;
 };
 
 export interface AgentControlGraphIterationRuntimeState {

@@ -23,6 +23,7 @@ import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { buildRunStoppedMessage } from './runStoppedMessage';
+import { deliverSteeringMessages } from './sessionSteering';
 
 export interface ExecuteAgentControlGraphSessionParams extends Omit<
   ExecuteAgentControlGraphIterationParams,
@@ -53,6 +54,7 @@ export async function executeAgentControlGraphSession(
     ...params.initialRuntime,
     workingMessages: [...params.initialRuntime.workingMessages],
   };
+  let toolRuntime = params.toolRuntime;
   const finishMaxIterationSession = async (): Promise<void> => {
     const maxIterationMemoryPolicyBinding = runtime.lastModelTurnMemoryPolicyBinding;
     await params.graph.finishWithGraphTerminalEvent({
@@ -94,6 +96,18 @@ export async function executeAgentControlGraphSession(
           `Invariant violation before model turn ${iteration}: ${initialRuntimeCommand.reason}`,
         );
       }
+
+      ({ runtime, toolRuntime } = deliverSteeringMessages({
+        takeSteeringMessages: params.callbacks.takeSteeringMessages,
+        runtime,
+        toolRuntime,
+        recordDelivery: (count) =>
+          params.graph.recordObservability({
+            observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.STEERING_DELIVERED,
+            iteration,
+            detail: `count:${count}`,
+          }),
+      }));
 
       if (
         restrictiveRefreshRequested ||
@@ -141,6 +155,7 @@ export async function executeAgentControlGraphSession(
         },
         iteration,
         runtime,
+        toolRuntime,
       });
       runtime = iterationExecution.runtime;
       if (iterationExecution.status === 'retry_current_iteration') {

@@ -71,6 +71,12 @@ export interface OrchestratorCallbacks {
    * this call recorded the stage for the first time, so the caller can persist it once.
    */
   onTurnLatencyMark?: (stage: AgentRunTurnLatencyStage) => AgentRunTurnLatency | undefined;
+  /**
+   * Messages the person sent while this run was working ("steering"), already persisted
+   * and ready for the run's next step. Asked before every model step; a run that cannot
+   * be steered leaves it unset.
+   */
+  takeSteeringMessages?: () => ReadonlyArray<Message>;
 }
 
 export interface OrchestratorOptions {

@@ -396,4 +396,90 @@ describe('agentControlGraphSessionExecution', () => {
       finalizationError,
     );
   });
+
+  describe('steering', () => {
+    const request = {
+      id: 'request',
+      role: 'user' as const,
+      content: 'Plan a dinner.',
+      timestamp: 1,
+    };
+    const toolResult = {
+      id: 'result',
+      role: 'tool' as const,
+      toolCallId: 'call-1',
+      content: 'ok',
+      timestamp: 2,
+    };
+    const steer = {
+      id: 'steer',
+      role: 'user' as const,
+      content: 'Make it vegetarian.',
+      timestamp: 3,
+      steerOfRunId: 'run-1',
+    };
+
+    it('gives the next step the messages that steered the run since the last one', async () => {
+      const takeSteeringMessages = jest
+        .fn()
+        .mockReturnValueOnce([])
+        .mockReturnValueOnce([steer])
+        .mockReturnValue([]);
+      const params = createParams({ maxToolIterations: 3 });
+      params.callbacks.takeSteeringMessages = takeSteeringMessages;
+      params.initialRuntime.workingMessages = [request];
+      (params.toolRuntime as { currentUserMessage?: unknown }).currentUserMessage = {
+        id: 'request',
+        text: 'Plan a dinner.',
+      };
+      mockedExecuteAgentControlGraphIteration
+        .mockImplementationOnce(async ({ runtime }) => ({
+          status: 'continued',
+          runtime: { ...runtime, workingMessages: [...runtime.workingMessages, toolResult] },
+        }))
+        .mockImplementationOnce(async ({ runtime }) => ({ status: 'finalized', runtime }));
+
+      await executeAgentControlGraphSession(params);
+
+      const [first, second] = mockedExecuteAgentControlGraphIteration.mock.calls.map(
+        ([input]) => input,
+      );
+      expect(first!.runtime.workingMessages).toEqual([request]);
+      expect(first!.toolRuntime.currentUserMessage).toEqual({
+        id: 'request',
+        text: 'Plan a dinner.',
+      });
+      expect(second!.runtime.workingMessages).toEqual([request, toolResult, steer]);
+      expect(second!.toolRuntime.currentUserMessage).toEqual({
+        id: 'steer',
+        text: 'Make it vegetarian.',
+      });
+      expect(second!.toolRuntime.toolCallHistory).toBe(params.toolRuntime.toolCallHistory);
+      expect(params.graph.recordObservability).toHaveBeenCalledWith({
+        observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.STEERING_DELIVERED,
+        iteration: 2,
+        detail: 'count:1',
+      });
+    });
+
+    it('runs unchanged when the run cannot be steered', async () => {
+      const params = createParams({ maxToolIterations: 2 });
+      params.initialRuntime.workingMessages = [request];
+      mockedExecuteAgentControlGraphIteration
+        .mockImplementationOnce(async ({ runtime }) => ({ status: 'continued', runtime }))
+        .mockImplementationOnce(async ({ runtime }) => ({ status: 'finalized', runtime }));
+
+      await executeAgentControlGraphSession(params);
+
+      for (const [input] of mockedExecuteAgentControlGraphIteration.mock.calls) {
+        expect(input.toolRuntime).toBe(params.toolRuntime);
+        expect(input.runtime.workingMessages).toEqual([request]);
+      }
+      expect(params.graph.recordObservability).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.STEERING_DELIVERED,
+        }),
+      );
+    });
+  });
 });

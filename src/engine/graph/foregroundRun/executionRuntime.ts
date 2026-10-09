@@ -9,6 +9,8 @@ import type {
 import { createForegroundRunRuntimeControllers } from './executionRuntimeControllers';
 import { createForegroundRunMutableState } from './executionRuntimeState';
 import { createForegroundRunTerminalLifecycle } from './executionTerminalLifecycle';
+import { createForegroundSteeringDelivery } from './steeringDelivery';
+import { appSteeringQueue } from './steeringQueue';
 
 export function createForegroundConversationRunRuntime(
   params: ForegroundConversationRunRuntimeParams,
@@ -75,7 +77,18 @@ export function createForegroundConversationRunRuntime(
     trackedRunStore,
   });
 
-  const callbacks = createForegroundRunOrchestratorCallbacks({
+  const steeringDelivery = createForegroundSteeringDelivery({
+    conversationId,
+    runId: bootstrapResult.foregroundRequestId,
+    queue: appSteeringQueue,
+    canDeliver: () => guardRunCallback() && assistantStream.hasQueuedNextAssistantTurn(),
+    addMessage: (targetConversationId, message) => {
+      shared.refs.forceNextScrollRef.current = shared.refs.shouldAutoFollowRef.current;
+      shared.store.addMessage(targetConversationId, message);
+    },
+  });
+
+  const orchestratorCallbacks = createForegroundRunOrchestratorCallbacks({
     actions: {
       appendConversationLog,
       applyConversationCompaction: (messages) => {
@@ -106,6 +119,10 @@ export function createForegroundConversationRunRuntime(
     providerId: provider.id,
     trackedAgentRunId: runId,
   });
+  const callbacks = {
+    ...orchestratorCallbacks,
+    takeSteeringMessages: steeringDelivery.takeSteeringMessages,
+  };
 
   return {
     callbacks,

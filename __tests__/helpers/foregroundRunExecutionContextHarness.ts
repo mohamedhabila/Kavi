@@ -1,5 +1,5 @@
 import type { Conversation, ModelProjectionOwner } from '../../src/types/conversation';
-import type { MessageMemoryPublicationDisposition } from '../../src/types/message';
+import type { Message, MessageMemoryPublicationDisposition } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { TransitionMessageMemoryPublicationResult } from '../../src/store/chatStoreTypes';
 import type { ForegroundRunPreflightResult } from '../../src/engine/graph/foregroundRun/preflight';
@@ -83,6 +83,8 @@ export function createExecutionContext(params: {
   providers: LlmProviderConfig[];
   recordConversationTurnMemory: jest.Mock;
   ensureCanonicalConversation: jest.Mock;
+  /** Append messages the run adds to the conversation instead of discarding them. */
+  persistAddedMessages?: boolean;
 }) {
   if (!params.recordConversationTurnMemory.getMockImplementation()) {
     params.recordConversationTurnMemory.mockResolvedValue({
@@ -104,6 +106,23 @@ export function createExecutionContext(params: {
   const projectionOwners = new Map<string, ModelProjectionOwner>();
   const projectionWaiters = new Map<string, Set<() => void>>();
   const noOp = jest.fn();
+  const addMessage = params.persistAddedMessages
+    ? jest.fn((conversationId: string, message: Partial<Message> & Pick<Message, 'role'>) => {
+        if (conversationId !== currentConversation.id) return;
+        commitConversation({
+          ...currentConversation,
+          messages: [
+            ...currentConversation.messages,
+            {
+              ...message,
+              id: message.id ?? `added-${currentConversation.messages.length}`,
+              content: message.content ?? '',
+              timestamp: message.timestamp ?? Date.now(),
+            } as Message,
+          ],
+        });
+      })
+    : noOp;
   const appendAgentRunCheckpoint = jest.fn((conversationId, entry, runId) => {
     if (conversationId !== currentConversation.id) return;
     commitConversation(appendAgentRunCheckpointInConversation(currentConversation, entry, runId));
@@ -381,7 +400,7 @@ export function createExecutionContext(params: {
       toolResultPersistenceCheckpointDelayMs: 50,
     },
     store: {
-      addMessage: noOp,
+      addMessage,
       applyMobileControllerOutcome,
       addToolCall: noOp,
       appendAgentRunCheckpoint,
