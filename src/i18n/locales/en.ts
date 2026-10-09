@@ -322,6 +322,7 @@ export const en: TranslationMap = {
     attachmentFallbackName: 'attachment',
     codeLabel: 'Code',
     copyMessage: 'Copy message',
+    copyMessageFailed: 'This message could not be copied. Please try again.',
     fetchBatchReading: 'Reading {settled} of {total} pages',
     fetchBatchRead: 'Read {total} pages',
     fetchBatchMore: '+{count} more',

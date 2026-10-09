@@ -337,6 +337,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: 'مرفق',
     codeLabel: 'الكود',
     copyMessage: 'نسخ الرسالة',
+    copyMessageFailed: 'تعذّر نسخ هذه الرسالة. يُرجى إعادة المحاولة.',
     fetchBatchReading: 'جارٍ قراءة {settled} من {total} صفحة',
     fetchBatchRead: 'تمت قراءة {total} صفحة',
     fetchBatchMore: '+{count} more',

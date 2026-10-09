@@ -308,6 +308,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: '附件',
     codeLabel: '程式碼',
     copyMessage: '複製訊息',
+    copyMessageFailed: '無法複製這則訊息。請重試。',
     fetchBatchReading: '正在讀取第 {settled}/{total} 頁',
     fetchBatchRead: '已讀取 {total} 頁',
     fetchBatchMore: '+{count} more',

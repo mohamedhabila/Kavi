@@ -308,6 +308,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: '附件',
     codeLabel: '代码',
     copyMessage: '复制消息',
+    copyMessageFailed: '无法复制这条消息。请重试。',
     fetchBatchReading: '正在读取第 {settled}/{total} 页',
     fetchBatchRead: '已读取 {total} 页',
     fetchBatchMore: '+{count} more',

@@ -334,6 +334,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: 'pièce jointe',
     codeLabel: 'Code',
     copyMessage: 'Copier le message',
+    copyMessageFailed: 'Impossible de copier ce message. Veuillez réessayer.',
     fetchBatchReading: 'Lecture de {settled} sur {total} pages',
     fetchBatchRead: '{total} pages lues',
     fetchBatchMore: '+{count} more',

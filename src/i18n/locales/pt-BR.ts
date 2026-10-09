@@ -324,6 +324,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: 'anexo',
     codeLabel: 'Código',
     copyMessage: 'Copiar mensagem',
+    copyMessageFailed: 'Não foi possível copiar esta mensagem. Tente novamente.',
     fetchBatchReading: 'Lendo {settled} de {total} páginas',
     fetchBatchRead: '{total} páginas lidas',
     fetchBatchMore: '+{count} more',

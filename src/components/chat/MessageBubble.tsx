@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import { Copy, Edit2 } from 'lucide-react-native';
+import { Edit2 } from 'lucide-react-native';
 import { AgentRun } from '../../types/agentRun';
 import { Attachment } from '../../types/attachment';
 import { Message } from '../../types/message';
@@ -13,6 +12,7 @@ import { AssistantBubble } from './AssistantBubble';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageContentRenderer } from './MessageContentRenderer';
 import { DisplayResponseSegment } from './messageGrouping';
+import { CopyMessageButton } from './CopyMessageButton';
 import { MessageActionButton } from './MessageActionButton';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
@@ -103,12 +103,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
       );
     }
 
-    const handleCopy = () => {
-      if (visibleUserContent) {
-        Clipboard.setStringAsync(visibleUserContent);
-      }
-    };
-
     return (
       <View style={[styles.wrapper, styles.userWrapper]} testID="message-user-wrapper">
         <View style={[styles.bubble, styles.userBubble]} testID="message-user-bubble">
@@ -139,13 +133,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
 
         {!isStreaming ? (
           <View style={[styles.actions, styles.actionsRight]}>
-            <MessageActionButton
-              onPress={handleCopy}
-              disabled={!visibleUserContent}
-              accessibilityLabel={t('chat.copyMessage')}
-            >
-              <Copy size={16} color={colors.textTertiary} />
-            </MessageActionButton>
+            <CopyMessageButton
+              color={colors.textTertiary}
+              confirmedColor={colors.success}
+              t={t}
+              testID="user-copy-message"
+              text={visibleUserContent}
+            />
             {onEdit ? (
               <MessageActionButton
                 onPress={() => onEdit(message.id, visibleUserContent)}

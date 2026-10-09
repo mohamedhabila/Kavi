@@ -312,6 +312,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: '添付ファイル',
     codeLabel: 'コード',
     copyMessage: 'メッセージをコピー',
+    copyMessageFailed: 'このメッセージをコピーできませんでした。もう一度お試しください。',
     fetchBatchReading: '{total} ページ中 {settled} ページを読み込み中',
     fetchBatchRead: '{total} ページを読み込みました',
     fetchBatchMore: '+{count} more',

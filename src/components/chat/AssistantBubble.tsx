@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { ActivityIndicator, Alert, Animated, Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
 import { AgentRun } from '../../types/agentRun';
 import { Attachment } from '../../types/attachment';
 import { Message } from '../../types/message';
@@ -136,12 +135,6 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       : undefined;
     const exactMemoryFeedbackMessageId =
       memoryFeedbackMessageId === undefined ? message.id : memoryFeedbackMessageId;
-
-    const handleCopy = () => {
-      if (bubbleModel.copyText) {
-        Clipboard.setStringAsync(bubbleModel.copyText);
-      }
-    };
 
     const handleShare = async () => {
       try {
@@ -353,10 +346,9 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
         {!isStreaming ? (
           <>
             <AssistantBubbleActions
-              canCopy={!!bubbleModel.copyText}
               canShare={bubbleModel.timelineItems.length > 0}
               colors={colors}
-              onCopy={handleCopy}
+              copyText={bubbleModel.copyText}
               onRetry={onRetry ? () => onRetry(retryMessageId || message.id) : undefined}
               onShare={handleShare}
               styles={styles}

@@ -320,6 +320,7 @@ export const de: TranslationMap = mergeTranslations(en, {
     attachmentFallbackName: 'Anhang',
     codeLabel: 'Code',
     copyMessage: 'Nachricht kopieren',
+    copyMessageFailed: 'Diese Nachricht konnte nicht kopiert werden. Bitte erneut versuchen.',
     fetchBatchReading: 'Lese {settled} von {total} Seiten',
     fetchBatchRead: '{total} Seiten gelesen',
     fetchBatchMore: '+{count} more',
