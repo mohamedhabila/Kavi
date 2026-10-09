@@ -1176,6 +1176,18 @@ export const ja: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: '添付ファイルを含む',
     episodeStructuralFallback: '会話のアクティビティ',
   },
+  conversationActions: {
+    menuAccessibility: "{title} のオプション",
+    rename: "名前を変更",
+    delete: "削除",
+    renameTitle: "チャット名を変更",
+    renamePlaceholder: "チャット名",
+    deleteConfirmTitle: "このチャットを削除しますか？",
+    deleteConfirmMessage: "「{title}」とそのメッセージはこのデバイスから削除され、Kavi は記憶の情報源として使わなくなります。",
+    deleteWhileWorking: "Kavi はまだこのチャットで作業中です。削除するとその作業は停止します。",
+    deleting: "削除中…",
+    deleteFailed: "このチャットを削除できませんでした。もう一度お試しください。",
+  },
   reminders: {
     sectionTitle: "リマインダー",
     next: "次回: {when}",

@@ -1,12 +1,16 @@
 import type { StoreApi } from 'zustand';
 import { generateId } from '../utils/id';
 import { getDefaultConversationTitle } from '../utils/conversation';
+import { truncateGraphemesTo } from '../utils/graphemes';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { captureSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 import { retireConversationSourcesBeforeDeletion } from '../services/memory/conversationDeletionRetirement';
 import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
+
+/** A user-chosen chat name is a label, not content: bounded so a paste cannot become one. */
+export const MAX_CONVERSATION_TITLE_GRAPHEMES = 120;
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 type ChatStoreGet = StoreApi<ChatState>['getState'];
@@ -90,6 +94,7 @@ export function createConversationStoreActions(
   | 'discardSideThread'
   | 'setActiveConversation'
   | 'deleteConversation'
+  | 'renameConversation'
   | 'clearAllConversations'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
@@ -308,6 +313,20 @@ export function createConversationStoreActions(
       set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+      }));
+      requestChatStorePersistenceCheckpoint();
+    },
+
+    renameConversation: (id, title) => {
+      const nextTitle = truncateGraphemesTo(
+        title.replace(/\s+/gu, ' ').trim(),
+        MAX_CONVERSATION_TITLE_GRAPHEMES,
+      );
+      if (!nextTitle) return;
+      set((state) => ({
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === id ? { ...conversation, title: nextTitle } : conversation,
+        ),
       }));
       requestChatStorePersistenceCheckpoint();
     },

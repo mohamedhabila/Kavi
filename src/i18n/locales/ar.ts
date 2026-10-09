@@ -1295,6 +1295,18 @@ export const ar: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'يتضمن مرفقات',
     episodeStructuralFallback: 'نشاط في المحادثة',
   },
+  conversationActions: {
+    menuAccessibility: "خيارات {title}",
+    rename: "إعادة التسمية",
+    delete: "حذف",
+    renameTitle: "إعادة تسمية المحادثة",
+    renamePlaceholder: "اسم المحادثة",
+    deleteConfirmTitle: "هل تريد حذف هذه المحادثة؟",
+    deleteConfirmMessage: "سيتم حذف «{title}» ورسائلها من هذا الجهاز، ولن يستخدمها Kavi مصدرًا لذاكرته بعد الآن.",
+    deleteWhileWorking: "لا يزال Kavi يعمل في هذه المحادثة. حذفها يوقف هذا العمل.",
+    deleting: "جارٍ الحذف…",
+    deleteFailed: "تعذّر حذف هذه المحادثة. يُرجى إعادة المحاولة.",
+  },
   reminders: {
     sectionTitle: "التذكيرات",
     next: "التالي: {when}",

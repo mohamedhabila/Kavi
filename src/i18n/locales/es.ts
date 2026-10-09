@@ -1250,6 +1250,18 @@ export const es: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Incluye archivos adjuntos',
     episodeStructuralFallback: 'Actividad de la conversación',
   },
+  conversationActions: {
+    menuAccessibility: "Opciones de {title}",
+    rename: "Cambiar nombre",
+    delete: "Eliminar",
+    renameTitle: "Cambiar nombre del chat",
+    renamePlaceholder: "Nombre del chat",
+    deleteConfirmTitle: "¿Eliminar este chat?",
+    deleteConfirmMessage: "«{title}» y sus mensajes se eliminarán de este dispositivo, y Kavi dejará de usarlo como fuente para su memoria.",
+    deleteWhileWorking: "Kavi sigue trabajando en este chat. Al eliminarlo, se detiene ese trabajo.",
+    deleting: "Eliminando…",
+    deleteFailed: "No se pudo eliminar este chat. Vuelve a intentarlo.",
+  },
   reminders: {
     sectionTitle: "Recordatorios",
     next: "Próximo: {when}",

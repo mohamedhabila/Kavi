@@ -1242,6 +1242,18 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Inclui anexos',
     episodeStructuralFallback: 'Atividade da conversa',
   },
+  conversationActions: {
+    menuAccessibility: "Opções de {title}",
+    rename: "Renomear",
+    delete: "Excluir",
+    renameTitle: "Renomear conversa",
+    renamePlaceholder: "Nome da conversa",
+    deleteConfirmTitle: "Excluir esta conversa?",
+    deleteConfirmMessage: "\"{title}\" e as mensagens dela serão excluídas deste dispositivo, e o Kavi deixará de usá-la como fonte para a memória.",
+    deleteWhileWorking: "O Kavi ainda está trabalhando nesta conversa. Excluí-la interrompe esse trabalho.",
+    deleting: "Excluindo…",
+    deleteFailed: "Não foi possível excluir esta conversa. Tente novamente.",
+  },
   reminders: {
     sectionTitle: "Lembretes",
     next: "Próximo: {when}",

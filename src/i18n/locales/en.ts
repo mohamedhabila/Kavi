@@ -1221,6 +1221,18 @@ export const en: TranslationMap = {
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────
+  conversationActions: {
+    menuAccessibility: "Options for {title}",
+    rename: "Rename",
+    delete: "Delete",
+    renameTitle: "Rename chat",
+    renamePlaceholder: "Chat name",
+    deleteConfirmTitle: "Delete this chat?",
+    deleteConfirmMessage: "\"{title}\" and its messages will be deleted from this device, and Kavi will stop using it as a memory source.",
+    deleteWhileWorking: "Kavi is still working in this chat. Deleting it stops that work.",
+    deleting: "Deleting…",
+    deleteFailed: "This chat could not be deleted. Please try again.",
+  },
   reminders: {
     sectionTitle: "Reminders",
     next: "Next: {when}",

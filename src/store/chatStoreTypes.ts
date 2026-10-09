@@ -104,6 +104,8 @@ export interface ChatState {
   discardSideThread: (id: string) => boolean;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
+  /** Names a chat; whitespace is collapsed, and an empty name leaves the title as it was. */
+  renameConversation: (id: string, title: string) => void;
   clearAllConversations: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
   updatePersonaInConversation: (

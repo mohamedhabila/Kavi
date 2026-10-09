@@ -1142,6 +1142,18 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: '包含附件',
     episodeStructuralFallback: '对话活动',
   },
+  conversationActions: {
+    menuAccessibility: "{title}的选项",
+    rename: "重命名",
+    delete: "删除",
+    renameTitle: "重命名对话",
+    renamePlaceholder: "对话名称",
+    deleteConfirmTitle: "要删除这个对话吗？",
+    deleteConfirmMessage: "“{title}”及其消息将从此设备删除，Kavi 也将不再把它用作记忆来源。",
+    deleteWhileWorking: "Kavi 仍在这个对话中工作。删除它会停止这项工作。",
+    deleting: "正在删除…",
+    deleteFailed: "无法删除这个对话。请重试。",
+  },
   reminders: {
     sectionTitle: "提醒",
     next: "下次：{when}",

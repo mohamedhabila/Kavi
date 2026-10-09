@@ -32,3 +32,12 @@ export async function stopConversationWork(conversation: Conversation): Promise<
     conversationId: conversation.id,
   });
 }
+
+/** Whether anything is still producing into the conversation: a reply, a run, or a claim. */
+export function hasConversationWork(conversation: Conversation): boolean {
+  return (
+    appForegroundRequestRegistry.hasConversation(conversation.id) ||
+    Boolean(conversation.modelProjectionOwner) ||
+    (conversation.agentRuns ?? []).some((run) => run.status === 'running')
+  );
+}

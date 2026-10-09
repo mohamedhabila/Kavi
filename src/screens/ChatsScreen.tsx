@@ -12,6 +12,9 @@ import {
   getNavigableConversations,
 } from '../utils/conversationNavigation';
 import { ConversationNavigationRow } from '../components/conversations/ConversationNavigationRow';
+import { ConversationActionsSheet } from '../components/conversations/ConversationActionsSheet';
+import { ConversationRenameDialog } from '../components/conversations/ConversationRenameDialog';
+import { useConversationActions } from '../components/conversations/useConversationActions';
 
 export const ChatsScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
@@ -22,6 +25,7 @@ export const ChatsScreen: React.FC = () => {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [query, setQuery] = useState('');
+  const conversationActions = useConversationActions();
   const hasSearchQuery = query.trim().length > 0;
   const navigableConversations = useMemo(
     () => getNavigableConversations(conversations),
@@ -84,8 +88,10 @@ export const ChatsScreen: React.FC = () => {
         keyExtractor={(conversation) => conversation.id}
         renderItem={({ item }) => (
           <ConversationNavigationRow
+            busy={conversationActions.deletingIds.has(item.id)}
             colors={colors}
             conversation={item}
+            onOpenActions={() => conversationActions.openActions(item)}
             onPress={() => openConversation(item.id)}
             selected={item.id === activeConversationId}
             testID={`chats-conversation-${item.id}`}
@@ -118,6 +124,22 @@ export const ChatsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         }
+      />
+
+      <ConversationActionsSheet
+        colors={colors}
+        onChoose={conversationActions.chooseAction}
+        onClose={conversationActions.closeSheet}
+        onDismissed={conversationActions.handleSheetDismissed}
+        title={conversationActions.target?.title ?? ''}
+        visible={conversationActions.sheetVisible}
+      />
+      <ConversationRenameDialog
+        colors={colors}
+        initialTitle={conversationActions.target?.title ?? ''}
+        onCancel={conversationActions.cancelRename}
+        onSave={conversationActions.saveRename}
+        visible={conversationActions.renameVisible}
       />
     </SafeAreaView>
   );

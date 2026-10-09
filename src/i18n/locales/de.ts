@@ -1226,6 +1226,18 @@ export const de: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Enthält Anhänge',
     episodeStructuralFallback: 'Unterhaltungsaktivität',
   },
+  conversationActions: {
+    menuAccessibility: "Optionen für {title}",
+    rename: "Umbenennen",
+    delete: "Löschen",
+    renameTitle: "Chat umbenennen",
+    renamePlaceholder: "Chat-Name",
+    deleteConfirmTitle: "Diesen Chat löschen?",
+    deleteConfirmMessage: "„{title}“ und seine Nachrichten werden von diesem Gerät gelöscht, und Kavi nutzt ihn nicht mehr als Quelle für sein Gedächtnis.",
+    deleteWhileWorking: "Kavi arbeitet noch in diesem Chat. Beim Löschen wird diese Arbeit beendet.",
+    deleting: "Wird gelöscht …",
+    deleteFailed: "Dieser Chat konnte nicht gelöscht werden. Bitte erneut versuchen.",
+  },
   reminders: {
     sectionTitle: "Erinnerungen",
     next: "Nächste: {when}",

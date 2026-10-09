@@ -1254,6 +1254,18 @@ export const fr: TranslationMap = mergeTranslations(en, {
     episodeStructuralHasAttachments: 'Contient des pièces jointes',
     episodeStructuralFallback: 'Activité de la conversation',
   },
+  conversationActions: {
+    menuAccessibility: "Options pour {title}",
+    rename: "Renommer",
+    delete: "Supprimer",
+    renameTitle: "Renommer la discussion",
+    renamePlaceholder: "Nom de la discussion",
+    deleteConfirmTitle: "Supprimer cette discussion ?",
+    deleteConfirmMessage: "« {title} » et ses messages seront supprimés de cet appareil, et Kavi ne s’en servira plus comme source pour sa mémoire.",
+    deleteWhileWorking: "Kavi travaille encore dans cette discussion. La supprimer arrête ce travail.",
+    deleting: "Suppression…",
+    deleteFailed: "Impossible de supprimer cette discussion. Veuillez réessayer.",
+  },
   reminders: {
     sectionTitle: "Rappels",
     next: "Prochain : {when}",

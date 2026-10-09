@@ -1,21 +1,27 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Check, GitBranch, MessageCircle } from 'lucide-react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Check, GitBranch, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 import type { Conversation } from '../../types/conversation';
 import type { AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 
 type ConversationNavigationRowProps = {
+  /** The row is being removed: its actions give way to a progress indicator. */
+  busy?: boolean;
   colors: AppPalette;
   conversation: Conversation;
+  /** Opens this conversation's actions; the row shows an options button when set. */
+  onOpenActions?: () => void;
   onPress: () => void;
   selected: boolean;
   testID: string;
 };
 
 export const ConversationNavigationRow: React.FC<ConversationNavigationRowProps> = ({
+  busy = false,
   colors,
   conversation,
+  onOpenActions,
   onPress,
   selected,
   testID,
@@ -29,7 +35,9 @@ export const ConversationNavigationRow: React.FC<ConversationNavigationRowProps>
     <TouchableOpacity
       accessibilityLabel={sideThreadLabel ? `${title}, ${sideThreadLabel}` : title}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={busy ? { selected, busy } : { selected }}
+      {...(busy ? { disabled: true } : {})}
+      onLongPress={onOpenActions}
       onPress={onPress}
       style={[styles.row, selected ? styles.rowSelected : null]}
       testID={testID}
@@ -48,6 +56,26 @@ export const ConversationNavigationRow: React.FC<ConversationNavigationRowProps>
         {sideThreadLabel ? <Text style={styles.subtitle}>{sideThreadLabel}</Text> : null}
       </View>
       {selected ? <Check size={17} color={colors.primary} /> : null}
+      {busy ? (
+        <View
+          accessibilityLabel={t('conversationActions.deleting')}
+          style={styles.actionsButton}
+          testID={`${testID}-busy`}
+        >
+          <ActivityIndicator size="small" color={colors.textSecondary} />
+        </View>
+      ) : onOpenActions ? (
+        <TouchableOpacity
+          accessibilityLabel={t('conversationActions.menuAccessibility', { title })}
+          accessibilityRole="button"
+          hitSlop={4}
+          onPress={onOpenActions}
+          style={styles.actionsButton}
+          testID={`${testID}-actions`}
+        >
+          <MoreHorizontal size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+      ) : null}
     </TouchableOpacity>
   );
 };
@@ -83,6 +111,14 @@ const createStyles = (colors: AppPalette) =>
     titleSelected: {
       color: colors.primary,
       fontWeight: '600',
+    },
+    actionsButton: {
+      width: 40,
+      height: 40,
+      marginEnd: -6,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 20,
     },
     subtitle: {
       marginTop: 1,
