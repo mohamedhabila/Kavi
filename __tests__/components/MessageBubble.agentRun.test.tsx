@@ -1,5 +1,6 @@
 import { render, fireEvent } from '@testing-library/react-native';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   MessageBubble,
   installMessageBubbleTestHarness,
@@ -9,6 +10,10 @@ import {
 
 describe('MessageBubble agent run widgets', () => {
   installMessageBubbleTestHarness();
+
+  afterEach(() => {
+    useSettingsStore.setState({ developerModeEnabled: false });
+  });
 
   it('shows a review footer while the run is being reviewed', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
@@ -116,6 +121,8 @@ describe('MessageBubble agent run widgets', () => {
   });
 
   it('should render a compact run trace widget and toggle its details', () => {
+    // Engine diagnostics are a developer-mode surface.
+    useSettingsStore.setState({ developerModeEnabled: true });
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
     const { getByTestId, getByText, queryByTestId } = render(
       <MessageBubble
@@ -185,6 +192,8 @@ describe('MessageBubble agent run widgets', () => {
   });
 
   it('renders a bootstrap placeholder when the run has no goals yet', () => {
+    // Engine diagnostics are a developer-mode surface.
+    useSettingsStore.setState({ developerModeEnabled: true });
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
     const { getByTestId, getByText } = render(
       <MessageBubble

@@ -7,7 +7,10 @@ type TranslateFn = (key: string, params?: Record<string, string | number>) => st
 export interface AgentWorkflowPresentation {
   activeGoal?: AgentGoal;
   detail?: string;
+  /** The task's own goals; the engine's bookkeeping goals are left out. */
   goals: AgentGoal[];
+  /** Every goal, bookkeeping included, for developer mode. */
+  allGoals: AgentGoal[];
   statusLabel: string;
   title: string;
   trace: AgentRunTraceIteration[];
@@ -60,12 +63,24 @@ function resolvePrimaryGoal(goals: AgentGoal[]): AgentGoal | undefined {
   );
 }
 
+/**
+ * Owners in the `system:` namespace mark goals the engine creates for itself, such as
+ * verifying that an action took effect. They describe the machinery, not the user's
+ * task, and their titles are engine text rather than the user's language.
+ */
+const SYSTEM_GOAL_OWNER_PREFIX = 'system:';
+
+function isTaskGoal(goal: AgentGoal): boolean {
+  return !goal.owner?.startsWith(SYSTEM_GOAL_OWNER_PREFIX);
+}
+
 export function buildAgentWorkflowPresentation(
   run: AgentRun,
   t: TranslateFn,
   executionPresentation?: AgentRunExecutionPresentation,
 ): AgentWorkflowPresentation {
-  const goals = run.controlGraph?.goals ?? [];
+  const allGoals = run.controlGraph?.goals ?? [];
+  const goals = allGoals.filter(isTaskGoal);
   const activePhase =
     run.phases.find((phase) => phase.key === run.currentPhase) ??
     run.phases.find((phase) => phase.status === 'active');
@@ -76,6 +91,7 @@ export function buildAgentWorkflowPresentation(
     activeGoal,
     detail: activePhase?.detail ?? run.latestSummary,
     goals,
+    allGoals,
     statusLabel: formatRunStatusLabel(run.status, t, executionPresentation),
     title: activeGoal?.title ?? activePhase?.title ?? run.goal,
     trace,

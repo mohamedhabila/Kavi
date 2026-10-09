@@ -3,6 +3,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { ExpandCollapseChevronIcon } from '../navigation/DirectionalIcons';
 import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import type { AgentRun } from '../../types/agentRun';
 import { buildAgentWorkflowPresentation, formatGoalStatusLabel } from './agentWorkflowPresentation';
 import { createAgentWorkflowSummaryStyles } from './AgentWorkflowSummary.styles';
@@ -26,12 +27,16 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
     () => buildAgentWorkflowPresentation(run, t, executionPresentation),
     [executionPresentation, run, t],
   );
-  const hasGoals = presentation.goals.length > 0;
+  // Run traces, bookkeeping goals, and evidence counts describe the engine, not the task:
+  // they are shown only to someone who turned developer mode on.
+  const developerModeEnabled = useSettingsStore((state) => state.developerModeEnabled);
+  const shownGoals = developerModeEnabled ? presentation.allGoals : presentation.goals;
+  const hasGoals = shownGoals.length > 0;
   const isPresentedRunning =
     run.status === 'running' &&
     executionPresentation !== 'needs_attention' &&
     executionPresentation !== 'waiting_for_user';
-  const showBootstrapGoals = !hasGoals && isPresentedRunning;
+  const showBootstrapGoals = developerModeEnabled && !hasGoals && isPresentedRunning;
 
   return (
     <View style={styles.container} testID="agent-workflow-summary">
@@ -56,7 +61,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
       {hasGoals ? (
         <View style={styles.section} testID="agent-goals-widget">
           <TouchableOpacity
-            accessibilityLabel={t('chat.agentGoals.header', { count: presentation.goals.length })}
+            accessibilityLabel={t('chat.agentGoals.header', { count: shownGoals.length })}
             accessibilityRole="button"
             accessibilityState={{ expanded: goalsExpanded }}
             onPress={() => setGoalsExpanded((value) => !value)}
@@ -64,7 +69,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
             testID="agent-goals-toggle"
           >
             <Text style={styles.sectionTitle} numberOfLines={1}>
-              {t('chat.agentGoals.header', { count: presentation.goals.length })}
+              {t('chat.agentGoals.header', { count: shownGoals.length })}
             </Text>
             <Text style={styles.sectionMeta} numberOfLines={1}>
               {presentation.activeGoal
@@ -75,12 +80,12 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
           </TouchableOpacity>
           {goalsExpanded ? (
             <View style={styles.details} testID="agent-goals-details">
-              {presentation.goals.map((goal) => (
+              {shownGoals.map((goal) => (
                 <View key={goal.id} style={styles.goalRow} testID={`agent-goals-item-${goal.id}`}>
                   <Text style={styles.goalTitle}>{goal.title}</Text>
                   <Text style={styles.goalMeta}>
                     {formatGoalStatusLabel(goal.status, t)}
-                    {goal.evidence.length > 0
+                    {developerModeEnabled && goal.evidence.length > 0
                       ? ` · ${t('chat.agentGoals.evidenceCount', {
                           count: goal.evidence.length,
                         })}`
@@ -99,7 +104,7 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
         </View>
       ) : null}
 
-      {presentation.trace.length > 0 ? (
+      {developerModeEnabled && presentation.trace.length > 0 ? (
         <View style={styles.section} testID="agent-run-trace-widget">
           <TouchableOpacity
             accessibilityLabel={t('chat.agentRunTrace.header')}

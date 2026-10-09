@@ -4,6 +4,8 @@ import { StyleSheet } from 'react-native';
 import { AgentWorkflowSummary } from '../../src/components/chat/AgentWorkflowSummary';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 import type { AgentRun, AgentRunControlGraphState } from '../../src/types/agentRun';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../src/engine/goals/types';
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
@@ -152,7 +154,69 @@ const expectMobileToggle = (node: { props: { style: unknown } }) => {
   expect(StyleSheet.flatten(node.props.style)).toEqual(expect.objectContaining({ minHeight: 48 }));
 };
 
-describe('AgentWorkflowSummary', () => {
+describe('AgentWorkflowSummary for everyday use', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ developerModeEnabled: false });
+  });
+
+  it('hides the run trace and the empty-goal placeholder outside developer mode', () => {
+    // Regression: the trace listed raw graph event names such as MODEL_TURN_STARTED in
+    // every agentic chat, and an empty run showed "Goals pending bootstrap".
+    const withTrace = render(<AgentWorkflowSummary run={makeRun()} />);
+    expect(withTrace.queryByTestId('agent-run-trace-widget')).toBeNull();
+
+    const withoutGoals = render(
+      <AgentWorkflowSummary run={makeRun({ controlGraph: makeControlGraph({ goals: [] }) })} />,
+    );
+    expect(withoutGoals.queryByText('Goals pending bootstrap')).toBeNull();
+  });
+
+  it("lists only the task's own goals and never titles the card with engine bookkeeping", () => {
+    const screen = render(
+      <AgentWorkflowSummary
+        run={makeRun({
+          controlGraph: makeControlGraph({
+            goals: [
+              {
+                id: 'effect-write-file',
+                title: 'Verify write_file effect',
+                status: 'active',
+                owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
+                dependencies: [],
+                evidence: ['receipt'],
+                createdAt: 1,
+                updatedAt: 1,
+              },
+              {
+                id: 'goal-trip',
+                title: 'Plan the Lisbon trip',
+                status: 'pending',
+                dependencies: [],
+                evidence: [],
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.queryByText('Verify write_file effect')).toBeNull();
+    expect(screen.getByText('Plan the Lisbon trip')).toBeTruthy();
+    expect(screen.getByTestId('agent-goals-toggle').props.accessibilityLabel).toBe('Goals (1)');
+  });
+});
+
+describe('AgentWorkflowSummary in developer mode', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ developerModeEnabled: true });
+  });
+
+  afterAll(() => {
+    useSettingsStore.setState({ developerModeEnabled: false });
+  });
+
   it('keeps current work primary while goals and trace details stay collapsed by default', () => {
     const screen = render(<AgentWorkflowSummary run={makeRun()} />);
 
