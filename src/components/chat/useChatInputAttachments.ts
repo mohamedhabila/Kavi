@@ -1,11 +1,13 @@
-import { useCallback } from 'react';
-import { Alert } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type { Attachment } from '../../types/attachment';
 import { generateId } from '../../utils/id';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
+
+export type ChatAttachSource = 'camera' | 'library' | 'file';
 
 type UseChatInputAttachmentsParams = {
   attachments: Attachment[];
@@ -100,6 +102,24 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
     }
   }, [attachments, clearVoiceError, onChangeAttachments]);
 
+  const [attachSheetVisible, setAttachSheetVisible] = useState(false);
+  // iOS cannot present the camera or a picker while the sheet is still animating away,
+  // so the chosen source waits for the sheet's dismissal there; Android launches at once.
+  const pendingSourceRef = useRef<ChatAttachSource | null>(null);
+
+  const launchAttachSource = useCallback(
+    (source: ChatAttachSource) => {
+      if (source === 'camera') {
+        void handleTakePhoto();
+      } else if (source === 'library') {
+        void handlePickImage();
+      } else {
+        void handlePickDocument();
+      }
+    },
+    [handlePickDocument, handlePickImage, handleTakePhoto],
+  );
+
   const handlePickAttachment = useCallback(() => {
     if (isVoiceActive || isInputDisabled) {
       return;
@@ -110,37 +130,33 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
       return;
     }
 
-    Alert.alert(t('chat.attach'), undefined, [
-      {
-        text: t('chat.takePhoto'),
-        onPress: () => handleTakePhoto(),
-      },
-      {
-        text: t('common.image'),
-        onPress: () => {
-          void handlePickImage();
-        },
-      },
-      {
-        text: t('common.file'),
-        onPress: () => {
-          void handlePickDocument();
-        },
-      },
-      {
-        text: t('common.cancel'),
-        style: 'cancel',
-      },
-    ]);
-  }, [
-    handlePickDocument,
-    handlePickImage,
-    handleTakePhoto,
-    isInputDisabled,
-    isVoiceActive,
-    supportsVision,
-    t,
-  ]);
+    setAttachSheetVisible(true);
+  }, [handlePickDocument, isInputDisabled, isVoiceActive, supportsVision]);
+
+  const closeAttachSheet = useCallback(() => {
+    pendingSourceRef.current = null;
+    setAttachSheetVisible(false);
+  }, []);
+
+  const chooseAttachSource = useCallback(
+    (source: ChatAttachSource) => {
+      setAttachSheetVisible(false);
+      if (Platform.OS === 'ios') {
+        pendingSourceRef.current = source;
+        return;
+      }
+      launchAttachSource(source);
+    },
+    [launchAttachSource],
+  );
+
+  const handleAttachSheetDismissed = useCallback(() => {
+    const source = pendingSourceRef.current;
+    pendingSourceRef.current = null;
+    if (source) {
+      launchAttachSource(source);
+    }
+  }, [launchAttachSource]);
 
   const removeAttachment = useCallback(
     (id: string) => {
@@ -150,6 +166,10 @@ export function useChatInputAttachments(params: UseChatInputAttachmentsParams) {
   );
 
   return {
+    attachSheetVisible,
+    chooseAttachSource,
+    closeAttachSheet,
+    handleAttachSheetDismissed,
     handlePickAttachment,
     removeAttachment,
   };

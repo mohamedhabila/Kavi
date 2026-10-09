@@ -17,6 +17,7 @@ import { ChatInputCommandSuggestions } from './ChatInputCommandSuggestions';
 import { ChatInputVoiceOverlayLayer } from './ChatInputVoiceOverlayLayer';
 import { useChatInputAttachments } from './useChatInputAttachments';
 import { ChatInputExactTextIndicator, ChatInputOptionsSheet } from './ChatInputOptionsSheet';
+import { ChatInputAttachSheet } from './ChatInputAttachSheet';
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: Attachment[]) => void | Promise<void>;
@@ -99,7 +100,14 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
       }
     }, [attachments, onSend, text, voiceRecorder]);
 
-    const { handlePickAttachment, removeAttachment } = useChatInputAttachments({
+    const {
+      attachSheetVisible,
+      chooseAttachSource,
+      closeAttachSheet,
+      handleAttachSheetDismissed,
+      handlePickAttachment,
+      removeAttachment,
+    } = useChatInputAttachments({
       attachments,
       clearVoiceError: voiceRecorder.clearError,
       isInputDisabled,
@@ -296,6 +304,15 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             </TouchableOpacity>
           )}
         </View>
+        <ChatInputAttachSheet
+          colors={colors}
+          onChoose={chooseAttachSource}
+          onClose={closeAttachSheet}
+          onDismissed={handleAttachSheetDismissed}
+          styles={styles}
+          t={t}
+          visible={attachSheetVisible}
+        />
         <ChatInputOptionsSheet
           colors={colors}
           exactText={exactText}

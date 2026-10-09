@@ -4,20 +4,26 @@
 
 import React from 'react';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert, Platform } from 'react-native';
+import { Modal, Platform } from 'react-native';
 import renderer from 'react-test-renderer';
 import { ChatInput } from '../../src/components/chat/ChatInput';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Attachment } from '../../src/types/attachment';
-import { i18n } from '../../src/i18n/manager';
 
-function pressAlertButtonByLabel(
-  buttons: Array<{ text?: string; onPress?: () => void }> | undefined,
-  label: string,
+/**
+ * Picks a source from the attach sheet and lets the sheet finish closing, which is when
+ * iOS (the jest platform) opens the system picker.
+ */
+function chooseAttachSourceFromSheet(
+  screen: ReturnType<typeof render>,
+  source: 'camera' | 'library' | 'file',
 ) {
-  const button = buttons?.find((candidate) => candidate.text === label);
-  button?.onPress?.();
+  fireEvent.press(screen.getByTestId(`chat-attach-source-${source}`));
+  const sheet = screen.UNSAFE_getAllByType(Modal).find((modal) => modal.props.onDismiss);
+  act(() => {
+    sheet?.props.onDismiss?.();
+  });
 }
 
 const mockUseChatVoiceRecorder = jest.fn();
@@ -300,9 +306,6 @@ describe('ChatInput', () => {
   });
 
   it('should pick image when attachment button is pressed and supportsVision', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
-      pressAlertButtonByLabel(buttons, i18n.t('common.image'));
-    });
     (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValueOnce({
       canceled: false,
       assets: [
@@ -311,20 +314,20 @@ describe('ChatInput', () => {
     });
 
     const onSend = jest.fn();
-    const { getByTestId } = renderControlledChatInput({ onSend, supportsVision: true });
+    const screen = renderControlledChatInput({ onSend, supportsVision: true });
 
-    const paperclipIcon = getByTestId('icon-Paperclip');
+    const paperclipIcon = screen.getByTestId('icon-Paperclip');
     fireEvent.press(paperclipIcon.parent || paperclipIcon);
+    chooseAttachSourceFromSheet(screen, 'library');
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled();
       expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith({
         mediaTypes: ['images'],
         quality: 0.8,
       });
     });
 
-    const sendIcon = getByTestId('icon-Send');
+    const sendIcon = screen.getByTestId('icon-Send');
     fireEvent.press(sendIcon.parent || sendIcon);
 
     expect(onSend).toHaveBeenCalledTimes(1);
@@ -340,57 +343,52 @@ describe('ChatInput', () => {
       }),
     ]);
     expect(sentAttachments[0]).not.toHaveProperty('base64');
-
-    alertSpy.mockRestore();
   });
 
   it('should allow picking a document when attachment button is pressed with vision support', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
-      pressAlertButtonByLabel(buttons, i18n.t('common.file'));
-    });
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValueOnce({
       canceled: false,
       assets: [{ uri: 'file://doc.pdf', name: 'doc.pdf', mimeType: 'application/pdf', size: 2000 }],
     });
 
-    const { getByTestId } = renderControlledChatInput({ supportsVision: true });
+    const screen = renderControlledChatInput({ supportsVision: true });
 
-    const paperclipIcon = getByTestId('icon-Paperclip');
+    const paperclipIcon = screen.getByTestId('icon-Paperclip');
     fireEvent.press(paperclipIcon.parent || paperclipIcon);
+    chooseAttachSourceFromSheet(screen, 'file');
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled();
       expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith({
         type: '*/*',
         copyToCacheDirectory: true,
       });
     });
-
-    alertSpy.mockRestore();
   });
 
   it('should take a photo when the take-photo button is pressed', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation((_, __, buttons) => {
-      pressAlertButtonByLabel(buttons, i18n.t('chat.takePhoto'));
-    });
     (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({
       granted: true,
     });
     (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValueOnce({
       canceled: false,
       assets: [
-        { uri: 'file://camera.jpg', fileName: 'camera.jpg', mimeType: 'image/jpeg', fileSize: 1500 },
+        {
+          uri: 'file://camera.jpg',
+          fileName: 'camera.jpg',
+          mimeType: 'image/jpeg',
+          fileSize: 1500,
+        },
       ],
     });
 
     const onSend = jest.fn();
-    const { getByTestId } = renderControlledChatInput({ onSend, supportsVision: true });
+    const screen = renderControlledChatInput({ onSend, supportsVision: true });
 
-    const paperclipIcon = getByTestId('icon-Paperclip');
+    const paperclipIcon = screen.getByTestId('icon-Paperclip');
     fireEvent.press(paperclipIcon.parent || paperclipIcon);
+    chooseAttachSourceFromSheet(screen, 'camera');
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled();
       expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
       expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
         mediaTypes: ['images'],
@@ -398,7 +396,7 @@ describe('ChatInput', () => {
       });
     });
 
-    const sendIcon = getByTestId('icon-Send');
+    const sendIcon = screen.getByTestId('icon-Send');
     fireEvent.press(sendIcon.parent || sendIcon);
 
     expect(onSend).toHaveBeenCalledTimes(1);
@@ -412,8 +410,6 @@ describe('ChatInput', () => {
         size: 1500,
       }),
     ]);
-
-    alertSpy.mockRestore();
   });
 
   it('should pick document when attachment button is pressed without vision', async () => {
