@@ -624,6 +624,7 @@ export const ChatScreen: React.FC = () => {
       />
 
       <ChatScreenConversationPane
+        activeConversationId={activeConversationId}
         bottomInset={insets.bottom}
         clearInteractionReleaseTimer={clearInteractionReleaseTimer}
         colors={colors}
@@ -662,6 +663,7 @@ export const ChatScreen: React.FC = () => {
         providerName={conversationStartSelection?.provider.name}
         recentConversation={recentConversation}
         resolvedDisplayMessages={resolvedDisplayMessages}
+        returnTextToComposer={returnTextToComposer}
         scrollToBottom={scrollToBottom}
         setEditingContent={setEditingContent}
         setEditingMessageId={setEditingMessageId}

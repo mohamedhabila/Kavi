@@ -325,6 +325,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: '目前無法儲存記憶回饋。',
     attachmentWorkspaceImportFailed: '無法將附件加入工作區。請再試一次。',
     steeringQueueFull: '等待助理讀取的訊息過多。請在助理讀取後再試一次。',
+    steeringQueuedTitle: '等待助理讀取',
+    steeringEditQueued: '編輯待傳送的訊息',
     shareFileFailed: '目前無法分享此工作區檔案。',
     commandSuggestion: '命令 {name}',
     usageTokens: '令牌',

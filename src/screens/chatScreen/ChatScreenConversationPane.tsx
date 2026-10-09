@@ -23,12 +23,14 @@ import { ChatLatestActivityButton } from './ChatLatestActivityButton';
 import { useLatestActivityPrompt } from './useLatestActivityPrompt';
 import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 import { AssistantStart } from '../../components/chat/AssistantStart';
+import { useQueuedSteering } from './useQueuedSteering';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
 const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const;
 
 type ChatScreenConversationPaneProps = {
+  activeConversationId: string | null;
   bottomInset: number;
   colors: AppPalette;
   composerAttachments: Attachment[];
@@ -76,6 +78,7 @@ type ChatScreenConversationPaneProps = {
   providerName?: string;
   recentConversation?: { id: string; title: string };
   resolvedDisplayMessages: ResolvedDisplayMessageItem[];
+  returnTextToComposer: (conversationId: string, text: string) => void;
   scrollToBottom: (animated: boolean) => void;
   setEditingContent: (content: string | undefined) => void;
   setEditingMessageId: (messageId: string | null) => void;
@@ -92,6 +95,7 @@ type ChatScreenConversationPaneProps = {
 
 export function ChatScreenConversationPane(props: ChatScreenConversationPaneProps) {
   const {
+    activeConversationId,
     bottomInset,
     clearInteractionReleaseTimer,
     colors,
@@ -130,6 +134,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     providerName,
     recentConversation,
     resolvedDisplayMessages,
+    returnTextToComposer,
     scrollToBottom,
     setEditingContent,
     setEditingMessageId,
@@ -141,6 +146,10 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     temporalMarkersByMessageId,
     updateAutoFollowState,
   } = props;
+  const { queuedMessages, editQueuedMessage } = useQueuedSteering({
+    conversationId: activeConversationId,
+    returnTextToComposer,
+  });
   const renderMessageItem = useConversationMessageRenderItem({
     handleEdit,
     handleOpenSubAgentDetails,
@@ -310,6 +319,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         supportsVision={supportsVision}
         bottomInset={bottomInset}
         onCancelEdit={handleCancelEdit}
+        queuedMessages={queuedMessages}
+        onEditQueuedMessage={editQueuedMessage}
       />
     </View>
   );

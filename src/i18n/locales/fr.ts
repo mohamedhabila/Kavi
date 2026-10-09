@@ -355,6 +355,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
       'Impossible d’ajouter les fichiers joints à l’espace de travail. Réessayez.',
     steeringQueueFull:
       'Trop de messages attendent l’assistant. Réessayez une fois qu’il les aura lus.',
+    steeringQueuedTitle: 'En attente de l’assistant',
+    steeringEditQueued: 'Modifier le message en attente',
     shareFileFailed: 'Ce fichier de l’espace de travail ne peut pas être partagé pour le moment.',
     commandSuggestion: 'Commande {name}',
     usageTokens: 'Jetons',

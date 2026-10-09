@@ -18,6 +18,7 @@ import { ChatInputVoiceOverlayLayer } from './ChatInputVoiceOverlayLayer';
 import { useChatInputAttachments } from './useChatInputAttachments';
 import { ChatInputExactTextIndicator, ChatInputOptionsSheet } from './ChatInputOptionsSheet';
 import { ChatInputAttachSheet } from './ChatInputAttachSheet';
+import { ChatInputQueuedMessages, type ChatInputQueuedMessage } from './ChatInputQueuedMessages';
 
 interface ChatInputProps {
   onSend: (text: string, attachments?: Attachment[]) => void | Promise<void>;
@@ -34,7 +35,12 @@ interface ChatInputProps {
   onCancelEdit?: () => void;
   supportsVision?: boolean;
   bottomInset?: number;
+  /** Messages sent while the assistant works, waiting for its next step. */
+  queuedMessages?: ReadonlyArray<ChatInputQueuedMessage>;
+  onEditQueuedMessage?: (messageId: string) => void;
 }
+
+const NO_QUEUED_MESSAGES: ReadonlyArray<ChatInputQueuedMessage> = [];
 
 export const ChatInput: React.FC<ChatInputProps> = React.memo(
   ({
@@ -52,6 +58,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
     onCancelEdit,
     supportsVision,
     bottomInset = 0,
+    queuedMessages = NO_QUEUED_MESSAGES,
+    onEditQueuedMessage,
   }) => {
     const { colors } = useAppTheme();
     const { t } = useTranslation();
@@ -136,7 +144,10 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
 
     const composerDisabled = isInputDisabled || voiceRecorder.isActive;
     const sendDisabled = composerDisabled || (!text.trim() && attachments.length === 0);
-    const showStopButton = isLoading && !text.trim() && attachments.length === 0;
+    const hasDraft = Boolean(text.trim()) || attachments.length > 0;
+    // While the assistant works, Stop stays reachable; a draft can still be sent, and the
+    // assistant reads it at its next step.
+    const showSendButton = !isLoading || hasDraft;
 
     useEffect(() => {
       if (composerDisabled) {
@@ -159,6 +170,15 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             </TouchableOpacity>
           </View>
         )}
+        {onEditQueuedMessage ? (
+          <ChatInputQueuedMessages
+            colors={colors}
+            messages={queuedMessages}
+            onEdit={onEditQueuedMessage}
+            styles={styles}
+            t={t}
+          />
+        ) : null}
         {attachments.length > 0 && (
           <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
         )}
@@ -273,7 +293,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
           >
             <MoreHorizontal size={20} color={colors.textSecondary} />
           </TouchableOpacity>
-          {showStopButton ? (
+          {isLoading ? (
             <TouchableOpacity
               style={styles.sendBtn}
               onPress={onStop}
@@ -283,7 +303,8 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
             >
               <Square size={20} color={colors.danger} fill={colors.danger} />
             </TouchableOpacity>
-          ) : (
+          ) : null}
+          {showSendButton ? (
             <TouchableOpacity
               style={[
                 styles.sendBtn,
@@ -302,7 +323,7 @@ export const ChatInput: React.FC<ChatInputProps> = React.memo(
                 color={text.trim() || attachments.length > 0 ? colors.primary : colors.placeholder}
               />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
         <ChatInputAttachSheet
           colors={colors}

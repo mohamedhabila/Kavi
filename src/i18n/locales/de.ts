@@ -340,6 +340,8 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Die angehängten Dateien konnten nicht zum Workspace hinzugefügt werden. Bitte erneut versuchen.',
     steeringQueueFull:
       'Zu viele Nachrichten warten auf den Assistenten. Versuche es erneut, sobald er sie gelesen hat.',
+    steeringQueuedTitle: 'Wartet auf den Assistenten',
+    steeringEditQueued: 'Wartende Nachricht bearbeiten',
     shareFileFailed: 'Diese Workspace-Datei kann gerade nicht geteilt werden.',
     commandSuggestion: 'Befehl {name}',
     usageTokens: 'Tokens',

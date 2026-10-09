@@ -359,6 +359,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: 'تعذر حفظ ملاحظات الذاكرة الآن.',
     attachmentWorkspaceImportFailed: 'تعذر إضافة الملفات المرفقة إلى مساحة العمل. حاول مرة أخرى.',
     steeringQueueFull: 'هناك رسائل كثيرة بانتظار المساعد. أعد المحاولة بعد أن يقرأها.',
+    steeringQueuedTitle: 'بانتظار المساعد',
+    steeringEditQueued: 'تعديل الرسالة المنتظرة',
     shareFileFailed: 'تعذرت مشاركة ملف مساحة العمل هذا الآن.',
     commandSuggestion: 'الأمر {name}',
     usageTokens: 'الرموز',

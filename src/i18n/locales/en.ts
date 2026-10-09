@@ -341,6 +341,8 @@ export const en: TranslationMap = {
     attachmentWorkspaceImportFailed: 'Unable to add attached files to the workspace. Try again.',
     steeringQueueFull:
       'Too many messages are waiting for the assistant. Try again after it reads them.',
+    steeringQueuedTitle: 'Waiting for the assistant',
+    steeringEditQueued: 'Edit queued message',
     shareFileFailed: 'Unable to share this workspace file right now.',
     commandSuggestion: 'Command {name}',
     usageTokens: 'Tokens',

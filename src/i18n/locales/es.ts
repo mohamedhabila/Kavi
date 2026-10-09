@@ -350,6 +350,8 @@ export const es: TranslationMap = mergeTranslations(en, {
       'No se pudieron agregar los archivos adjuntos al espacio de trabajo. Intentalo de nuevo.',
     steeringQueueFull:
       'Hay demasiados mensajes esperando al asistente. Inténtalo de nuevo cuando los haya leído.',
+    steeringQueuedTitle: 'Esperando al asistente',
+    steeringEditQueued: 'Editar mensaje en espera',
     shareFileFailed: 'No se puede compartir este archivo del espacio de trabajo ahora.',
     commandSuggestion: 'Comando {name}',
     usageTokens: 'Tokens',
