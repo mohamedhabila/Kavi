@@ -45,7 +45,6 @@ import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
 import { generateId } from '../../utils/id';
-import { cloneAndFreeze } from './foregroundScenarioDriverTypes';
 import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type {
   ForegroundScenarioCompletionSnapshot,
