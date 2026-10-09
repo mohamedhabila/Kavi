@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 905 |
+| MIT | 906 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -582,6 +582,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | expo-font | 55.0.8 | runtime | MIT |
 | expo-haptics | 55.0.18 | runtime | MIT |
 | expo-image-loader | 55.0.1 | transitive | MIT |
+| expo-image-manipulator | 55.0.21 | runtime | MIT |
 | expo-image-picker | 55.0.24 | runtime | MIT |
 | expo-keep-awake | 55.0.8 | transitive | MIT |
 | expo-linking | 55.0.17 | transitive | MIT |

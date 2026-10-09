@@ -65,6 +65,9 @@ PODS:
     - ExpoModulesCore
   - ExpoHaptics (55.0.18):
     - ExpoModulesCore
+  - ExpoImageManipulator (55.0.21):
+    - ExpoModulesCore
+    - SDWebImageWebPCoder
   - ExpoImagePicker (55.0.24):
     - ExpoModulesCore
   - ExpoKeepAwake (55.0.8):
@@ -144,6 +147,18 @@ PODS:
   - KaviSsh (0.1.0):
     - ExpoModulesCore
   - libssh2-iosx (1.11.0.1)
+  - libwebp (1.6.0):
+    - libwebp/demux (= 1.6.0)
+    - libwebp/mux (= 1.6.0)
+    - libwebp/sharpyuv (= 1.6.0)
+    - libwebp/webp (= 1.6.0)
+  - libwebp/demux (1.6.0):
+    - libwebp/webp
+  - libwebp/mux (1.6.0):
+    - libwebp/demux
+  - libwebp/sharpyuv (1.6.0)
+  - libwebp/webp (1.6.0):
+    - libwebp/sharpyuv
   - NMSSH (2.3.1):
     - libssh2-iosx (= 1.11.0.1)
   - RCT-Folly (2024.11.18.00):
@@ -3140,6 +3155,10 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - SDWebImage/Core (5.21.7)
+  - SDWebImageWebPCoder (0.15.0):
+    - libwebp (~> 1.0)
+    - SDWebImage/Core (~> 5.17)
   - SocketRocket (0.7.1)
   - UMAppLoader (55.0.5)
   - Yoga (0.0.0)
@@ -3164,6 +3183,7 @@ DEPENDENCIES:
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
   - ExpoHaptics (from `../node_modules/expo-haptics/ios`)
+  - ExpoImageManipulator (from `../node_modules/expo-image-manipulator/ios`)
   - ExpoImagePicker (from `../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../node_modules/expo/node_modules/expo-keep-awake/ios`)
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
@@ -3278,6 +3298,9 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
+    - libwebp
+    - SDWebImage
+    - SDWebImageWebPCoder
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -3319,6 +3342,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-font/ios"
   ExpoHaptics:
     :path: "../node_modules/expo-haptics/ios"
+  ExpoImageManipulator:
+    :path: "../node_modules/expo-image-manipulator/ios"
   ExpoImagePicker:
     :path: "../node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
@@ -3559,6 +3584,7 @@ SPEC CHECKSUMS:
   ExpoFileSystem: bdb067c7739d9f7405227154a7280e2d6653bbc8
   ExpoFont: a7e34a75bdfb703fa07a0e87807f836236608c76
   ExpoHaptics: eb775b37da9504cf324325e63a054bedf963a7c9
+  ExpoImageManipulator: 6ee60a0202c350d82d99fd48773d7c2e770f80ea
   ExpoImagePicker: 7dd57ad3d0922e30efa9b52b3ce83099c2bf4352
   ExpoKeepAwake: d0eb7a0719500d2a43fbf29b6f79e84d70c75ebf
   ExpoLinking: 72204a7378924ec333a2ab4ee80aac7058b33ffe
@@ -3584,6 +3610,7 @@ SPEC CHECKSUMS:
   hermes-engine: 94a333fb97b8135eae5e4fb8fab6a67d61274dd1
   KaviSsh: 280126833c0d2128c191024543f3b4100532d138
   libssh2-iosx: a096366b4de77f3de01bb1265e26beb2ad5b0784
+  libwebp: af5937a13536ef73f3784d69cc342b98961acf33
   NMSSH: 39d19ff70231635ff73b75052d0f32522a2b009e
   RCT-Folly: b29feb752b08042c62badaef7d453f3bb5e6ae23
   RCTDeprecation: f05668eea7b0e209e77e8ab1dc6a5e3b342f6f65
@@ -3666,6 +3693,8 @@ SPEC CHECKSUMS:
   RNSSHClient: 53d1179af41521dbdc69bd22dc14b05ce64408f5
   RNSVG: 595abfa0f9ac26d56afcaaedf4e37a00f54cab71
   RNWorklets: a3184955a41f2be46898a937e2821469c8c8da42
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
+  SDWebImageWebPCoder: 0e06e365080397465cc73a7a9b472d8a3bd0f377
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   UMAppLoader: 045699ef1cc6afda399a5c78bde728f23bcce213
   Yoga: d2ed98551adb569fc38be0148666854e1ff60692
