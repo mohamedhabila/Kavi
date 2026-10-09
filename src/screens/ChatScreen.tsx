@@ -61,6 +61,7 @@ import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTra
 import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
 import { getNavigableConversations } from '../utils/conversationNavigation';
 import { useVoiceConversationBridge } from './chatScreen/useVoiceConversationBridge';
+import { useChatScreenNavigation } from './chatScreen/useChatScreenNavigation';
 import { usePreparedChatDraft } from './usePreparedChatDraft';
 
 export const ChatScreen: React.FC = () => {
@@ -245,38 +246,12 @@ export const ChatScreen: React.FC = () => {
       ),
     [activeConversationId, conversations],
   );
-  const handleOpenProviderSetup = useCallback(
-    () =>
-      navigation.navigate('Settings' as any, {
-        destination: 'advanced-ai',
-        returnTo: { name: 'Chat' },
-      }),
-    [navigation],
-  );
-  const handleOpenConversationSettings = useCallback(() => {
-    if (!activeConversationId) return;
-    navigation.navigate('ConversationSettings' as any, {
-      conversationId: activeConversationId,
-      returnTo: { name: 'Chat' },
-    });
-  }, [activeConversationId, navigation]);
-  const handleOpenDeveloperTools = useCallback(
-    () =>
-      navigation.navigate('DeveloperWork' as any, {
-        returnTo: { name: 'Chat' },
-      }),
-    [navigation],
-  );
-  const handleOpenUsage = useCallback(() => {
-    if (!activeConversationId) {
-      return;
-    }
-    navigation.navigate('ConversationSettings' as any, {
-      conversationId: activeConversationId,
-      returnTo: { name: 'Chat' },
-      showUsage: true,
-    });
-  }, [activeConversationId, navigation]);
+  const {
+    handleOpenConversationSettings,
+    handleOpenDeveloperTools,
+    handleOpenProviderSetup,
+    handleOpenUsage,
+  } = useChatScreenNavigation({ activeConversationId, navigation });
 
   const { activeErrorMessage } = useLocalModelRuntimeState({
     activeProvider,
