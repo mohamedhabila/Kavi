@@ -1,14 +1,14 @@
 import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
 import { resolveForegroundConversationExecutionContext } from '../../engine/graph/foregroundRun/executionContext';
-import type {
-  ExecuteForegroundConversationRunParams,
-  ForegroundStreamingDraft,
-} from '../../engine/graph/foregroundRun/executionTypes';
+import type { ExecuteForegroundConversationRunParams } from '../../engine/graph/foregroundRun/executionTypes';
 import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
-import { createForegroundRequestRegistry } from '../../engine/graph/foregroundRun/requestRegistry';
 import type { ForegroundConversationSendContext } from '../../engine/graph/foregroundRun/sendExecution';
 import { createForegroundScenarioSendContextFactory } from './foregroundScenarioSendContext';
+import {
+  createForegroundScenarioRequestRegistry,
+  createForegroundScenarioStreamingState,
+} from './foregroundScenarioRequestState';
 import { clearAgentRunCancellation } from '../../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import {
@@ -25,13 +25,6 @@ import {
   waitForModelProjectionAvailability,
 } from '../../store/modelProjectionOwnership';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
-import {
-  drainIngestionQueueWithWakeup,
-  getIngestionJob,
-  type IngestionJob,
-} from '../../services/memory/ingestionQueue';
-import { listIngestionDurabilityReceipts } from '../../services/memory/ingestionStructuralReceiptStore';
-import { loadIngestionJobRuntimeContext } from '../../services/memory/lifecycle';
 import { publishConversationTurnMemory } from '../../services/memory/turnPublication';
 import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
 import { truncateLogDetail } from '../../screens/chatFormatting';
@@ -47,7 +40,7 @@ import {
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
-import type { AgentRun, AgentRunControlGraphState } from '../../types/agentRun';
+import type { AgentRun } from '../../types/agentRun';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
@@ -60,14 +53,12 @@ import type {
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioMemoryRecord,
-  ForegroundScenarioMemorySnapshot,
   ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
 
-const MEMORY_JOB_INITIAL_POLL_MS = 10;
-const MEMORY_JOB_MAX_POLL_MS = 500;
-
-export type ForegroundScenarioRequestRegistry = ReturnType<typeof createRequestRegistry>;
+export type ForegroundScenarioRequestRegistry = ReturnType<
+  typeof createForegroundScenarioRequestRegistry
+>;
 
 export type ForegroundScenarioRuntime = {
   /**
@@ -224,187 +215,6 @@ export function buildForegroundScenarioCompletionSnapshot(params: {
   };
 }
 
-function createRequestRegistry() {
-  const registry = createForegroundRequestRegistry();
-  const pendingAbortReasons = new Map<string, string | undefined>();
-
-  return {
-    abortForegroundRequestForConversation: (conversationId: string, reason?: string) =>
-      registry.abortForConversation(conversationId, reason),
-    abortCurrentOrNextForegroundRequest: (conversationId: string, reason?: string) => {
-      if (!registry.abortForConversation(conversationId, reason)) {
-        pendingAbortReasons.set(conversationId, reason);
-      }
-    },
-    clearForegroundRequest: (
-      conversationId: string,
-      requestId: string,
-      controller: AbortController,
-    ) => {
-      if (!registry.clear({ conversationId, requestId, controller })) return false;
-      pendingAbortReasons.delete(conversationId);
-      useChatStore.getState().setLoading(registry.size > 0);
-      return true;
-    },
-    isCurrentForegroundRequest: (
-      conversationId: string,
-      requestId: string,
-      controller: AbortController,
-    ) => registry.isCurrent({ conversationId, requestId, controller }),
-    registerForegroundRequest: (
-      requestId: string,
-      conversationId: string,
-      controller: AbortController,
-    ) => {
-      registry.register({ conversationId, requestId, controller });
-      useChatStore.getState().setLoading(registry.size > 0);
-      if (pendingAbortReasons.has(conversationId)) {
-        registry.abort(
-          { conversationId, requestId, controller },
-          pendingAbortReasons.get(conversationId),
-        );
-        pendingAbortReasons.delete(conversationId);
-      }
-    },
-    setStreamingMessageId: (
-      conversationId: string,
-      requestId: string,
-      controller: AbortController,
-      messageId: string | null,
-    ) => registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
-  };
-}
-
-function createStreamingState() {
-  const drafts: Record<string, ForegroundStreamingDraft | undefined> = {};
-  return {
-    drafts,
-    clearStreamingDraft: (messageId: string) => {
-      delete drafts[messageId];
-    },
-    mergeStreamingDraft: (messageId: string, patch: Partial<ForegroundStreamingDraft>) => {
-      drafts[messageId] = { ...(drafts[messageId] ?? {}), ...patch };
-    },
-    updateStreamingDraft: (
-      messageId: string,
-      updater: (
-        currentDraft: ForegroundStreamingDraft | undefined,
-      ) => ForegroundStreamingDraft | undefined,
-    ) => {
-      const next = updater(drafts[messageId]);
-      if (next) drafts[messageId] = next;
-      else delete drafts[messageId];
-    },
-  };
-}
-
-function sleep(delayMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
-async function awaitMemorySettlementBeforeDeadline<T>(
-  promise: Promise<T>,
-  deadline: number,
-  timeoutMessage = 'Timed out settling foreground scenario memory.',
-): Promise<T> {
-  const remainingMs = deadline - Date.now();
-  if (remainingMs <= 0) throw new Error(timeoutMessage);
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error(timeoutMessage)), remainingMs);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
-}
-
-async function awaitMemoryJob(jobId: string, deadline: number): Promise<IngestionJob> {
-  let requestedDrain = false;
-  let pollDelayMs = MEMORY_JOB_INITIAL_POLL_MS;
-  while (Date.now() <= deadline) {
-    const job = getIngestionJob(jobId);
-    if (!job) throw new Error(`Memory ingestion job ${jobId} disappeared before completion.`);
-    if (job.structuralCompletedAt !== null) return job;
-    if (['degraded', 'completed_structural', 'completed_enriched', 'failed'].includes(job.status)) {
-      return job;
-    }
-
-    if ((job.status === 'pending' || job.status === 'retrying') && !requestedDrain) {
-      requestedDrain = true;
-      // Product chat only waits for the durable structural checkpoint; provider
-      // enrichment continues in the background. Keep the live evaluator on the
-      // same boundary instead of blocking on the full drain/provider request.
-      void drainIngestionQueueWithWakeup({
-        loadRuntimeContextForJob: loadIngestionJobRuntimeContext,
-        maxJobs: 1,
-      }).catch(() => undefined);
-      continue;
-    }
-
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) break;
-    await sleep(Math.min(pollDelayMs, remainingMs));
-    pollDelayMs = Math.min(pollDelayMs * 2, MEMORY_JOB_MAX_POLL_MS);
-  }
-  throw new Error(`Timed out waiting for memory ingestion job ${jobId}.`);
-}
-
-export async function settleForegroundScenarioMemory(
-  records: ReadonlyArray<ForegroundScenarioMemoryRecord>,
-  timeoutMs: number,
-): Promise<ReadonlyArray<ForegroundScenarioMemorySnapshot>> {
-  const deadline = Date.now() + timeoutMs;
-  const results = await awaitMemorySettlementBeforeDeadline(
-    Promise.all(records.map((record) => record.promise)),
-    deadline,
-  );
-  const seenJobIds = new Set<string>();
-  const uniqueResults = results.filter((result) => {
-    if (!result.jobId) return true;
-    if (seenJobIds.has(result.jobId)) return false;
-    seenJobIds.add(result.jobId);
-    return true;
-  });
-  const jobIds = uniqueResults.flatMap((result) => (result.jobId ? [result.jobId] : []));
-  const snapshots = await awaitMemorySettlementBeforeDeadline(
-    Promise.all(
-      uniqueResults.map(async (result) => {
-        const job = result.jobId ? await awaitMemoryJob(result.jobId, deadline) : null;
-        return {
-          publication: result,
-          job,
-          receipts: result.jobId ? listIngestionDurabilityReceipts(result.jobId) : [],
-        };
-      }),
-    ),
-    deadline,
-    jobIds.length === 1
-      ? `Timed out waiting for memory ingestion job ${jobIds[0]}.`
-      : 'Timed out settling foreground scenario memory.',
-  );
-  return cloneAndFreeze(snapshots);
-}
-
-export function shouldExpectForegroundMemoryCloseout(params: {
-  disableLongTermMemory: boolean;
-  finalAssistantCompleted: boolean;
-  graphStatus: AgentRunControlGraphState['status'] | null | undefined;
-  isSideThread: boolean;
-  timedOut: boolean;
-}): boolean {
-  return (
-    !params.disableLongTermMemory &&
-    !params.isSideThread &&
-    params.finalAssistantCompleted &&
-    params.graphStatus !== 'awaiting_user' &&
-    !params.timedOut
-  );
-}
-
 export function resolveForegroundScenarioTurnRun(
   conversation: Conversation,
   userMessageId: string,
@@ -459,8 +269,8 @@ export function createForegroundScenarioRuntime(
   input: ForegroundScenarioDriverInput,
   memoryRecords: ForegroundScenarioMemoryRecord[],
 ): ForegroundScenarioRuntime {
-  const requests = createRequestRegistry();
-  const streaming = createStreamingState();
+  const requests = createForegroundScenarioRequestRegistry();
+  const streaming = createForegroundScenarioStreamingState();
   const pendingFinalizations = new Map<string, Promise<string | undefined>>();
   const pendingTerminalReviews = new Map<string, Promise<void>>();
   const pendingAsyncResumes = new Map<string, Promise<void>>();

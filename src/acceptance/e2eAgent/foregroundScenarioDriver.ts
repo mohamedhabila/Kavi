@@ -34,9 +34,11 @@ import {
   ensureForegroundScenarioStoresHydrated,
   resolveForegroundScenarioFinalAssistant,
   resolveForegroundScenarioTurnRun,
+} from './foregroundScenarioDriverRuntime';
+import {
   settleForegroundScenarioMemory,
   shouldExpectForegroundMemoryCloseout,
-} from './foregroundScenarioDriverRuntime';
+} from './foregroundScenarioMemorySettlement';
 import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import {
   cloneAndFreeze,

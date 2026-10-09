@@ -14,10 +14,8 @@ import { listIngestionDurabilityReceipts } from '../../src/services/memory/inges
 import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
-import {
-  resolveForegroundScenarioFinalAssistant,
-  settleForegroundScenarioMemory,
-} from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import { resolveForegroundScenarioFinalAssistant } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+import { settleForegroundScenarioMemory } from '../../src/acceptance/e2eAgent/foregroundScenarioMemorySettlement';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';

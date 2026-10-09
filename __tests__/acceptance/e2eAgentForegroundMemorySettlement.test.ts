@@ -8,11 +8,11 @@ import {
   getIngestionJob,
   type IngestionJob,
 } from '../../src/services/memory/ingestionQueue';
+import { resolveForegroundScenarioTurnRun } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
 import {
-  resolveForegroundScenarioTurnRun,
   settleForegroundScenarioMemory,
   shouldExpectForegroundMemoryCloseout,
-} from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
+} from '../../src/acceptance/e2eAgent/foregroundScenarioMemorySettlement';
 import {
   sealForegroundScenarioMemoryEvidence,
   sealForegroundScenarioMemoryEvidenceAfterProviderWait,
