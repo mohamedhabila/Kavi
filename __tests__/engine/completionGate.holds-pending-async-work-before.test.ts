@@ -3,6 +3,7 @@ import { evaluateCompletionGate } from '../../src/engine/graph/completionGate';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
 import type { AgentGoal } from '../../src/types/agentRun';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
+import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 const baseTurnDirectives: AgentControlTurnDirectives = {
   forceFinalText: false,
   requireWorkflowTool: false,
@@ -423,7 +424,7 @@ describe('completionGate', () => {
         type: 'BLOCKED',
         reason: 'goals_incomplete_without_tool_path',
       },
-      content: expect.stringContaining('without claiming completion'),
+      content: expect.stringContaining(buildRunStoppedMessage('no_way_to_continue')),
     });
   });
   it('does not expose pending goal criteria in hold prompts before activation', () => {

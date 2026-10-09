@@ -11,6 +11,7 @@ import {
   reduceAgentControlGraph,
 } from '../../src/engine/graph/agentControlGraph';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
+import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
 describe('tool execution outcome resolution', () => {
   it('projects a deferred mobile action into waiting state without a tool result', async () => {
@@ -180,7 +181,7 @@ describe('tool execution outcome resolution', () => {
           reason: 'tool_effect_not_claimed',
         },
         sessionEndReason: 'tool_effect_not_claimed',
-        content: expect.stringContaining('That action was not executed or claimed as successful'),
+        content: buildRunStoppedMessage('action_not_recorded'),
       }),
     );
     expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
@@ -220,7 +221,7 @@ describe('tool execution outcome resolution', () => {
         type: 'CANCELLED',
         reason: 'user_approval_denied',
       },
-      content: expect.stringContaining('No effect was dispatched'),
+      content: buildRunStoppedMessage('approval_declined'),
       assistantMetadata: expect.objectContaining({
         kind: 'final',
         completionStatus: 'complete',
@@ -266,7 +267,7 @@ describe('tool execution outcome resolution', () => {
         type: 'BLOCKED',
         reason: 'user_takeover_required',
       },
-      content: expect.stringContaining('No effect was dispatched'),
+      content: buildRunStoppedMessage('takeover_required'),
       assistantMetadata: expect.objectContaining({
         kind: 'final',
         completionStatus: 'incomplete',

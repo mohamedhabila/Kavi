@@ -6,6 +6,7 @@ import { emitSessionEvent } from '../../src/services/events/bus';
 import { getMemoryPolicyEpoch } from '../../src/services/memory/policy';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
+import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
 jest.mock('../../src/services/events/bus', () => ({
   emitSessionEvent: jest.fn().mockResolvedValue(undefined),
@@ -154,8 +155,7 @@ describe('agentControlGraphSessionExecution', () => {
     expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledTimes(1);
     expect(params.graph.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        content:
-          "I've reached the maximum number of tool iterations. Here's what I've accomplished so far with the tools I've used.",
+        content: buildRunStoppedMessage('step_limit'),
         graphEvent: {
           type: 'FINALIZED',
           reason: 'max_iterations',

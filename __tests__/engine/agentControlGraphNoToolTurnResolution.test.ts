@@ -10,6 +10,7 @@ import {
   projectRequestUnderstanding,
   summarizeRequestUnderstanding,
 } from '../../src/services/agents/requestUnderstandingProjection';
+import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
 describe('agent control graph no-tool turn resolution', () => {
   it('finalizes an actionable agentic request answered without tools on the first pass', async () => {
@@ -407,7 +408,7 @@ describe('agent control graph no-tool turn resolution', () => {
           type: 'BLOCKED',
           reason: 'empty_final_text_after_recovery',
         },
-        content: expect.stringContaining('no usable response'),
+        content: buildRunStoppedMessage('no_usable_reply'),
       }),
     );
   });
@@ -506,7 +507,7 @@ describe('agent control graph no-tool turn resolution', () => {
           type: 'BLOCKED',
           reason: 'empty_final_text_after_recovery',
         },
-        content: expect.stringContaining('no usable response'),
+        content: buildRunStoppedMessage('no_usable_reply'),
         assistantMetadata: expect.objectContaining({
           completionStatus: 'incomplete',
           finishReason: 'empty_final_text_after_recovery',

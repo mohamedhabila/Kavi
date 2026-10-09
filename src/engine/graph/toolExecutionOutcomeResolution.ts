@@ -59,6 +59,7 @@ import type { PersistedMobileControllerHandoff } from '../../services/executionJ
 import { buildAgentRunMobileControllerAsyncOperation } from '../../services/agents/mobileControllerAsyncOperation';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { didSessionToolStartBackgroundWork } from './sessionBackgroundHandoff';
+import { buildRunStoppedMessage } from './runStoppedMessage';
 
 export interface TerminalToolExecutionOutcome {
   index: number;
@@ -542,8 +543,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         type: 'CANCELLED',
         reason: 'user_approval_denied',
       },
-      content:
-        'Okay — I did not perform that action because you rejected the approval request. No effect was dispatched.',
+      content: buildRunStoppedMessage('approval_declined'),
       assistantMetadata: buildAssistantMessageMetadata('final', {
         completionStatus: 'complete',
         finishReason: 'user_approval_denied',
@@ -569,8 +569,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         type: 'BLOCKED',
         reason: 'user_takeover_required',
       },
-      content:
-        'I stopped before performing that action because this controller requires you to review and complete the consequential step directly. No effect was dispatched.',
+      content: buildRunStoppedMessage('takeover_required'),
       assistantMetadata: buildAssistantMessageMetadata('final', {
         completionStatus: 'incomplete',
         finishReason: 'tool_effect_not_claimed',
@@ -594,10 +593,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         type: 'BLOCKED',
         reason: 'tool_effect_not_claimed',
       },
-      content:
-        'The request is incomplete because a required action could not be safely authorized, durably recorded, and verified. ' +
-        'That action was not executed or claimed as successful. Any separately verified actions remain reflected in their tool results. ' +
-        'Review the relevant permission, or retry after the durable execution service is available.',
+      content: buildRunStoppedMessage('action_not_recorded'),
       assistantMetadata: buildAssistantMessageMetadata('final', {
         completionStatus: 'incomplete',
         finishReason: 'tool_effect_not_claimed',

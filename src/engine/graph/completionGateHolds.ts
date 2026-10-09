@@ -27,6 +27,7 @@ import {
 import type { CompletionGateDecision } from './completionGateTypes';
 import { renderGoalFocusLines, renderPendingGoalFocusLines } from './goalFocusPrompt';
 import { extractRecentToolRepairHints } from './toolRepairHints';
+import { buildRunStoppedMessage } from './runStoppedMessage';
 
 function buildGoalHoldPrompt(goals: ReadonlyArray<AgentGoal>): string {
   const blockingGoals = goals.filter(isBlockingGoal);
@@ -229,8 +230,7 @@ export function evaluateGoalsIncompleteHold(params: {
         type: 'BLOCKED',
         reason: 'goals_incomplete_without_tool_path',
       },
-      content:
-        'I could not complete this request because required work remains but no executable tool path is available. The task stopped without claiming completion.',
+      content: buildRunStoppedMessage('no_way_to_continue', params.goals),
     };
   }
 

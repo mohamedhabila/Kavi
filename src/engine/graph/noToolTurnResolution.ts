@@ -28,6 +28,7 @@ import {
   buildGraphObservabilityRecordedEvent,
   GRAPH_OBSERVABILITY_AUDIT_TYPES,
 } from './graphObservability';
+import { buildRunStoppedMessage } from './runStoppedMessage';
 
 type FinalCandidateEvent = Extract<AgentControlGraphEvent, { type: 'FINAL_CANDIDATE_READY' }>;
 
@@ -187,8 +188,6 @@ function resolveEmptyResponseRetryReason(params: {
 }
 
 const EMPTY_FINAL_TEXT_FAILURE_REASON = 'empty_final_text_after_recovery';
-const EMPTY_FINAL_TEXT_FAILURE_MESSAGE =
-  "I couldn't complete this request because the model returned no usable response after bounded recovery attempts. Please retry or choose another model.";
 
 async function continueNoToolTurn(params: {
   commandReason: CompletionGateHoldReason;
@@ -338,7 +337,7 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
         type: 'BLOCKED',
         reason: EMPTY_FINAL_TEXT_FAILURE_REASON,
       },
-      content: EMPTY_FINAL_TEXT_FAILURE_MESSAGE,
+      content: buildRunStoppedMessage('no_usable_reply'),
       providerReplay: params.providerReplay,
       assistantMetadata: buildAssistantMessageMetadata('final', {
         completionStatus: 'incomplete',

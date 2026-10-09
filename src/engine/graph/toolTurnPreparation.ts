@@ -15,7 +15,7 @@ import {
 import { resolveAssistantToolTurnContent } from './assistantToolTurnContent';
 import { buildAgentControlGraphLoopRecoveryDecision } from './loopRecovery';
 import { buildLoopDetectedObservabilityDetail } from './graphObservability';
-import { buildLoopDetectedUserMessage } from './loopTerminalMessage';
+import { buildRunStoppedMessage } from './runStoppedMessage';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 import { trimAgentControlGraphPendingToolCallsAfterYield } from './sessionsYield';
 import { normalizeToolName } from '../tools/toolNameNormalization';
@@ -114,7 +114,7 @@ export function prepareAgentControlGraphToolTurn(
       warningInjectedThisRound: params.warningInjectedThisRound,
       workingMessages,
       blockDetails: loopRecoveryDecision.details,
-      blockedUserMessage: buildLoopDetectedUserMessage(params.goals ?? []),
+      blockedUserMessage: buildRunStoppedMessage('repeating_step', params.goals ?? []),
       ...(loopObservabilityDetail ? { loopObservabilityDetail } : {}),
     };
   }

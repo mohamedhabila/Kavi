@@ -1,9 +1,6 @@
 import { emitSessionEvent } from '../../services/events/bus';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
-import {
-  getAgentControlGraphFinalizationBlocker,
-  selectAgentControlGraphRuntimeCommand,
-} from './agentControlGraph';
+import { selectAgentControlGraphRuntimeCommand } from './agentControlGraph';
 import { executeAgentControlGraphIteration } from './iterationExecution';
 import type {
   AgentControlGraphIterationRuntimeState,
@@ -25,6 +22,7 @@ import {
 import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
+import { buildRunStoppedMessage } from './runStoppedMessage';
 
 export interface ExecuteAgentControlGraphSessionParams extends Omit<
   ExecuteAgentControlGraphIterationParams,
@@ -43,20 +41,6 @@ export interface ExecuteAgentControlGraphSessionParams extends Omit<
 export const MAX_MEMORY_AUTHORITY_REPREPARATIONS_PER_ITERATION = 2;
 export const MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON = 'memory_authority_unstable';
 
-const MEMORY_AUTHORITY_UNSTABLE_MESSAGE =
-  'Memory changed repeatedly while this response was being prepared. Please retry the request.';
-
-function buildMaxIterationMessage(finalizationBlocker?: string): string {
-  if (!finalizationBlocker) {
-    return "I've reached the maximum number of tool iterations. Here's what I've accomplished so far with the tools I've used.";
-  }
-
-  return [
-    "I've reached the maximum number of tool iterations before completing the active goals.",
-    finalizationBlocker,
-  ].join('\n');
-}
-
 export async function executeAgentControlGraphSession(
   params: ExecuteAgentControlGraphSessionParams,
 ): Promise<void> {
@@ -71,15 +55,12 @@ export async function executeAgentControlGraphSession(
   };
   const finishMaxIterationSession = async (): Promise<void> => {
     const maxIterationMemoryPolicyBinding = runtime.lastModelTurnMemoryPolicyBinding;
-    const maxIterationFinalizationBlocker = getAgentControlGraphFinalizationBlocker(
-      params.graph.getGraphSnapshot(),
-    );
     await params.graph.finishWithGraphTerminalEvent({
       graphEvent: {
         type: 'FINALIZED',
         reason: 'max_iterations',
       },
-      content: buildMaxIterationMessage(maxIterationFinalizationBlocker),
+      content: buildRunStoppedMessage('step_limit', params.graph.getGraphSnapshot()?.goals ?? []),
       assistantMetadata: attachModelTurnMemoryAttribution(
         buildAssistantMessageMetadata('final', {
           completionStatus: 'complete',
@@ -124,7 +105,7 @@ export async function executeAgentControlGraphSession(
               type: 'BLOCKED',
               reason: MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON,
             },
-            content: MEMORY_AUTHORITY_UNSTABLE_MESSAGE,
+            content: buildRunStoppedMessage('memory_changed'),
             assistantMetadata: buildAssistantMessageMetadata('final', {
               completionStatus: 'incomplete',
               finishReason: 'response_failed',
