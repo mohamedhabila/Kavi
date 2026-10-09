@@ -2,10 +2,10 @@ import { executeUpdateGoals } from '../../../src/engine/tools/toolGoalExecution'
 import type { AgentGoal } from '../../../src/engine/goals/types';
 
 // Traced live on an Android emulator. `complete` reported {"status":"ok"} regardless of
-// whether the goal closed, so a goal held open by unmet success criteria looked completed
-// to the model. It read "ok", saw the goal still active in the next graph snapshot, and
-// repeated the call — six completes and two activates in one run — until the loop
-// detector ended the run for "update_goals calls without goal state change".
+// whether the goal's criteria held, so the model could not tell a proven close from an
+// unproven one. Closing is never refused — the goal closes either way — so the result
+// says whether the close is proven, because only proven blocking goals let a run finish
+// as completed.
 
 function goal(overrides: Partial<AgentGoal> & { id: string }): AgentGoal {
   return {
@@ -25,7 +25,7 @@ function completeGoal(id: string, goals: ReadonlyArray<AgentGoal>) {
 }
 
 describe('completing a goal reports what actually happens', () => {
-  it('says the goal stays open and names the outstanding criterion', () => {
+  it('says the goal closes unproven and names the outstanding criterion', () => {
     const goals = [
       goal({
         id: 'geo-feasibility',
@@ -37,14 +37,17 @@ describe('completing a goal reports what actually happens', () => {
     const result = completeGoal('geo-feasibility', goals);
     const entry = result.goals[0];
 
-    expect(entry.closes).toBe(false);
+    expect(entry.closes).toBe(true);
+    expect(entry.proven).toBe(false);
+    expect(entry.reason).toContain('cannot finish as verified');
     expect(entry.unmetCriteria).toEqual([
       expect.objectContaining({ criterion: 'evidence.artifact:artifacts/tl3/report.md' }),
     ]);
     expect(entry.nextStep).toContain('Repeating this complete call changes nothing');
+    expect(entry.nextStep).toContain('tell the user plainly what could not be confirmed');
   });
 
-  it('confirms closure once the criteria are satisfied', () => {
+  it('confirms a proven close without a report', () => {
     const goals = [
       goal({
         id: 'geo-feasibility',
@@ -55,15 +58,26 @@ describe('completing a goal reports what actually happens', () => {
 
     const result = completeGoal('geo-feasibility', goals);
     expect(result.goals[0].closes).toBe(true);
+    expect(result.goals[0].proven).toBeUndefined();
     expect(result.goals[0].unmetCriteria).toBeUndefined();
   });
 
-  it('explains a goal that recorded no evidence at all', () => {
-    const goals = [goal({ id: 'geo-risks-worker', evidence: [] })];
+  it('explains a blocking goal that has no success criteria to prove it', () => {
+    const goals = [goal({ id: 'geo-risks-worker', completionPolicy: 'blocking', evidence: [] })];
 
     const result = completeGoal('geo-risks-worker', goals);
-    expect(result.goals[0].closes).toBe(false);
-    expect(result.goals[0].reason).toContain('no evidence');
+    expect(result.goals[0]).toMatchObject({ closes: true, proven: false });
+    expect(result.goals[0].reason).toContain('no success criteria');
+    expect(result.goals[0].unmetCriteria).toBeUndefined();
+  });
+
+  it('closes a persistent goal plainly, since it never gates the run', () => {
+    const goals = [goal({ id: 'standing-preference', evidence: [] })];
+
+    expect(completeGoal('standing-preference', goals).goals[0]).toEqual(
+      expect.objectContaining({ closes: true }),
+    );
+    expect(completeGoal('standing-preference', goals).goals[0].proven).toBeUndefined();
   });
 
   it('still answers ok, because the mutation is accepted rather than refused', () => {
@@ -89,9 +103,7 @@ describe('the report is only added where it is meaningful', () => {
   });
 
   it('behaves exactly as before when no graph is supplied', () => {
-    const result = JSON.parse(
-      executeUpdateGoals({ action: 'complete', id: 'g' }).content ?? '{}',
-    );
+    const result = JSON.parse(executeUpdateGoals({ action: 'complete', id: 'g' }).content ?? '{}');
 
     expect(result.status).toBe('ok');
     expect(result.goals[0].closes).toBeUndefined();

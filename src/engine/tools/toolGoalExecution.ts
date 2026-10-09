@@ -14,12 +14,7 @@ import {
   type AgentGoalMutation,
   type AgentGoalStatus,
 } from '../goals/types';
-import {
-  areGoalSuccessCriteriaSatisfied,
-  describeCriterionSatisfactionAction,
-  isSuccessCriterionMet,
-  resolveGatingSuccessCriteria,
-} from '../goals/completionEvidence';
+import { describeUnmetGatingCriteria, isBlockingGoalClosedWithoutProof } from '../goals/goalProof';
 import {
   completedToolOutcome,
   failedToolOutcome,
@@ -342,15 +337,13 @@ function parseUserConstraintRetention(params: {
  * What a `complete` request will actually do, reported back to the model.
  *
  * Traced live on an Android emulator. `complete` answered `{"status":"ok"}` whether or
- * not the goal closed, because the result echoed the requested mutation and nothing else.
- * A goal whose success criteria were unmet stayed open, the model read "ok", saw the goal
- * still active, and asked again — six times across one run, interleaved with `activate`
- * calls trying to shake it loose. The loop detector eventually ended the run for
- * "update_goals calls without goal state change".
+ * not the goal's criteria held, because the result echoed the requested mutation and
+ * nothing else; the model could not tell a proven close from an unproven one.
  *
- * Nothing was refused and nothing was broken; the model was simply told the wrong thing.
- * So the result now states whether the goal closes and, when it does not, which criteria
- * are outstanding and the action that satisfies each — a move, not just a verdict.
+ * Closing is the model's bookkeeping and is never refused: the goal closes either way.
+ * What the result must say is whether the close is proven, because only proven blocking
+ * goals let the run finish as completed — and, when it is not, which criteria are
+ * outstanding and the action that satisfies each: a move, not just a verdict.
  */
 function describeCompletionOutcome(
   goalId: string,
@@ -361,28 +354,24 @@ function describeCompletionOutcome(
     return null;
   }
 
-  if (areGoalSuccessCriteriaSatisfied(goal)) {
+  const closed: AgentGoal = { ...goal, status: 'completed' };
+  if (!isBlockingGoalClosedWithoutProof(closed)) {
     return { closes: true };
   }
 
-  const criteria = goal.successCriteria ?? [];
-  const unmet = (criteria.length > 0 ? resolveGatingSuccessCriteria(criteria) : []).filter(
-    (criterion) => !isSuccessCriterionMet(goal, criterion),
-  );
-
+  const unmetCriteria = describeUnmetGatingCriteria(closed);
   return {
-    closes: false,
+    closes: true,
+    proven: false,
     reason:
-      criteria.length === 0
-        ? 'This goal has recorded no evidence yet, so completing it has no effect.'
-        : 'Success criteria are not satisfied, so this goal stays open.',
-    unmetCriteria: unmet.map((criterion) => {
-      const action = describeCriterionSatisfactionAction(criterion);
-      return action ? { criterion, satisfyBy: action } : { criterion };
-    }),
+      (goal.successCriteria?.length ?? 0) === 0
+        ? 'This goal closes, but it has no success criteria, so nothing proves it and the run cannot finish as verified.'
+        : 'This goal closes, but its success criteria are not met, so the run cannot finish as verified.',
+    ...(unmetCriteria.length > 0 ? { unmetCriteria } : {}),
     nextStep:
       'Produce the missing evidence with the relevant tool, or call update_goals with ' +
-      'action "update" to correct successCriteria. Repeating this complete call changes nothing.',
+      'action "update" to correct successCriteria; otherwise tell the user plainly what ' +
+      'could not be confirmed. Repeating this complete call changes nothing.',
   };
 }
 
