@@ -339,6 +339,8 @@ export const en: TranslationMap = {
     memoryFeedbackIrrelevant: 'Not relevant',
     memoryFeedbackFailed: 'Unable to save memory feedback right now.',
     attachmentWorkspaceImportFailed: 'Unable to add attached files to the workspace. Try again.',
+    steeringQueueFull:
+      'Too many messages are waiting for the assistant. Try again after it reads them.',
     shareFileFailed: 'Unable to share this workspace file right now.',
     commandSuggestion: 'Command {name}',
     usageTokens: 'Tokens',

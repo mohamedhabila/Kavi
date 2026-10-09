@@ -87,6 +87,20 @@ export function createSteeringQueue() {
       );
       return taken;
     },
+    /** Address the messages waiting for one run to the run that continues its work. */
+    retarget(conversationId: string, fromRunId: string, toRunId: string): void {
+      requireIdentity(toRunId, 'run_id');
+      const queue = get(conversationId);
+      if (!queue.some((message) => message.targetRunId === fromRunId)) return;
+      replace(
+        conversationId,
+        queue.map((message) =>
+          message.targetRunId === fromRunId
+            ? Object.freeze({ ...message, targetRunId: toRunId })
+            : message,
+        ),
+      );
+    },
     /** Remove one queued message, returning it when it was still waiting. */
     remove(conversationId: string, messageId: string): QueuedSteeringMessage | undefined {
       const queue = get(conversationId);

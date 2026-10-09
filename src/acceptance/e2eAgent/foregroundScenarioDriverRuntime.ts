@@ -465,6 +465,7 @@ export function createForegroundScenarioRuntime(
     abortForegroundRequestForConversation: requests.abortForegroundRequestForConversation,
     context,
     defaultMode: input.defaultMode,
+    requests,
     setChatError: (message) => {
       chatError = message;
     },

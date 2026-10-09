@@ -9,7 +9,11 @@
 
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
 import type { ExecuteForegroundConversationRunParams } from '../../engine/graph/foregroundRun/executionTypes';
-import type { ForegroundConversationSendContext } from '../../engine/graph/foregroundRun/sendExecution';
+import type {
+  ForegroundConversationSendContext,
+  ForegroundSteeringBinding,
+} from '../../engine/graph/foregroundRun/sendExecution';
+import { appSteeringQueue } from '../../engine/graph/foregroundRun/steeringQueue';
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
 import { waitForModelProjectionAvailability } from '../../store/modelProjectionOwnership';
 import { useChatStore } from '../../store/useChatStore';
@@ -20,6 +24,9 @@ import { generateId } from '../../utils/id';
 export const E2E_ATTACHMENT_IMPORT_FAILED_MESSAGE =
   'Failed to import chat attachments into the conversation workspace.';
 
+/** Surfaced when a message sent during a scenario run cannot join the ones waiting. */
+export const E2E_STEERING_QUEUE_FULL_MESSAGE = 'Too many messages are waiting for the run.';
+
 export type ForegroundScenarioSendContextFactory = (
   activeConversationId: string,
   overrides?: Partial<ForegroundConversationSendContext>,
@@ -29,6 +36,8 @@ export type CreateForegroundScenarioSendContextParams = {
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => void;
   context: ExecuteForegroundConversationRunParams['context'];
   defaultMode: Conversation['mode'];
+  /** The scenario's foreground requests, which a message sent during a run steers. */
+  requests: ForegroundSteeringBinding['registry'];
   setChatError: (message: string | null) => void;
 };
 
@@ -65,6 +74,8 @@ export function createForegroundScenarioSendContextFactory(
     runChat: (conversationId, options) =>
       executeForegroundConversationRun({ conversationId, context: params.context, options }),
     setChatError: params.setChatError,
+    steering: { queue: appSteeringQueue, registry: params.requests },
+    steeringQueueFullMessage: E2E_STEERING_QUEUE_FULL_MESSAGE,
     waitForConversationWriteAvailability: async (conversationId, reason) => {
       params.abortForegroundRequestForConversation(conversationId, reason);
       try {

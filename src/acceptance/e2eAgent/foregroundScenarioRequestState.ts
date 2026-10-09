@@ -15,6 +15,9 @@ export function createForegroundScenarioRequestRegistry() {
   const pendingAbortReasons = new Map<string, string | undefined>();
 
   return {
+    /** Which run is active, for routing a message sent during it to that run. */
+    getRequestId: registry.getRequestId,
+    subscribe: registry.subscribe,
     abortForegroundRequestForConversation: (conversationId: string, reason?: string) =>
       registry.abortForConversation(conversationId, reason),
     abortCurrentOrNextForegroundRequest: (conversationId: string, reason?: string) => {

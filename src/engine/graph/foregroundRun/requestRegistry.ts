@@ -129,6 +129,8 @@ export function createForegroundRequestRegistry() {
     },
     getStreamingMessageId: (conversationId: string): string | null =>
       requestsByConversation.get(conversationId)?.streamingMessageId ?? null,
+    getRequestId: (conversationId: string): string | null =>
+      requestsByConversation.get(conversationId)?.requestId ?? null,
     hasConversation: (conversationId: string): boolean =>
       requestsByConversation.has(conversationId),
     getActiveConversationIds: (): ReadonlySet<string> => new Set(requestsByConversation.keys()),

@@ -28,6 +28,7 @@ export function useChatComposerState({
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
   handleComposerExactTextChange: (exactText: boolean) => void;
   handleComposerTextChange: (value: string) => void;
+  returnTextToComposer: (conversationId: string, text: string) => void;
 } {
   const [composerDrafts, setComposerDrafts] = useState<Record<string, ComposerDraftState>>({});
   const activeComposerDraftKey = useMemo(
@@ -68,6 +69,17 @@ export function useChatComposerState({
       const remainingDrafts = { ...currentDrafts };
       delete remainingDrafts[draftKey];
       return remainingDrafts;
+    });
+  }, []);
+
+  const returnTextToComposer = useCallback((conversationId: string, text: string) => {
+    const draftKey = getComposerDraftKey(conversationId);
+    setComposerDrafts((currentDrafts) => {
+      const draft = normalizeComposerDraftState(currentDrafts[draftKey]);
+      return {
+        ...currentDrafts,
+        [draftKey]: { ...draft, text: draft.text ? `${text}\n\n${draft.text}` : text },
+      };
     });
   }, []);
 
@@ -135,5 +147,6 @@ export function useChatComposerState({
     handleComposerAttachmentsChange,
     handleComposerExactTextChange,
     handleComposerTextChange,
+    returnTextToComposer,
   };
 }

@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { appSteeringQueue } from '../../src/engine/graph/foregroundRun/steeringQueue';
 import { useForegroundConversationActions } from '../../src/engine/graph/foregroundRun/useForegroundConversationActions';
 import { getComposerDraftKey } from '../../src/screens/chatComposerDrafts';
 import { waitForPersistedAgentRecoveryReadiness } from '../../src/services/startupRecovery';
@@ -57,10 +58,12 @@ function createParams(
     pendingAgentRunFinalizationsRef: { current: new Map() },
     pendingAgentRunTerminalReviewsRef: { current: new Map() },
     requestChatStorePersistenceCheckpoint: jest.fn(),
+    returnTextToComposer: jest.fn(),
     runChat: jest.fn().mockResolvedValue(undefined),
     setChatError: jest.fn(),
     setEditingContent: jest.fn(),
     setEditingMessageId: jest.fn(),
+    steeringQueueFullMessage: 'queue full',
     updateAgentRunControlGraph: jest.fn(),
     ...overrides,
   };
@@ -319,5 +322,77 @@ describe('useForegroundConversationActions', () => {
     expect(rewindUserMessageForResend).not.toHaveBeenCalled();
     expect(runChat).not.toHaveBeenCalled();
     expect(setChatError).toHaveBeenCalledWith('projection wait failed');
+  });
+
+  describe('messages still waiting for a run', () => {
+    function queueSteers(conversationId: string) {
+      for (const [id, text] of [
+        ['steer-1', 'Make it vegetarian.'],
+        ['steer-2', 'And under 30 euros.'],
+      ]) {
+        appSteeringQueue.enqueue({ id, conversationId, targetRunId: 'run-1', text, enqueuedAt: 1 });
+      }
+    }
+
+    afterEach(() => {
+      for (const conversation of useChatStore.getState().conversations) {
+        appSteeringQueue.clear(conversation.id);
+      }
+    });
+
+    it('go back to the composer when the person stops the run', () => {
+      const conversationId = useChatStore.getState().createConversation('openai', 'system');
+      queueSteers(conversationId);
+      const returnTextToComposer = jest.fn();
+      const { result } = renderHook(() =>
+        useForegroundConversationActions(createParams(conversationId, { returnTextToComposer })),
+      );
+
+      act(() => {
+        result.current.handleStop();
+      });
+
+      expect(returnTextToComposer).toHaveBeenCalledWith(
+        conversationId,
+        'Make it vegetarian.\n\nAnd under 30 euros.',
+      );
+      expect(appSteeringQueue.get(conversationId)).toEqual([]);
+    });
+
+    it('go back to the composer when the person retries an answer', async () => {
+      const conversationId = useChatStore.getState().createConversation('openai', 'system');
+      useChatStore.getState().addMessage(conversationId, {
+        id: 'request',
+        role: 'user',
+        content: 'Plan a dinner.',
+        timestamp: 1,
+      });
+      useChatStore.getState().addMessage(conversationId, {
+        id: 'answer',
+        role: 'assistant',
+        content: 'Here is a plan.',
+        timestamp: 2,
+      });
+      queueSteers(conversationId);
+      const returnTextToComposer = jest.fn();
+      const { result } = renderHook(() =>
+        useForegroundConversationActions(
+          createParams(conversationId, {
+            returnTextToComposer,
+            rewindUserMessageForResend: useChatStore.getState().rewindUserMessageForResend,
+          }),
+        ),
+      );
+
+      await act(async () => {
+        await result.current.handleRetry('answer');
+      });
+
+      expect(returnTextToComposer).toHaveBeenCalledWith(
+        conversationId,
+        'Make it vegetarian.\n\nAnd under 30 euros.',
+      );
+      expect(appSteeringQueue.get(conversationId)).toEqual([]);
+    });
   });
 });

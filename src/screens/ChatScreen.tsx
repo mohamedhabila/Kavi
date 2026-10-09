@@ -353,6 +353,7 @@ export const ChatScreen: React.FC = () => {
     handleComposerAttachmentsChange,
     handleComposerExactTextChange,
     handleComposerTextChange,
+    returnTextToComposer,
   } = useChatComposerState({
     activeConversationId,
     editingContent,
@@ -506,10 +507,12 @@ export const ChatScreen: React.FC = () => {
     pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
     requestChatStorePersistenceCheckpoint,
+    returnTextToComposer,
     runChat,
     setChatError,
     setEditingContent,
     setEditingMessageId,
+    steeringQueueFullMessage: t('chat.steeringQueueFull'),
     updateAgentRunControlGraph,
   });
 

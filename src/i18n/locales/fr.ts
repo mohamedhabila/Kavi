@@ -353,6 +353,8 @@ export const fr: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: "Impossible d'enregistrer cet avis sur la mémoire.",
     attachmentWorkspaceImportFailed:
       'Impossible d’ajouter les fichiers joints à l’espace de travail. Réessayez.',
+    steeringQueueFull:
+      'Trop de messages attendent l’assistant. Réessayez une fois qu’il les aura lus.',
     shareFileFailed: 'Ce fichier de l’espace de travail ne peut pas être partagé pour le moment.',
     commandSuggestion: 'Commande {name}',
     usageTokens: 'Jetons',

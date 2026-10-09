@@ -54,6 +54,24 @@ describe('steering queue', () => {
     expect(() => enqueue(queue, 'a', { targetRunId: '' })).toThrow('steering_queue_run_id_invalid');
   });
 
+  it('moves only the messages waiting for one run to the run that continues it', () => {
+    const queue = createSteeringQueue();
+    enqueue(queue, 'a');
+    enqueue(queue, 'other', { targetRunId: 'run-other' });
+
+    queue.retarget('conversation-1', 'run-1', 'run-2');
+
+    expect(queue.get('conversation-1').map((message) => [message.id, message.targetRunId])).toEqual(
+      [
+        ['a', 'run-2'],
+        ['other', 'run-other'],
+      ],
+    );
+    expect(() => queue.retarget('conversation-1', 'run-2', ' ')).toThrow(
+      'steering_queue_run_id_invalid',
+    );
+  });
+
   it('removes one message or clears the conversation, returning what was waiting', () => {
     const queue = createSteeringQueue();
     enqueue(queue, 'a');

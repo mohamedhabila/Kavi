@@ -20,6 +20,8 @@ import {
   type ForegroundConversationSendContext,
 } from './sendExecution';
 import type { EnsureAgentRunFinalResponse, RunChatOptions } from './contracts';
+import { appForegroundRequestRegistry } from './requestRegistry';
+import { appSteeringQueue } from './steeringQueue';
 import type {
   ForegroundConversationRunHelpers,
   ForegroundRunLogEntryInput,
@@ -49,10 +51,13 @@ type UseForegroundConversationActionsParams = {
   pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   requestChatStorePersistenceCheckpoint: (delayMs?: number) => void;
+  /** Put text back into the conversation's composer, ahead of any draft already there. */
+  returnTextToComposer: (conversationId: string, text: string) => void;
   runChat: (conversationId: string, options?: RunChatOptions) => Promise<void>;
   setChatError: (message: string | null) => void;
   setEditingContent: (content: string | undefined) => void;
   setEditingMessageId: (messageId: string | null) => void;
+  steeringQueueFullMessage: string;
   updateAgentRunControlGraph: ChatStoreState['updateAgentRunControlGraph'];
 };
 
@@ -88,10 +93,12 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
     requestChatStorePersistenceCheckpoint,
+    returnTextToComposer,
     runChat,
     setChatError,
     setEditingContent,
     setEditingMessageId,
+    steeringQueueFullMessage,
     updateAgentRunControlGraph,
   } = params;
   const pendingConversationWritesRef = useRef(new Set<string>());
@@ -131,8 +138,21 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     [activeConversationId],
   );
 
+  // Messages still waiting for a run the person is stopping or rewinding go back to the
+  // composer: they were written for that run, so sending them on their own is the
+  // person's call.
+  const returnQueuedSteeringToComposer = useCallback(
+    (conversationId: string) => {
+      const queued = appSteeringQueue.clear(conversationId);
+      if (queued.length === 0) return;
+      returnTextToComposer(conversationId, queued.map((message) => message.text).join('\n\n'));
+    },
+    [returnTextToComposer],
+  );
+
   const cancelConversationRunForRewind = useCallback(
     (conversationId: string, reason: string) => {
+      returnQueuedSteeringToComposer(conversationId);
       rewindForegroundConversationRun({
         abortForegroundRequestForConversation: (conversationId, reason) => {
           abortForegroundRequestForConversation(conversationId, reason);
@@ -144,7 +164,12 @@ export function useForegroundConversationActions(params: UseForegroundConversati
         reason,
       });
     },
-    [abortForegroundRequestForConversation, clearPendingRunState, getConversation],
+    [
+      abortForegroundRequestForConversation,
+      clearPendingRunState,
+      getConversation,
+      returnQueuedSteeringToComposer,
+    ],
   );
 
   const retireMemorySourcesForRewind = useCallback(
@@ -189,6 +214,8 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       reserveConversationWrite,
       runChat,
       setChatError,
+      steering: { queue: appSteeringQueue, registry: appForegroundRequestRegistry },
+      steeringQueueFullMessage,
       waitForConversationWriteAvailability,
     }),
     [
@@ -205,6 +232,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       reserveConversationWrite,
       runChat,
       setChatError,
+      steeringQueueFullMessage,
       waitForConversationWriteAvailability,
     ],
   );
@@ -226,6 +254,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
   const handleStop = useCallback(() => {
     const conversationId = getLiveActiveConversationId();
     if (conversationId) {
+      returnQueuedSteeringToComposer(conversationId);
       void stopForegroundConversationRuns({
         abortForegroundRequestForConversation: (conversationId, reason) => {
           abortForegroundRequestForConversation(conversationId, reason);
@@ -259,6 +288,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     getConversation,
     getLiveActiveConversationId,
     requestChatStorePersistenceCheckpoint,
+    returnQueuedSteeringToComposer,
     updateAgentRunControlGraph,
   ]);
 

@@ -38,4 +38,28 @@ describe('useChatComposerState', () => {
     expect(result.current.composerExactText).toBe(false);
     expect(result.current.composerText).toBe('');
   });
+
+  it('returns text to a conversation composer ahead of the draft already there', () => {
+    const { result } = renderHook(() =>
+      useChatComposerState({
+        activeConversationId: 'conversation-1',
+        editingContent: undefined,
+        editingMessageId: null,
+        setEditingContent: jest.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.returnTextToComposer('conversation-1', 'Make it vegetarian.');
+    });
+    expect(result.current.composerText).toBe('Make it vegetarian.');
+
+    act(() => {
+      result.current.handleComposerTextChange('Also book a table.');
+    });
+    act(() => {
+      result.current.returnTextToComposer('conversation-1', 'Under 30 euros.');
+    });
+    expect(result.current.composerText).toBe('Under 30 euros.\n\nAlso book a table.');
+  });
 });

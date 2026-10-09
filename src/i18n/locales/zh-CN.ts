@@ -324,6 +324,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     memoryFeedbackIrrelevant: '不相关',
     memoryFeedbackFailed: '目前无法保存记忆反馈。',
     attachmentWorkspaceImportFailed: '无法将附件添加到工作区。请重试。',
+    steeringQueueFull: '等待助手读取的消息过多。请在助手读取后重试。',
     shareFileFailed: '目前无法分享此工作区文件。',
     commandSuggestion: '命令 {name}',
     usageTokens: '令牌',

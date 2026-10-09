@@ -338,6 +338,8 @@ export const de: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: 'Das Feedback zur Erinnerung konnte nicht gespeichert werden.',
     attachmentWorkspaceImportFailed:
       'Die angehängten Dateien konnten nicht zum Workspace hinzugefügt werden. Bitte erneut versuchen.',
+    steeringQueueFull:
+      'Zu viele Nachrichten warten auf den Assistenten. Versuche es erneut, sobald er sie gelesen hat.',
     shareFileFailed: 'Diese Workspace-Datei kann gerade nicht geteilt werden.',
     commandSuggestion: 'Befehl {name}',
     usageTokens: 'Tokens',

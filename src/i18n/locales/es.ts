@@ -348,6 +348,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: 'No se pudo guardar la valoración de memoria.',
     attachmentWorkspaceImportFailed:
       'No se pudieron agregar los archivos adjuntos al espacio de trabajo. Intentalo de nuevo.',
+    steeringQueueFull:
+      'Hay demasiados mensajes esperando al asistente. Inténtalo de nuevo cuando los haya leído.',
     shareFileFailed: 'No se puede compartir este archivo del espacio de trabajo ahora.',
     commandSuggestion: 'Comando {name}',
     usageTokens: 'Tokens',

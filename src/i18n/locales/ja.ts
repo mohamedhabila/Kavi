@@ -329,6 +329,8 @@ export const ja: TranslationMap = mergeTranslations(en, {
     memoryFeedbackFailed: 'メモリへの評価を保存できませんでした。',
     attachmentWorkspaceImportFailed:
       '添付ファイルをワークスペースに追加できませんでした。もう一度お試しください。',
+    steeringQueueFull:
+      'アシスタントへの未読メッセージが多すぎます。読み終わってから、もう一度お試しください。',
     shareFileFailed: 'このワークスペースファイルは現在共有できません。',
     commandSuggestion: 'コマンド {name}',
     usageTokens: 'トークン',

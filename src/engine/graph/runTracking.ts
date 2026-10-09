@@ -5,7 +5,7 @@ import { getCommand } from '../../services/commands/builtins';
 import { parseCommand } from '../../services/commands/parser';
 import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
-function isRegisteredSlashCommand(content: string | undefined): boolean {
+export function isRegisteredSlashCommand(content: string | undefined): boolean {
   const command = parseCommand(content);
   return command ? getCommand(command.name) !== undefined : false;
 }
