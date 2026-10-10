@@ -1,8 +1,5 @@
-import {
-  buildUpdateGoalsResult,
-  executeUpdateGoals,
-  parseUpdateGoalsArgs,
-} from '../../../src/engine/tools/toolGoalExecution';
+import { executeUpdateGoals, parseUpdateGoalsArgs } from '../../../src/engine/tools/toolGoalExecution';
+import { buildUpdateGoalsResult } from '../../../src/engine/tools/updateGoalsResult';
 import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../../src/engine/goals/types';
 import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
 import {
