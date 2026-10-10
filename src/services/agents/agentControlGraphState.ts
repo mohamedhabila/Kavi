@@ -58,20 +58,27 @@ const CONTROL_GRAPH_STATUSES = new Set<AgentRunControlGraphStatus>([
   'failed',
 ]);
 
-const FORCED_TEXT_REASONS = new Set<AgentRunControlGraphForcedTextReason>([
-  'async_terminal_completion',
-  'background_session_started',
-  'empty_delivery_recovery',
-  'execution_loop_recovery',
-  'incomplete_delivery_continuation',
-  'loop_recovery',
-  'request_clarification',
-  'request_consent',
-  'request_decline',
-  'request_wait',
-  'workflow_route_completed',
-  'yield_finalization',
-]);
+/**
+ * Keyed by the reason type, so a new reason cannot be added without listing it here. A
+ * hand-kept set drifted: it lacked `foreground_budget_checkpoint`, so the engine read the
+ * checkpoint back as no reason and the stored run lost it.
+ */
+const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true> = {
+  async_terminal_completion: true,
+  background_session_started: true,
+  empty_delivery_recovery: true,
+  execution_loop_recovery: true,
+  foreground_budget_checkpoint: true,
+  incomplete_delivery_continuation: true,
+  loop_recovery: true,
+  request_clarification: true,
+  request_consent: true,
+  request_decline: true,
+  request_wait: true,
+  workflow_route_completed: true,
+  yield_finalization: true,
+};
+const FORCED_TEXT_REASONS: ReadonlySet<string> = new Set(Object.keys(FORCED_TEXT_REASON_KEYS));
 
 const TOOL_EFFECT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const MAX_MOBILE_CONTROLLER_STALL_COUNT = 3;
@@ -99,7 +106,7 @@ function isDefinedText(value: string | undefined): value is string {
 function normalizeForcedTextReason(
   value: unknown,
 ): AgentRunControlGraphForcedTextReason | undefined {
-  return FORCED_TEXT_REASONS.has(value as AgentRunControlGraphForcedTextReason)
+  return typeof value === 'string' && FORCED_TEXT_REASONS.has(value)
     ? (value as AgentRunControlGraphForcedTextReason)
     : undefined;
 }
