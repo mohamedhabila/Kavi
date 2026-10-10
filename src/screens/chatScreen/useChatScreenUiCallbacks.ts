@@ -26,6 +26,9 @@ type UseChatScreenUiCallbacksParams = {
   conversations: ReadonlyArray<Conversation>;
   createSideThread?: (conversationId: string) => void;
   discardSideThread?: (conversationId: string) => void;
+  /** In-memory messages not yet shown; archived history pages in after them. */
+  hiddenSourceMessageCount: number;
+  loadEarlierArchivedMessages: () => void;
   navigation: Pick<DrawerNavigationProp<any>, 'navigate'>;
   setChatError: (message: string | null) => void;
   setEditingContent: (content: string | undefined) => void;
@@ -231,9 +234,14 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     [resolveMemoryFeedbackTarget],
   );
 
+  const { hiddenSourceMessageCount, loadEarlierArchivedMessages } = params;
   const handleShowEarlierMessages = useCallback(() => {
+    if (hiddenSourceMessageCount === 0) {
+      loadEarlierArchivedMessages();
+      return;
+    }
     setVisibleSourceMessageLimit((currentLimit) => currentLimit + CHAT_SOURCE_MESSAGE_PAGE_SIZE);
-  }, [setVisibleSourceMessageLimit]);
+  }, [hiddenSourceMessageCount, loadEarlierArchivedMessages, setVisibleSourceMessageLimit]);
 
   return {
     handleEdit,

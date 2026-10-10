@@ -30,6 +30,8 @@ type ConversationMessageRowProps = {
   temporalMarkerBeforeMessageId?: string;
   temporalMarkerKind?: string;
   temporalMarkerText?: string;
+  /** Archived history: shown for reading, with no actions that act on the live conversation. */
+  readOnly?: boolean;
 };
 
 export const ConversationMessageRow = memo(function ConversationMessageRow(
@@ -77,13 +79,13 @@ export const ConversationMessageRow = memo(function ConversationMessageRow(
         agentRunExecutionPresentation={props.item.agentRunExecutionPresentation}
         isStreaming={props.item.isStreaming}
         responseSegments={props.item.resolvedResponseSegments}
-        onEdit={props.onEdit}
-        onRetry={props.onRetry}
+        onEdit={props.readOnly ? undefined : props.onEdit}
+        onRetry={props.readOnly ? undefined : props.onRetry}
         onViewCanvas={props.onViewCanvas}
         onViewFile={props.onViewFiles}
         onShareWorkspaceFile={props.onShareWorkspaceFile}
         onOpenSubAgentDetails={props.onOpenSubAgentDetails}
-        memoryFeedbackMessageId={memoryFeedbackMessageId}
+        memoryFeedbackMessageId={props.readOnly ? undefined : memoryFeedbackMessageId}
         onLoadMemoryFeedback={props.onLoadMemoryFeedback}
         onMemoryFeedback={props.onMemoryFeedback}
         retryMessageId={props.item.retryMessageId}

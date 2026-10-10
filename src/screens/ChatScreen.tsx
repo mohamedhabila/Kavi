@@ -522,8 +522,11 @@ export const ChatScreen: React.FC = () => {
   const personaCustomList = usePersonaConfigStore((state) => state.customPersonas);
   const personaOverrides = usePersonaConfigStore((state) => state.overrides);
   const {
+    archivedEarlierMessageCount,
+    archivedMessageIds,
     availableSubAgentSnapshotsById,
     hiddenSourceMessageCount,
+    loadEarlierArchivedMessages,
     messages,
     personaSwitchMarkersByMessageId,
     resolvedDisplayMessages,
@@ -570,6 +573,8 @@ export const ChatScreen: React.FC = () => {
     conversations,
     createSideThread,
     discardSideThread,
+    hiddenSourceMessageCount,
+    loadEarlierArchivedMessages,
     navigation,
     setChatError,
     setEditingContent,
@@ -651,7 +656,8 @@ export const ChatScreen: React.FC = () => {
         handleUserScrollStart={handleUserScrollStart}
         handleViewCanvas={handleViewCanvas}
         handleViewFiles={handleViewFiles}
-        hiddenSourceMessageCount={hiddenSourceMessageCount}
+        hiddenSourceMessageCount={hiddenSourceMessageCount + archivedEarlierMessageCount}
+        archivedMessageIds={archivedMessageIds}
         hasProviderReady={hasProviderReady}
         interactionReleaseTimerRef={interactionReleaseTimerRef}
         isConversationBusy={isConversationBusy}

@@ -11,6 +11,7 @@ import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrie
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
 type RenderMessageContext = {
+  archivedMessageIds: ReadonlySet<string>;
   handleEdit: (messageId: string, content: string) => void;
   handleOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
   handleLoadMemoryFeedback: (
@@ -65,6 +66,7 @@ export function useConversationMessageRenderItem(params: UseConversationMessageR
         onViewCanvas={renderContext.handleViewCanvas}
         onViewFiles={renderContext.handleViewFiles}
         personaMarkerId={personaMarker?.id}
+        readOnly={renderContext.archivedMessageIds.has(item.resolvedMessage.id)}
         personaMarkerText={personaMarkerText}
         styles={renderContext.styles}
         temporalMarkerBeforeMessageId={marker?.beforeMessageId}

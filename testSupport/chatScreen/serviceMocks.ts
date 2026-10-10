@@ -11,6 +11,32 @@ export const mockPublishConversationTurnMemory = jest.fn().mockResolvedValue({
   openThreadsUpdated: false,
   enriched: false,
 });
+/** Archived history the chat screen pages in; empty unless a test seeds it. */
+export const mockArchivedTranscript: { messages: any[] } = { messages: [] };
+
+beforeEach(() => {
+  mockArchivedTranscript.messages = [];
+});
+
+// Archived history lives in SQLite, which Jest cannot open natively.
+jest.mock('../../src/services/transcriptArchive/transcriptArchive', () => ({
+  countArchivedMessages: (_conversationId: string, excludeIds?: ReadonlySet<string>) =>
+    mockArchivedTranscript.messages.filter((message) => !excludeIds?.has(message.id)).length,
+  loadArchivedMessagesPage: (params: { excludeIds?: ReadonlySet<string> }) => ({
+    messages: mockArchivedTranscript.messages.filter(
+      (message) => !params.excludeIds?.has(message.id),
+    ),
+    nextCursor: null,
+  }),
+  subscribeToTranscriptArchive: () => () => undefined,
+  noteEvictedMessages: jest.fn(),
+  isMessageArchivedOrQueued: () => false,
+  drainPendingTranscriptArchive: jest.fn(),
+  deleteArchivedConversation: jest.fn(),
+  deleteAllArchivedMessages: jest.fn(),
+  purgeArchivedConversationsExcept: jest.fn(() => 0),
+}));
+
 jest.mock('../../src/services/memory/turnPublication', () => ({
   publishConversationTurnMemory: (...args: unknown[]) => mockPublishConversationTurnMemory(...args),
 }));

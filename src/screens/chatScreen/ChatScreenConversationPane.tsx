@@ -32,6 +32,7 @@ const MAINTAIN_VISIBLE_CONTENT_POSITION = { minIndexForVisible: 0 } as const;
 
 type ChatScreenConversationPaneProps = {
   activeConversationId: string | null;
+  archivedMessageIds: ReadonlySet<string>;
   bottomInset: number;
   colors: AppPalette;
   composerAttachments: Attachment[];
@@ -98,6 +99,7 @@ type ChatScreenConversationPaneProps = {
 export function ChatScreenConversationPane(props: ChatScreenConversationPaneProps) {
   const {
     activeConversationId,
+    archivedMessageIds,
     bottomInset,
     clearInteractionReleaseTimer,
     colors,
@@ -154,6 +156,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     returnTextToComposer,
   });
   const renderMessageItem = useConversationMessageRenderItem({
+    archivedMessageIds,
     handleEdit,
     handleOpenSubAgentDetails,
     handleLoadMemoryFeedback,

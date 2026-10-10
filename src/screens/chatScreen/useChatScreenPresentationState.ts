@@ -29,6 +29,8 @@ import {
   type ResolvedDisplayMessageItem,
   type StreamingDraft,
 } from '../chatScreenDisplayState';
+import { mergeChronologically } from '../../utils/messageChronology';
+import { useArchivedTranscript } from './useArchivedTranscript';
 
 type SubAgentSnapshot = NonNullable<Message['subAgentEvent']>['snapshot'];
 
@@ -47,7 +49,12 @@ type UseChatScreenPresentationStateParams = {
 
 type ChatScreenPresentationState = {
   availableSubAgentSnapshotsById: Map<string, SubAgentSnapshot>;
+  /** Archived history not yet shown, available once the in-memory window is exhausted. */
+  archivedEarlierMessageCount: number;
+  /** Ids of displayed messages that come from the archive; they are read-only. */
+  archivedMessageIds: ReadonlySet<string>;
   hiddenSourceMessageCount: number;
+  loadEarlierArchivedMessages: () => void;
   messages: Message[];
   personaSwitchMarkersByMessageId: Map<string, PersonaSwitchMarker>;
   resolvedDisplayMessages: ResolvedDisplayMessageItem[];
@@ -81,14 +88,32 @@ export function useChatScreenPresentationState(
 
     return snapshotsById;
   }, [params.liveSubAgentSnapshotsById, messages]);
+  const archivedTranscript = useArchivedTranscript(params.activeConversationId, messages);
+  const archivedMessageIds = useMemo(
+    () => new Set(archivedTranscript.messages.map((message) => message.id)),
+    [archivedTranscript.messages],
+  );
   const messageById = useMemo(
-    () => new Map(messages.map((message) => [message.id, message])),
-    [messages],
+    () =>
+      new Map(
+        [...archivedTranscript.messages, ...messages].map((message) => [message.id, message]),
+      ),
+    [archivedTranscript.messages, messages],
   );
-  const visibleMessageWindow = useMemo(
-    () => getVisibleSourceMessageWindow(messages, params.visibleSourceMessageLimit),
-    [messages, params.visibleSourceMessageLimit],
-  );
+  const visibleMessageWindow = useMemo(() => {
+    const window = getVisibleSourceMessageWindow(messages, params.visibleSourceMessageLimit);
+    // Archived history sits before everything held in memory, so it joins only once the
+    // in-memory window is fully shown.
+    return window.hiddenSourceMessageCount > 0 || archivedTranscript.messages.length === 0
+      ? window
+      : {
+          visibleMessages: mergeChronologically(
+            archivedTranscript.messages,
+            window.visibleMessages,
+          ),
+          hiddenSourceMessageCount: 0,
+        };
+  }, [archivedTranscript.messages, messages, params.visibleSourceMessageLimit]);
   const visibleDisplayMessages = useMemo(
     () =>
       getStableDisplayMessages(
@@ -201,7 +226,10 @@ export function useChatScreenPresentationState(
 
   return {
     availableSubAgentSnapshotsById,
+    archivedEarlierMessageCount: archivedTranscript.remainingCount,
+    archivedMessageIds,
     hiddenSourceMessageCount: visibleMessageWindow.hiddenSourceMessageCount,
+    loadEarlierArchivedMessages: archivedTranscript.loadEarlier,
     messages,
     personaSwitchMarkersByMessageId,
     resolvedDisplayMessages,
