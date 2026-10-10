@@ -44,6 +44,7 @@ jest.mock('../../src/engine/tools/builtin-memory', () => ({
 }));
 
 import { executeBuiltinMemoryTool } from '../../src/engine/tools/toolBuiltinMemoryExecution';
+import { isolateExecutorContext } from '../../src/engine/tools/toolExecutionDispatchSupport';
 import {
   consumeExplicitMemoryRecallGrant,
   resetExplicitMemoryRecallGrantStateForTests,
@@ -333,6 +334,37 @@ describe('builtin memory execution scope', () => {
     };
     expect(consumeExplicitMemoryRecallGrant(validation)).toBe(true);
     expect(consumeExplicitMemoryRecallGrant(validation)).toBe(false);
+  });
+
+  it('creates that authority from the context the dispatcher actually hands the executor', async () => {
+    // Traced live on GLM 5.3 Flash: every memory_recall carrying relation_quote came back
+    // "request_missing". The dispatcher isolates the executor context, and isolation
+    // deleted the run and tool-call identities this grant binds to — so the person's
+    // explicit request for their own sensitive fact could never be honoured.
+    const currentUserMessage = {
+      id: 'user-message-dual',
+      text: 'Verify both the access_code and backup_code for subject `longmem-dual`.',
+    };
+    await executeBuiltinMemoryTool({
+      ...BASE_PARAMS,
+      context: isolateExecutorContext({
+        ...BASE_PARAMS.context,
+        currentUserMessage,
+        executionRunId: 'execution-dual',
+        toolCallId: 'tool-call-dual',
+        agentRunId: 'agent-dual',
+      }),
+      name: 'memory_recall',
+      args: {
+        subject: 'longmem-dual',
+        predicate: 'access_code',
+        relation_quote: 'access_code',
+      },
+    });
+
+    expect(mockExecuteMemoryRecall.mock.calls[0]?.[1]).toMatchObject({
+      explicitUserRequestGrant: { kind: 'explicit_memory_recall_grant' },
+    });
   });
 
   it('does not create recall authority for a broad user message', async () => {

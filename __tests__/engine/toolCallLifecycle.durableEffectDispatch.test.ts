@@ -397,7 +397,9 @@ describe('production tool lifecycle durable effect wiring', () => {
       expect(context).not.toHaveProperty('captureEffectReceipt');
       expect(context).not.toHaveProperty('finalizeEffectReceiptCapture');
       expect(context).toHaveProperty('executionSignal', undefined);
-      expect(context).not.toHaveProperty('toolCallId');
+      expect(context).not.toHaveProperty('modelTurnMemoryPolicyBinding');
+      // Identity is provenance, not authority; the explicit recall grant binds to it.
+      expect(context).toHaveProperty('toolCallId');
       expect(
         getExecutionJournalDb().getFirstSync<{ status: string }>(
           'SELECT status FROM execution_effects LIMIT 1',
