@@ -47,7 +47,9 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
       id: {
         type: 'string',
         description:
-          'Stable goal ID. Required for all actions. Use a short structural ID when adding a new goal.',
+          'Stable goal ID. Required for all actions. Use a short structural ID when adding a new goal. ' +
+          'With a goals batch, give the ID of the batch entry this call is mainly about; the batch ' +
+          'entries are what the call applies.',
       },
       name: {
         type: 'string',
@@ -135,8 +137,8 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
               type: 'string',
               enum: ['pending', 'active', 'completed', 'blocked'],
               description:
-                'Goal status. Mark the one step starting now as "active" and later steps '
-                + '"pending"; only one goal is active at a time.',
+                'Goal status. Mark the one step starting now as "active" and later steps ' +
+                '"pending"; only one goal is active at a time.',
             },
             completionPolicy: {
               type: 'string',
@@ -160,7 +162,12 @@ export const UPDATE_GOALS_TOOL: ToolDefinition = {
         },
       },
     },
-    required: ['action'],
+    // `id` was documented as required but not declared so, and an argument object with only
+    // `action` is schema-valid. Measured on OpenRouter's InferenceNet upstream for GLM 5.3
+    // Flash, that is what arrived — bare `{"action":"add"}` in 5 of 8 forced calls, looping
+    // live runs into loop_detected — while declaring `id` required gave 8 of 8 calls with the
+    // goal identified. A declared requirement is also what provider tool-call telemetry checks.
+    required: ['action', 'id'],
   },
   strict: true,
   contract: {
