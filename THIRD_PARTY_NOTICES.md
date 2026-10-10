@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 906 |
+| MIT | 907 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -940,6 +940,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | react-native-gesture-handler | 2.31.2 | runtime | MIT |
 | react-native-get-random-values | 1.11.0 | runtime | MIT |
 | react-native-is-edge-to-edge | 1.2.1 | transitive | MIT |
+| react-native-keyboard-controller | 1.20.7 | runtime | MIT |
 | react-native-marked | 8.0.0 | runtime | MIT |
 | react-native-reanimated | 4.2.1 | runtime | MIT |
 | react-native-reanimated-table | 0.0.2 | transitive | MIT |
