@@ -61,6 +61,26 @@ const SPECIAL_TOKEN_TOOL_CALL_DETECTION_RE = new RegExp(
   'iu',
 );
 
+/**
+ * A third dialect: GLM's own. It writes a call as `<tool_call>` followed by the tool's
+ * name, `<arg_key>…</arg_key><arg_value>…</arg_value>` pairs, and `</tool_call>` — the
+ * format vLLM's GLM-4 MoE tool parser reads. When the structured channel is off, as on a
+ * forced final-text turn, the provider returns that text as the reply.
+ *
+ * Traced on the GLM 5.3 Flash suite: a forced final turn answered
+ * `<tool_call>clipboard<arg_key>action</arg_key><arg_value>read</arg_value></tool_call>`,
+ * no pattern recognized it, and it was shown to the user as the run's answer.
+ *
+ * Matching is structural: the call opens on a bare tool name and closes only after whole
+ * key/value pairs, so prose that mentions the tags carries no closed call.
+ */
+const ARG_PAIR_TOOL_CALL_INNER_PATTERN =
+  '<tool_call>\\s*[A-Za-z0-9_.:-]+\\s*' +
+  '(?:<arg_key>[\\s\\S]*?<\\/arg_key>\\s*<arg_value>[\\s\\S]*?<\\/arg_value>\\s*)*' +
+  '<\\/tool_call>';
+const ARG_PAIR_TOOL_CALL_BLOCK_RE = new RegExp(ARG_PAIR_TOOL_CALL_INNER_PATTERN, 'giu');
+const ARG_PAIR_TOOL_CALL_DETECTION_RE = new RegExp(ARG_PAIR_TOOL_CALL_INNER_PATTERN, 'iu');
+
 function normalizeTranscriptWhitespace(text: string): string {
   return text
     .replace(/[ \t]+\n/g, '\n')
@@ -95,7 +115,8 @@ export function stripRawProviderToolCallMarkupForDisplay(text: string): string {
   return normalizeTranscriptWhitespace(
     text
       .replace(RAW_PROVIDER_FUNCTION_BLOCK_RE, '')
-      .replace(SPECIAL_TOKEN_TOOL_CALL_BLOCK_RE, ''),
+      .replace(SPECIAL_TOKEN_TOOL_CALL_BLOCK_RE, '')
+      .replace(ARG_PAIR_TOOL_CALL_BLOCK_RE, ''),
   );
 }
 
@@ -106,7 +127,8 @@ export function containsRawProviderToolCallMarkup(text: string): boolean {
   }
   return (
     RAW_PROVIDER_FUNCTION_BLOCK_DETECTION_RE.test(text) ||
-    SPECIAL_TOKEN_TOOL_CALL_DETECTION_RE.test(text)
+    SPECIAL_TOKEN_TOOL_CALL_DETECTION_RE.test(text) ||
+    ARG_PAIR_TOOL_CALL_DETECTION_RE.test(text)
   );
 }
 

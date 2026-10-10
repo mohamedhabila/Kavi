@@ -352,6 +352,32 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
   });
 
+  it("retries GLM's arg-pair tool-call markup emitted during a forced final delivery", async () => {
+    // Traced verbatim on the GLM 5.3 Flash suite, where it reached the user as the answer.
+    const params = buildBaseParams();
+    const rawToolMarkup =
+      '<tool_call>clipboard<arg_key>action</arg_key><arg_value>read</arg_value></tool_call>';
+    params.turnAssistantContent = rawToolMarkup;
+    params.modelTurnAssistantContent = rawToolMarkup;
+    params.effectiveForceTextThisTurn = true;
+    params.selectedToolNames = new Set<string>();
+    params.selectedToolCount = 0;
+
+    const result = await resolveAgentControlGraphNoToolTurn(params);
+
+    expect(result).toEqual({
+      status: 'continued',
+      nextConsecutivePendingAsyncNoToolTurns: 0,
+    });
+    expect(params.applyGraphEvents).toHaveBeenCalledWith([
+      { type: 'FINALIZATION_HELD', reason: 'malformed_tool_call_retry' },
+    ]);
+    expect(params.workingMessages.at(-1)?.content).toContain(
+      '[SYSTEM INVALID FINAL RESPONSE RETRY]',
+    );
+    expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
+  });
+
   it('retries provider tool-call markup as a native call when tools remain available', async () => {
     const params = buildBaseParams();
     params.turnAssistantContent = [
