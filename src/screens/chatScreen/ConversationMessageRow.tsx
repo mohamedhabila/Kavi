@@ -32,6 +32,8 @@ type ConversationMessageRowProps = {
   temporalMarkerText?: string;
   /** Archived history: shown for reading, with no actions that act on the live conversation. */
   readOnly?: boolean;
+  /** Carry on the task this answer handed back unfinished. */
+  onContinue?: () => void;
 };
 
 export const ConversationMessageRow = memo(function ConversationMessageRow(
@@ -81,6 +83,7 @@ export const ConversationMessageRow = memo(function ConversationMessageRow(
         responseSegments={props.item.resolvedResponseSegments}
         onEdit={props.readOnly ? undefined : props.onEdit}
         onRetry={props.readOnly ? undefined : props.onRetry}
+        onContinue={props.readOnly ? undefined : props.onContinue}
         onViewCanvas={props.onViewCanvas}
         onViewFile={props.onViewFiles}
         onShareWorkspaceFile={props.onShareWorkspaceFile}

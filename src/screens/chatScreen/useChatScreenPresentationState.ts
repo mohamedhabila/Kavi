@@ -31,6 +31,7 @@ import {
 } from '../chatScreenDisplayState';
 import { mergeChronologically } from '../../utils/messageChronology';
 import { useArchivedTranscript } from './useArchivedTranscript';
+import { isContinuableStop } from './continuableStop';
 
 type SubAgentSnapshot = NonNullable<Message['subAgentEvent']>['snapshot'];
 
@@ -53,6 +54,8 @@ type ChatScreenPresentationState = {
   archivedEarlierMessageCount: number;
   /** Ids of displayed messages that come from the archive; they are read-only. */
   archivedMessageIds: ReadonlySet<string>;
+  /** The latest answer, when it handed a task back unfinished and can be continued. */
+  continuableMessageId: string | null;
   hiddenSourceMessageCount: number;
   loadEarlierArchivedMessages: () => void;
   messages: Message[];
@@ -164,6 +167,14 @@ export function useChatScreenPresentationState(
       visibleDisplayMessages,
     ],
   );
+  const continuableMessageId = useMemo(() => {
+    const latest = resolvedDisplayMessages.at(-1);
+    return latest &&
+      !latest.isStreaming &&
+      isContinuableStop(latest.resolvedMessage, latest.agentRun)
+      ? latest.resolvedMessage.id
+      : null;
+  }, [resolvedDisplayMessages]);
   const { locale } = useTranslation();
   const temporalMarkersByMessageId = useMemo(() => {
     const markers = computeTemporalMarkers(
@@ -228,6 +239,7 @@ export function useChatScreenPresentationState(
     availableSubAgentSnapshotsById,
     archivedEarlierMessageCount: archivedTranscript.remainingCount,
     archivedMessageIds,
+    continuableMessageId,
     hiddenSourceMessageCount: visibleMessageWindow.hiddenSourceMessageCount,
     loadEarlierArchivedMessages: archivedTranscript.loadEarlier,
     messages,

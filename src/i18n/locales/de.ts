@@ -331,6 +331,8 @@ export const de: TranslationMap = mergeTranslations(en, {
     shareMessage: 'Antwort teilen',
     shareMessageFailed: 'Diese Antwort kann gerade nicht geteilt werden.',
     retryMessage: 'Nachricht erneut senden',
+    continueTask: 'Fortfahren',
+    continueTaskMessage: 'Bitte machen Sie mit der Aufgabe dort weiter, wo Sie aufgehört haben.',
     memoryFeedbackPrompt: 'Hat der gemerkte Kontext geholfen?',
     memoryFeedbackHelpful: 'Hilfreich',
     memoryFeedbackWrong: 'Falsch',

@@ -318,6 +318,8 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     shareMessage: '分享回复',
     shareMessageFailed: '目前无法分享此回复。',
     retryMessage: '重试消息',
+    continueTask: '继续',
+    continueTaskMessage: '请从你停下的地方继续这个任务。',
     memoryFeedbackPrompt: '记住的上下文有帮助吗？',
     memoryFeedbackHelpful: '有帮助',
     memoryFeedbackWrong: '不正确',

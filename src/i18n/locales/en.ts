@@ -333,6 +333,8 @@ export const en: TranslationMap = {
     shareMessage: 'Share response',
     shareMessageFailed: 'Unable to share this response right now.',
     retryMessage: 'Retry message',
+    continueTask: 'Continue',
+    continueTaskMessage: 'Please continue with the task from where you stopped.',
     memoryFeedbackPrompt: 'Did the remembered context help?',
     memoryFeedbackHelpful: 'Helpful',
     memoryFeedbackWrong: 'Wrong',

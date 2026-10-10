@@ -86,6 +86,7 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
     responseSegments,
     onEdit,
     onRetry,
+    onContinue,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
   }: any) => {
@@ -226,6 +227,16 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
             onPress: () => onEdit?.(message.id, message.content),
           },
           React.createElement(View, { testID: 'icon-Edit2' }),
+        ),
+      );
+    }
+
+    if (message?.role === 'assistant' && onContinue) {
+      nodes.push(
+        React.createElement(
+          TouchableOpacity,
+          { key: 'continue', onPress: onContinue, testID: 'assistant-continue-task' },
+          React.createElement(Text, null, 'Continue'),
         ),
       );
     }

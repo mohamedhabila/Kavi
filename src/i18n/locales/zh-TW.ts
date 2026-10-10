@@ -318,6 +318,8 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     shareMessage: '分享回覆',
     shareMessageFailed: '目前無法分享此回覆。',
     retryMessage: '重試訊息',
+    continueTask: '繼續',
+    continueTaskMessage: '請從你停下的地方繼續這項任務。',
     memoryFeedbackPrompt: '記住的脈絡有幫助嗎？',
     memoryFeedbackHelpful: '有幫助',
     memoryFeedbackWrong: '不正確',

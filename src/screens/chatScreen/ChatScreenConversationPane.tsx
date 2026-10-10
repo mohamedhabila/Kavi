@@ -34,6 +34,8 @@ type ChatScreenConversationPaneProps = {
   activeConversationId: string | null;
   archivedMessageIds: ReadonlySet<string>;
   bottomInset: number;
+  continuableMessageId: string | null;
+  handleContinueTask: () => void;
   colors: AppPalette;
   composerAttachments: Attachment[];
   composerExactText: boolean;
@@ -101,6 +103,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     activeConversationId,
     archivedMessageIds,
     bottomInset,
+    continuableMessageId,
+    handleContinueTask,
     clearInteractionReleaseTimer,
     colors,
     composerAttachments,
@@ -157,6 +161,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
   });
   const renderMessageItem = useConversationMessageRenderItem({
     archivedMessageIds,
+    continuableMessageId,
+    handleContinueTask,
     handleEdit,
     handleOpenSubAgentDetails,
     handleLoadMemoryFeedback,
@@ -278,6 +284,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         <FlatList
           ref={flatListRef}
           data={resolvedDisplayMessages}
+          // Rows read which answer can be continued from outside `data`.
+          extraData={continuableMessageId}
           keyExtractor={(item) => item.id}
           style={styles.flex}
           contentContainerStyle={[

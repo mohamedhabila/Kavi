@@ -190,6 +190,22 @@ export const createAssistantBubbleStyles = (colors: AppPalette) =>
     },
     actionsLeft: {
       justifyContent: 'flex-start',
+      alignItems: 'center',
+    },
+    continuePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minHeight: 44,
+      paddingHorizontal: 14,
+      borderRadius: 22,
+      marginRight: 4,
+      backgroundColor: colors.primarySoft,
+    },
+    continuePillText: {
+      color: colors.primary,
+      fontSize: 14,
+      fontWeight: '600',
     },
     memoryFeedback: {
       marginTop: 6,

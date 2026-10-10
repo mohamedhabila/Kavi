@@ -12,6 +12,8 @@ type TranslationFn = (key: string, params?: Record<string, string | number>) => 
 
 type RenderMessageContext = {
   archivedMessageIds: ReadonlySet<string>;
+  continuableMessageId: string | null;
+  handleContinueTask: () => void;
   handleEdit: (messageId: string, content: string) => void;
   handleOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
   handleLoadMemoryFeedback: (
@@ -67,6 +69,11 @@ export function useConversationMessageRenderItem(params: UseConversationMessageR
         onViewFiles={renderContext.handleViewFiles}
         personaMarkerId={personaMarker?.id}
         readOnly={renderContext.archivedMessageIds.has(item.resolvedMessage.id)}
+        onContinue={
+          item.resolvedMessage.id === renderContext.continuableMessageId
+            ? renderContext.handleContinueTask
+            : undefined
+        }
         personaMarkerText={personaMarkerText}
         styles={renderContext.styles}
         temporalMarkerBeforeMessageId={marker?.beforeMessageId}

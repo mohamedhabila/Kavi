@@ -42,6 +42,7 @@ interface AssistantBubbleProps {
   isStreaming?: boolean;
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onRetry?: (messageId: string) => void;
+  onContinue?: () => void;
   onViewCanvas?: () => void;
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
@@ -67,6 +68,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
     isStreaming,
     responseSegments,
     onRetry,
+    onContinue,
     onViewCanvas,
     onViewFile,
     onShareWorkspaceFile,
@@ -350,6 +352,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
               colors={colors}
               copyText={bubbleModel.copyText}
               onRetry={onRetry ? () => onRetry(retryMessageId || message.id) : undefined}
+              onContinue={onContinue}
               onShare={handleShare}
               styles={styles}
               t={t}

@@ -352,6 +352,8 @@ export const ar: TranslationMap = mergeTranslations(en, {
     shareMessage: 'مشاركة الرد',
     shareMessageFailed: 'تعذرت مشاركة هذا الرد الآن.',
     retryMessage: 'إعادة محاولة الرسالة',
+    continueTask: 'متابعة',
+    continueTaskMessage: 'يرجى متابعة المهمة من حيث توقفت.',
     memoryFeedbackPrompt: 'هل كان السياق المتذكّر مفيدًا؟',
     memoryFeedbackHelpful: 'مفيد',
     memoryFeedbackWrong: 'غير صحيح',

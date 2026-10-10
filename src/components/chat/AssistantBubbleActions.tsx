@@ -1,6 +1,6 @@
 import React from 'react';
-import { View } from 'react-native';
-import { RotateCcw, Share2 } from 'lucide-react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { Play, RotateCcw, Share2 } from 'lucide-react-native';
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { AssistantBubbleStyles } from './AssistantBubble.styles';
 import { CopyMessageButton } from './CopyMessageButton';
@@ -14,6 +14,8 @@ type AssistantBubbleActionsProps = {
   /** The answer's copyable text; empty disables copying. */
   copyText: string;
   onRetry?: () => void;
+  /** Carry on a task the answer handed back unfinished. */
+  onContinue?: () => void;
   onShare: () => void;
   styles: AssistantBubbleStyles;
   t: TranslationFn;
@@ -24,6 +26,18 @@ export const AssistantBubbleActions = React.memo(function AssistantBubbleActions
 ) {
   return (
     <View style={[props.styles.actions, props.styles.actionsLeft]}>
+      {props.onContinue ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={props.t('chat.continueTask')}
+          onPress={props.onContinue}
+          style={props.styles.continuePill}
+          testID="assistant-continue-task"
+        >
+          <Play size={14} color={props.colors.primary} />
+          <Text style={props.styles.continuePillText}>{props.t('chat.continueTask')}</Text>
+        </TouchableOpacity>
+      ) : null}
       <CopyMessageButton
         color={props.colors.textTertiary}
         confirmedColor={props.colors.success}

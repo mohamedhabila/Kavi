@@ -341,6 +341,8 @@ export const es: TranslationMap = mergeTranslations(en, {
     shareMessage: 'Compartir respuesta',
     shareMessageFailed: 'No se puede compartir esta respuesta ahora.',
     retryMessage: 'Reintentar mensaje',
+    continueTask: 'Continuar',
+    continueTaskMessage: 'Por favor, continúa con la tarea desde donde te detuviste.',
     memoryFeedbackPrompt: '¿Te ayudó el contexto recordado?',
     memoryFeedbackHelpful: 'Útil',
     memoryFeedbackWrong: 'Incorrecto',

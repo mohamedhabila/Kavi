@@ -25,6 +25,8 @@ interface MessageBubbleProps {
   responseSegments?: Array<DisplayResponseSegment & { isStreaming?: boolean }>;
   onEdit?: (id: string, content: string) => void;
   onRetry?: (messageId: string) => void;
+  /** Offered on an answer that handed a task back unfinished. */
+  onContinue?: () => void;
   onViewCanvas?: () => void;
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
@@ -51,6 +53,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
     responseSegments,
     onEdit,
     onRetry,
+    onContinue,
     onViewCanvas,
     onViewFile,
     onShareWorkspaceFile,
@@ -91,6 +94,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(
           isStreaming={isStreaming}
           responseSegments={responseSegments}
           onRetry={onRetry}
+          onContinue={onContinue}
           onViewCanvas={onViewCanvas}
           onViewFile={onViewFile}
           onShareWorkspaceFile={onShareWorkspaceFile}

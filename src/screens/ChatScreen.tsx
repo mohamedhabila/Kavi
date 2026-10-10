@@ -518,6 +518,10 @@ export const ChatScreen: React.FC = () => {
   });
 
   useVoiceConversationBridge(handleSend);
+  const handleContinueTask = useCallback(
+    () => void handleSend(t('chat.continueTaskMessage')),
+    [handleSend, t],
+  );
 
   const personaCustomList = usePersonaConfigStore((state) => state.customPersonas);
   const personaOverrides = usePersonaConfigStore((state) => state.overrides);
@@ -525,6 +529,7 @@ export const ChatScreen: React.FC = () => {
     archivedEarlierMessageCount,
     archivedMessageIds,
     availableSubAgentSnapshotsById,
+    continuableMessageId,
     hiddenSourceMessageCount,
     loadEarlierArchivedMessages,
     messages,
@@ -658,6 +663,8 @@ export const ChatScreen: React.FC = () => {
         handleViewFiles={handleViewFiles}
         hiddenSourceMessageCount={hiddenSourceMessageCount + archivedEarlierMessageCount}
         archivedMessageIds={archivedMessageIds}
+        continuableMessageId={isConversationBusy ? null : continuableMessageId}
+        handleContinueTask={handleContinueTask}
         hasProviderReady={hasProviderReady}
         interactionReleaseTimerRef={interactionReleaseTimerRef}
         isConversationBusy={isConversationBusy}
