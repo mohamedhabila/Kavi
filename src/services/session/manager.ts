@@ -4,6 +4,8 @@
 // Idle reset, export, conversation search, folders/tags.
 
 import type { Conversation } from '../../types/conversation';
+import type { Message } from '../../types/message';
+import { mergeChronologically } from '../../utils/messageChronology';
 import { unrefTimerIfSupported } from '../../utils/timers';
 
 // ── Session Idle/Daily Reset ─────────────────────────────────────────────
@@ -26,12 +28,20 @@ export function clearIdleTimer(): void {
 
 // ── Chat Export ──────────────────────────────────────────────────────────
 
-export function exportConversationAsMarkdown(conversation: Conversation): string {
+/**
+ * The whole conversation as Markdown. `earlierMessages` is archived history no longer held
+ * in memory; without it an export of a long-running conversation would silently start
+ * partway through.
+ */
+export function exportConversationAsMarkdown(
+  conversation: Conversation,
+  earlierMessages: ReadonlyArray<Message> = [],
+): string {
   const lines: string[] = [];
   lines.push(`# ${conversation.title}`);
   lines.push(`\n_Created: ${new Date(conversation.createdAt).toLocaleString()}_\n`);
 
-  for (const msg of conversation.messages) {
+  for (const msg of mergeChronologically(earlierMessages, conversation.messages)) {
     const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
     const time = new Date(msg.timestamp).toLocaleTimeString();
     lines.push(`\n## ${role} (${time})\n`);

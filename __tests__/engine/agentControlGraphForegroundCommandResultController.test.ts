@@ -11,6 +11,13 @@ jest.mock('../../src/services/session/manager', () => ({
   exportConversationAsMarkdown: (...args: unknown[]) => mockExportConversationAsMarkdown(...args),
 }));
 
+const mockArchivedHistory = [{ id: 'archived', role: 'user', content: 'Earlier', timestamp: 0 }];
+const mockLoadAllArchivedMessages = jest.fn(() => mockArchivedHistory);
+
+jest.mock('../../src/services/transcriptArchive/transcriptArchive', () => ({
+  loadAllArchivedMessages: (...args: unknown[]) => mockLoadAllArchivedMessages(...args),
+}));
+
 jest.mock('../../src/services/share/localShare', () => ({
   shareTextExport: (...args: unknown[]) => mockShareTextExport(...args),
 }));
@@ -84,7 +91,12 @@ describe('foreground command result controller', () => {
         detail: 'Exporting conversation...',
       }),
     );
-    expect(mockExportConversationAsMarkdown).toHaveBeenCalledWith(conversation);
+    // A long-running conversation exports from its archived history onward.
+    expect(mockLoadAllArchivedMessages).toHaveBeenCalledWith('conv1', new Set());
+    expect(mockExportConversationAsMarkdown).toHaveBeenCalledWith(
+      conversation,
+      mockArchivedHistory,
+    );
     expect(mockShareTextExport).toHaveBeenCalledWith(
       expect.objectContaining({
         content: '# Exported',

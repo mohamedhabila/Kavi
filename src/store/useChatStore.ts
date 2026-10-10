@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../constants/storage';
 import { createThrottledJSONStorage } from './throttledStorage';
+import { drainPendingTranscriptArchive } from '../services/transcriptArchive/transcriptArchive';
 import { partializeChatPersistState } from './chatPersistence';
 import { createAgentRunStoreActions } from './agentRuns/storeActions';
 import { createConversationStoreActions } from './chatStoreConversationActions';
@@ -36,7 +37,8 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: STORAGE_KEYS.CONVERSATIONS,
-      storage: createThrottledJSONStorage(),
+      // Archived history must be durable before a generation that omits it is committed.
+      storage: createThrottledJSONStorage({ beforeCommit: drainPendingTranscriptArchive }),
       version: CHAT_STORE_VERSION,
       migrate: (persistedState: unknown, persistedVersion: number) => {
         const normalized = normalizePersistedChatState(

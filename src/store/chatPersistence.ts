@@ -18,6 +18,10 @@ import { sanitizeUsage } from './chatPersistenceUsage';
 import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 import { isEligibleMessageMemoryPublicationSource } from '../utils/messageMemoryPublication';
 import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
+import {
+  isMessageArchivedOrQueued,
+  noteEvictedMessages,
+} from '../services/transcriptArchive/transcriptArchive';
 
 const persistedConversationProjectionCache = new WeakMap<Conversation, Conversation>();
 
@@ -81,6 +85,27 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
   };
 }
 
+/**
+ * Hand the messages a projection leaves out to the transcript archive, in the form they
+ * had when they left the persisted window. They are written before the commit that omits
+ * them, so a conversation the person keeps using does not lose its older history.
+ */
+function archiveEvictedMessages(conversation: Conversation, persisted: Conversation): void {
+  const messages = conversation.messages ?? [];
+  if (messages.length <= persisted.messages.length) return;
+  const keptIds = new Set(persisted.messages.map((message) => message.id));
+  const evicted = messages.filter(
+    (message) =>
+      !keptIds.has(message.id) && !isMessageArchivedOrQueued(conversation.id, message.id),
+  );
+  noteEvictedMessages(
+    conversation.id,
+    evicted.map((message) =>
+      sanitizeMessage(message, { preserveReplay: false, preserveReasoning: false }),
+    ),
+  );
+}
+
 export function partializeChatPersistState<
   T extends {
     conversations: Conversation[];
@@ -94,6 +119,7 @@ export function partializeChatPersistState<
 
       const sanitized = sanitizeConversationForPersistence(conversation);
       persistedConversationProjectionCache.set(conversation, sanitized);
+      archiveEvictedMessages(conversation, sanitized);
       return sanitized;
     }),
     activeConversationId: state.activeConversationId,

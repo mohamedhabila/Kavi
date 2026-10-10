@@ -25,6 +25,8 @@ type PendingSerializedValue = string | (() => string);
 
 interface PendingWrite {
   value: PendingSerializedValue;
+  /** Runs synchronously right before the generation carrying `value` is committed. */
+  beforeCommit?: () => void;
   timer: ReturnType<typeof setTimeout> | null;
   revision: number;
   flushingRevision: number | null;
@@ -82,14 +84,16 @@ function scheduleWriteTimer(key: string, pending: PendingWrite): void {
   unrefTimerIfSupported(pending.timer);
 }
 
-function queueWrite(key: string, value: PendingSerializedValue): void {
+function queueWrite(key: string, value: PendingSerializedValue, beforeCommit?: () => void): void {
   let pending = pendingWrites.get(key);
   if (pending) {
     pending.value = value;
+    pending.beforeCommit = beforeCommit;
     pending.revision = nextWriteRevision++;
   } else {
     pending = {
       value,
+      beforeCommit,
       timer: null,
       revision: nextWriteRevision++,
       flushingRevision: null,
@@ -170,10 +174,12 @@ async function flushWrite(key: string): Promise<void> {
   pending.timer = null;
   const revision = pending.revision;
   const value = pending.value;
+  const beforeCommit = pending.beforeCommit;
   pending.flushingRevision = revision;
   try {
     await enqueueStorageMutation(key, async () => {
       const serializedValue = resolvePendingValue(value);
+      beforeCommit?.();
       await commitPersistedGeneration(getGenerationFileUris(key), serializedValue);
     });
     if (pendingWrites.get(key) === pending && pending.revision === revision) {
@@ -200,7 +206,15 @@ async function drainStorageKey(key: string): Promise<void> {
   }
 }
 
-export function createThrottledJSONStorage<T>(): PersistStorage<T> {
+export function createThrottledJSONStorage<T>(
+  options: {
+    /**
+     * Runs synchronously before each commit, after the value is serialized — for durable
+     * side writes that must land before the generation that depends on them.
+     */
+    beforeCommit?: () => void;
+  } = {},
+): PersistStorage<T> {
   return {
     async getItem(key: string): Promise<StorageValue<T> | null> {
       const serialized = await throttledAsyncStorage.getItem(key);
@@ -212,7 +226,7 @@ export function createThrottledJSONStorage<T>(): PersistStorage<T> {
     },
 
     async setItem(key: string, value: StorageValue<T>): Promise<void> {
-      queueWrite(key, () => JSON.stringify(value));
+      queueWrite(key, () => JSON.stringify(value), options.beforeCommit);
     },
 
     async removeItem(key: string): Promise<void> {

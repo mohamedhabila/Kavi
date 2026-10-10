@@ -23,7 +23,13 @@ import { runBootOnLaunchIfPresent } from './agents/bootLaunch';
 import { loadHooksFromDirectory } from './hooks/loader';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useChatStore } from '../store/useChatStore';
-import { type PersistHydratableStore, waitForStoreHydration } from '../store/persistHydration';
+import {
+  isStoreHydrated,
+  type PersistHydratableStore,
+  waitForStoreHydration,
+} from '../store/persistHydration';
+import { purgeArchivedConversationsExcept } from './transcriptArchive/transcriptArchive';
+import { purgeArchivedHistoryOfDeletedConversations } from './transcriptArchive/startupPurge';
 import { runOrchestrator } from '../engine/orchestrator';
 import { initializeNotifications } from './notifications/service';
 import { hydrateCanvasSurfaces } from './canvas/renderer';
@@ -285,6 +291,14 @@ export function initializeServices(): void {
   void triggerPersistedAgentRecovery().catch((e) =>
     console.warn('[startup] recoverPersistedAgentState failed:', e),
   );
+
+  void purgeArchivedHistoryOfDeletedConversations({
+    waitForHydration: () => waitForStoreHydration(useChatStore as PersistHydratableStore, null),
+    isHydrated: () => isStoreHydrated(useChatStore as PersistHydratableStore),
+    getConversationIds: () =>
+      useChatStore.getState().conversations.map((conversation) => conversation.id),
+    purge: purgeArchivedConversationsExcept,
+  }).catch((e) => console.warn('[startup] transcript archive purge failed:', e));
 
   // Register built-in service skills (weather, news, etc.)
   registerBuiltInServiceSkills();

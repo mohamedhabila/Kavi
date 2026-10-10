@@ -1,7 +1,27 @@
 import { exportConversationAsMarkdown } from '../../../services/session/manager';
+import { loadAllArchivedMessages } from '../../../services/transcriptArchive/transcriptArchive';
 import { shareTextExport } from '../../../services/share/localShare';
 import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
+import type { Message } from '../../../types/message';
 import { generateId } from '../../../utils/id';
+import { createLogger } from '../../../utils/logger';
+
+const logger = createLogger('ForegroundCommandResult');
+
+/** Archived history for an export; the in-memory part still exports when it cannot load. */
+function loadArchivedHistoryForExport(conversation: Conversation): Message[] {
+  try {
+    return loadAllArchivedMessages(
+      conversation.id,
+      new Set(conversation.messages.map((message) => message.id)),
+    );
+  } catch (error: unknown) {
+    logger.warn('Exporting without archived history; it could not be read.', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
 
 type ConversationMode = 'agentic' | 'chitchat';
 
@@ -73,8 +93,9 @@ export function createForegroundCommandResultController(params: {
       }
 
       try {
+        const earlierMessages = loadArchivedHistoryForExport(conversation);
         await shareTextExport({
-          content: exportConversationAsMarkdown(conversation),
+          content: exportConversationAsMarkdown(conversation, earlierMessages),
           fileName: buildForegroundConversationExportFileName(conversation.title),
           dialogTitle: params.exportDialogTitle,
           mimeType: 'text/markdown',

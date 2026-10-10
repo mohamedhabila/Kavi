@@ -8,6 +8,11 @@ import type { ChatState } from './chatStoreTypes';
 import { captureSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
 import { retireConversationSourcesBeforeDeletion } from '../services/memory/conversationDeletionRetirement';
 import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
+import { createLogger } from '../utils/logger';
+import {
+  deleteAllArchivedMessages,
+  deleteArchivedConversation,
+} from '../services/transcriptArchive/transcriptArchive';
 
 /** A user-chosen chat name is a label, not content: bounded so a paste cannot become one. */
 export const MAX_CONVERSATION_TITLE_GRAPHEMES = 120;
@@ -34,6 +39,25 @@ function captureActiveMemoryHandoff(get: ChatStoreGet) {
     ? state.conversations.find((conversation) => conversation.id === state.activeConversationId)
     : undefined;
   return captureSemanticMemoryHandoff(active);
+}
+
+const logger = createLogger('ChatStoreConversations');
+
+/**
+ * Remove a deleted conversation's archived history. The deletion itself must not fail on it:
+ * whatever is left is removed when the app next starts.
+ */
+function removeArchivedHistory(remove: () => void): void {
+  try {
+    remove();
+  } catch (error: unknown) {
+    logger.warn(
+      'Archived history will be removed on the next launch; it could not be removed now.',
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+    );
+  }
 }
 
 function retireConversationDeletionTargets(
@@ -314,6 +338,7 @@ export function createConversationStoreActions(
         conversations: state.conversations.filter((c) => c.id !== id),
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
       }));
+      removeArchivedHistory(() => deleteArchivedConversation(id));
       requestChatStorePersistenceCheckpoint();
     },
 
@@ -345,6 +370,7 @@ export function createConversationStoreActions(
         })),
       );
       set({ conversations: [], activeConversationId: null });
+      removeArchivedHistory(deleteAllArchivedMessages);
       requestChatStorePersistenceCheckpoint();
     },
 

@@ -22,3 +22,20 @@ beforeEach(() => {
     | undefined;
   loadedModule?.exports?.setSearchProviderReadinessSnapshot?.(true);
 });
+
+// The transcript archive keeps one SQLite connection per process. Tests that reset the
+// expo-sqlite shim close it underneath; release it so the next test opens a fresh one.
+afterEach(() => {
+  const loadedModule = require.cache[
+    require.resolve('../../src/services/transcriptArchive/database')
+  ] as { exports?: { closeTranscriptArchiveDb?: () => void } } | undefined;
+  try {
+    loadedModule?.exports?.closeTranscriptArchiveDb?.();
+  } catch {
+    // A connection the shim already closed has nothing left to release.
+  }
+  const archiveModule = require.cache[
+    require.resolve('../../src/services/transcriptArchive/transcriptArchive')
+  ] as { exports?: { _resetTranscriptArchiveStateForTests?: () => void } } | undefined;
+  archiveModule?.exports?._resetTranscriptArchiveStateForTests?.();
+});
