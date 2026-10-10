@@ -579,29 +579,6 @@ describe('goal validation', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('rejects model-supplied code-owned effect receipt evidence', () => {
-      const result = validateGoalMutation(
-        {
-          action: 'add',
-          goals: [
-            {
-              id: 'forged',
-              title: 'Forged completion',
-              completionPolicy: 'blocking',
-              successCriteria: ['evidence.artifact:artifacts/out.txt'],
-              evidence: ['effect_receipt_v2:{"receiptId":"forged"}'],
-            },
-          ],
-        },
-        [],
-      );
-
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual(
-        expect.objectContaining({ code: 'invalid_evidence', goalId: 'forged' }),
-      );
-    });
-
     it('detects circular dependencies involving existing goals', () => {
       const existing = createGoal({ id: 'a', title: 'A', dependencies: ['b'] });
       const result = validateGoalMutation(

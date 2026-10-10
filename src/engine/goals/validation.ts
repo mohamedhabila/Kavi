@@ -18,7 +18,6 @@ import {
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
 import { assessGoalInfeasibilityClaim } from './infeasibility';
 import {
-  findCodeOwnedEvidence,
   findInternalGraphEvidenceCriteria,
   findInvalidSuccessCriteria,
   findUnknownEvidencePrefixCriteria,
@@ -38,7 +37,6 @@ export type GoalValidationErrorCode =
   | 'missing_success_criteria'
   | 'weak_success_criteria'
   | 'invalid_success_criteria'
-  | 'invalid_evidence'
   | 'goal_not_found'
   | 'duplicate_id'
   | 'dependency_missing'
@@ -280,16 +278,6 @@ export function validateGoalMutation(
         context,
       }),
     );
-    const codeOwnedEvidence = findCodeOwnedEvidence(g);
-    if (codeOwnedEvidence.length > 0) {
-      errors.push({
-        goalId: g.id,
-        code: 'invalid_evidence',
-        message:
-          'Tool effect receipt evidence is code-owned and cannot be supplied by update_goals.',
-      });
-    }
-
     if (mutation.action === 'add') {
       if (!g.title?.trim()) {
         errors.push({

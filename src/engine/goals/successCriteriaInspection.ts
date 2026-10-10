@@ -11,7 +11,6 @@ import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
 import { isRecognizedSuccessCriterionForm } from './completionEvidence';
 import type { AgentGoal, AgentGoalMutation } from './types';
 import { isRegisteredToolName } from '../tools/toolNameNormalization';
-import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
 
 const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
   GOAL_BOOTSTRAP_TOOL_NAME,
@@ -31,7 +30,6 @@ export function formatRegisteredNonToolEvidencePrefixes(): string {
     .map((prefix) => `evidence.prefix:${prefix}`)
     .join(', ');
 }
-const CODE_OWNED_EVIDENCE_PREFIXES = [EFFECT_RECEIPT_EVIDENCE_PREFIX] as const;
 
 export function resolvePatchCompletionPolicy(
   patch: AgentGoalMutation['goals'][number],
@@ -100,12 +98,6 @@ export function findUnknownEvidencePrefixCriteria(
         !isRegisteredToolName(prefixToken),
       );
     });
-}
-
-export function findCodeOwnedEvidence(patch: AgentGoalMutation['goals'][number]): ReadonlyArray<string> {
-  return (patch.evidence ?? []).filter((evidence) =>
-    CODE_OWNED_EVIDENCE_PREFIXES.some((prefix) => evidence.startsWith(prefix)),
-  );
 }
 
 export function readEvidenceToolCriterionToken(criterion: string): string | null {

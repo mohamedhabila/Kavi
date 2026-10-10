@@ -569,6 +569,11 @@ export function parseUpdateGoalsArgs(args: Record<string, unknown>): {
   }
 
   const completionPolicy = normalizeGoalCompletionPolicy(normalizedArgs.completionPolicy);
+  // The one place model-authored evidence is refused, batched entries included: past this
+  // point every evidence string on a mutation was put there by the graph itself. A second
+  // check in the mutation validator once refused the effect receipts the graph had just
+  // reconciled onto the patch, so no goal naming an effectful tool could be added or
+  // updated after that tool ran — the traced SMS draft run had no legal move left.
   if (Object.prototype.hasOwnProperty.call(normalizedArgs, 'evidence')) {
     return {
       mutation: { action, goals: [] },
