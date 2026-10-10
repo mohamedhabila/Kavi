@@ -414,6 +414,7 @@ describe('MCP OAuth service', () => {
   it('reuses stored OAuth client information when the redirect URL still matches', async () => {
     mockGetMcpOAuthSecret.mockResolvedValueOnce(
       JSON.stringify({
+        authorizationServerUrl: 'https://linear.app',
         clientInformation: {
           client_id: 'stored-client-id',
           redirect_uris: ['https://auth.expo.io/@test-owner/kavi'],

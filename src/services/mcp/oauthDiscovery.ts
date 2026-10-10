@@ -24,6 +24,26 @@ function stripToOrigin(url: string): string {
   return parsed.toString();
 }
 
+function normalizeAuthorizationServerUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether two URLs name the same OAuth authorization server: same scheme, host, port and
+ * path (a tenant path is part of the identity), ignoring a trailing slash, query and
+ * fragment. A missing or unparseable URL is never the same server.
+ */
+export function isSameAuthorizationServer(stored: string | undefined, current: string): boolean {
+  if (!stored) return false;
+  const left = normalizeAuthorizationServerUrl(stored);
+  return left !== null && left === normalizeAuthorizationServerUrl(current);
+}
+
 function buildFallbackMetadata(
   authorizationServerUrl: string,
   oauth?: McpOAuthConfig,
