@@ -9,6 +9,7 @@ type UseChatScrollControllerParams = {
 export function useChatScrollController({ flatListRef }: UseChatScrollControllerParams): {
   clearInteractionReleaseTimer: () => void;
   clearPendingScrollFrames: () => void;
+  followLatestOnLayout: () => void;
   forceNextScrollRef: MutableRefObject<boolean>;
   handleUserScrollEnd: () => void;
   handleUserScrollStart: () => void;
@@ -101,6 +102,17 @@ export function useChatScrollController({ flatListRef }: UseChatScrollController
     [scrollToBottom],
   );
 
+  // The viewport resized (the keyboard opened, the composer grew or shrank). A reader
+  // following the latest message keeps it in view; a reader who scrolled up stays put,
+  // and a pending forced scroll stays pending for the content it was set for.
+  const followLatestOnLayout = useCallback(() => {
+    if (isUserInteractingRef.current || !shouldAutoFollowRef.current) {
+      return;
+    }
+
+    scrollToBottom(false);
+  }, [scrollToBottom]);
+
   const handleUserScrollStart = useCallback(() => {
     clearInteractionReleaseTimer();
     clearPendingScrollFrames();
@@ -130,6 +142,7 @@ export function useChatScrollController({ flatListRef }: UseChatScrollController
   return {
     clearInteractionReleaseTimer,
     clearPendingScrollFrames,
+    followLatestOnLayout,
     forceNextScrollRef,
     handleUserScrollEnd,
     handleUserScrollStart,

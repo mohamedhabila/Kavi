@@ -124,4 +124,68 @@ describe('useChatScrollController', () => {
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
     expect(scrollToEnd).toHaveBeenCalledTimes(1);
   });
+
+  describe('followLatestOnLayout', () => {
+    function readAwayFromLatest(result: ReturnType<typeof renderController>['result']) {
+      act(() => {
+        result.current.handleUserScrollStart();
+        result.current.listMetricsRef.current = {
+          contentHeight: 1_800,
+          layoutHeight: 600,
+          offsetY: 120,
+        };
+        result.current.handleUserScrollEnd();
+      });
+    }
+
+    it('keeps the latest message in view when the keyboard shrinks the transcript', () => {
+      const { result, scrollToEnd } = renderController();
+
+      act(() => result.current.followLatestOnLayout());
+      act(() => flushFrame());
+
+      expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+    });
+
+    it('leaves a reader who scrolled up where they are', () => {
+      const { result, scrollToEnd } = renderController();
+      readAwayFromLatest(result);
+
+      act(() => result.current.followLatestOnLayout());
+
+      expect(requestAnimationFrame).not.toHaveBeenCalled();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    });
+
+    it('keeps a pending send scroll for the message it was set for', () => {
+      const { result, scrollToEnd } = renderController();
+      readAwayFromLatest(result);
+
+      // Sending marks the next content change as forced, then clearing the composer
+      // resizes the transcript before the sent message is measured.
+      act(() => {
+        result.current.forceNextScrollRef.current = true;
+        result.current.followLatestOnLayout();
+      });
+      expect(result.current.forceNextScrollRef.current).toBe(true);
+
+      act(() => result.current.maybeScrollToBottom(false));
+      act(() => flushFrame());
+
+      expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+      expect(result.current.forceNextScrollRef.current).toBe(false);
+    });
+
+    it('does not fight a gesture in progress', () => {
+      const { result, scrollToEnd } = renderController();
+
+      act(() => {
+        result.current.handleUserScrollStart();
+        result.current.followLatestOnLayout();
+      });
+
+      expect(requestAnimationFrame).not.toHaveBeenCalled();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    });
+  });
 });

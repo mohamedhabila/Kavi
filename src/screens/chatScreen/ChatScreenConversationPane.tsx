@@ -37,6 +37,7 @@ type ChatScreenConversationPaneProps = {
   composerAttachments: Attachment[];
   composerExactText: boolean;
   composerText: string;
+  followLatestOnLayout: () => void;
   forceNextScrollRef: MutableRefObject<boolean>;
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
   handleComposerExactTextChange: (exactText: boolean) => void;
@@ -104,6 +105,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     composerExactText,
     composerText,
     flatListRef,
+    followLatestOnLayout,
     forceNextScrollRef,
     handleComposerAttachmentsChange,
     handleComposerExactTextChange,
@@ -222,10 +224,10 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
       updateAutoFollowState();
       // The transcript shrinks while the keyboard opens; a reader following the latest
       // message keeps it in view instead of having it pushed below the composer.
-      maybeScrollToBottom(false);
+      followLatestOnLayout();
       syncLatestActivityPrompt();
     },
-    [listMetricsRef, maybeScrollToBottom, syncLatestActivityPrompt, updateAutoFollowState],
+    [followLatestOnLayout, listMetricsRef, syncLatestActivityPrompt, updateAutoFollowState],
   );
   const handleListScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {

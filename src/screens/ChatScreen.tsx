@@ -190,6 +190,7 @@ export const ChatScreen: React.FC = () => {
   const {
     clearInteractionReleaseTimer,
     clearPendingScrollFrames,
+    followLatestOnLayout,
     forceNextScrollRef,
     handleUserScrollEnd,
     handleUserScrollStart,
@@ -656,6 +657,7 @@ export const ChatScreen: React.FC = () => {
         isConversationBusy={isConversationBusy}
         isEditing={editingMessageId !== null}
         listMetricsRef={listMetricsRef}
+        followLatestOnLayout={followLatestOnLayout}
         maybeScrollToBottom={maybeScrollToBottom}
         onOpenProviderSetup={handleOpenProviderSetup}
         onResumeConversation={setActiveConversation}
