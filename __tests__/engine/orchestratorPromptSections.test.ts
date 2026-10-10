@@ -207,6 +207,19 @@ describe('orchestratorPromptSections', () => {
     expect(deNote).toContain('measurement_system: metric');
   });
 
+  it('states the local request time with its offset and weekday, so no arithmetic is left', () => {
+    const offset = jest.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(-120);
+    expect(buildRuntimeContextNote(new Date('2026-10-10T19:49:12.000Z'))).toContain(
+      'request_local_time: 2026-10-10T21:49:12+02:00 (Saturday)',
+    );
+
+    offset.mockReturnValue(300);
+    expect(buildRuntimeContextNote(new Date('2026-10-10T02:00:00.000Z'))).toContain(
+      'request_local_time: 2026-10-09T21:00:00-05:00 (Friday)',
+    );
+    offset.mockRestore();
+  });
+
   it('falls back to the runtime IANA zone and active app locale when no override is given', () => {
     const note = buildRuntimeContextNote(new Date('2026-05-29T10:00:00.000Z'));
     expect(note).toMatch(/device_timezone: \S+/);

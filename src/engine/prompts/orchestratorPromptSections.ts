@@ -49,17 +49,6 @@ const KEYLESS_PUBLIC_SOURCES_GUIDANCE =
   'facts — Wikipedia (https://<lang>.wikipedia.org/api/rest_v1/page/summary/<title>); many sites are ' +
   'readable directly. Try one before mentioning setup; only mention it after a fetch fails.';
 
-export function formatUtcOffset(offsetMinutesWestOfUtc: number): string {
-  const totalMinutes = -offsetMinutesWestOfUtc;
-  const sign = totalMinutes >= 0 ? '+' : '-';
-  const absoluteMinutes = Math.abs(totalMinutes);
-  const hours = Math.floor(absoluteMinutes / 60)
-    .toString()
-    .padStart(2, '0');
-  const minutes = (absoluteMinutes % 60).toString().padStart(2, '0');
-  return `UTC${sign}${hours}:${minutes}`;
-}
-
 export function buildRuntimePromptSection(options: {
   toolExecutionAvailable: boolean;
   /**
@@ -141,6 +130,34 @@ function resolveMeasurementSystem(bcp47Tag: string): 'metric' | 'us_customary' {
   return region && US_CUSTOMARY_BCP47_REGIONS.has(region) ? 'us_customary' : 'metric';
 }
 
+const WEEKDAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
+
+/**
+ * The request time in the device's local time, as ISO 8601 with its offset, and its
+ * weekday. Stated outright because combining a UTC time with a separate offset is
+ * arithmetic models get wrong: traced on GLM 5.3 Flash, the model read the UTC clock as
+ * local time, attached the local offset, and every reminder it set "60 seconds from now"
+ * was two hours in the past.
+ */
+function formatLocalRequestTime(now: Date): string {
+  const offsetMinutes = -now.getTimezoneOffset();
+  const local = new Date(now.getTime() + offsetMinutes * 60_000);
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, '0');
+  const minutes = String(absoluteMinutes % 60).padStart(2, '0');
+  const isoLocal = `${local.toISOString().slice(0, 19)}${sign}${hours}:${minutes}`;
+  return `${isoLocal} (${WEEKDAY_NAMES[local.getUTCDay()]})`;
+}
+
 export function buildRuntimeContextNote(
   now: Date = new Date(),
   overrides: { locale?: Locale; timeZone?: string } = {},
@@ -153,7 +170,7 @@ export function buildRuntimeContextNote(
   return [
     'Runtime context:',
     `request_timestamp_utc: ${currentTimeIso}`,
-    `device_local_timezone_offset: ${formatUtcOffset(now.getTimezoneOffset())}`,
+    `request_local_time: ${formatLocalRequestTime(now)}`,
     `device_timezone: ${timeZone}`,
     `device_locale: ${bcp47Tag}`,
     `measurement_system: ${resolveMeasurementSystem(bcp47Tag)}`,
