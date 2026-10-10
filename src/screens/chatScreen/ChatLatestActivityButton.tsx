@@ -1,12 +1,14 @@
 import React from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ArrowDown } from 'lucide-react-native';
 import type { AppPalette } from '../../theme/useAppTheme';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
+/** Gap between the button and the bottom of the transcript, just above the composer. */
+const TRANSCRIPT_BOTTOM_GAP = 12;
+
 type ChatLatestActivityButtonProps = {
-  bottomInset: number;
   colors: AppPalette;
   onPress: () => void;
   t: TranslationFn;
@@ -21,10 +23,9 @@ export const ChatLatestActivityButton = React.memo(function ChatLatestActivityBu
   }
 
   const label = props.t('chat.jumpToLatest');
-  const bottomOffset = Math.max(props.bottomInset, Platform.OS === 'ios' ? 6 : 8) + 66;
 
   return (
-    <View pointerEvents="box-none" style={[styles.container, { bottom: bottomOffset }]}>
+    <View pointerEvents="box-none" style={styles.container}>
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -51,6 +52,7 @@ export const ChatLatestActivityButton = React.memo(function ChatLatestActivityBu
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    bottom: TRANSCRIPT_BOTTOM_GAP,
     left: 0,
     right: 0,
     zIndex: 4,

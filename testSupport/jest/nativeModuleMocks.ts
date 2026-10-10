@@ -133,3 +133,10 @@ jest.mock('expo-audio', () => {
     },
   };
 });
+
+// Reanimated and Worklets ship JS mocks for Jest, which has no UI runtime.
+jest.mock('react-native-worklets', () => jest.requireActual('react-native-worklets/src/mock'));
+jest.mock('react-native-reanimated', () => jest.requireActual('react-native-reanimated/mock'));
+jest.mock('react-native-keyboard-controller', () =>
+  jest.requireActual('react-native-keyboard-controller/jest'),
+);

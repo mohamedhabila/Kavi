@@ -8,6 +8,7 @@ import { AppState } from 'react-native';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-get-random-values';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PyodideWebView } from './src/components/python/PyodideWebView';
 import { i18n } from './src/i18n/manager';
@@ -66,7 +67,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppContent />
+        <KeyboardProvider>
+          <AppContent />
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

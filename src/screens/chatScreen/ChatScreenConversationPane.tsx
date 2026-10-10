@@ -10,6 +10,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { ChatInput } from '../../components/chat/ChatInput';
+import { ChatKeyboardSpacer } from '../../components/chat/ChatKeyboardSpacer';
 import type { Attachment } from '../../types/attachment';
 import type { Message } from '../../types/message';
 import { USER_SCROLL_RELEASE_DELAY_MS } from '../chatScreenConstants';
@@ -219,9 +220,12 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     (event: LayoutChangeEvent) => {
       listMetricsRef.current.layoutHeight = event.nativeEvent.layout.height;
       updateAutoFollowState();
+      // The transcript shrinks while the keyboard opens; a reader following the latest
+      // message keeps it in view instead of having it pushed below the composer.
+      maybeScrollToBottom(false);
       syncLatestActivityPrompt();
     },
-    [listMetricsRef, syncLatestActivityPrompt, updateAutoFollowState],
+    [listMetricsRef, maybeScrollToBottom, syncLatestActivityPrompt, updateAutoFollowState],
   );
   const handleListScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -265,44 +269,45 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
 
   return (
     <View style={styles.body}>
-      <FlatList
-        ref={flatListRef}
-        data={resolvedDisplayMessages}
-        keyExtractor={(item) => item.id}
-        style={styles.flex}
-        contentContainerStyle={[
-          styles.messageList,
-          resolvedDisplayMessages.length === 0 ? styles.messageListEmpty : null,
-        ]}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={32}
-        initialNumToRender={10}
-        windowSize={7}
-        // iOS can retain ScrollView's JS responder after programmatic follow-scrolls,
-        // swallowing presses on transcript controls. UIKit still owns native pan scrolling.
-        disableScrollViewPanResponder={Platform.OS === 'ios'}
-        keyboardShouldPersistTaps="always"
-        removeClippedSubviews={Platform.OS === 'android'}
-        maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
-        onLayout={handleListLayout}
-        onScroll={handleListScroll}
-        onScrollBeginDrag={handleUserScrollStart}
-        onScrollEndDrag={handleListScrollEndDrag}
-        onMomentumScrollBegin={handleUserScrollStart}
-        onMomentumScrollEnd={handleUserScrollEnd}
-        onContentSizeChange={handleContentSizeChange}
-        scrollEventThrottle={16}
-        renderItem={renderMessageItem}
-        ListHeaderComponent={listHeaderComponent}
-        ListEmptyComponent={listEmptyComponent}
-      />
-      <ChatLatestActivityButton
-        bottomInset={bottomInset}
-        colors={colors}
-        onPress={handleJumpToLatest}
-        t={t}
-        visible={hasNewLatestActivity}
-      />
+      <View style={styles.flex}>
+        <FlatList
+          ref={flatListRef}
+          data={resolvedDisplayMessages}
+          keyExtractor={(item) => item.id}
+          style={styles.flex}
+          contentContainerStyle={[
+            styles.messageList,
+            resolvedDisplayMessages.length === 0 ? styles.messageListEmpty : null,
+          ]}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={32}
+          initialNumToRender={10}
+          windowSize={7}
+          // iOS can retain ScrollView's JS responder after programmatic follow-scrolls,
+          // swallowing presses on transcript controls. UIKit still owns native pan scrolling.
+          disableScrollViewPanResponder={Platform.OS === 'ios'}
+          keyboardShouldPersistTaps="always"
+          removeClippedSubviews={Platform.OS === 'android'}
+          maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
+          onLayout={handleListLayout}
+          onScroll={handleListScroll}
+          onScrollBeginDrag={handleUserScrollStart}
+          onScrollEndDrag={handleListScrollEndDrag}
+          onMomentumScrollBegin={handleUserScrollStart}
+          onMomentumScrollEnd={handleUserScrollEnd}
+          onContentSizeChange={handleContentSizeChange}
+          scrollEventThrottle={16}
+          renderItem={renderMessageItem}
+          ListHeaderComponent={listHeaderComponent}
+          ListEmptyComponent={listEmptyComponent}
+        />
+        <ChatLatestActivityButton
+          colors={colors}
+          onPress={handleJumpToLatest}
+          t={t}
+          visible={hasNewLatestActivity}
+        />
+      </View>
 
       <ChatInput
         onSend={isEditing ? handleEditSend : handleSend}
@@ -322,6 +327,7 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
         queuedMessages={queuedMessages}
         onEditQueuedMessage={editQueuedMessage}
       />
+      <ChatKeyboardSpacer bottomInset={bottomInset} />
     </View>
   );
 }
