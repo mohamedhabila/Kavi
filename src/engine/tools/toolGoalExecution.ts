@@ -415,7 +415,9 @@ function describeGoalsDemotedByActivation(params: {
   }
 
   const lanesActivated = new Set(
-    activatedIds.map((id) => graphGoals.find((goal) => goal.id === id)?.owner?.trim() || 'supervisor'),
+    activatedIds.map(
+      (id) => graphGoals.find((goal) => goal.id === id)?.owner?.trim() || 'supervisor',
+    ),
   );
   const demotedIds = graphGoals
     .filter(
@@ -624,5 +626,7 @@ export function executeUpdateGoals(
     validationErrors: parsed.errors,
     ...(graphGoals ? { graphGoals } : {}),
   });
-  return parsed.errors.length > 0 ? failedToolOutcome(content) : completedToolOutcome(content);
+  return parsed.errors.length > 0
+    ? failedToolOutcome(content, 'invalid_arguments')
+    : completedToolOutcome(content);
 }

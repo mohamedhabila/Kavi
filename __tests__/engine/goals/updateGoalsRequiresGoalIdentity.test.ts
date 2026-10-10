@@ -1,5 +1,6 @@
 import { validateToolArgumentsAgainstSchema } from '../../../src/engine/toolExecution/toolArgumentSchemaValidation';
 import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
+import { executeUpdateGoals } from '../../../src/engine/tools/toolGoalExecution';
 
 // On OpenRouter's InferenceNet upstream, GLM 5.3 Flash sent update_goals as bare
 // {"action":"add"} — schema-valid while only `action` was required — and live runs looped
@@ -50,5 +51,14 @@ describe('update_goals goal identity', () => {
     expect(
       validate({ action: 'complete', goals: [{ id: 'study' }, { status: 'completed' }] }),
     ).toBeDefined();
+  });
+
+  it('classifies a refused goal mutation as invalid arguments', () => {
+    // The upstream health check reads this classification to tell a mangled call apart
+    // from any other failure.
+    expect(executeUpdateGoals({ action: 'add', id: 'worker-task' })).toMatchObject({
+      status: 'failed',
+      failureKind: 'invalid_arguments',
+    });
   });
 });
