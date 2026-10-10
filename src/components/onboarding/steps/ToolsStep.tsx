@@ -1,10 +1,12 @@
 import React from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ChevronDown, CloudSun, ExternalLink, Search, Wrench } from 'lucide-react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
 import type { ServiceGuide } from '../onboardingGuides';
+import { FOCUSED_INPUT_KEYBOARD_GAP } from '../../../theme/keyboard';
 
 export function ToolsStep() {
   const {
@@ -69,7 +71,11 @@ export function ToolsStep() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scrollContent}
+        bottomOffset={FOCUSED_INPUT_KEYBOARD_GAP}
+        keyboardShouldPersistTaps="handled"
+      >
         {progressHeader}
         <Wrench size={40} color={colors.primary} style={styles.stepIcon} />
         <Text style={styles.stepTitle}>{t('onboarding.toolsTitle')}</Text>
@@ -157,7 +163,7 @@ export function ToolsStep() {
         >
           <Text style={styles.skipBtnText}>{t('common.back')}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

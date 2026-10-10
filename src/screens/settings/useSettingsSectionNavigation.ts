@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef } from 'react';
-import type { ScrollView } from 'react-native';
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 
 import type { SettingsSection } from './useSettingsRemoteConfigFlow';
 
@@ -13,8 +13,8 @@ export function useSettingsSectionNavigation({
   mainContentKey,
   section,
 }: UseSettingsSectionNavigationParams) {
-  const mainScrollRef = useRef<ScrollView>(null);
-  const editorScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const editorScrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const pendingRestoreSectionRef = useRef<SettingsSection>('main');
   const scrollOffsetsRef = useRef<Record<SettingsSection, number>>({
     main: 0,
@@ -32,7 +32,7 @@ export function useSettingsSectionNavigation({
   }, []);
 
   const restoreTrackedScroll = useCallback(
-    (sectionKey: SettingsSection, ref: React.RefObject<ScrollView | null>) => {
+    (sectionKey: SettingsSection, ref: React.RefObject<KeyboardAwareScrollViewRef | null>) => {
       if (pendingRestoreSectionRef.current !== sectionKey) return;
       pendingRestoreSectionRef.current = 'main';
       const y = scrollOffsetsRef.current[sectionKey] || 0;

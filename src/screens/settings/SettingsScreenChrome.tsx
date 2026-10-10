@@ -1,6 +1,11 @@
 import { ExpandCollapseChevronIcon } from '../../components/navigation/DirectionalIcons';
 import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from 'react-native-keyboard-controller';
+import { FOCUSED_INPUT_KEYBOARD_GAP } from '../../theme/keyboard';
 import type { AppPalette } from '../../theme/useAppTheme';
 
 type SettingsCollapsibleSectionProps = {
@@ -53,20 +58,23 @@ type SettingsManagedScrollViewProps = {
 };
 
 export const SettingsManagedScrollView = React.forwardRef<
-  ScrollView,
+  KeyboardAwareScrollViewRef,
   SettingsManagedScrollViewProps
 >(({ children, style, contentContainerStyle, onTrackedScroll, onRestore }, ref) => (
-  <ScrollView
+  // Settings forms (keys, personas, tool access) run down the screen; the window is not
+  // resized for the keyboard, so keep the focused field scrolled above it.
+  <KeyboardAwareScrollView
     ref={ref}
     style={style}
     contentContainerStyle={contentContainerStyle}
+    bottomOffset={FOCUSED_INPUT_KEYBOARD_GAP}
     keyboardShouldPersistTaps="handled"
     scrollEventThrottle={16}
     onScroll={(event) => onTrackedScroll(event.nativeEvent.contentOffset.y)}
     onContentSizeChange={onRestore}
   >
     {children}
-  </ScrollView>
+  </KeyboardAwareScrollView>
 ));
 
 SettingsManagedScrollView.displayName = 'SettingsManagedScrollView';

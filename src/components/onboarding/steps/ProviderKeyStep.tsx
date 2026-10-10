@@ -8,9 +8,7 @@ import { buildLocalModelDisclosureSentence } from '../../../services/localLlm/mo
 import { LocalModelDownloadPanel } from '../../localLlm/LocalModelDownloadPanel';
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
 import { ForwardChevronIcon } from '../../navigation/DirectionalIcons';
-
-/** Space kept between the focused field and the top of the keyboard. */
-const KEYBOARD_FIELD_GAP = 24;
+import { FOCUSED_INPUT_KEYBOARD_GAP } from '../../../theme/keyboard';
 
 export function ProviderKeyStep() {
   const [showAdvancedConnection, setShowAdvancedConnection] = useState(false);
@@ -54,7 +52,7 @@ export function ProviderKeyStep() {
           focused field in view, and let Save take the first tap while the keyboard is up. */}
       <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContent}
-        bottomOffset={KEYBOARD_FIELD_GAP}
+        bottomOffset={FOCUSED_INPUT_KEYBOARD_GAP}
         keyboardShouldPersistTaps="handled"
       >
         {progressHeader}

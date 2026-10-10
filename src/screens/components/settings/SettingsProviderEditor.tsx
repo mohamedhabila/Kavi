@@ -1,5 +1,9 @@
 import React from 'react';
-import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  KeyboardAwareScrollView,
+  type KeyboardAwareScrollViewRef,
+} from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Cpu, Eye, EyeOff, Trash2 } from 'lucide-react-native';
 
@@ -16,6 +20,7 @@ import type { LlmProviderConfig } from '../../../types/provider';
 import type { AppPalette } from '../../../theme/useAppTheme';
 import { SettingsLocalModelControls } from './SettingsLocalModelControls';
 import { BackIcon } from '../../../components/navigation/DirectionalIcons';
+import { FOCUSED_INPUT_KEYBOARD_GAP } from '../../../theme/keyboard';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -24,7 +29,7 @@ type SharedEditorProps = {
   colors: AppPalette;
   styles: StyleMap;
   t: TranslationFn;
-  scrollRef: React.RefObject<ScrollView | null>;
+  scrollRef: React.RefObject<KeyboardAwareScrollViewRef | null>;
   onBack: () => void;
   onTrackedScroll: (y: number) => void;
   onRestore: () => void;
@@ -75,17 +80,18 @@ const SettingsEditorFrame: React.FC<SettingsEditorFrameProps> = ({
           </Text>
         </TouchableOpacity>
       </View>
-      <ScrollView
+      <KeyboardAwareScrollView
         ref={scrollRef}
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
+        bottomOffset={FOCUSED_INPUT_KEYBOARD_GAP}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={16}
         onScroll={(event) => onTrackedScroll(event.nativeEvent.contentOffset.y)}
         onContentSizeChange={onRestore}
       >
         {children}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };
