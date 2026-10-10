@@ -20,6 +20,25 @@ import {
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
 
+/** Deepest supervisor chain walked; spawn depth is bounded far below this. */
+const MAX_CALLER_LINEAGE_DEPTH = 16;
+
+/**
+ * The calling worker session and every supervisor above it. None of them can finish while
+ * the caller is blocked waiting, so a wait on any of them can only run out its timeout.
+ */
+function collectCallerSessionLineage(callerId: string): Set<string> {
+  const lineage = new Set<string>();
+  let sessionId: string | undefined = callerId;
+  while (sessionId && !lineage.has(sessionId) && lineage.size < MAX_CALLER_LINEAGE_DEPTH) {
+    const session = getSubAgent(sessionId);
+    if (!session) break;
+    lineage.add(sessionId);
+    sessionId = session.parentSessionId;
+  }
+  return lineage;
+}
+
 export async function executeSessionWait(
   args: {
     sessionId?: string;
@@ -110,6 +129,27 @@ export async function executeSessionWait(
           availablePendingSessionIds.length > 0
             ? 'Use an availablePendingSessionIds value exactly as returned, or omit sessionId/sessionIds to wait for every joined worker in this request.'
             : 'Use a session id exactly as returned by sessions_spawn or sessions_list.',
+      }),
+    );
+  }
+
+  // Live, a worker refused a spawn for its own goal took the returned session id — its
+  // own — as another worker, and waited on itself for two full 180 s windows.
+  const callerLineage = collectCallerSessionLineage(conversationId);
+  const ownSessionIds = resolvedSessionIds.filter((sessionId) => callerLineage.has(sessionId));
+  if (ownSessionIds.length > 0) {
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'error',
+        code: 'cannot_wait_on_own_session',
+        error:
+          ownSessionIds[0] === conversationId
+            ? 'This is your own session; it cannot finish while you wait for it.'
+            : 'This session supervises yours; it cannot finish while you wait for it.',
+        sessionIds: ownSessionIds,
+        guidance:
+          'Finish the task you were given and give its result as your final answer; your ' +
+          'supervisor receives it when you finish.',
       }),
     );
   }

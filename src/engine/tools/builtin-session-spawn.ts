@@ -170,6 +170,7 @@ export async function executeSessionSpawn(
       agentRunId: executionContext?.agentRunId ?? agentRunId,
       liveWorkers,
       parentGoals: executionContext?.controlGraphGoals,
+      callerSessionId: currentSession?.sessionId,
     });
     if (launchPlan.status !== 'ready') {
       return failedToolOutcome(JSON.stringify(launchPlan.response));

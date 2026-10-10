@@ -137,6 +137,8 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   agentRunId: string | undefined;
   liveWorkers: SubAgentSnapshot[];
   parentGoals?: ReadonlyArray<AgentGoal>;
+  /** The worker session asking to spawn, when a worker is the caller. */
+  callerSessionId?: string;
 }): DelegatedWorkerSpawnPlan {
   const activeRun = resolveDelegatedWorkerActiveRun(params.conversation, params.agentRunId);
   const dependencyRefs = normalizeDependencyRefs(params.request.dependsOnWorkstreams);
@@ -252,8 +254,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
 
   const nonDedicatedDelegationGoal = scopedGoals.find(
     (goal) =>
-      isBlockingGoal(goal) &&
-      (!isDelegationOwnedGoal(goal) || !hasCoordinateCapability(goal)),
+      isBlockingGoal(goal) && (!isDelegationOwnedGoal(goal) || !hasCoordinateCapability(goal)),
   );
   if (hasStructuredGoalGraph && nonDedicatedDelegationGoal) {
     const error = `Goal "${nonDedicatedDelegationGoal.id}" is not a dedicated delegated-worker goal.`;
@@ -428,6 +429,25 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
       worker.status === 'running' &&
       (worker.workstreamId === workstreamId || worker.name === params.request.name?.trim()),
   );
+  if (duplicateRunning && duplicateRunning.sessionId === params.callerSessionId) {
+    // The running worker for this goal is the caller. Answered as a duplicate, with its
+    // own session id, a worker took that id as another worker to wait for and waited on
+    // itself until the supervisor's turn timed out (live, delegation-worker-finalize).
+    return {
+      status: 'blocked',
+      goals,
+      spawnGate: { status: 'blocked', workstreamId },
+      response: {
+        status: 'blocked',
+        code: 'caller_owns_workstream',
+        error: 'You are the worker running this goal, so it cannot be delegated again.',
+        sessionId: duplicateRunning.sessionId,
+        guidance:
+          'Do the assigned task yourself and give its result as your final answer. Do not ' +
+          'wait on this session: it is your own.',
+      },
+    };
+  }
   if (duplicateRunning) {
     return {
       status: 'blocked',
