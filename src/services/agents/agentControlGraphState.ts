@@ -65,7 +65,6 @@ const FORCED_TEXT_REASONS = new Set<AgentRunControlGraphForcedTextReason>([
   'execution_loop_recovery',
   'incomplete_delivery_continuation',
   'loop_recovery',
-  'persistent_context_settled',
   'request_clarification',
   'request_consent',
   'request_decline',

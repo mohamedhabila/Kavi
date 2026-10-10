@@ -342,7 +342,6 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: false,
     });
@@ -485,7 +484,6 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: true,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: false,
     });
@@ -518,13 +516,12 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: false,
     });
   });
 
-  it('reports settled active persistent context to the post-tool final-text directive', async () => {
+  it('reports the post-tool route beside an active persistent goal', async () => {
     const params = buildBaseParams();
     params.getGraphSnapshot = jest.fn().mockReturnValue({
       goals: [
@@ -558,7 +555,6 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: true,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: false,
     });
@@ -599,7 +595,6 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: true,
       hasIncompleteBlockingGoal: false,
     });
@@ -638,7 +633,6 @@ describe('tool execution outcome resolution', () => {
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
       hasAsyncTerminalResolution: false,
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: false,
     });

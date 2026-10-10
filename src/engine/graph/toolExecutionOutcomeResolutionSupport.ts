@@ -56,7 +56,6 @@ export function collectCompletedBlockingGoalIds(
 }
 
 export type PostToolGoalRoute = {
-  hasActivePersistentGoal: boolean;
   hasCompletedBlockingGoal: boolean;
   hasIncompleteBlockingGoal: boolean;
 };
@@ -67,9 +66,6 @@ export function summarizePostToolGoalRoute(params: {
   goals: ReadonlyArray<AgentGoal>;
 }): PostToolGoalRoute {
   return {
-    hasActivePersistentGoal: params.goals.some(
-      (goal) => goal.status === 'active' && !isBlockingGoal(goal),
-    ),
     hasCompletedBlockingGoal: params.goals.some(
       (goal) =>
         isBlockingGoal(goal) &&

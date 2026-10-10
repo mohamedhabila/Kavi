@@ -54,11 +54,6 @@ describe('agent control graph forced text turns', () => {
       'no verified completion is available yet',
     ],
     [
-      'persistent_context_settled',
-      '[SYSTEM FINAL DELIVERY]',
-      'The active context is updated and no blocking goal remains',
-    ],
-    [
       'execution_loop_recovery',
       '[SYSTEM EXECUTION BLOCKED]',
       'State the unverified requested side effect, the blocker, and the smallest missing input',

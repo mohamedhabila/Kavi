@@ -294,7 +294,6 @@ describe('tool execution outcome resolution', () => {
     expect(params.publishWorkflowToolResultProgress).toHaveBeenCalledTimes(2);
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
       expect.objectContaining({
-        hasActivePersistentGoal: false,
         hasIncompleteBlockingGoal: false,
       }),
     );

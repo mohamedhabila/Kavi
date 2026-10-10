@@ -43,7 +43,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
     pendingAsyncCount: number;
     hasBackgroundLaunchWithoutWait?: boolean;
     hasAsyncTerminalResolution?: boolean;
-    hasActivePersistentGoal?: boolean;
     hasCompletedBlockingGoal?: boolean;
     hasIncompleteBlockingGoal?: boolean;
   }) => boolean;
@@ -58,7 +57,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
   yieldCompletionNoteMessage?: string;
   hasAsyncTerminalResolution: boolean;
   hasBackgroundLaunchWithoutWait: boolean;
-  hasActivePersistentGoal?: boolean;
   hasCompletedBlockingGoal?: boolean;
   hasIncompleteBlockingGoal?: boolean;
   workingMessages: Message[];
@@ -111,7 +109,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
       pendingAsyncCount: pendingAsyncCountAfterTools,
       hasBackgroundLaunchWithoutWait: params.hasBackgroundLaunchWithoutWait,
       hasAsyncTerminalResolution: params.hasAsyncTerminalResolution,
-      hasActivePersistentGoal: params.hasActivePersistentGoal,
       hasCompletedBlockingGoal: params.hasCompletedBlockingGoal,
       hasIncompleteBlockingGoal: params.hasIncompleteBlockingGoal,
     });

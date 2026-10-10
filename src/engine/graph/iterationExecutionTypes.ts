@@ -152,7 +152,6 @@ export type GraphIterationBindings = {
   recordPostToolFinalTextDirective: (params: {
     hasBackgroundLaunchWithoutWait?: boolean;
     hasAsyncTerminalResolution?: boolean;
-    hasActivePersistentGoal?: boolean;
     hasCompletedBlockingGoal?: boolean;
     hasIncompleteBlockingGoal?: boolean;
     pendingAsyncCount: number;

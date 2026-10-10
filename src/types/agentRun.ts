@@ -263,7 +263,6 @@ export type AgentRunControlGraphForcedTextReason =
   | 'foreground_budget_checkpoint'
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'
-  | 'persistent_context_settled'
   | 'request_clarification'
   | 'request_consent'
   | 'request_decline'

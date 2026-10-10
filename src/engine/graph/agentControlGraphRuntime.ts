@@ -112,7 +112,6 @@ export function createAgentControlGraphRuntime(params: {
       pendingAsyncCount: number;
       hasBackgroundLaunchWithoutWait?: boolean;
       hasAsyncTerminalResolution?: boolean;
-      hasActivePersistentGoal?: boolean;
       hasCompletedBlockingGoal?: boolean;
       hasIncompleteBlockingGoal?: boolean;
     }): boolean {

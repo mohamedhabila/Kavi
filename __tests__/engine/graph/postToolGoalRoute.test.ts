@@ -24,7 +24,6 @@ describe('summarizePostToolGoalRoute', () => {
     });
 
     expect(route).toEqual({
-      hasActivePersistentGoal: false,
       hasCompletedBlockingGoal: true,
       hasIncompleteBlockingGoal: false,
     });
@@ -57,7 +56,7 @@ describe('summarizePostToolGoalRoute', () => {
     expect(route.hasCompletedBlockingGoal).toBe(false);
   });
 
-  it('reports open blocking work and active persistent context', () => {
+  it('reports open blocking work beside an active persistent goal', () => {
     const route = summarizePostToolGoalRoute({
       completedBefore: new Set(),
       goals: [
@@ -67,7 +66,6 @@ describe('summarizePostToolGoalRoute', () => {
     });
 
     expect(route).toEqual({
-      hasActivePersistentGoal: true,
       hasCompletedBlockingGoal: false,
       hasIncompleteBlockingGoal: true,
     });

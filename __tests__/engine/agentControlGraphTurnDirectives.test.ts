@@ -137,28 +137,13 @@ describe('agent control graph turn directives boundary', () => {
     ).toBeUndefined();
   });
 
-  it('forces final text when persistent context is settled after tools', () => {
+  it('leaves the next turn its tools when no blocking work just finished', () => {
+    // A standing goal says nothing about whether this request is done. Forcing text on it
+    // ended a traced calendar request after the model had only looked up its tools.
     expect(
       buildAgentControlGraphPostToolFinalTextDirectiveEvent({
         pendingAsyncCount: 0,
-        hasActivePersistentGoal: true,
         hasIncompleteBlockingGoal: false,
-      }),
-    ).toEqual(
-      buildAgentControlGraphTurnDirectivesRecordedEvent(
-        {
-          forceFinalText: true,
-          forcedTextReason: 'persistent_context_settled',
-        },
-        'persistent_context_settled',
-      ),
-    );
-
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasActivePersistentGoal: true,
-        hasIncompleteBlockingGoal: true,
       }),
     ).toBeUndefined();
   });

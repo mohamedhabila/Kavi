@@ -36,7 +36,6 @@ export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
   pendingAsyncCount: number;
   hasBackgroundLaunchWithoutWait?: boolean;
   hasAsyncTerminalResolution?: boolean;
-  hasActivePersistentGoal?: boolean;
   hasCompletedBlockingGoal?: boolean;
   hasIncompleteBlockingGoal?: boolean;
 }): Extract<AgentControlGraphEvent, { type: 'TURN_DIRECTIVES_RECORDED' }> | undefined {
@@ -80,20 +79,6 @@ export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
         forcedTextReason: 'workflow_route_completed',
       },
       'workflow_route_completed',
-    );
-  }
-
-  if (
-    params.pendingAsyncCount === 0 &&
-    params.hasActivePersistentGoal === true &&
-    params.hasIncompleteBlockingGoal !== true
-  ) {
-    return buildAgentControlGraphTurnDirectivesRecordedEvent(
-      {
-        forceFinalText: true,
-        forcedTextReason: 'persistent_context_settled',
-      },
-      'persistent_context_settled',
     );
   }
 

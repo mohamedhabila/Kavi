@@ -164,7 +164,6 @@ export interface ExecuteAgentControlGraphToolTurnParams {
     pendingAsyncCount: number;
     hasBackgroundLaunchWithoutWait?: boolean;
     hasAsyncTerminalResolution?: boolean;
-    hasActivePersistentGoal?: boolean;
     hasCompletedBlockingGoal?: boolean;
     hasIncompleteBlockingGoal?: boolean;
   }) => boolean;
