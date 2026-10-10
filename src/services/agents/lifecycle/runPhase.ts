@@ -1,3 +1,4 @@
+import type { OrchestratorTerminalDisposition } from '../../../engine/orchestrator/types';
 import type { Message } from '../../../types/message';
 import type {
   SubAgentResult,
@@ -158,9 +159,12 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
 
   const resolveWorkerOutput = async (
     status: SubAgentResult['status'],
+    terminalDisposition?: OrchestratorTerminalDisposition,
   ): Promise<SubAgentResult['completionState']> => {
     const resolvedOutput = await resolveSubAgentRunOutput({
       status,
+      terminalDisposition,
+      deliverableKind: params.config.deliverableKind,
       provider: params.provider,
       model: params.config.model || params.provider.model,
       systemPrompt,
@@ -283,7 +287,10 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     });
 
     failureCause = 'unknown';
-    terminalCompletionState = await resolveWorkerOutput('completed');
+    terminalCompletionState = await resolveWorkerOutput(
+      'completed',
+      orchestratorResult.terminalDisposition,
+    );
     const pendingVerifiedProcedureObservation =
       orchestratorResult.terminalDisposition === 'final_candidate' &&
       terminalCompletionState === 'verified_success' &&

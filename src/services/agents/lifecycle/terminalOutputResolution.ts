@@ -1,6 +1,11 @@
+import type { OrchestratorTerminalDisposition } from '../../../engine/orchestrator/types';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message } from '../../../types/message';
-import type { SubAgentCompletionState, SubAgentResult } from '../../../types/subAgent';
+import type {
+  SubAgentCompletionState,
+  SubAgentConfig,
+  SubAgentResult,
+} from '../../../types/subAgent';
 import type { TokenUsage } from '../../../types/usage';
 import { normalizeFinalizationOutputText } from '../finalizationText';
 import { synthesizeSubAgentFinalAnswer } from '../subAgentFinalization';
@@ -14,6 +19,9 @@ import { buildSubAgentFinalizationPrompt, buildToolResultFallback } from './term
 
 export async function resolveSubAgentRunOutput(params: {
   status: SubAgentResult['status'];
+  /** How the worker's run ended, when it ran to completion. */
+  terminalDisposition?: OrchestratorTerminalDisposition;
+  deliverableKind?: SubAgentConfig['deliverableKind'];
   provider: LlmProviderConfig;
   model: string;
   systemPrompt: string;
@@ -52,6 +60,8 @@ export async function resolveSubAgentRunOutput(params: {
       toolResultPreviews: params.toolResultPreviews,
       requireStructuredExecutionEvidence: params.requireStructuredExecutionEvidence,
       terminalStatus,
+      terminalDisposition: params.terminalDisposition,
+      deliverableKind: params.deliverableKind,
       outputTruncation: params.outputTruncation,
     });
 
@@ -164,6 +174,8 @@ export async function resolveSubAgentRunOutput(params: {
     toolResultPreviews: params.toolResultPreviews,
     requireStructuredExecutionEvidence: params.requireStructuredExecutionEvidence,
     terminalStatus: params.status,
+    terminalDisposition: params.terminalDisposition,
+    deliverableKind: params.deliverableKind,
     outputTruncation: params.outputTruncation,
   });
 }

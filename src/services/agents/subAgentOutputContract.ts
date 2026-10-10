@@ -1,4 +1,5 @@
-import type { SubAgentCompletionState, SubAgentResult } from '../../types/subAgent';
+import type { OrchestratorTerminalDisposition } from '../../engine/orchestrator/types';
+import type { SubAgentCompletionState, SubAgentConfig, SubAgentResult } from '../../types/subAgent';
 import {
   FINALIZATION_OUTPUT_TRUNCATION,
   normalizeFinalizationOutputText,
@@ -64,16 +65,34 @@ function buildWorkerFallbackOutput(status: SubAgentResult['status']): string {
   }
 }
 
-function resolveVisibleWorkerOutput(
-  output: string,
-  terminalStatus: SubAgentResult['status'],
-  outputTruncation: number,
-): string {
-  const strippedOutput = normalizeFinalizationOutputText(
-    stripWorkerMetadataLines(output),
-    outputTruncation,
+function stripWorkerReport(output: string, outputTruncation: number): string {
+  return normalizeFinalizationOutputText(stripWorkerMetadataLines(output), outputTruncation) ?? '';
+}
+
+/**
+ * Whether an answer-only worker delivered what it was asked for, read from what the
+ * runtime observed rather than from text the worker had to append.
+ *
+ * The worker contract tells such a worker that the runtime tracks its completion state
+ * and to focus on the report. The runtime only did that for workers that used tools, so a
+ * worker that answered directly — exactly as asked — ended with no state, was filed as
+ * incomplete, and its goal never received worker evidence (`delegation-worker-finalize`,
+ * live: the worker returned the requested token in 1.2 s and the supervisor blocked).
+ * Its run completing with a final answer candidate and a non-empty report is that
+ * delivery. A state the worker declares itself still wins.
+ */
+function hasDeliveredInformationAnswer(params: {
+  deliverableKind?: SubAgentConfig['deliverableKind'];
+  terminalStatus: SubAgentResult['status'];
+  terminalDisposition?: OrchestratorTerminalDisposition;
+  report: string;
+}): boolean {
+  return (
+    params.deliverableKind === 'information' &&
+    params.terminalStatus === 'completed' &&
+    params.terminalDisposition === 'final_candidate' &&
+    params.report.length > 0
   );
-  return strippedOutput || buildWorkerFallbackOutput(terminalStatus);
 }
 
 export function enforceExecutionWorkerOutputContract(params: {
@@ -83,29 +102,39 @@ export function enforceExecutionWorkerOutputContract(params: {
   toolResultPreviews: SubAgentToolResultPreview[];
   requireStructuredExecutionEvidence: boolean;
   terminalStatus: SubAgentResult['status'];
+  /** How the worker's own run ended; only a completed run reports one. */
+  terminalDisposition?: OrchestratorTerminalDisposition;
+  deliverableKind?: SubAgentConfig['deliverableKind'];
   outputTruncation?: number;
 }): EnforcedExecutionWorkerOutput {
-  const normalizedOutput = normalizeFinalizationOutputText(
-    params.output,
-    params.outputTruncation ?? FINALIZATION_OUTPUT_TRUNCATION,
-  );
+  const outputTruncation = params.outputTruncation ?? FINALIZATION_OUTPUT_TRUNCATION;
+  const normalizedOutput = normalizeFinalizationOutputText(params.output, outputTruncation);
   if (!normalizedOutput) {
     return { output: params.output };
   }
 
-  const completionState = params.completionState ?? extractWorkerCompletionState(normalizedOutput);
-  const visibleOutput = resolveVisibleWorkerOutput(
-    normalizedOutput,
-    params.terminalStatus,
-    params.outputTruncation ?? FINALIZATION_OUTPUT_TRUNCATION,
-  );
+  const declaredCompletionState =
+    params.completionState ?? extractWorkerCompletionState(normalizedOutput);
+  const report = stripWorkerReport(normalizedOutput, outputTruncation);
+  const visibleOutput = report || buildWorkerFallbackOutput(params.terminalStatus);
 
   if (!params.requireStructuredExecutionEvidence) {
+    const completionState =
+      declaredCompletionState ??
+      (hasDeliveredInformationAnswer({
+        deliverableKind: params.deliverableKind,
+        terminalStatus: params.terminalStatus,
+        terminalDisposition: params.terminalDisposition,
+        report,
+      })
+        ? 'verified_success'
+        : undefined);
     return {
       output: visibleOutput,
       ...(completionState ? { completionState } : {}),
     };
   }
+  const completionState = declaredCompletionState;
 
   const successfulResultPreviews = params.toolResultPreviews
     .filter((entry) => entry.status !== 'failed')
