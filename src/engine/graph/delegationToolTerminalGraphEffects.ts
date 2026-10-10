@@ -11,6 +11,7 @@ import type {
   SubAgentTerminationCause,
 } from '../../types/subAgent';
 import { buildSubAgentTerminalControlGraphEvents } from '../../services/agents/subAgentGoalGraphEffects';
+import { reduceAgentControlGraph } from './agentControlGraph';
 import type { AgentControlGraphEvent } from './agentControlGraphTypes';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import { applyGoalMutation } from '../goals/graphState';
@@ -124,29 +125,31 @@ function readTerminationCause(value: unknown, status: SubAgentStatus): SubAgentT
   return 'unknown';
 }
 
-function parseTerminalDelegationRecord(
+function hasTerminalStatus(record: Record<string, unknown>): boolean {
+  return (
+    typeof record.status === 'string' && TERMINAL_STATUSES.has(record.status.trim().toLowerCase())
+  );
+}
+
+/**
+ * The terminal worker records a delegation result carries. A wait result reports every
+ * session it waited on under `sessions`; its own top-level `status` only summarizes them
+ * and names no session. Reading that summary as the worker — as this did whenever it was
+ * terminal — produced no worker at all, so a worker that finished `verified_success` and
+ * was collected with `sessions_wait` never reached its goal: live, the goal kept only its
+ * launch evidence and the supervisor ended blocked. Only the first terminal session was
+ * ever read, too, so a wait on several workers credited one of them.
+ */
+function parseTerminalDelegationRecords(
   parsed: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  if (
-    typeof parsed.status === 'string' &&
-    TERMINAL_STATUSES.has(parsed.status.trim().toLowerCase())
-  ) {
-    return parsed;
-  }
-
+): Array<Record<string, unknown>> {
   if (Array.isArray(parsed.sessions)) {
-    for (const session of parsed.sessions) {
-      if (
-        isRecord(session) &&
-        typeof session.status === 'string' &&
-        TERMINAL_STATUSES.has(session.status.trim().toLowerCase())
-      ) {
-        return session;
-      }
-    }
+    return parsed.sessions.filter(
+      (session): session is Record<string, unknown> =>
+        isRecord(session) && hasTerminalStatus(session),
+    );
   }
-
-  return undefined;
+  return hasTerminalStatus(parsed) ? [parsed] : [];
 }
 
 function buildWorkerSnapshotFromTerminalRecord(
@@ -297,29 +300,35 @@ export function buildDelegationToolTerminalGraphEvents(params: {
     return { events, applied: events.length > 0 };
   }
 
-  const terminalRecord = parseTerminalDelegationRecord(parsed);
-  if (!terminalRecord) {
-    return { events: [], applied: false };
-  }
+  // Each worker's events are built against the graph as the previous worker's left it, so
+  // one worker's evidence, goal materialization and pending-operation removal do not
+  // overwrite another's.
+  const events: AgentControlGraphEvent[] = [];
+  let run = params.run;
+  for (const terminalRecord of parseTerminalDelegationRecords(parsed)) {
+    const worker = buildWorkerSnapshotFromTerminalRecord(terminalRecord);
+    if (!worker) continue;
 
-  const worker = buildWorkerSnapshotFromTerminalRecord(terminalRecord);
-  if (!worker) {
-    return { events: [], applied: false };
-  }
+    const terminalEvents = buildSubAgentTerminalControlGraphEvents({
+      run,
+      agent: worker,
+      event: resolveWorkerLifecycleEvent(worker.status),
+      timestamp,
+    });
+    const verified =
+      worker.status === 'completed' &&
+      isSuccessfulTerminalStatus(terminalRecord.status) &&
+      isVerifiedCompletionState(worker.completionState);
+    const workerEvents = verified
+      ? terminalEvents
+      : [...buildBlockedWorkerGoalEvents({ worker, run, timestamp }), ...terminalEvents];
+    if (workerEvents.length === 0) continue;
 
-  const terminalEvents = buildSubAgentTerminalControlGraphEvents({
-    run: params.run,
-    agent: worker,
-    event: resolveWorkerLifecycleEvent(worker.status),
-    timestamp,
-  });
-  const verified =
-    worker.status === 'completed' &&
-    isSuccessfulTerminalStatus(terminalRecord.status) &&
-    isVerifiedCompletionState(worker.completionState);
-  const events = verified
-    ? terminalEvents
-    : [...buildBlockedWorkerGoalEvents({ worker, run: params.run, timestamp }), ...terminalEvents];
+    events.push(...workerEvents);
+    if (run.controlGraph) {
+      run = { controlGraph: reduceAgentControlGraph(run.controlGraph, workerEvents) };
+    }
+  }
 
   const applied = events.some(
     (event) => event.type === 'GOAL_EVIDENCE_ADDED' || event.type === 'GOALS_UPDATED',
