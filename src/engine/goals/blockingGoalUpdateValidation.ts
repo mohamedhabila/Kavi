@@ -2,6 +2,7 @@ import {
   isCountOnlySuccessCriterion,
   isRecognizedSuccessCriterionForm,
 } from './completionEvidence';
+import { isJsonFieldAbsentFromResults } from './jsonFieldCriterion';
 import {
   isBlockingGoal,
   resolveGoalCompletionPolicy,
@@ -67,9 +68,19 @@ export function validateBlockingGoalUpdate(
     // could neither reach two nor revise down — twelve identical refusals, run blocked,
     // with the deliverable correct on disk the whole time. Revising a count stays legal;
     // dropping a criterion that names a deliverable does not.
+    //
+    // A json_field criterion naming a field that none of the goal's results carry is the
+    // same kind of lock. It is a guess at a result's shape made before the result
+    // existed, so it proves nothing about the deliverable, and no further work can meet
+    // it. Traced live: `evidence.json_field:recipients.length:1` on an SMS compose whose
+    // result carries `recipientCount` — draft opened and verified, run ended blocked
+    // after five refused corrections. A field the results do carry stays locked whatever
+    // its value, because there the criterion is a real check the work failed.
     const removedCriteria = (existing.successCriteria ?? []).filter(
       (criterion) =>
-        !proposedCriteria.has(criterion) && !isCountOnlySuccessCriterion(criterion),
+        !proposedCriteria.has(criterion) &&
+        !isCountOnlySuccessCriterion(criterion) &&
+        !isJsonFieldAbsentFromResults(criterion, existing.evidence),
     );
     const existingCriteria = new Set(existing.successCriteria ?? []);
     /**

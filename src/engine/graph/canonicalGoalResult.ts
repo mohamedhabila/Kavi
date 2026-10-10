@@ -7,12 +7,21 @@ import { describeUnmetGatingCriteria, isBlockingGoalClosedWithoutProof } from '.
  * goal whose memory writes had all been refused, read "completed", and told the user the
  * verification was recorded — while finalization, which does check the proof, refused to
  * settle the run. The result now says so when the goal it reports is closed unproven.
+ *
+ * The note names only recoveries the graph accepts. It once told the model to "correct
+ * them with update_goals action \"update\"" for any unmet criterion, while blocking
+ * criteria that name a deliverable are monotonic and refuse exactly that — traced live as
+ * five refused corrections and a run ended blocked. Each unmet criterion now carries its
+ * own `satisfyBy`, which says when a correction is the legal step.
  */
 const UNPROVEN_CLOSE_NOTE =
   'Closed, but its success criteria are not met, so the run cannot finish as verified. ' +
-  'If the work is not actually done, produce the missing evidence; if the criteria do not ' +
-  'describe the task, correct them with update_goals action "update"; otherwise tell the ' +
-  'user plainly what could not be confirmed.';
+  'Each unmet criterion says what would meet it; do that if the work allows, otherwise ' +
+  'tell the user plainly what could not be confirmed.';
+const NO_CRITERIA_CLOSE_NOTE =
+  'Closed, but it has no success criteria, so nothing proves it and the run cannot ' +
+  'finish as verified. Add a specific criterion naming the evidence the work produced ' +
+  'with update_goals action "update", or tell the user plainly what could not be confirmed.';
 
 function buildUnprovenCloseReport(goal: AgentGoal): Record<string, unknown> | undefined {
   if (!isBlockingGoalClosedWithoutProof(goal)) return undefined;
@@ -20,7 +29,7 @@ function buildUnprovenCloseReport(goal: AgentGoal): Record<string, unknown> | un
   return {
     proven: false,
     ...(unmetCriteria.length > 0 ? { unmetCriteria } : {}),
-    note: UNPROVEN_CLOSE_NOTE,
+    note: (goal.successCriteria?.length ?? 0) === 0 ? NO_CRITERIA_CLOSE_NOTE : UNPROVEN_CLOSE_NOTE,
   };
 }
 

@@ -69,10 +69,11 @@ export function buildUnmetCompletionRequirementMessage(
     return GENERIC_MESSAGE;
   }
 
+  const evidence = [...goal.evidence, ...extraEvidence];
   const actions = Array.from(
     new Set(
       unmet
-        .map((criterion) => describeCriterionSatisfactionAction(criterion))
+        .map((criterion) => describeCriterionSatisfactionAction(criterion, evidence))
         .filter((action): action is string => Boolean(action)),
     ),
   );

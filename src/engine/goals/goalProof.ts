@@ -15,7 +15,7 @@ export function describeUnmetGatingCriteria(goal: AgentGoal): UnmetGoalCriterion
   return (criteria.length > 0 ? resolveGatingSuccessCriteria(criteria) : [])
     .filter((criterion) => !isSuccessCriterionMet(goal, criterion))
     .map((criterion) => {
-      const action = describeCriterionSatisfactionAction(criterion);
+      const action = describeCriterionSatisfactionAction(criterion, goal.evidence);
       return action ? { criterion, satisfyBy: action } : { criterion };
     });
 }

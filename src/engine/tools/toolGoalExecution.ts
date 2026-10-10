@@ -360,18 +360,23 @@ function describeCompletionOutcome(
   }
 
   const unmetCriteria = describeUnmetGatingCriteria(closed);
+  const hasCriteria = (goal.successCriteria?.length ?? 0) > 0;
   return {
     closes: true,
     proven: false,
-    reason:
-      (goal.successCriteria?.length ?? 0) === 0
-        ? 'This goal closes, but it has no success criteria, so nothing proves it and the run cannot finish as verified.'
-        : 'This goal closes, but its success criteria are not met, so the run cannot finish as verified.',
+    reason: hasCriteria
+      ? 'This goal closes, but its success criteria are not met, so the run cannot finish as verified.'
+      : 'This goal closes, but it has no success criteria, so nothing proves it and the run cannot finish as verified.',
     ...(unmetCriteria.length > 0 ? { unmetCriteria } : {}),
+    // Only recoveries the graph accepts: criteria naming a deliverable cannot be revised,
+    // so each unmet criterion's own satisfyBy says whether a correction is legal.
     nextStep:
-      'Produce the missing evidence with the relevant tool, or call update_goals with ' +
-      'action "update" to correct successCriteria; otherwise tell the user plainly what ' +
-      'could not be confirmed. Repeating this complete call changes nothing.',
+      (hasCriteria
+        ? 'Do what each unmet criterion\'s satisfyBy says'
+        : 'Add a specific criterion naming the evidence the work produced with update_goals ' +
+          'action "update"') +
+      ', or tell the user plainly what could not be confirmed. Repeating this complete call ' +
+      'changes nothing.',
   };
 }
 

@@ -11,6 +11,11 @@ import {
 } from './effectCompletionEvidence';
 import { sanitizeWorkspaceRelativePath } from '../../services/workspaces/paths';
 import { readDelegatedArtifactEvidencePath } from './delegation';
+import {
+  describeJsonFieldCriterionAction,
+  EVIDENCE_JSON_FIELD_PATTERN,
+  readJsonFieldCriterion,
+} from './jsonFieldCriterion';
 
 /**
  * A workspace resource identity has two independent authors. The receipt carries the
@@ -71,7 +76,6 @@ const EVIDENCE_COUNT_PATTERN = /^evidence\.count:(\d+)$/;
 const EVIDENCE_PREFIX_PATTERN = /^evidence\.prefix:(.+)$/;
 const EVIDENCE_TOOL_PATTERN = /^evidence\.tool:(.+)$/;
 const EVIDENCE_ARTIFACT_PATTERN = /^evidence\.artifact:(.+)$/;
-const EVIDENCE_JSON_FIELD_PATTERN = /^evidence\.json_field:([^:]+):(.+)$/;
 const EVIDENCE_FILE_HASH_PATTERN = /^evidence\.file_hash:([^:]+):([^:]+)(?::([0-9a-fA-F]+))?$/;
 const EVIDENCE_EXIT_CODE_PATTERN = /^evidence\.exit_code:(-?\d+)$/;
 const EVIDENCE_PREFIX_SURFACE_HINTS: ReadonlyMap<string, SuccessCriterionSurfaceHints> = new Map([
@@ -128,8 +132,14 @@ export function isCountOnlySuccessCriterion(criterion: string): boolean {
  *
  * Returns null for criteria that no single action satisfies (bare counts), where a
  * specific instruction would be misleading.
+ *
+ * `evidence` is what the goal already holds. A json_field criterion is judged against
+ * it, because only the results themselves say which fields they actually carry.
  */
-export function describeCriterionSatisfactionAction(criterion: string): string | null {
+export function describeCriterionSatisfactionAction(
+  criterion: string,
+  evidence: ReadonlyArray<string> = [],
+): string | null {
   const trimmed = criterion.trim();
   if (!trimmed || isCountOnlySuccessCriterion(trimmed)) {
     return null;
@@ -145,9 +155,9 @@ export function describeCriterionSatisfactionAction(criterion: string): string |
     return `write ${artifactMatch[1].trim()} with write_file`;
   }
 
-  const jsonFieldMatch = trimmed.match(EVIDENCE_JSON_FIELD_PATTERN);
-  if (jsonFieldMatch) {
-    return `write ${jsonFieldMatch[1].trim()} with write_file so it contains ${jsonFieldMatch[2].trim()}`;
+  const jsonField = readJsonFieldCriterion(trimmed);
+  if (jsonField) {
+    return describeJsonFieldCriterionAction(jsonField, evidence);
   }
 
   const fileHashMatch = trimmed.match(EVIDENCE_FILE_HASH_PATTERN);
@@ -177,7 +187,7 @@ export function buildCriterionSatisfactionActions(
   for (const goal of goals) {
     for (const criterion of goal.successCriteria ?? []) {
       if (isSuccessCriterionMet(goal, criterion)) continue;
-      const action = describeCriterionSatisfactionAction(criterion);
+      const action = describeCriterionSatisfactionAction(criterion, goal.evidence);
       if (!action || seen.has(action)) continue;
       seen.add(action);
       actions.push(action);
