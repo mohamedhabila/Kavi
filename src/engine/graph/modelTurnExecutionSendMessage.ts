@@ -12,6 +12,7 @@ import {
   normalizeOpenAiCompatibleCompletion,
 } from '../../services/llm/core/streaming/metadataBuilder';
 import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
+import { noteToolCallsServedBy } from '../../services/llm/support/upstreamToolCallHealth';
 import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,
@@ -212,6 +213,12 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       },
       'model_turn_completed',
     );
+
+    noteToolCallsServedBy({
+      model: params.requestModel,
+      upstream: usageTracker.upstreamProvider(),
+      toolCallIds: pendingToolCalls.map((toolCall) => toolCall.id),
+    });
 
     return {
       completion,

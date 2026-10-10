@@ -33,6 +33,7 @@ import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/model
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
 import { resolveRuntimeExplicitToolSurfaceToolNames } from '../tools/runtimeAvailability';
+import { settleToolCallOutcome } from '../../services/llm/support/upstreamToolCallHealth';
 
 const logger = createLogger('Orchestrator');
 
@@ -182,6 +183,10 @@ export async function runOrchestratorGraphSession(params: {
     | undefined;
   const graphCallbacks = {
     ...callbacks,
+    onToolCallComplete: (toolCall: Parameters<typeof callbacks.onToolCallComplete>[0]) => {
+      settleToolCallOutcome(toolCall);
+      callbacks.onToolCallComplete(toolCall);
+    },
     onAssistantMessage: (
       content: string,
       toolCalls?: Parameters<typeof callbacks.onAssistantMessage>[1],

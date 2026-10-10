@@ -12,6 +12,7 @@ import type {
 } from '../../support/contracts';
 import { normalizeOpenAICompatibleToolCallMessages } from '../../support/toolArgumentReplay';
 import { applyCompatibleReasoningControl } from './reasoning';
+import { getExcludedUpstreams } from '../../support/upstreamToolCallHealth';
 
 export async function sendOpenAICompatibleChat(args: {
   baseUrl: string;
@@ -149,6 +150,14 @@ export async function sendOpenAICompatibleChat(args: {
   });
   if (structuredOutput) {
     body.response_format = args.buildCompatibleStructuredOutputFormat(structuredOutput);
+  }
+  if (requestTools?.length && isOpenRouterProvider) {
+    // Leave out upstreams whose tool calls for this model have recently arrived malformed;
+    // see upstreamToolCallHealth.
+    const excludedUpstreams = getExcludedUpstreams(args.model);
+    if (excludedUpstreams.length > 0) {
+      body.provider = { ...(body.provider ?? {}), ignore: excludedUpstreams };
+    }
   }
   if (requestTools?.length) {
     body.tools = requestTools.map((tool) => {

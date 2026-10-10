@@ -137,6 +137,10 @@ export function createModelTurnUsageTracker(
       usageReported = false;
       usageWasReportedByProvider = false;
     },
+    /** The upstream an aggregator reported serving this turn, when it reports one. */
+    upstreamProvider(): string | undefined {
+      return latestUsage?.upstreamProvider;
+    },
     mergeSnapshot(usage: Partial<TokenUsage>) {
       usageWasReportedByProvider = true;
       const inputTokens = Math.max(latestUsage?.inputTokens ?? 0, usage.inputTokens ?? 0);
