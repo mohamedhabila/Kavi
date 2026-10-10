@@ -10,7 +10,6 @@ import {
   getAgentRunPendingAsyncOperations,
   isAgentRunAwaitingBackgroundWorkers,
 } from '../../services/agents/agentRunAsyncState';
-import { hasBlockedBlockingGoals, hasResumableBlockingGoals } from '../goals/types';
 import { isAgentControlGraphAtPersistedFinalDeliveryBoundary } from './persistedFinalDelivery';
 import { decodeSubAgentTerminationCause } from '../../utils/subAgentTermination';
 
@@ -80,26 +79,6 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
     params.run.controlGraph &&
     isAgentControlGraphAtPersistedFinalDeliveryBoundary(params.run.controlGraph)
   ) {
-    const goals = params.run.controlGraph?.goals ?? [];
-    if (hasBlockedBlockingGoals(goals)) {
-      return {
-        status: 'failed',
-        latestSummary: 'A required goal remained blocked when the app restarted.',
-        checkpointTitle: 'Blocked goal prevented completion',
-        checkpointDetail:
-          'The persisted response cannot mark the run complete while a required goal is blocked.',
-      };
-    }
-    if (hasResumableBlockingGoals(goals)) {
-      return {
-        status: 'running',
-        latestSummary: 'A final response was persisted, but required goals still need work.',
-        checkpointTitle: 'Recovered open goals',
-        checkpointDetail:
-          'The run remains active because required goals were not completed before restart.',
-        phase: 'review',
-      };
-    }
     return {
       status: 'completed',
       latestSummary: preservedFinalResponse,

@@ -163,9 +163,6 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   recordPostToolFinalTextDirective: (params: {
     pendingAsyncCount: number;
     hasBackgroundLaunchWithoutWait?: boolean;
-    hasAsyncTerminalResolution?: boolean;
-    hasCompletedBlockingGoal?: boolean;
-    hasIncompleteBlockingGoal?: boolean;
   }) => boolean;
   getModelTurnBlocker: () => string | undefined;
   finishWithGraphTerminalEvent: (params: {
@@ -487,7 +484,6 @@ export async function executeAgentControlGraphToolTurn(
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     trackedAsyncOperations: params.trackedAsyncOperations,
     toolCallHistory: params.toolCallHistory,
-    pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
     lastPendingAsyncSignature: params.lastPendingAsyncSignature,
     contextWindow: params.contextWindow,
     conversationId: params.conversationId,

@@ -111,9 +111,6 @@ export function createAgentControlGraphRuntime(params: {
     recordPostToolFinalTextDirective(args: {
       pendingAsyncCount: number;
       hasBackgroundLaunchWithoutWait?: boolean;
-      hasAsyncTerminalResolution?: boolean;
-      hasCompletedBlockingGoal?: boolean;
-      hasIncompleteBlockingGoal?: boolean;
     }): boolean {
       const event = buildAgentControlGraphPostToolFinalTextDirectiveEvent(args);
       if (!event) {

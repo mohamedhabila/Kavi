@@ -9,16 +9,9 @@ import type { Conversation, ConversationLogEntry } from '../types/conversation';
 import type { Message, MessageMemoryPublicationDisposition } from '../types/message';
 import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
 import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
-import {
-  EnsureAgentRunFinalResponse,
-  ResumeAgentRun,
-} from '../engine/graph/foregroundRun/contracts';
+import { EnsureAgentRunFinalResponse } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
 import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
-import {
-  hasResumableBlockingGoals,
-  hasUnearnedBlockedBlockingGoals,
-} from '../engine/goals/types';
 import { canWriteLongTermMemory } from '../services/memory/policy';
 import { fingerprintForegroundTerminalMemorySource } from '../engine/graph/foregroundRun/terminalMemorySource';
 import {
@@ -145,7 +138,6 @@ export async function handleTerminalBackgroundReview(params: {
   ensureAgentRunFinalResponse?: EnsureAgentRunFinalResponse | null;
   flushChatState: () => Promise<void>;
   recordConversationTurnMemory: RecordConversationTurnMemory;
-  resumeAgentRun?: ResumeAgentRun | null;
   reviewTimestamp: number;
   runId: string;
   signal: AbortSignal;
@@ -157,42 +149,7 @@ export async function handleTerminalBackgroundReview(params: {
   transitionMessageMemoryPublication: ChatStore['transitionMessageMemoryPublication'];
 }): Promise<void> {
   const { conversation, targetRun, candidateSummary, candidateStatus } = params.context;
-  const goals = targetRun.controlGraph?.goals ?? [];
-
-  if (hasResumableBlockingGoals(goals) && params.resumeAgentRun) {
-    params.setAgentRunPhase(
-      params.conversationId,
-      'work',
-      {
-        status: 'active',
-        detail: candidateSummary,
-        checkpointTitle: 'Goals still open',
-        checkpointDetail: candidateSummary,
-      },
-      params.runId,
-    );
-    await params.resumeAgentRun({
-      conversationId: params.conversationId,
-      runId: params.runId,
-      additionalSystemPrompt:
-        'Background workers finished, but goals are still open. Continue executing the active goal set.',
-      additionalUserPrompt: candidateSummary,
-      assistantDraftMode: 'continue',
-    });
-    return;
-  }
-
-  // A goal abandoned through the exhaustion gate is an earned outcome: every
-  // available path was tried and failed, so the turn concluded honestly even though
-  // the objective was not met. Run status records whether the turn ended properly;
-  // the goal's own status records whether it was achieved. Goals blocked by a
-  // code-owned failure, such as an unverified effect, remain genuine failures.
-  const status =
-    candidateStatus === 'completed' &&
-    !hasResumableBlockingGoals(goals) &&
-    !hasUnearnedBlockedBlockingGoals(goals)
-      ? 'completed'
-      : 'failed';
+  const status = candidateStatus === 'completed' ? 'completed' : 'failed';
   const checkpointTitle =
     status === 'completed' ? 'Background workers finished' : 'Background worker review failed';
   const runMessageScope = buildAgentRunMessageScope(targetRun);

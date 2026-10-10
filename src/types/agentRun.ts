@@ -249,7 +249,6 @@ export interface AgentRunControlGraphPerformance {
 }
 
 export type AgentRunControlGraphForcedTextReason =
-  | 'async_terminal_completion'
   | 'background_session_started'
   | 'empty_delivery_recovery'
   | 'execution_loop_recovery'
@@ -267,7 +266,6 @@ export type AgentRunControlGraphForcedTextReason =
   | 'request_consent'
   | 'request_decline'
   | 'request_wait'
-  | 'workflow_route_completed'
   | 'yield_finalization';
 
 export type AgentRunMobileControllerRecoveryState =

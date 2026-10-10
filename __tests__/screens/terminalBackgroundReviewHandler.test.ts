@@ -393,45 +393,4 @@ describe('terminal background review memory closeout', () => {
     expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });
 
-  it.each(['user_constraint_state_conflict', 'goal_evidence_incomplete'])(
-    'fails blocked required goals without resuming them (%s)',
-    async (blockedReason) => {
-      jest.mocked(completeTerminalBackgroundReviewRun).mockReturnValue(true);
-      const blockedRun: AgentRun = {
-        ...run,
-        controlGraph: {
-          ...run.controlGraph!,
-          goals: [
-            {
-              id: 'blocked-goal',
-              title: 'Required result',
-              status: 'blocked',
-              dependencies: [],
-              evidence: [],
-              successCriteria: ['evidence.tool:read_file'],
-              completionPolicy: 'blocking',
-              blockedReason,
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
-        },
-      };
-      useChatStore.setState({
-        conversations: [{ ...conversation, agentRuns: [blockedRun] }],
-        activeConversationId: conversation.id,
-        isLoading: false,
-      });
-      const resumeAgentRun = jest.fn();
-
-      await invoke(jest.fn(), { targetRun: blockedRun, resumeAgentRun });
-
-      expect(resumeAgentRun).not.toHaveBeenCalled();
-      expect(completeTerminalBackgroundReviewRun).toHaveBeenCalledWith(
-        expect.objectContaining({
-          completion: expect.objectContaining({ status: 'failed' }),
-        }),
-      );
-    },
-  );
 });

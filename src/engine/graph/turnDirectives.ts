@@ -32,53 +32,23 @@ export function buildAgentControlGraphResetIncompleteFinalTextRecoveryEvent(
   );
 }
 
+/**
+ * The one post-tool turn the graph forces to text: a detached background session was
+ * started and nothing waits on it, so control goes back to the person. Every other
+ * request ends when the model answers. Directives keyed on goal state ended requests the
+ * model was still working on and were removed with goal gating.
+ */
 export function buildAgentControlGraphPostToolFinalTextDirectiveEvent(params: {
   pendingAsyncCount: number;
   hasBackgroundLaunchWithoutWait?: boolean;
-  hasAsyncTerminalResolution?: boolean;
-  hasCompletedBlockingGoal?: boolean;
-  hasIncompleteBlockingGoal?: boolean;
 }): Extract<AgentControlGraphEvent, { type: 'TURN_DIRECTIVES_RECORDED' }> | undefined {
-  if (
-    params.pendingAsyncCount === 0 &&
-    params.hasAsyncTerminalResolution === true &&
-    params.hasCompletedBlockingGoal === true &&
-    params.hasIncompleteBlockingGoal !== true
-  ) {
-    return buildAgentControlGraphTurnDirectivesRecordedEvent(
-      {
-        forceFinalText: true,
-        forcedTextReason: 'async_terminal_completion',
-      },
-      'async_terminal_completion',
-    );
-  }
-
-  if (
-    params.pendingAsyncCount === 0 &&
-    params.hasBackgroundLaunchWithoutWait === true &&
-    params.hasIncompleteBlockingGoal !== true
-  ) {
+  if (params.pendingAsyncCount === 0 && params.hasBackgroundLaunchWithoutWait === true) {
     return buildAgentControlGraphTurnDirectivesRecordedEvent(
       {
         forceFinalText: true,
         forcedTextReason: 'background_session_started',
       },
       'background_session_started',
-    );
-  }
-
-  if (
-    params.pendingAsyncCount === 0 &&
-    params.hasCompletedBlockingGoal === true &&
-    params.hasIncompleteBlockingGoal !== true
-  ) {
-    return buildAgentControlGraphTurnDirectivesRecordedEvent(
-      {
-        forceFinalText: true,
-        forcedTextReason: 'workflow_route_completed',
-      },
-      'workflow_route_completed',
     );
   }
 

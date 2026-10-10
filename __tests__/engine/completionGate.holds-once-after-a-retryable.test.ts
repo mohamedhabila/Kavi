@@ -264,50 +264,6 @@ describe('completionGate', () => {
 
     expect(decision).toEqual({ type: 'ready' });
   });
-  it('holds when evidence.tool criteria are unmet', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [
-        createGoal({
-          status: 'active',
-          successCriteria: ['evidence.tool:write_file'],
-          evidence: ['read_file:config.json'],
-        }),
-      ],
-    });
-
-    expect(decision).toEqual(
-      expect.objectContaining({
-        type: 'hold',
-        reason: 'goal_evidence_incomplete',
-        missingRequiredEvidenceLabels: ['g1:evidence.tool:write_file'],
-      }),
-    );
-  });
-  it('does not finalize a completed effect goal with only an unverified acknowledgement', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      toolingEnabledForProvider: false,
-      selectedToolCount: 0,
-      forceTextThisTurn: true,
-      goals: [
-        createGoal({
-          status: 'completed',
-          completionPolicy: 'blocking',
-          successCriteria: [EFFECT_CRITERION],
-          evidence: [buildToolEffectReceiptEvidence(buildEffectReceipt('acknowledged'))],
-        }),
-      ],
-    });
-
-    expect(decision).toEqual(
-      expect.objectContaining({
-        type: 'hold',
-        reason: 'goal_evidence_incomplete',
-        missingRequiredEvidenceLabels: [`g1:${EFFECT_CRITERION}`],
-      }),
-    );
-  });
   it('allows an explicit blocker report after an applied effect cannot be verified', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
@@ -338,23 +294,6 @@ describe('completionGate', () => {
     });
 
     expect(decision).toEqual({ type: 'ready' });
-  });
-  it('keeps missing evidence as a continuation condition in hold prompts', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [
-        createGoal({
-          status: 'active',
-          successCriteria: ['evidence.tool:write_file'],
-          evidence: [],
-        }),
-      ],
-    });
-
-    const prompt = decision.type === 'hold' ? decision.systemPrompts.join('\n') : '';
-    expect(prompt).toContain('Missing evidence criteria: g1:evidence.tool:write_file');
-    expect(prompt).toContain('Continue executing until required goal evidence is recorded');
-    expect(prompt).not.toContain('blockedReason');
   });
   it('returns ready when no blockers remain', () => {
     expect(

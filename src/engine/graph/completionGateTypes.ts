@@ -2,9 +2,6 @@ import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agent
 
 export type CompletionGateHoldReason =
   | 'async_waiting_finalization_hold'
-  | 'goals_incomplete'
-  | 'goal_evidence_incomplete'
-  | 'graph_mutation_error'
   | 'tool_error_repair'
   | 'empty_response_retry'
   | 'empty_tool_call_retry'
@@ -15,17 +12,6 @@ export type CompletionGateHoldReason =
 
 export type CompletionGateDecision =
   | { type: 'ready' }
-  | {
-      type: 'block';
-      reason: 'goals_incomplete_without_tool_path';
-      graphEvent: Extract<AgentControlGraphEvent, { type: 'BLOCKED' }>;
-      content: string;
-    }
-  | {
-      type: 'auto_complete_goals';
-      reason: 'goal_evidence_satisfied' | 'delegation_evidence_satisfied';
-      graphEvent: Extract<AgentControlGraphEvent, { type: 'GOALS_UPDATED' }>;
-    }
   | {
       type: 'hold';
       reason: CompletionGateHoldReason;

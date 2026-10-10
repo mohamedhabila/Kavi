@@ -369,25 +369,21 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
     return { status: 'finalized' };
   }
 
-  const evaluateGate = (goals: typeof params.controlGraph.goals) =>
-    evaluateCompletionGate({
-      trackedOperations: params.trackedAsyncOperations,
-      pendingOperations: pendingAsyncOperations,
-      consecutivePendingAsyncNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
-      hasDraftContent: params.turnAssistantContent.trim().length > 0,
-      goals: goals ?? [],
-      toolingEnabledForProvider: params.toolingEnabledForProvider,
-      selectedToolCount: params.selectedToolCount,
-      selectedToolNames: params.selectedToolNames,
-      forceTextThisTurn: params.effectiveForceTextThisTurn,
-      fullContent: params.turnAssistantContent,
-      recoveryDirectives: params.recoveryDirectives,
-      toolCallHistory: params.toolCallHistory,
-      completion: params.completion,
-      nextFinalizationMaxTokens: params.nextFinalizationMaxTokens,
-    });
-
-  let gateDecision = evaluateGate(params.controlGraph.goals);
+  const gateDecision = evaluateCompletionGate({
+    trackedOperations: params.trackedAsyncOperations,
+    pendingOperations: pendingAsyncOperations,
+    consecutivePendingAsyncNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
+    hasDraftContent: params.turnAssistantContent.trim().length > 0,
+    toolingEnabledForProvider: params.toolingEnabledForProvider,
+    selectedToolCount: params.selectedToolCount,
+    selectedToolNames: params.selectedToolNames,
+    forceTextThisTurn: params.effectiveForceTextThisTurn,
+    fullContent: params.turnAssistantContent,
+    recoveryDirectives: params.recoveryDirectives,
+    toolCallHistory: params.toolCallHistory,
+    completion: params.completion,
+    nextFinalizationMaxTokens: params.nextFinalizationMaxTokens,
+  });
 
   params.applyGraphEvents([
     buildGraphObservabilityRecordedEvent({
@@ -396,33 +392,6 @@ export async function resolveAgentControlGraphNoToolTurn(params: {
       detail: buildCompletionGateObservabilityDetail(gateDecision),
     }),
   ]);
-
-  if (gateDecision.type === 'auto_complete_goals') {
-    params.applyGraphEvents([gateDecision.graphEvent]);
-    gateDecision = evaluateGate(gateDecision.graphEvent.goals);
-    params.applyGraphEvents([
-      buildGraphObservabilityRecordedEvent({
-        observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE,
-        iteration: params.iteration,
-        detail: buildCompletionGateObservabilityDetail(gateDecision),
-      }),
-    ]);
-  }
-
-  if (gateDecision.type === 'block') {
-    params.commitModelTurn();
-    await params.finishWithGraphTerminalEvent({
-      graphEvent: gateDecision.graphEvent,
-      content: gateDecision.content,
-      providerReplay: params.providerReplay,
-      assistantMetadata: buildAssistantMessageMetadata('final', {
-        completionStatus: 'incomplete',
-        finishReason: gateDecision.reason,
-      }),
-      sessionEndReason: gateDecision.reason,
-    });
-    return { status: 'finalized' };
-  }
 
   if (gateDecision.type === 'hold') {
     return continueNoToolTurn({

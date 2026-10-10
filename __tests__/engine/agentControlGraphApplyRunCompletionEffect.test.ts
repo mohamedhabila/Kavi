@@ -301,43 +301,6 @@ describe('applyConversationRunCompletionEffect', () => {
       expect(completeAgentRun).toHaveBeenCalledTimes(1);
     });
 
-    it('rejects a completed blocking goal whose structural evidence is missing', () => {
-      const conversation = constrainedConversation([
-        { id: 'user-1', role: 'user', content: 'Reply in Dutch.', timestamp: 1 },
-        {
-          id: 'final-1',
-          role: 'assistant',
-          content: 'Het resultaat is geverifieerd.',
-          timestamp: 3,
-          assistantMetadata: {
-            kind: 'final',
-            completionStatus: 'complete',
-            finishReason: 'stop',
-          },
-        },
-      ]);
-      const run = conversation.agentRuns?.[0];
-      if (!run?.controlGraph?.goals?.[0]) throw new Error('expected goal fixture');
-      run.controlGraph = {
-        ...run.controlGraph,
-        goals: run.controlGraph.goals.map((goal) => ({ ...goal, evidence: [] })),
-      };
-      const updateAgentRunControlGraph = jest.fn();
-      const completeAgentRun = jest.fn();
-
-      expect(
-        applyConversationRunCompletionEffect({
-          actions: { completeAgentRun, updateAgentRunControlGraph },
-          conversationId: conversation.id,
-          effect: { status: 'completed' },
-          getLatestConversation: () => conversation,
-          runId: 'run-1',
-        }),
-      ).toBe(false);
-      expect(updateAgentRunControlGraph).not.toHaveBeenCalled();
-      expect(completeAgentRun).not.toHaveBeenCalled();
-    });
-
     it.each([
       ['missing', []],
       [

@@ -6,12 +6,8 @@ export function buildAgentControlGraphForcedTextOnlyTurnPrompt(
   reason?: AgentControlGraphForcedTextReason,
 ): string {
   switch (reason) {
-    case 'async_terminal_completion':
-      return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nAsync work is terminal; answer from the verified result now.\nPreserve exact requested format.';
     case 'background_session_started':
       return '[SYSTEM BACKGROUND HANDOFF]\nTool use is disabled for this turn.\nThe requested detached session has started. Mobile operating systems may suspend background execution. Return control to the user now with a concise status; do not claim completion or guaranteed continuous execution.';
-    case 'workflow_route_completed':
-      return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nThe workflow is complete; answer from verified evidence now.\nPreserve exact requested format.';
     case 'yield_finalization':
       return '[SYSTEM FINAL DELIVERY]\nTool use is disabled for this turn.\nThe workflow is complete; deliver the final answer now.';
     case 'incomplete_delivery_continuation':

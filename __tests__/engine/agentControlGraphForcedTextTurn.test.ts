@@ -8,19 +8,9 @@ describe('agent control graph forced text turns', () => {
     [reason: AgentControlGraphForcedTextReason, expectedHeading: string, expectedContract: string]
   >([
     [
-      'async_terminal_completion',
-      '[SYSTEM FINAL DELIVERY]',
-      'Async work is terminal; answer from the verified result now.',
-    ],
-    [
       'background_session_started',
       '[SYSTEM BACKGROUND HANDOFF]',
       'Return control to the user now with a concise status',
-    ],
-    [
-      'workflow_route_completed',
-      '[SYSTEM FINAL DELIVERY]',
-      'The workflow is complete; answer from verified evidence now.',
     ],
     [
       'yield_finalization',
@@ -103,12 +93,4 @@ describe('agent control graph forced text turns', () => {
     expect(prompt).toContain('The next message can resume the work.');
   });
 
-  it('prioritizes exact final-output constraints in completed workflow prompts', () => {
-    expect(buildAgentControlGraphForcedTextOnlyTurnPrompt('workflow_route_completed')).toContain(
-      'Preserve exact requested format.',
-    );
-    expect(buildAgentControlGraphForcedTextOnlyTurnPrompt('async_terminal_completion')).toContain(
-      'Preserve exact requested format.',
-    );
-  });
 });

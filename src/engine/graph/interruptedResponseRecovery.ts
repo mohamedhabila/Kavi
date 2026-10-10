@@ -58,25 +58,15 @@ export function buildAgentControlGraphInterruptedNoEvidenceOutcome(params: {
   return buildAgentControlGraphInterruptedTurnFailedOutcome(params.errorMessage);
 }
 
-export function buildAgentControlGraphInterruptedGoalsResumeOutcome(params: {
-  checkpointTitle: string;
-  checkpointDetail: string;
-  resumePrompt: string;
-  resumeUserPrompt?: string;
-}): AgentControlGraphInterruptedResponseOutcome {
-  return {
-    status: 'failed',
-    checkpointTitle: params.checkpointTitle,
-    checkpointDetail: params.checkpointDetail,
-    resumePrompt: params.resumePrompt,
-    resumeUserPrompt: params.resumeUserPrompt,
-  };
-}
-
-export function buildAgentControlGraphInterruptedGoalsCompleteOutcome(): AgentControlGraphInterruptedResponseOutcome {
+/**
+ * The work is verified and nothing is still running, so the interrupted answer is
+ * recovered from that evidence. This was the path of every run without goals; with goal
+ * gating gone it is the path of every run.
+ */
+export function buildAgentControlGraphInterruptedRecoveredOutcome(): AgentControlGraphInterruptedResponseOutcome {
   return {
     status: 'completed',
-    checkpointTitle: 'Goals satisfied',
-    checkpointDetail: 'Interrupted stream recovered after goals reached a completable state.',
+    checkpointTitle: 'Response recovered',
+    checkpointDetail: 'Interrupted stream recovered from the verified work.',
   };
 }

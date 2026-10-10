@@ -28,7 +28,7 @@ jest.mock('../../src/services/agents/lifecycle/finalizePhase', () => ({
   hasCompletedExecutionRecoveryEvidence: jest.fn(() => true),
 }));
 
-function seedGoal(goal: Record<string, unknown>): void {
+function seedInterruptedRun(): void {
   mockCurrentConversation = {
     id: 'conversation-1',
     messages: [{ id: 'user-1', role: 'user', content: 'Finish it', timestamp: 1 }],
@@ -41,70 +41,29 @@ function seedGoal(goal: Record<string, unknown>): void {
         createdAt: 1,
         updatedAt: 2,
         summary: { startedTools: 1 },
-        controlGraph: { iteration: 1, goals: [goal] },
+        controlGraph: { iteration: 1 },
       },
     ],
   };
 }
 
-describe('foreground interrupted response goal state', () => {
-  it.each(['user_constraint_state_conflict', 'goal_evidence_incomplete'])(
-    'fails instead of completing or resuming a blocked required goal (%s)',
-    async (blockedReason) => {
-      seedGoal({
-        id: 'required',
-        title: 'Required result',
-        status: 'blocked',
-        dependencies: [],
-        evidence: [],
-        successCriteria: ['evidence.tool:read_file'],
-        completionPolicy: 'blocking',
-        blockedReason,
-        createdAt: 1,
-        updatedAt: 2,
-      });
+describe('a foreground response interrupted after the work was verified', () => {
+  it('is recovered from that work, whatever the run planned', async () => {
+    seedInterruptedRun();
 
-      const outcome = await resolveForegroundInterruptedResponseOutcome({
-        assertNotAborted: jest.fn(),
-        conversationId: mockCurrentConversation.id,
-        error: new Error('stream interrupted'),
-        finalizationProviderContext: {} as never,
-        runId: 'run-1',
-        signal: new AbortController().signal,
-      });
-
-      expect(outcome).toEqual(
-        expect.objectContaining({
-          status: 'failed',
-          checkpointTitle: 'Turn failed',
-          checkpointDetail: expect.stringContaining('blocked required goals'),
-        }),
-      );
-      expect(outcome).not.toHaveProperty('resumePrompt');
-    },
-  );
-
-  it('does not let an active persistent focus block finite-run completion', async () => {
-    seedGoal({
-      id: 'focus',
-      title: 'Remember my style',
-      status: 'active',
-      dependencies: [],
-      evidence: [],
-      completionPolicy: 'persistent',
-      createdAt: 1,
-      updatedAt: 2,
+    const outcome = await resolveForegroundInterruptedResponseOutcome({
+      assertNotAborted: jest.fn(),
+      conversationId: mockCurrentConversation.id,
+      error: new Error('stream interrupted'),
+      finalizationProviderContext: {} as never,
+      runId: 'run-1',
+      signal: new AbortController().signal,
     });
 
-    await expect(
-      resolveForegroundInterruptedResponseOutcome({
-        assertNotAborted: jest.fn(),
-        conversationId: mockCurrentConversation.id,
-        error: new Error('stream interrupted'),
-        finalizationProviderContext: {} as never,
-        runId: 'run-1',
-        signal: new AbortController().signal,
-      }),
-    ).resolves.toMatchObject({ status: 'completed', checkpointTitle: 'Goals satisfied' });
+    expect(outcome).toEqual({
+      status: 'completed',
+      checkpointTitle: 'Response recovered',
+      checkpointDetail: 'Interrupted stream recovered from the verified work.',
+    });
   });
 });

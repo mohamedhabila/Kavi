@@ -162,7 +162,6 @@ async function runTerminalBackgroundReview(params: {
       ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponseRef.current,
       flushChatState: flushChatStorePersistenceNow,
       recordConversationTurnMemory: params.recordConversationTurnMemory,
-      resumeAgentRun,
       reviewTimestamp,
       runId: candidate.runId,
       setAgentRunPhase: params.setAgentRunPhase,

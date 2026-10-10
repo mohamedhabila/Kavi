@@ -57,43 +57,4 @@ describe('completion precedence integration', () => {
     }
   });
 
-  it('orders goals incomplete ahead of delivery continuation', () => {
-    const decision = evaluateCompletionGate({
-      trackedOperations: new Map(),
-      pendingOperations: [],
-      consecutivePendingAsyncNoToolTurns: 0,
-      hasDraftContent: true,
-      goals: [
-        {
-          id: 'g1',
-          title: 'Finish task',
-          status: 'pending',
-          completionPolicy: 'blocking',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
-      toolingEnabledForProvider: true,
-      selectedToolCount: 2,
-      forceTextThisTurn: false,
-      fullContent: 'partial final answer',
-      recoveryDirectives: {
-        forceFinalText: false,
-        requireWorkflowTool: false,
-        incompleteFinalTextRecoveryCount: 0,
-      },
-      completion: {
-        completionStatus: 'incomplete',
-        finishReason: 'length',
-      },
-      nextFinalizationMaxTokens: 4096,
-    });
-
-    expect(decision.type).toBe('hold');
-    if (decision.type === 'hold') {
-      expect(decision.reason).toBe('goals_incomplete');
-    }
-  });
 });

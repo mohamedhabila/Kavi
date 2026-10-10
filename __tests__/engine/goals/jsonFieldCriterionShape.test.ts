@@ -206,22 +206,6 @@ function sendUpdateGoals(goals: AgentGoal[], args: Record<string, unknown>) {
 describe('correcting a criterion that names a field no result carries', () => {
   const traced = ['evidence.tool:sms_compose', 'evidence.json_field:recipients.length:1'];
 
-  it('tells the model which field to use once the goal closes unproven', () => {
-    const { result } = sendUpdateGoals(draftGoalClosedUnproven(traced), {
-      action: 'complete',
-      id: 'avery-sms-draft',
-    });
-    const reported = result.goals.find((entry: { id: string }) => entry.id === 'avery-sms-draft');
-
-    expect(reported.proof.unmetCriteria).toEqual([
-      expect.objectContaining({
-        criterion: 'evidence.json_field:recipients.length:1',
-        satisfyBy: expect.stringContaining('status, recipientCount, messageLength'),
-      }),
-    ]);
-    expect(reported.proof.note).not.toContain('correct them with update_goals');
-  });
-
   it('accepts the correction that hint asks for, and the goal is then proven', () => {
     const { result, goal } = sendUpdateGoals(draftGoalClosedUnproven(traced), {
       action: 'update',
@@ -267,27 +251,4 @@ describe('correcting a criterion that names a field no result carries', () => {
 });
 
 describe('a blocking goal closed with no criteria at all', () => {
-  it('can be given one, as its close report says', () => {
-    const goals = [
-      createGoal({
-        id: 'avery-sms-draft',
-        title: 'Open SMS composer to Avery',
-        status: 'completed',
-        completionPolicy: 'blocking',
-        evidence: [],
-      }),
-    ];
-    const closed = sendUpdateGoals(goals, { action: 'complete', id: 'avery-sms-draft' });
-    expect(closed.result.goals[0].proof.note).toContain(
-      'Add a specific criterion naming the evidence the work produced',
-    );
-
-    const { result, goal } = sendUpdateGoals(goals, {
-      action: 'update',
-      goals: [{ id: 'avery-sms-draft', successCriteria: ['evidence.tool:sms_compose'] }],
-    });
-
-    expect(result.errors).toBeUndefined();
-    expect(goal?.successCriteria).toEqual(['evidence.tool:sms_compose']);
-  });
 });

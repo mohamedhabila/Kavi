@@ -34,7 +34,6 @@ import {
   bindVerifiedProcedureOriginAuthority,
   digestTerminalProof,
   exactStringArrayEqual,
-  hasIncompleteBlockingGoal,
   relevantToolName,
   VERIFIED_PROCEDURE_BEHAVIORS,
   type VerifiedProcedureBehavior,
@@ -291,7 +290,6 @@ class TwoStepVerifiedProcedureExecutionSession {
       params.graphSnapshot.status !== 'awaiting_review' ||
       params.graphSnapshot.pendingAsyncCount !== 0 ||
       params.graphSnapshot.asyncWork.awaitingBackgroundWorkers ||
-      hasIncompleteBlockingGoal(params.graphSnapshot) ||
       !params.finalAssistant?.content.trim() ||
       !isDeliverableAssistantCompletionMetadata(params.finalAssistant.metadata)
     ) {

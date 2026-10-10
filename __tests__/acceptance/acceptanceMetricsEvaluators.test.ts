@@ -1,10 +1,8 @@
 import { evaluateAgentBootstrapFixture } from '../../src/acceptance/acceptanceMetrics/evaluateAgentBootstrapFixture';
-import { evaluateDelegationEvidenceFixture } from '../../src/acceptance/acceptanceMetrics/evaluateDelegationEvidenceFixture';
 import { evaluateDelegationSpawnFixture } from '../../src/acceptance/acceptanceMetrics/evaluateDelegationSpawnFixture';
 import { evaluateFalseFinalizeFixture } from '../../src/acceptance/acceptanceMetrics/evaluateFalseFinalizeFixture';
 import { evaluateMemoryRecallResult } from '../../src/acceptance/acceptanceMetrics/evaluateMemoryRecallResult';
 import { AGENT_BOOTSTRAP_FIXTURES } from '../../src/acceptance/acceptanceMetrics/agentBootstrapFixtures';
-import { DELEGATION_EVIDENCE_FIXTURES } from '../../src/acceptance/acceptanceMetrics/delegationEvidenceFixtures';
 import { DELEGATION_SPAWN_FIXTURES } from '../../src/acceptance/acceptanceMetrics/delegationSpawnFixtures';
 import { FALSE_FINALIZE_FIXTURES } from '../../src/acceptance/acceptanceMetrics/falseFinalizeFixtures';
 
@@ -49,9 +47,4 @@ describe('acceptance metric evaluators', () => {
     }
   });
 
-  it('passes all delegation evidence fixtures structurally', () => {
-    for (const fixture of DELEGATION_EVIDENCE_FIXTURES) {
-      expect(evaluateDelegationEvidenceFixture(fixture).passed).toBe(true);
-    }
-  });
 });

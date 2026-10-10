@@ -1,7 +1,6 @@
 import {
   type AgentControlGraphInterruptedResponseOutcome,
-  buildAgentControlGraphInterruptedGoalsCompleteOutcome,
-  buildAgentControlGraphInterruptedGoalsResumeOutcome,
+  buildAgentControlGraphInterruptedRecoveredOutcome,
   buildAgentControlGraphInterruptedNoEvidenceOutcome,
   buildAgentControlGraphInterruptedTurnFailedOutcome,
   buildAgentControlGraphProviderRejectedInterruptedOutcome,
@@ -16,11 +15,6 @@ import { isNonRetryableProviderRequestError } from '../../../services/llm/suppor
 import { useChatStore } from '../../../store/useChatStore';
 import { ResolvedFinalizationProviderContext } from './contracts';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
-import {
-  hasBlockedBlockingGoals,
-  hasResumableBlockingGoals,
-  isBlockingGoal,
-} from '../../goals/types';
 
 export async function resolveForegroundInterruptedResponseOutcome(params: {
   assertNotAborted: () => void;
@@ -58,7 +52,6 @@ export async function resolveForegroundInterruptedResponseOutcome(params: {
     (snapshot) => snapshot.status === 'running',
   ).length;
   const pendingAsyncOperations = getAgentRunPendingAsyncOperations(targetRun);
-  const goals = targetRun.controlGraph?.goals ?? [];
 
   const evidence = collectAgentRunFinalizationEvidence(
     latestConversation.messages,
@@ -83,33 +76,6 @@ export async function resolveForegroundInterruptedResponseOutcome(params: {
 
   params.assertNotAborted();
 
-  if (hasBlockedBlockingGoals(goals)) {
-    return buildAgentControlGraphInterruptedTurnFailedOutcome(
-      `The interrupted run has blocked required goals and cannot be completed: ${params.error.message}`,
-    );
-  }
-
-  if (hasResumableBlockingGoals(goals)) {
-    const activeGoals = goals
-      .filter((goal) => isBlockingGoal(goal) && goal.status === 'active')
-      .map((goal) => goal.title);
-    const pendingGoals = goals
-      .filter((goal) => isBlockingGoal(goal) && goal.status === 'pending')
-      .map((goal) => goal.title);
-    return buildAgentControlGraphInterruptedGoalsResumeOutcome({
-      checkpointTitle: 'Goals still open',
-      checkpointDetail: params.error.message,
-      resumePrompt: [
-        'Resume the run and continue executing open goals.',
-        activeGoals.length > 0 ? `Active: ${activeGoals.join(', ')}` : undefined,
-        pendingGoals.length > 0 ? `Pending: ${pendingGoals.join(', ')}` : undefined,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      resumeUserPrompt: 'Continue from the interrupted supervisor turn.',
-    });
-  }
-
   if (
     hasOrphanedRunningSnapshots ||
     reviewableSubAgents.some((worker) => worker.status === 'running')
@@ -121,5 +87,5 @@ export async function resolveForegroundInterruptedResponseOutcome(params: {
     });
   }
 
-  return buildAgentControlGraphInterruptedGoalsCompleteOutcome();
+  return buildAgentControlGraphInterruptedRecoveredOutcome();
 }

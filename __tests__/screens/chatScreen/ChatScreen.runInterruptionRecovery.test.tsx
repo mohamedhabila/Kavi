@@ -31,7 +31,7 @@ describe('ChatScreen run interruption recovery', () => {
 
   afterEach(cleanupChatScreenTestEnvironment);
 
-  it('recovers a response interruption as a completed run when goals and evidence are satisfied', async () => {
+  it('recovers a response interruption as a completed run when its work is verified', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -105,7 +105,7 @@ describe('ChatScreen run interruption recovery', () => {
         'conv1',
         expect.objectContaining({
           status: 'completed',
-          checkpointTitle: 'Goals satisfied',
+          checkpointTitle: 'Response recovered',
         }),
         'run-1',
       );
@@ -311,7 +311,7 @@ describe('ChatScreen run interruption recovery', () => {
         'conv1',
         expect.objectContaining({
           status: 'completed',
-          checkpointTitle: 'Goals satisfied',
+          checkpointTitle: 'Response recovered',
         }),
         'run-1',
       );

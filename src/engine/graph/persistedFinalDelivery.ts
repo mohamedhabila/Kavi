@@ -1,5 +1,4 @@
 import { readPendingGoalUserConstraintDelivery } from '../goals/userConstraintFinalDelivery';
-import { areBlockingGoalsStructurallyComplete } from '../goals/completionEvidence';
 import {
   buildAgentRunMessageScope,
   getLatestAssistantProjectionFinalResponsePreview,
@@ -80,11 +79,7 @@ export function buildAgentControlGraphAfterPersistedFinalDelivery(params: {
   terminalReason?: string;
 }): AgentRunControlGraphState | undefined {
   const graph = params.run.controlGraph;
-  if (
-    !graph ||
-    !isAgentControlGraphAtPersistedFinalDeliveryBoundary(graph) ||
-    !areBlockingGoalsStructurallyComplete(graph.goals ?? [])
-  ) {
+  if (!graph || !isAgentControlGraphAtPersistedFinalDeliveryBoundary(graph)) {
     return undefined;
   }
 

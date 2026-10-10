@@ -17,16 +17,16 @@ describe('agent control graph turn directives boundary', () => {
       buildAgentControlGraphTurnDirectivesRecordedEvent(
         {
           forceFinalText: true,
-          forcedTextReason: 'workflow_route_completed',
+          forcedTextReason: 'yield_finalization',
           maxTokensOverride: 8192,
         },
-        'workflow_route_completed',
+        'yield_finalization',
       ),
     ]);
     const directives = getAgentControlGraphTurnDirectives(snapshot);
 
     expect(directives.forceFinalText).toBe(true);
-    expect(directives.forcedTextReason).toBe('workflow_route_completed');
+    expect(directives.forcedTextReason).toBe('yield_finalization');
     expect(directives.maxTokensOverride).toBe(8192);
     expect(hasAgentControlGraphOneShotTurnDirectives(directives)).toBe(true);
   });
@@ -65,46 +65,6 @@ describe('agent control graph turn directives boundary', () => {
     expect(directives.incompleteFinalTextContinuationPrefix).toBeUndefined();
   });
 
-  it('only finalizes an async terminal result when it completes the remaining blocking work', () => {
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 1,
-      }),
-    ).toBeUndefined();
-
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasAsyncTerminalResolution: true,
-      }),
-    ).toBeUndefined();
-
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasAsyncTerminalResolution: true,
-        hasCompletedBlockingGoal: true,
-      }),
-    ).toEqual(
-      buildAgentControlGraphTurnDirectivesRecordedEvent(
-        {
-          forceFinalText: true,
-          forcedTextReason: 'async_terminal_completion',
-        },
-        'async_terminal_completion',
-      ),
-    );
-
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasAsyncTerminalResolution: true,
-        hasCompletedBlockingGoal: true,
-        hasIncompleteBlockingGoal: true,
-      }),
-    ).toBeUndefined();
-  });
-
   it('hands control back after a successful non-blocking background launch', () => {
     expect(
       buildAgentControlGraphPostToolFinalTextDirectiveEvent({
@@ -128,48 +88,14 @@ describe('agent control graph turn directives boundary', () => {
       }),
     ).toBeUndefined();
 
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasBackgroundLaunchWithoutWait: true,
-        hasIncompleteBlockingGoal: true,
-      }),
-    ).toBeUndefined();
   });
 
-  it('leaves the next turn its tools when no blocking work just finished', () => {
-    // A standing goal says nothing about whether this request is done. Forcing text on it
-    // ended a traced calendar request after the model had only looked up its tools.
+  it('leaves the next turn its tools after any other batch', () => {
+    // The model ends a request by answering. Forcing text on goal state ended a traced
+    // calendar request after the model had only looked up its tools.
     expect(
       buildAgentControlGraphPostToolFinalTextDirectiveEvent({
         pendingAsyncCount: 0,
-        hasIncompleteBlockingGoal: false,
-      }),
-    ).toBeUndefined();
-  });
-
-  it('forces final text when blocking goals are completed after tools', () => {
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasCompletedBlockingGoal: true,
-        hasIncompleteBlockingGoal: false,
-      }),
-    ).toEqual(
-      buildAgentControlGraphTurnDirectivesRecordedEvent(
-        {
-          forceFinalText: true,
-          forcedTextReason: 'workflow_route_completed',
-        },
-        'workflow_route_completed',
-      ),
-    );
-
-    expect(
-      buildAgentControlGraphPostToolFinalTextDirectiveEvent({
-        pendingAsyncCount: 0,
-        hasCompletedBlockingGoal: true,
-        hasIncompleteBlockingGoal: true,
       }),
     ).toBeUndefined();
   });

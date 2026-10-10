@@ -2,60 +2,12 @@
 // Kavi — update_goals tool result
 // ---------------------------------------------------------------------------
 // What an update_goals call reports back to the model: its argument errors, or the
-// mutation it requested together with what that mutation will actually do — whether a
-// close is proven, and which goals an activation moves back to pending.
+// mutation it requested, and which goals an activation moves back to pending.
 // ---------------------------------------------------------------------------
 
-import { describeUnmetGatingCriteria, isBlockingGoalClosedWithoutProof } from '../goals/goalProof';
 import type { AgentGoal, AgentGoalMutation } from '../goals/types';
 import type { UpdateGoalsArgumentError } from './toolGoalExecution';
 
-/**
- * What a `complete` request will actually do, reported back to the model.
- *
- * Traced live on an Android emulator. `complete` answered `{"status":"ok"}` whether or
- * not the goal's criteria held, because the result echoed the requested mutation and
- * nothing else; the model could not tell a proven close from an unproven one.
- *
- * Closing is the model's bookkeeping and is never refused: the goal closes either way.
- * What the result must say is whether the close is proven, because only proven blocking
- * goals let the run finish as completed — and, when it is not, which criteria are
- * outstanding and the action that satisfies each: a move, not just a verdict.
- */
-function describeCompletionOutcome(
-  goalId: string,
-  graphGoals: ReadonlyArray<AgentGoal>,
-): Record<string, unknown> | null {
-  const goal = graphGoals.find((entry) => entry.id === goalId);
-  if (!goal) {
-    return null;
-  }
-
-  const closed: AgentGoal = { ...goal, status: 'completed' };
-  if (!isBlockingGoalClosedWithoutProof(closed)) {
-    return { closes: true };
-  }
-
-  const unmetCriteria = describeUnmetGatingCriteria(closed);
-  const hasCriteria = (goal.successCriteria?.length ?? 0) > 0;
-  return {
-    closes: true,
-    proven: false,
-    reason: hasCriteria
-      ? 'This goal closes, but its success criteria are not met, so the run cannot finish as verified.'
-      : 'This goal closes, but it has no success criteria, so nothing proves it and the run cannot finish as verified.',
-    ...(unmetCriteria.length > 0 ? { unmetCriteria } : {}),
-    // Only recoveries the graph accepts: criteria naming a deliverable cannot be revised,
-    // so each unmet criterion's own satisfyBy says whether a correction is legal.
-    nextStep:
-      (hasCriteria
-        ? 'Do what each unmet criterion\'s satisfyBy says'
-        : 'Add a specific criterion naming the evidence the work produced with update_goals ' +
-          'action "update"') +
-      ', or tell the user plainly what could not be confirmed. Repeating this complete call ' +
-      'changes nothing.',
-  };
-}
 
 /**
  * The goals this mutation moves back to pending, when it activates something.
@@ -156,20 +108,12 @@ export function buildUpdateGoalsResult(params: {
       status: 'ok',
       action: params.mutation.action,
       ...(demoted ? { activationSideEffect: demoted } : {}),
-      goals: params.mutation.goals.map((g) => {
-        const completion =
-          params.mutation.action === 'complete' && g.id && params.graphGoals
-            ? describeCompletionOutcome(g.id, params.graphGoals)
-            : null;
-
-        return {
-          ...(g.id ? { id: g.id } : {}),
-          ...(g.title ? { title: g.title } : {}),
-          ...(g.status ? { status: g.status } : {}),
-          ...(g.completionPolicy ? { completionPolicy: g.completionPolicy } : {}),
-          ...(completion ?? {}),
-        };
-      }),
+      goals: params.mutation.goals.map((g) => ({
+        ...(g.id ? { id: g.id } : {}),
+        ...(g.title ? { title: g.title } : {}),
+        ...(g.status ? { status: g.status } : {}),
+        ...(g.completionPolicy ? { completionPolicy: g.completionPolicy } : {}),
+      })),
     },
     null,
     2,

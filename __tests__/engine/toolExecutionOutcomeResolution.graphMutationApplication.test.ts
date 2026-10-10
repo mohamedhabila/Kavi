@@ -1,7 +1,6 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
 import {
   buildEffectCompletionCriterion,
-  buildToolEffectReceiptEvidence,
 } from '../../src/engine/goals/effectCompletionEvidence';
 import {
   CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
@@ -13,7 +12,6 @@ import {
   buildBaseParams,
   createGoal,
   createToolMessage,
-  extractGoalEvidenceEvents,
   tool,
 } from '../helpers/toolExecutionOutcomeHarness';
 
@@ -183,211 +181,6 @@ describe('tool execution outcome resolution', () => {
     ]);
   });
 
-  it('routes and completes same-batch evidence after an applied goal mutation', async () => {
-    const params = buildBaseParams();
-    const requestDigest = `sha256:${'4'.repeat(64)}` as const;
-    const receipt: ToolEffectReceipt = {
-      version: 2,
-      receiptId: `ter_${'c'.repeat(32)}`,
-      toolCallId: 'tc-memory',
-      toolName: 'memory_remember',
-      executionRunId: 'execution-run-1',
-      contractIdentity: {
-        kind: 'code_owned',
-        version: 1,
-        toolName: 'memory_remember',
-        schemaDigest: `sha256:${'6'.repeat(64)}`,
-        capabilityContractDigest: `sha256:${'6'.repeat(64)}`,
-        workflowContractDigest: `sha256:${'6'.repeat(64)}`,
-        effectContractDigest: `sha256:${'6'.repeat(64)}`,
-        executionPolicyDigest: `sha256:${'6'.repeat(64)}`,
-      },
-      transportState: 'returned',
-      effectKind: 'memory.write',
-      effectState: 'applied',
-      verificationState: 'verified',
-      requestDigest,
-      resultDigest: `sha256:${'5'.repeat(64)}`,
-      resource: { kind: 'memory_fact', id: 'fact-avery' },
-      recordedAt: 1,
-    };
-    const effectCriterion = buildEffectCompletionCriterion({
-      effectKind: 'memory.write',
-      requestDigest,
-      resource: { kind: 'memory_fact', id: 'fact-avery' },
-      verificationState: 'verified',
-    });
-    const receiptEvidence = buildToolEffectReceiptEvidence(receipt);
-    let graph = { goals: [] as AgentGoal[] };
-    params.getGraphSnapshot = jest.fn(() => graph);
-    params.applyGraphEvents = jest.fn((events) => {
-      graph = applyGoalGraphEvents(graph, events);
-    });
-    params.groundedRequestScopedTools = [
-      tool({
-        name: 'memory_remember',
-        contract: {
-          capabilities: ['write'],
-          resourceKinds: ['memory'],
-        },
-      }),
-    ];
-    params.executableToolCalls = [
-      {
-        name: 'update_goals',
-        arguments: JSON.stringify({
-          action: 'add',
-          id: 'preferred-contact-memory',
-          name: 'preferred-contact-memory',
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: [effectCriterion],
-        }),
-      },
-      {
-        name: 'memory_remember',
-        arguments: '{"fact":{"subject":"user","predicate":"preferred_contact","value":"Avery"}}',
-      },
-    ];
-    params.toolExecutionOutcomes = [
-      {
-        index: 0,
-        toolCallId: 'tc-goals',
-        toolMessage: createToolMessage({
-          id: 'tc-goals',
-          name: 'update_goals',
-          content: '{"status":"ok"}',
-        }),
-      },
-      {
-        index: 1,
-        toolCallId: 'tc-memory',
-        toolMessage: createToolMessage({
-          id: 'tc-memory',
-          name: 'memory_remember',
-          content:
-            '{"ok":true,"fact":{"subject":"user","predicate":"preferred_contact","value":"Avery"}}',
-        }),
-        effectReceipt: receipt,
-      },
-    ];
-
-    await resolveAgentControlGraphToolExecutionOutcomes(params);
-
-    const memoryGoal = graph.goals.find((goal) => goal.id === 'preferred-contact-memory');
-    expect(memoryGoal).toEqual(
-      expect.objectContaining({
-        status: 'completed',
-        evidence: expect.arrayContaining([receiptEvidence]),
-      }),
-    );
-    expect(params.workingMessages).toHaveLength(2);
-    expect(params.workingMessages[1].isError).not.toBe(true);
-    expect(extractGoalEvidenceEvents(params)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          goalId: 'preferred-contact-memory',
-          evidence: receiptEvidence,
-        }),
-      ]),
-    );
-    expect(params.publishWorkflowToolResultProgress).toHaveBeenCalledTimes(2);
-    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hasIncompleteBlockingGoal: false,
-      }),
-    );
-  });
-
-  it('does not treat a completed code-owned effect guard as whole-workflow completion', async () => {
-    const params = buildBaseParams();
-    const requestDigest = `sha256:${'7'.repeat(64)}` as const;
-    const receipt: ToolEffectReceipt = {
-      version: 2,
-      receiptId: `ter_${'7'.repeat(32)}`,
-      toolCallId: 'tc-calendar-create',
-      toolName: 'calendar_create_event',
-      executionRunId: 'execution-run-1',
-      contractIdentity: {
-        kind: 'code_owned',
-        version: 1,
-        toolName: 'calendar_create_event',
-        schemaDigest: `sha256:${'7'.repeat(64)}`,
-        capabilityContractDigest: `sha256:${'7'.repeat(64)}`,
-        workflowContractDigest: `sha256:${'7'.repeat(64)}`,
-        effectContractDigest: `sha256:${'7'.repeat(64)}`,
-        executionPolicyDigest: `sha256:${'7'.repeat(64)}`,
-      },
-      transportState: 'returned',
-      effectKind: 'calendar.create',
-      effectState: 'applied',
-      verificationState: 'verified',
-      requestDigest,
-      resultDigest: `sha256:${'8'.repeat(64)}`,
-      resource: { kind: 'calendar_event', id: 'event-1' },
-      recordedAt: 1,
-    };
-    const criterion = buildEffectCompletionCriterion({
-      effectKind: 'calendar.create',
-      requestDigest,
-      resource: { kind: 'calendar_event', id: '*' },
-      verificationState: 'verified',
-    });
-    let graph = {
-      goals: [
-        createGoal({
-          id: 'effect-calendar-create',
-          title: 'Verify calendar_create_event effect',
-          status: 'active',
-          owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
-          completionPolicy: 'blocking',
-          successCriteria: [criterion],
-        }),
-      ],
-    };
-    params.getGraphSnapshot = jest.fn(() => graph);
-    params.applyGraphEvents = jest.fn((events) => {
-      graph = applyGoalGraphEvents(graph, events);
-    });
-    params.groundedRequestScopedTools = [
-      tool({
-        name: 'calendar_create_event',
-        contract: {
-          capabilities: ['write'],
-          resourceKinds: ['device'],
-        },
-      }),
-    ];
-    params.executableToolCalls = [
-      {
-        name: 'calendar_create_event',
-        arguments: '{"title":"Review"}',
-      },
-    ];
-    params.toolExecutionOutcomes = [
-      {
-        index: 0,
-        toolCallId: 'tc-calendar-create',
-        toolMessage: createToolMessage({
-          id: 'tc-calendar-create',
-          name: 'calendar_create_event',
-          content: '{"status":"created_verified","eventId":"event-1"}',
-        }),
-        effectReceipt: receipt,
-      },
-    ];
-
-    await resolveAgentControlGraphToolExecutionOutcomes(params);
-
-    expect(graph.goals[0]?.status).toBe('completed');
-    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hasCompletedBlockingGoal: false,
-        hasIncompleteBlockingGoal: false,
-      }),
-    );
-  });
-
   it('retires a code-owned effect guard after a definitive failed receipt', async () => {
     const params = buildBaseParams();
     const requestDigest = `sha256:${'9'.repeat(64)}` as const;
@@ -478,8 +271,6 @@ describe('tool execution outcome resolution', () => {
     ]);
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith(
       expect.objectContaining({
-        hasCompletedBlockingGoal: false,
-        hasIncompleteBlockingGoal: false,
       }),
     );
   });

@@ -42,9 +42,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
   recordPostToolFinalTextDirective: (params: {
     pendingAsyncCount: number;
     hasBackgroundLaunchWithoutWait?: boolean;
-    hasAsyncTerminalResolution?: boolean;
-    hasCompletedBlockingGoal?: boolean;
-    hasIncompleteBlockingGoal?: boolean;
   }) => boolean;
   finishWithGraphTerminalEvent: (params: {
     graphEvent: Extract<AgentControlGraphEvent, { type: 'YIELDED' }>;
@@ -55,10 +52,7 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
   yieldedTurnMessage?: string;
   forceFinalTextFromYieldThisTurn: boolean;
   yieldCompletionNoteMessage?: string;
-  hasAsyncTerminalResolution: boolean;
   hasBackgroundLaunchWithoutWait: boolean;
-  hasCompletedBlockingGoal?: boolean;
-  hasIncompleteBlockingGoal?: boolean;
   workingMessages: Message[];
 }): Promise<{
   status: 'continued' | 'finalized';
@@ -108,9 +102,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
     params.recordPostToolFinalTextDirective({
       pendingAsyncCount: pendingAsyncCountAfterTools,
       hasBackgroundLaunchWithoutWait: params.hasBackgroundLaunchWithoutWait,
-      hasAsyncTerminalResolution: params.hasAsyncTerminalResolution,
-      hasCompletedBlockingGoal: params.hasCompletedBlockingGoal,
-      hasIncompleteBlockingGoal: params.hasIncompleteBlockingGoal,
     });
   }
 

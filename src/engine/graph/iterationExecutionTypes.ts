@@ -151,9 +151,6 @@ export type GraphIterationBindings = {
   }) => AgentControlGraphSnapshot;
   recordPostToolFinalTextDirective: (params: {
     hasBackgroundLaunchWithoutWait?: boolean;
-    hasAsyncTerminalResolution?: boolean;
-    hasCompletedBlockingGoal?: boolean;
-    hasIncompleteBlockingGoal?: boolean;
     pendingAsyncCount: number;
   }) => boolean;
   recordTurnDirectives: (

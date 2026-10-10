@@ -234,9 +234,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     streamOptions.systemPromptSections = approvedSystemPromptSections;
   }
   const allowQueuedToolCalls = !(
-    (params.effectiveForceTextReasonThisTurn === 'async_terminal_completion' ||
-      params.effectiveForceTextReasonThisTurn === 'workflow_route_completed' ||
-      params.effectiveForceTextReasonThisTurn === 'yield_finalization' ||
+    (params.effectiveForceTextReasonThisTurn === 'yield_finalization' ||
       params.effectiveForceTextReasonThisTurn === 'incomplete_delivery_continuation') &&
     (!params.preparedTurn.toolsForIteration || budgetResult.tools.length === 0)
   );

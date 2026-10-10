@@ -4,7 +4,6 @@ import {
 } from '../../../engine/authority/modelTurnMemoryPolicyBinding';
 import { digestToolEffectText } from '../../../engine/toolExecution/toolEffectReceipt';
 import { resolveRegisteredToolName } from '../../../engine/tools/toolNameNormalization';
-import type { AgentRunControlGraphState } from '../../../types/agentRun';
 import type { ToolEffectDigest } from '../../../types/toolEffectReceipt';
 import { getMemoryDb } from '../database';
 import { getLocalMemoryVaultOwnerId } from '../memoryVaultIdentity';
@@ -93,15 +92,6 @@ export function relevantToolName(
 
 export function exactStringArrayEqual(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-export function hasIncompleteBlockingGoal(snapshot: AgentRunControlGraphState): boolean {
-  return (snapshot.goals ?? []).some((goal) => {
-    const blocking =
-      goal.completionPolicy === 'blocking' ||
-      (goal.completionPolicy === undefined && (goal.successCriteria?.length ?? 0) > 0);
-    return blocking && goal.status !== 'completed';
-  });
 }
 
 export async function digestTerminalProof(value: unknown): Promise<ToolEffectDigest> {

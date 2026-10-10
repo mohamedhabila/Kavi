@@ -64,7 +64,6 @@ const CONTROL_GRAPH_STATUSES = new Set<AgentRunControlGraphStatus>([
  * checkpoint back as no reason and the stored run lost it.
  */
 const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true> = {
-  async_terminal_completion: true,
   background_session_started: true,
   empty_delivery_recovery: true,
   execution_loop_recovery: true,
@@ -75,7 +74,6 @@ const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true
   request_consent: true,
   request_decline: true,
   request_wait: true,
-  workflow_route_completed: true,
   yield_finalization: true,
 };
 const FORCED_TEXT_REASONS: ReadonlySet<string> = new Set(Object.keys(FORCED_TEXT_REASON_KEYS));

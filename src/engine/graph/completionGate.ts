@@ -1,29 +1,28 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { AssistantCompletionMetadata } from '../../types/message';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import { buildAgentControlGraphPendingAsyncFinalizationCommand } from './asyncPendingFinalization';
 import {
   evaluateDeliveryIncompleteHold,
-  evaluateGoalEvidenceIncompleteHold,
-  evaluateGoalsIncompleteHold,
   evaluateIncompleteToolContinuationHold,
 } from './completionGateHolds';
-import {
-  evaluateGraphMutationErrorHold,
-  evaluateToolErrorRepairHold,
-} from './completionGateRecoveryHolds';
+import { evaluateToolErrorRepairHold } from './completionGateRecoveryHolds';
 import type { CompletionGateDecision } from './completionGateTypes';
 import type { ToolCallRecord } from '../loopDetection';
 
 export type { CompletionGateDecision, CompletionGateHoldReason } from './completionGateTypes';
 
+/**
+ * Whether a text-only model turn may finalize the run. Goals never gate it: the model ends
+ * a request by answering, as in any agent loop. What can hold the answer is work still in
+ * flight or a delivery that is visibly incomplete — pending background work, a partial
+ * file read, a retryable tool error, a truncated answer.
+ */
 export function evaluateCompletionGate(params: {
   trackedOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   pendingOperations: ReadonlyArray<TrackedAsyncOperation>;
   consecutivePendingAsyncNoToolTurns: number;
   hasDraftContent: boolean;
-  goals: ReadonlyArray<AgentGoal>;
   toolingEnabledForProvider: boolean;
   selectedToolCount: number;
   selectedToolNames?: ReadonlySet<string>;
@@ -62,27 +61,6 @@ export function evaluateCompletionGate(params: {
     return incompleteToolContinuationHold;
   }
 
-  const evidenceHold = evaluateGoalEvidenceIncompleteHold({
-    goals: params.goals,
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    forceTextThisTurn: params.forceTextThisTurn,
-    toolCallHistory: params.toolCallHistory,
-  });
-  if (evidenceHold) {
-    return evidenceHold;
-  }
-
-  const graphMutationErrorHold = evaluateGraphMutationErrorHold({
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    forceTextThisTurn: params.forceTextThisTurn,
-    toolCallHistory: params.toolCallHistory,
-  });
-  if (graphMutationErrorHold) {
-    return graphMutationErrorHold;
-  }
-
   const toolErrorRepairHold = evaluateToolErrorRepairHold({
     consecutiveNoToolTurns: params.consecutivePendingAsyncNoToolTurns,
     toolingEnabledForProvider: params.toolingEnabledForProvider,
@@ -92,16 +70,6 @@ export function evaluateCompletionGate(params: {
   });
   if (toolErrorRepairHold) {
     return toolErrorRepairHold;
-  }
-
-  const goalsHold = evaluateGoalsIncompleteHold({
-    goals: params.goals,
-    toolingEnabledForProvider: params.toolingEnabledForProvider,
-    selectedToolCount: params.selectedToolCount,
-    forceTextThisTurn: params.forceTextThisTurn,
-  });
-  if (goalsHold) {
-    return goalsHold;
   }
 
   const deliveryHold = evaluateDeliveryIncompleteHold({

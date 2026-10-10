@@ -1,7 +1,6 @@
 import {
   AGENT_CONTROL_GRAPH_INTERRUPTED_RESPONSE_CANDIDATE_SUMMARY,
-  buildAgentControlGraphInterruptedGoalsCompleteOutcome,
-  buildAgentControlGraphInterruptedGoalsResumeOutcome,
+  buildAgentControlGraphInterruptedRecoveredOutcome,
   buildAgentControlGraphInterruptedNoEvidenceOutcome,
   buildAgentControlGraphInterruptedTurnFailedOutcome,
   buildAgentControlGraphProviderRejectedInterruptedOutcome,
@@ -87,26 +86,11 @@ describe('agent control graph interrupted response recovery', () => {
     });
   });
 
-  it('builds goals-based resume and completion outcomes', () => {
-    expect(
-      buildAgentControlGraphInterruptedGoalsResumeOutcome({
-        checkpointTitle: 'Goals still open',
-        checkpointDetail: 'stream closed',
-        resumePrompt: 'Continue executing open goals.',
-        resumeUserPrompt: 'Continue from the interrupted supervisor turn.',
-      }),
-    ).toEqual({
-      status: 'failed',
-      checkpointTitle: 'Goals still open',
-      checkpointDetail: 'stream closed',
-      resumePrompt: 'Continue executing open goals.',
-      resumeUserPrompt: 'Continue from the interrupted supervisor turn.',
-    });
-
-    expect(buildAgentControlGraphInterruptedGoalsCompleteOutcome()).toEqual({
+  it('builds the recovered outcome', () => {
+    expect(buildAgentControlGraphInterruptedRecoveredOutcome()).toEqual({
       status: 'completed',
-      checkpointTitle: 'Goals satisfied',
-      checkpointDetail: 'Interrupted stream recovered after goals reached a completable state.',
+      checkpointTitle: 'Response recovered',
+      checkpointDetail: 'Interrupted stream recovered from the verified work.',
     });
   });
 });

@@ -1,4 +1,3 @@
-import { agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution } from '../../src/engine/graph/asyncTerminalResolution';
 import {
   buildAgentControlGraphBackgroundWorkerWaitSummary,
   buildAgentControlGraphInterruptedOpenWorkRecovery,
@@ -224,42 +223,4 @@ describe('agent control graph async finalization', () => {
     });
   });
 
-  it('distinguishes successful async completion from terminal worker failure', () => {
-    expect(
-      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
-        content: JSON.stringify({
-          status: 'completed',
-          pendingCount: 0,
-          completedCount: 0,
-          failedCount: 1,
-          sessions: [{ sessionId: 'worker-failed', status: 'error' }],
-        }),
-      }),
-    ).toBe(false);
-    expect(
-      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
-        content: JSON.stringify({
-          status: 'completed',
-          pendingCount: 0,
-          completedCount: 1,
-          failedCount: 0,
-          sessions: [{ sessionId: 'worker-complete', status: 'completed' }],
-        }),
-      }),
-    ).toBe(true);
-  });
-
-  it('requires every nested session to complete successfully', () => {
-    expect(
-      agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution({
-        content: JSON.stringify({
-          status: 'completed',
-          sessions: [
-            { sessionId: 'worker-complete', status: 'completed' },
-            { sessionId: 'worker-cancelled', status: 'cancelled' },
-          ],
-        }),
-      }),
-    ).toBe(false);
-  });
 });

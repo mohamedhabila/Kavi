@@ -25,14 +25,6 @@ export function buildCompletionGateObservabilityDetail(decision: CompletionGateD
     return 'decision:ready';
   }
 
-  if (decision.type === 'auto_complete_goals') {
-    return `decision:auto_complete_goals,reason:${decision.reason}`;
-  }
-
-  if (decision.type === 'block') {
-    return `decision:block,reason:${decision.reason}`;
-  }
-
   return `decision:hold,reason:${decision.reason}`;
 }
 

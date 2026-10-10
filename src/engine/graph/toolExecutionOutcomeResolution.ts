@@ -10,20 +10,14 @@ import type { ToolCallRecord } from '../loopDetection';
 import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
 import { type AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agentControlGraph';
-import { agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution } from './asyncTerminalResolution';
 import { finalizeAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomePostProcessing';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
-import { normalizeToolName, resolveRegisteredToolName } from '../tools/toolNameNormalization';
+import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
 import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import { collectDelegatedArtifactEvidence } from './delegatedToolEvidence';
-import {
-  buildDelegationEvidenceAutoCompleteEvent,
-  buildEvidenceSatisfiedGoalAutoCompleteEvent,
-  findEvidenceSatisfiedGoals,
-} from './completionGateGoalAutoComplete';
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
   extractActivatedToolNamesFromDiscoveryToolResult,
@@ -46,8 +40,6 @@ import {
   buildAppliedUnverifiedEffectGoalBlockEvent,
   buildClarificationRequestUnderstanding,
   buildTerminalFailedEffectGuardRemovalEvent,
-  collectCompletedBlockingGoalIds,
-  summarizePostToolGoalRoute,
   updateToolCallHistoryResult,
 } from './toolExecutionOutcomeResolutionSupport';
 import {
@@ -97,7 +89,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   completedWorkflowToolNames: Set<string>;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   toolCallHistory?: ToolCallRecord[];
-  pendingAsyncMonitorToolNames: ReadonlySet<string>;
   lastPendingAsyncSignature: string;
   contextWindow: number;
   conversationId: string;
@@ -126,9 +117,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   recordPostToolFinalTextDirective: (params: {
     pendingAsyncCount: number;
     hasBackgroundLaunchWithoutWait?: boolean;
-    hasAsyncTerminalResolution?: boolean;
-    hasCompletedBlockingGoal?: boolean;
-    hasIncompleteBlockingGoal?: boolean;
   }) => boolean;
   getModelTurnBlocker: () => string | undefined;
   finishWithGraphTerminalEvent: (params: {
@@ -152,9 +140,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   lastPendingAsyncSignature: string;
   workingMessages: Message[];
 }> {
-  const completedBlockingGoalIdsBeforeTools = collectCompletedBlockingGoalIds(
-    params.getGraphSnapshot().goals,
-  );
   let yieldedTurnMessage: string | undefined;
   let forceFinalTextFromYieldThisTurn = false;
   let hasBackgroundLaunchWithoutWait = false;
@@ -367,14 +352,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       if (delegationTerminal.events.length > 0) {
         params.applyGraphEvents(delegationTerminal.events);
         delegationEvidenceApplied = delegationTerminal.applied;
-        if (delegationTerminal.applied) {
-          const delegationAutoCompleteEvent = buildDelegationEvidenceAutoCompleteEvent({
-            goals: params.getGraphSnapshot().goals ?? [],
-          });
-          if (delegationAutoCompleteEvent) {
-            params.applyGraphEvents([delegationAutoCompleteEvent]);
-          }
-        }
       }
     }
 
@@ -419,18 +396,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
         });
         if (terminalFailedEffectGuardRemovalEvent) {
           params.applyGraphEvents([terminalFailedEffectGuardRemovalEvent]);
-        }
-        if (routedEvidence.length > 0) {
-          const satisfiedGoals = findEvidenceSatisfiedGoals(params.getGraphSnapshot().goals ?? []);
-          if (satisfiedGoals.length > 0) {
-            const autoCompleteEvent = buildEvidenceSatisfiedGoalAutoCompleteEvent({
-              goals: params.getGraphSnapshot().goals ?? [],
-              goalIds: satisfiedGoals.map((goal) => goal.id),
-            });
-            if (autoCompleteEvent) {
-              params.applyGraphEvents([autoCompleteEvent]);
-            }
-          }
         }
       }
     }
@@ -613,11 +578,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     );
   }
 
-  const goalRoute = summarizePostToolGoalRoute({
-    completedBefore: completedBlockingGoalIdsBeforeTools,
-    goals: params.getGraphSnapshot().goals ?? [],
-  });
-
   return finalizeAgentControlGraphToolExecutionOutcomes({
     iteration: params.iteration,
     trackedAsyncOperations: params.trackedAsyncOperations,
@@ -639,14 +599,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     forceFinalTextFromYieldThisTurn,
     yieldCompletionNoteMessage,
     hasBackgroundLaunchWithoutWait,
-    hasAsyncTerminalResolution:
-      canonicalToolExecutionOutcomes.some((outcome) =>
-        agentControlGraphToolMessageShowsSuccessfulAsyncTerminalResolution(outcome.toolMessage),
-      ) &&
-      params.executableToolCalls.some((toolCall) =>
-        params.pendingAsyncMonitorToolNames.has(normalizeToolName(toolCall.name)),
-      ),
-    ...goalRoute,
     workingMessages,
   });
 }

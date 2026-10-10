@@ -1,7 +1,6 @@
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
 import { applyGoalMutation } from '../../../src/engine/goals/graphState';
 import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
-import { findEvidenceSatisfiedGoals } from '../../../src/engine/graph/completionGateGoalAutoComplete';
 import { createGoal } from '../../../src/engine/goals/types';
 import { DELEGATED_WORKER_GOAL_OWNER } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
@@ -109,19 +108,6 @@ describe('a declared but unfocused goal earns the evidence it named', () => {
 });
 
 describe('routing evidence is not focusing a goal', () => {
-  it('does not auto-complete a pending goal whose criteria are satisfied', () => {
-    // The discovery scenario regressed when a goal was auto-activated and began enforcing
-    // completion. Enforcement still keys off focus, so this must stay empty.
-    const satisfiedButPending = createGoal({
-      id: 'research-brief',
-      title: 'research-brief',
-      completionPolicy: 'blocking',
-      successCriteria: [`evidence.artifact:${BRIEF}`],
-      evidence: [verifiedWrite(BRIEF)],
-    });
-
-    expect(findEvidenceSatisfiedGoals([satisfiedButPending])).toEqual([]);
-  });
 
   it('gives a pending goal nothing it did not name', () => {
     const unrelated = 'read_file:notes.md (2 lines)';

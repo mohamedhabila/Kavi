@@ -18,37 +18,14 @@ describe('graphObservability', () => {
     expect(
       buildCompletionGateObservabilityDetail({
         type: 'hold',
-        reason: 'goals_incomplete',
-        graphEvent: { type: 'FINALIZATION_HELD', reason: 'goals_incomplete' },
+        reason: 'async_waiting_finalization_hold',
+        graphEvent: { type: 'FINALIZATION_HELD', reason: 'async_waiting_finalization_hold' },
         systemPrompts: ['[SYSTEM HOLD]'],
         missingRequiredEvidenceLabels: [],
       }),
-    ).toBe('decision:hold,reason:goals_incomplete');
+    ).toBe('decision:hold,reason:async_waiting_finalization_hold');
 
-    expect(
-      buildCompletionGateObservabilityDetail({
-        type: 'block',
-        reason: 'goals_incomplete_without_tool_path',
-        graphEvent: {
-          type: 'BLOCKED',
-          reason: 'goals_incomplete_without_tool_path',
-        },
-        content: 'blocked',
-      }),
-    ).toBe('decision:block,reason:goals_incomplete_without_tool_path');
-
-    expect(
-      buildCompletionGateObservabilityDetail({
-        type: 'auto_complete_goals',
-        reason: 'goal_evidence_satisfied',
-        graphEvent: {
-          type: 'GOALS_UPDATED',
-          goals: [],
-          reason: 'completion_gate:auto_complete',
-          timestamp: 1,
-        },
-      }),
-    ).toBe('decision:auto_complete_goals,reason:goal_evidence_satisfied');
+    expect(buildCompletionGateObservabilityDetail({ type: 'ready' })).toBe('decision:ready');
 
     expect(
       buildToolSurfaceObservabilityDetail({

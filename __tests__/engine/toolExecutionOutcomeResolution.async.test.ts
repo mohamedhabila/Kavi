@@ -1,8 +1,6 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
 import {
-  applyGoalGraphEvents,
   buildBaseParams,
-  createGoal,
   createPendingOperation,
   createToolMessage,
 } from '../helpers/toolExecutionOutcomeHarness';
@@ -341,9 +339,6 @@ describe('tool execution outcome resolution', () => {
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: false,
-      hasIncompleteBlockingGoal: false,
     });
     expect(params.onStateChange).toHaveBeenCalledWith('thinking');
     expect(params.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
@@ -483,9 +478,6 @@ describe('tool execution outcome resolution', () => {
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: true,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: false,
-      hasIncompleteBlockingGoal: false,
     });
   });
 
@@ -515,126 +507,7 @@ describe('tool execution outcome resolution', () => {
     expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
       pendingAsyncCount: 0,
       hasBackgroundLaunchWithoutWait: false,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: false,
-      hasIncompleteBlockingGoal: false,
     });
   });
 
-  it('reports the post-tool route beside an active persistent goal', async () => {
-    const params = buildBaseParams();
-    params.getGraphSnapshot = jest.fn().mockReturnValue({
-      goals: [
-        {
-          id: 'focus-context',
-          title: 'Track active conversation focus',
-          status: 'active',
-          completionPolicy: 'persistent',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
-    });
-    params.toolExecutionOutcomes = [
-      {
-        index: 0,
-        toolCallId: 'tc-persistent',
-        toolMessage: createToolMessage({
-          id: 'tc-persistent',
-          name: 'read_file',
-          content: 'focused context evidence',
-        }),
-      },
-    ];
-
-    await resolveAgentControlGraphToolExecutionOutcomes(params);
-
-    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
-      pendingAsyncCount: 0,
-      hasBackgroundLaunchWithoutWait: false,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: false,
-      hasIncompleteBlockingGoal: false,
-    });
-  });
-
-  it('reports completed blocking goals to the post-tool final-text directive', async () => {
-    const params = buildBaseParams();
-    let graph = {
-      goals: [
-        createGoal({
-          id: 'finite-task',
-          title: 'Finish finite task',
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.json_field:status:ok'],
-        }),
-      ],
-    };
-    params.getGraphSnapshot = jest.fn(() => graph);
-    params.applyGraphEvents = jest.fn((events) => {
-      graph = applyGoalGraphEvents(graph, events);
-    });
-    params.toolExecutionOutcomes = [
-      {
-        index: 0,
-        toolCallId: 'tc-blocking',
-        toolMessage: createToolMessage({
-          id: 'tc-blocking',
-          name: 'read_file',
-          content: '{"status":"ok"}',
-        }),
-      },
-    ];
-
-    await resolveAgentControlGraphToolExecutionOutcomes(params);
-
-    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
-      pendingAsyncCount: 0,
-      hasBackgroundLaunchWithoutWait: false,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: true,
-      hasIncompleteBlockingGoal: false,
-    });
-  });
-
-  it('does not report previously completed blocking goals as current tool-batch completions', async () => {
-    const params = buildBaseParams();
-    params.getGraphSnapshot = jest.fn().mockReturnValue({
-      goals: [
-        createGoal({
-          id: 'settled-memory',
-          title: 'Settled memory task',
-          status: 'completed',
-          completionPolicy: 'blocking',
-          evidence: ['memory_remember:{"status":"remembered"}'],
-          successCriteria: ['evidence.min:1'],
-          completedAt: 2,
-        }),
-      ],
-    });
-    params.toolExecutionOutcomes = [
-      {
-        index: 0,
-        toolCallId: 'tc-recall',
-        toolMessage: createToolMessage({
-          id: 'tc-recall',
-          name: 'memory_recall',
-          content: '{"status":"ok","facts":[]}',
-        }),
-      },
-    ];
-
-    await resolveAgentControlGraphToolExecutionOutcomes(params);
-
-    expect(params.recordPostToolFinalTextDirective).toHaveBeenCalledWith({
-      pendingAsyncCount: 0,
-      hasBackgroundLaunchWithoutWait: false,
-      hasAsyncTerminalResolution: false,
-      hasCompletedBlockingGoal: false,
-      hasIncompleteBlockingGoal: false,
-    });
-  });
 });
