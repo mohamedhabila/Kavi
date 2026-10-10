@@ -54,7 +54,11 @@ export function buildAgentTurnPromptBundle(
     params.iteration <= params.maxToolIterations - 1
       ? params.selectedTools
       : undefined;
-  const textOnlyPrompt = params.effectiveForceTextThisTurn || params.selectedTools.length === 0;
+  // A turn the graph forces to text keeps the run's prompt: its directive says tool use is
+  // paused and why. Rebuilding it as a no-tools prompt told the model "no registered
+  // executable tools are available", so after a provider stall it told the person the app
+  // had no calendar tools — and the changed cacheable prefix missed the prompt cache.
+  const textOnlyPrompt = params.selectedTools.length === 0;
   const baseSystemPromptSections = buildSystemPromptSections(
     params.resolvedPrompt,
     params.runtimeContext ?? null,

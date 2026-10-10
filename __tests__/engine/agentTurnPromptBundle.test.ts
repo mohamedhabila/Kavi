@@ -127,4 +127,28 @@ describe('buildAgentTurnPromptBundle', () => {
       splitCacheableSystemPromptSections(withoutTools.enrichedSystemPromptSections).dynamicText,
     ).toContain('Execution mode for this turn: no registered executable tools');
   });
+
+  it('keeps the run prompt for a turn forced to text while tools exist', () => {
+    // Traced on GLM 5.3 Flash: after a provider stall forced a checkpoint, the no-tools
+    // prompt made the model tell the person the app had no calendar tools.
+    const selectedTools = [
+      {
+        name: 'calendar_create_event',
+        description: 'Create a calendar event.',
+        input_schema: { type: 'object', properties: {} },
+      },
+    ];
+    const toolTurn = buildAgentTurnPromptBundle({ ...baseParams, selectedTools });
+    const forcedTurn = buildAgentTurnPromptBundle({
+      ...baseParams,
+      selectedTools,
+      effectiveForceTextThisTurn: true,
+    });
+
+    expect(forcedTurn.toolsForIteration).toBeUndefined();
+    expect(forcedTurn.enrichedSystemPrompt).not.toContain('no registered executable tools');
+    expect(splitCacheableSystemPromptSections(forcedTurn.enrichedSystemPromptSections).cacheableText).toBe(
+      splitCacheableSystemPromptSections(toolTurn.enrichedSystemPromptSections).cacheableText,
+    );
+  });
 });
