@@ -251,7 +251,7 @@ describe('OnboardingWizard', () => {
 
   it('defers optional services and completes the essential setup', async () => {
     const onComplete = jest.fn();
-    const { getByText, getByPlaceholderText, UNSAFE_getByType } = render(
+    const { getByText, getByPlaceholderText, queryByText, UNSAFE_getByType } = render(
       <OnboardingWizard onComplete={onComplete} />,
     );
 
@@ -260,17 +260,12 @@ describe('OnboardingWizard', () => {
     fireEvent.changeText(getByPlaceholderText('sk-...'), 'sk-test123');
     fireEvent.press(getByText('Save provider'));
 
-    await waitFor(() => {
-      expect(getByText('Ways Kavi can help')).toBeTruthy();
-    });
-    expect(getByText('Ask & understand')).toBeTruthy();
-    expect(getByText('Take action safely')).toBeTruthy();
-
-    fireEvent.press(getByText('Continue'));
-
+    // Saving the provider goes straight to the summary: the capabilities were already on
+    // the welcome screen, and the empty chat offers them again as tappable starters.
     await waitFor(() => {
       expect(getByText("You're all set!")).toBeTruthy();
     });
+    expect(queryByText('Ways Kavi can help')).toBeNull();
     expect(
       StyleSheet.flatten(UNSAFE_getByType(ScrollView).props.contentContainerStyle),
     ).toMatchObject({ flexGrow: 1, alignItems: 'center' });
@@ -283,6 +278,17 @@ describe('OnboardingWizard', () => {
     expect(onComplete).toHaveBeenCalled();
   });
 
+  it('goes straight to the summary when the provider is skipped', () => {
+    const { getByText, queryByText } = render(<OnboardingWizard onComplete={jest.fn()} />);
+
+    fireEvent.press(getByText('Get Started'));
+    fireEvent.press(getByText('OpenAI'));
+    fireEvent.press(getByText('Skip provider for now'));
+
+    expect(getByText('Set up optional services')).toBeTruthy();
+    expect(queryByText('Ways Kavi can help')).toBeNull();
+  });
+
   it('lets people configure optional services after essential setup', async () => {
     const { getByText, getByPlaceholderText } = render(<OnboardingWizard onComplete={jest.fn()} />);
 
@@ -290,11 +296,6 @@ describe('OnboardingWizard', () => {
     fireEvent.press(getByText('OpenAI'));
     fireEvent.changeText(getByPlaceholderText('sk-...'), 'sk-test123');
     fireEvent.press(getByText('Save provider'));
-
-    await waitFor(() => {
-      expect(getByText('Ways Kavi can help')).toBeTruthy();
-    });
-    fireEvent.press(getByText('Continue'));
 
     await waitFor(() => {
       expect(getByText('Set up optional services')).toBeTruthy();

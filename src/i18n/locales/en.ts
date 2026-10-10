@@ -2235,33 +2235,17 @@ export const en: TranslationMap = {
     tipReviewActions:
       'Kavi asks before sensitive actions so you can review exactly what will happen.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'Ways Kavi can help',
-    exploreHint: 'Ask naturally. Kavi can answer directly or use a relevant tool when it helps.',
     outcomeAskTitle: 'Ask & understand',
-    outcomeAskDescription:
-      'Explain a topic, compare options, rewrite something, or work through a decision.',
     outcomeResearchTitle: 'Research current information',
-    outcomeResearchDescription:
-      'Search the web when freshness matters and keep the answer grounded in sources.',
     outcomePlanTitle: 'Plan & remind',
-    outcomePlanDescription:
-      'Turn an idea into steps, prepare for an event, or schedule a reminder.',
     outcomeRememberTitle: 'Remember preferences',
-    outcomeRememberDescription:
-      'Keep useful preferences and context across conversations under your control.',
     outcomeCreateTitle: 'Create from attachments',
-    outcomeCreateDescription:
-      'Use photos and files to summarize, analyze, draft, or produce a new result.',
     outcomeActSafelyTitle: 'Take action safely',
-    outcomeActSafelyDescription:
-      'Review sensitive actions before Kavi uses a tool or changes something.',
-    continueToFinish: 'Continue to finish',
     heroTitle: 'Set up the essentials',
     heroStep1: '1. Connect an AI provider so Kavi can answer.',
     heroStep2: '2. See practical ways Kavi can help.',
     heroStep3: '3. Add optional services only when you need them.',
     progressModel: 'Model',
-    progressExplore: 'Explore',
     progressFinish: 'Finish',
     chooseMainProviderTitle: 'Choose your main model provider',
     chooseMainProviderHint:

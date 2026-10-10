@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ExternalLink, Key, Server, Settings2 } from 'lucide-react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buildLocalModelDisclosureSentence } from '../../../services/localLlm/modelDisclosure';
 import { LocalModelDownloadPanel } from '../../localLlm/LocalModelDownloadPanel';
 import { useOnboardingWizardContext } from '../OnboardingWizardContext';
 import { ForwardChevronIcon } from '../../navigation/DirectionalIcons';
+
+/** Space kept between the focused field and the top of the keyboard. */
+const KEYBOARD_FIELD_GAP = 24;
 
 export function ProviderKeyStep() {
   const [showAdvancedConnection, setShowAdvancedConnection] = useState(false);
@@ -46,30 +50,17 @@ export function ProviderKeyStep() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      {/* Edge-to-edge Android and iOS never resize the window for the keyboard; keep the
+          focused field in view, and let Save take the first tap while the keyboard is up. */}
+      <KeyboardAwareScrollView
+        contentContainerStyle={styles.scrollContent}
+        bottomOffset={KEYBOARD_FIELD_GAP}
+        keyboardShouldPersistTaps="handled"
+      >
         {progressHeader}
         <Key size={40} color={colors.primary} style={styles.stepIcon} />
         <Text style={styles.stepTitle}>{selectedGuide.title}</Text>
         <Text style={styles.stepSubtitle}>{selectedGuide.summary}</Text>
-
-        <View style={styles.guideCard}>
-          <Text style={styles.guideTitle}>{t('onboarding.accessTitle')}</Text>
-          <Text style={styles.guideText}>{selectedGuide.setup}</Text>
-          <Text style={styles.guideFree}>{selectedGuide.freeAccess}</Text>
-          {selectedGuide.docsUrl ? (
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => void handleOpenUrl(selectedGuide.docsUrl)}
-              accessibilityRole="button"
-              accessibilityLabel={t('onboarding.openProviderGuide', {
-                name: selectedGuide.title,
-              })}
-            >
-              <ExternalLink size={16} color={colors.primary} />
-              <Text style={styles.secondaryBtnText}>{t('onboarding.openOfficialGuide')}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
 
         {!selectedGuide.preset ? (
           <TextInput
@@ -234,6 +225,25 @@ export function ProviderKeyStep() {
           </Text>
         </TouchableOpacity>
 
+        <View style={styles.guideCard}>
+          <Text style={styles.guideTitle}>{t('onboarding.accessTitle')}</Text>
+          <Text style={styles.guideText}>{selectedGuide.setup}</Text>
+          <Text style={styles.guideFree}>{selectedGuide.freeAccess}</Text>
+          {selectedGuide.docsUrl ? (
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => void handleOpenUrl(selectedGuide.docsUrl)}
+              accessibilityRole="button"
+              accessibilityLabel={t('onboarding.openProviderGuide', {
+                name: selectedGuide.title,
+              })}
+            >
+              <ExternalLink size={16} color={colors.primary} />
+              <Text style={styles.secondaryBtnText}>{t('onboarding.openOfficialGuide')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         <TouchableOpacity
           style={styles.secondaryBtn}
           onPress={handleSkipProvider}
@@ -252,7 +262,7 @@ export function ProviderKeyStep() {
         >
           <Text style={styles.skipBtnText}>{t('common.back')}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

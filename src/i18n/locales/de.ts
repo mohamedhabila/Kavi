@@ -2244,34 +2244,17 @@ export const de: TranslationMap = mergeTranslations(en, {
     tipReviewActions:
       'Vor sensiblen Aktionen fragt Kavi nach, damit Sie genau prüfen können, was passieren wird.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'So kann Kavi helfen',
-    exploreHint:
-      'Fragen Sie einfach natürlich. Kavi kann direkt antworten oder bei Bedarf ein passendes Tool nutzen.',
     outcomeAskTitle: 'Fragen und verstehen',
-    outcomeAskDescription:
-      'Lassen Sie sich ein Thema erklären, Optionen vergleichen, Texte umformulieren oder Entscheidungen durchdenken.',
     outcomeResearchTitle: 'Aktuelle Informationen recherchieren',
-    outcomeResearchDescription:
-      'Durchsuchen Sie bei zeitkritischen Themen das Web und erhalten Sie eine quellenbasierte Antwort.',
     outcomePlanTitle: 'Planen und erinnern',
-    outcomePlanDescription:
-      'Machen Sie aus einer Idee konkrete Schritte, bereiten Sie ein Ereignis vor oder planen Sie eine Erinnerung.',
     outcomeRememberTitle: 'Präferenzen merken',
-    outcomeRememberDescription:
-      'Bewahren Sie nützliche Präferenzen und Kontext unter Ihrer Kontrolle gesprächsübergreifend auf.',
     outcomeCreateTitle: 'Aus Anhängen erstellen',
-    outcomeCreateDescription:
-      'Nutzen Sie Fotos und Dateien zum Zusammenfassen, Analysieren, Entwerfen oder Erstellen neuer Ergebnisse.',
     outcomeActSafelyTitle: 'Sicher handeln',
-    outcomeActSafelyDescription:
-      'Prüfen Sie sensible Aktionen, bevor Kavi ein Tool verwendet oder etwas ändert.',
-    continueToFinish: 'Weiter zum Abschluss',
     heroTitle: 'Das Wesentliche einrichten',
     heroStep1: '1. Verbinden Sie einen KI-Anbieter, damit Kavi antworten kann.',
     heroStep2: '2. Entdecken Sie, wie Kavi Sie praktisch unterstützen kann.',
     heroStep3: '3. Fügen Sie optionale Dienste erst hinzu, wenn Sie sie brauchen.',
     progressModel: 'Modell',
-    progressExplore: 'Entdecken',
     progressFinish: 'Fertig',
     chooseMainProviderTitle: 'Wählen Sie Ihren wichtigsten Modellanbieter',
     chooseMainProviderHint:

@@ -2284,34 +2284,17 @@ export const fr: TranslationMap = mergeTranslations(en, {
     tipReviewActions:
       'Kavi demande votre accord avant toute action sensible afin que vous sachiez exactement ce qui va se passer.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'Ce que Kavi peut faire pour vous',
-    exploreHint:
-      'Demandez naturellement. Kavi peut répondre directement ou utiliser un outil pertinent si cela aide.',
     outcomeAskTitle: 'Demander et comprendre',
-    outcomeAskDescription:
-      'Faites expliquer un sujet, comparer des options, reformuler un texte ou éclairer une décision.',
     outcomeResearchTitle: 'Rechercher des informations actuelles',
-    outcomeResearchDescription:
-      'Effectuez une recherche web lorsque la fraîcheur compte et obtenez une réponse appuyée par des sources.',
     outcomePlanTitle: 'Planifier et recevoir des rappels',
-    outcomePlanDescription:
-      'Transformez une idée en étapes, préparez un événement ou programmez un rappel.',
     outcomeRememberTitle: 'Mémoriser vos préférences',
-    outcomeRememberDescription:
-      'Conservez, sous votre contrôle, les préférences et le contexte utiles entre les conversations.',
     outcomeCreateTitle: 'Créer à partir de pièces jointes',
-    outcomeCreateDescription:
-      'Utilisez des photos et fichiers pour résumer, analyser, rédiger ou produire un nouveau résultat.',
     outcomeActSafelyTitle: 'Agir en toute sécurité',
-    outcomeActSafelyDescription:
-      'Examinez les actions sensibles avant que Kavi utilise un outil ou apporte une modification.',
-    continueToFinish: 'Continuer pour terminer',
     heroTitle: 'Configurez l’essentiel',
     heroStep1: '1. Connectez un fournisseur d’IA pour permettre à Kavi de répondre.',
     heroStep2: '2. Découvrez comment Kavi peut concrètement vous aider.',
     heroStep3: '3. Ajoutez les services facultatifs uniquement lorsque vous en avez besoin.',
     progressModel: 'Modèle',
-    progressExplore: 'Découvrir',
     progressFinish: 'Terminer',
     chooseMainProviderTitle: 'Choisissez votre principal fournisseur de modèle',
     chooseMainProviderHint:

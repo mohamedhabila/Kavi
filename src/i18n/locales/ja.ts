@@ -2156,34 +2156,17 @@ export const ja: TranslationMap = mergeTranslations(en, {
     tipReviewActions:
       '機密性の高い操作の前に Kavi が確認を求めるため、実行内容を正確に確認できます。',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'Kavi にできること',
-    exploreHint:
-      '普段の言葉で質問してください。Kavi は直接答えるか、必要に応じて適切なツールを使います。',
     outcomeAskTitle: '質問して理解する',
-    outcomeAskDescription:
-      'トピックの説明、選択肢の比較、文章の書き直し、意思決定の検討を依頼できます。',
     outcomeResearchTitle: '最新情報を調べる',
-    outcomeResearchDescription:
-      '最新性が重要なときは Web を検索し、出典に基づいた回答を得られます。',
     outcomePlanTitle: '計画とリマインダー',
-    outcomePlanDescription:
-      'アイデアを手順に変えたり、予定の準備やリマインダーの設定をしたりできます。',
     outcomeRememberTitle: '好みを覚える',
-    outcomeRememberDescription:
-      '役立つ設定や文脈を、自分で管理しながら会話をまたいで保存できます。',
     outcomeCreateTitle: '添付ファイルから作る',
-    outcomeCreateDescription:
-      '写真やファイルを使って、要約、分析、下書き、新しい成果物の作成ができます。',
     outcomeActSafelyTitle: '安全に操作する',
-    outcomeActSafelyDescription:
-      'Kavi がツールを使ったり何かを変更したりする前に、機密性の高い操作を確認できます。',
-    continueToFinish: '完了へ進む',
     heroTitle: '必要な設定を完了',
     heroStep1: '1. Kavi が回答できるように AI プロバイダーを接続します。',
     heroStep2: '2. Kavi の実用的な活用方法を確認します。',
     heroStep3: '3. オプションのサービスは必要になったときだけ追加します。',
     progressModel: 'モデル',
-    progressExplore: '活用方法',
     progressFinish: '完了',
     chooseMainProviderTitle: 'メインで使うモデルプロバイダーを選択',
     chooseMainProviderHint:

@@ -2259,34 +2259,17 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     tipReviewActions:
       'O Kavi pede sua autorização antes de ações sensíveis para você revisar exatamente o que acontecerá.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'Como o Kavi pode ajudar',
-    exploreHint:
-      'Pergunte naturalmente. O Kavi pode responder diretamente ou usar uma ferramenta adequada quando ajudar.',
     outcomeAskTitle: 'Pergunte e entenda',
-    outcomeAskDescription:
-      'Peça uma explicação, compare opções, reescreva algo ou reflita sobre uma decisão.',
     outcomeResearchTitle: 'Pesquise informações atuais',
-    outcomeResearchDescription:
-      'Pesquise na web quando a atualidade for importante e mantenha a resposta fundamentada em fontes.',
     outcomePlanTitle: 'Planeje e receba lembretes',
-    outcomePlanDescription:
-      'Transforme uma ideia em etapas, prepare um evento ou programe um lembrete.',
     outcomeRememberTitle: 'Lembre suas preferências',
-    outcomeRememberDescription:
-      'Mantenha preferências e contexto úteis entre conversas sob o seu controle.',
     outcomeCreateTitle: 'Crie a partir de anexos',
-    outcomeCreateDescription:
-      'Use fotos e arquivos para resumir, analisar, redigir ou produzir um novo resultado.',
     outcomeActSafelyTitle: 'Aja com segurança',
-    outcomeActSafelyDescription:
-      'Revise ações sensíveis antes que o Kavi use uma ferramenta ou altere algo.',
-    continueToFinish: 'Continuar para concluir',
     heroTitle: 'Configure o essencial',
     heroStep1: '1. Conecte um provedor de IA para o Kavi poder responder.',
     heroStep2: '2. Veja maneiras práticas de o Kavi ajudar.',
     heroStep3: '3. Adicione serviços opcionais somente quando precisar deles.',
     progressModel: 'Modelo',
-    progressExplore: 'Explorar',
     progressFinish: 'Finalizar',
     chooseMainProviderTitle: 'Escolha seu principal provedor de modelo',
     chooseMainProviderHint:

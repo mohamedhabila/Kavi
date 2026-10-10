@@ -2275,34 +2275,17 @@ export const es: TranslationMap = mergeTranslations(en, {
     tipReviewActions:
       'Kavi pide permiso antes de acciones delicadas para que puedas revisar exactamente qué ocurrirá.',
     appIconAccessibility: 'Kavi app icon',
-    exploreTitle: 'Formas en las que Kavi puede ayudarte',
-    exploreHint:
-      'Pregunta con naturalidad. Kavi puede responder directamente o usar una herramienta adecuada cuando ayude.',
     outcomeAskTitle: 'Pregunta y comprende',
-    outcomeAskDescription:
-      'Pide una explicación, compara opciones, reescribe algo o analiza una decisión.',
     outcomeResearchTitle: 'Investiga información actual',
-    outcomeResearchDescription:
-      'Busca en la web cuando la actualidad importe y mantén la respuesta respaldada por fuentes.',
     outcomePlanTitle: 'Planifica y crea recordatorios',
-    outcomePlanDescription:
-      'Convierte una idea en pasos, prepara un evento o programa un recordatorio.',
     outcomeRememberTitle: 'Recuerda tus preferencias',
-    outcomeRememberDescription:
-      'Conserva preferencias y contexto útiles entre conversaciones bajo tu control.',
     outcomeCreateTitle: 'Crea a partir de archivos adjuntos',
-    outcomeCreateDescription:
-      'Usa fotos y archivos para resumir, analizar, redactar o producir un resultado nuevo.',
     outcomeActSafelyTitle: 'Actúa de forma segura',
-    outcomeActSafelyDescription:
-      'Revisa las acciones delicadas antes de que Kavi use una herramienta o cambie algo.',
-    continueToFinish: 'Continuar para terminar',
     heroTitle: 'Configura lo esencial',
     heroStep1: '1. Conecta un proveedor de IA para que Kavi pueda responder.',
     heroStep2: '2. Descubre formas prácticas en las que Kavi puede ayudarte.',
     heroStep3: '3. Añade servicios opcionales solo cuando los necesites.',
     progressModel: 'Modelo',
-    progressExplore: 'Explorar',
     progressFinish: 'Finalizar',
     chooseMainProviderTitle: 'Elige tu proveedor principal de modelos',
     chooseMainProviderHint:

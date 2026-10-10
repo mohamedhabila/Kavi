@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Kavi — Onboarding Wizard
 // ---------------------------------------------------------------------------
-// First-run experience: Welcome → Provider setup → Assistant outcomes → Summary.
+// First-run experience: Welcome → Provider setup → Summary.
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Linking, Text, View } from 'react-native';
@@ -31,7 +31,6 @@ import {
 } from './onboardingGuides';
 import { OnboardingWizardProvider } from './OnboardingWizardContext';
 import { DoneStep } from './steps/DoneStep';
-import { FeaturesStep } from './steps/FeaturesStep';
 import { ProviderKeyStep } from './steps/ProviderKeyStep';
 import { ProviderStep } from './steps/ProviderStep';
 import { ToolsStep } from './steps/ToolsStep';
@@ -251,7 +250,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       }
       addProvider(finalizedProvider);
       setConfiguredProviderName(finalizedProvider.name);
-      setStep('features');
+      setStep('done');
     } catch {
       setSaveError(t('onboarding.saveFailed'));
     } finally {
@@ -270,7 +269,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
   const handleSkipProvider = useCallback(() => {
     setSaveError(null);
-    setStep('features');
+    setStep('done');
   }, []);
 
   const handleSaveTools = useCallback(async () => {
@@ -313,20 +312,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     (!selectedGuideIsOnDevice || (selectedOnDeviceModelInstalled && !onDeviceDownloadInProgress)),
   );
 
-  const progress = [
-    t('onboarding.progressModel'),
-    t('onboarding.progressExplore'),
-    t('onboarding.progressFinish'),
-  ];
+  const progress = [t('onboarding.progressModel'), t('onboarding.progressFinish')];
 
   const currentProgressIndex =
     step === 'provider' || step === 'providerKey'
       ? 0
-      : step === 'features'
+      : step === 'tools' || step === 'done'
         ? 1
-        : step === 'tools' || step === 'done'
-          ? 2
-          : -1;
+        : -1;
 
   const progressHeader =
     currentProgressIndex >= 0 ? (
@@ -411,8 +404,6 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         return <ProviderKeyStep />;
       case 'tools':
         return <ToolsStep />;
-      case 'features':
-        return <FeaturesStep />;
       case 'done':
       default:
         return <DoneStep />;

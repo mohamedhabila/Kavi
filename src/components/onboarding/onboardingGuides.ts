@@ -3,7 +3,7 @@ import { ON_DEVICE_PROVIDER_NAME } from '../../services/localLlm/catalog';
 import type { WebSearchProvider } from '../../types/tool';
 
 type ProviderPreset = (typeof KNOWN_PROVIDERS)[number];
-export type Step = 'welcome' | 'provider' | 'providerKey' | 'tools' | 'features' | 'done';
+export type Step = 'welcome' | 'provider' | 'providerKey' | 'tools' | 'done';
 
 export interface ProviderGuide {
   id: string;
