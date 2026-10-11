@@ -1,57 +1,48 @@
 import {
-  normalizeAgentRunControlGraphGoals,
+  normalizeAgentRunControlGraphState,
   normalizeAgentRunControlGraphToolResultRefs,
 } from '../../../src/services/agents/agentControlGraphState';
+import type { AgentRunControlGraphState } from '../../../src/types/agentRun';
 
-describe('normalizeAgentRunControlGraphGoals', () => {
-  it('preserves success criteria and blocked reason on graph-owned goals', () => {
-    const goals = normalizeAgentRunControlGraphGoals([
-      {
-        id: 'g1',
-        title: 'Verify calendar',
-        status: 'active',
-        dependencies: [],
-        evidence: ['calendar_list:[{"allowsModifications":true}]'],
-        successCriteria: ['evidence.json_field:allowsModifications:true'],
-        blockedReason: 'gate:g1:evidence.min:1',
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ]);
+describe('a run persisted while the graph still kept goals', () => {
+  it('loads with its goals and goal evidence dropped and everything else kept', () => {
+    const persisted = {
+      status: 'awaiting_tool_results',
+      iteration: 3,
+      activeTaskId: 'research',
+      plan: [{ step: 'Read the report', status: 'in_progress' }],
+      goals: [
+        {
+          id: 'effect-write',
+          title: 'Verify write_file effect',
+          status: 'active',
+          completionPolicy: 'blocking',
+          successCriteria: ['evidence.effect:artifact.write'],
+          dependencies: [],
+          evidence: ['effect_receipt_v2:abc'],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      observedToolResults: [
+        { id: 'tc-1', name: 'write_file', evidence: ['effect_receipt_v2:abc'], failed: true },
+      ],
+      audit: [{ type: 'GOALS_UPDATED', timestamp: 5, detail: 'effect_completion_contract' }],
+      updatedAt: 9,
+    } as unknown as Partial<AgentRunControlGraphState>;
 
-    expect(goals).toEqual([
-      expect.objectContaining({
-        id: 'g1',
-        successCriteria: ['evidence.json_field:allowsModifications:true'],
-        blockedReason: 'gate:g1:evidence.min:1',
-      }),
-    ]);
-  });
-});
+    const state = normalizeAgentRunControlGraphState(persisted);
 
-describe('a run persisted before user constraints were removed', () => {
-  it('loads its goals with the constraint fields dropped', () => {
-    const [goal] = normalizeAgentRunControlGraphGoals([
-      {
-        id: 'done',
-        title: 'Completed constrained goal',
-        status: 'completed',
-        completionPolicy: 'blocking',
-        dependencies: [],
-        evidence: [],
-        successCriteria: ['evidence.tool:read_file'],
-        userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
-        userConstraintIntegrity: 'conflict',
-        userConstraintDeliveryPending: true,
-        createdAt: 1,
-        updatedAt: 1,
-      } as never,
-    ]);
-
-    expect(goal).toMatchObject({ id: 'done', status: 'completed' });
-    expect(goal).not.toHaveProperty('userConstraints');
-    expect(goal).not.toHaveProperty('userConstraintIntegrity');
-    expect(goal).not.toHaveProperty('userConstraintDeliveryPending');
+    expect(state).not.toHaveProperty('goals');
+    expect(state).toMatchObject({
+      status: 'awaiting_tool_results',
+      iteration: 3,
+      activeTaskId: 'research',
+      plan: [{ step: 'Read the report', status: 'in_progress' }],
+      observedToolResults: [{ id: 'tc-1', name: 'write_file', failed: true }],
+      updatedAt: 9,
+    });
+    expect(state?.observedToolResults[0]).not.toHaveProperty('evidence');
   });
 });
 
@@ -59,8 +50,8 @@ describe('normalizeAgentRunControlGraphToolResultRefs', () => {
   it('preserves canonicalization trace flags on observed tool results', () => {
     const results = normalizeAgentRunControlGraphToolResultRefs([
       {
-        id: 'tc-goals',
-        name: 'update_goals',
+        id: 'tc-plan',
+        name: 'update_plan',
         canonicalized: true,
         graphApplied: true,
       },
@@ -74,8 +65,8 @@ describe('normalizeAgentRunControlGraphToolResultRefs', () => {
 
     expect(results).toEqual([
       {
-        id: 'tc-goals',
-        name: 'update_goals',
+        id: 'tc-plan',
+        name: 'update_plan',
         canonicalized: true,
         graphApplied: true,
       },

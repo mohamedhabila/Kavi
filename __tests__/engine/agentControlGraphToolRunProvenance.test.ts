@@ -49,7 +49,7 @@ describe('agent control graph tool run provenance', () => {
           finishWithGraphFinalCandidateEvent: jest.fn(),
           finishWithGraphTerminalEvent: jest.fn(),
           getCurrentTurnDirectives: jest.fn(),
-          getGraphSnapshot: jest.fn(() => ({ goals: [] })),
+          getGraphSnapshot: jest.fn(() => ({})),
           publishWorkflowToolResultProgressToAgentControlGraph: jest.fn(),
           recordObservability: jest.fn(),
           recordPerformanceMetrics: jest.fn(),

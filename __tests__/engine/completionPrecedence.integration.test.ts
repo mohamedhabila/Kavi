@@ -1,9 +1,8 @@
 import { evaluateCompletionGate } from '../../src/engine/graph/completionGate';
-import type { AgentGoal } from '../../src/types/agentRun';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 
 describe('completion precedence integration', () => {
-  it('orders async pending ahead of goals and delivery blockers', () => {
+  it('orders async pending ahead of delivery blockers', () => {
     const pendingOperation: TrackedAsyncOperation = {
       key: 'session:worker-1',
       kind: 'session',
@@ -16,25 +15,11 @@ describe('completion precedence integration', () => {
       waitToolName: 'sessions_wait',
       waitArgs: { sessionId: 'worker-1' },
     };
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Finish task',
-        status: 'active',
-        completionPolicy: 'blocking',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ];
-
     const decision = evaluateCompletionGate({
       trackedOperations: new Map([[pendingOperation.key, pendingOperation]]),
       pendingOperations: [pendingOperation],
       consecutivePendingAsyncNoToolTurns: 0,
       hasDraftContent: true,
-      goals,
       toolingEnabledForProvider: true,
       selectedToolCount: 2,
       forceTextThisTurn: false,
@@ -56,5 +41,4 @@ describe('completion precedence integration', () => {
       expect(decision.reason).toBe('async_waiting_finalization_hold');
     }
   });
-
 });

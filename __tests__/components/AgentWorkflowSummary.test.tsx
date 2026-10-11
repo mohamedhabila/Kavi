@@ -5,7 +5,6 @@ import { AgentWorkflowSummary } from '../../src/components/chat/AgentWorkflowSum
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 import type { AgentRun, AgentRunControlGraphState } from '../../src/types/agentRun';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../src/engine/goals/types';
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
@@ -98,7 +97,7 @@ const makeControlGraph = (
       type: GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE,
       iteration: 2,
       timestamp: 200,
-      detail: 'decision:hold,reason:goals_incomplete',
+      detail: 'decision:hold,reason:async_waiting_finalization_hold',
     },
   ],
   updatedAt: 2,
@@ -161,34 +160,6 @@ describe('AgentWorkflowSummary for everyday use', () => {
     expect(screen.getByText('Apply the fix')).toBeTruthy();
     expect(screen.getByText('In progress')).toBeTruthy();
     expect(screen.getByText('Pending')).toBeTruthy();
-  });
-
-  it("never shows the engine's bookkeeping goals", () => {
-    const screen = render(
-      <AgentWorkflowSummary
-        run={makeRun({
-          controlGraph: makeControlGraph({
-            plan: undefined,
-            goals: [
-              {
-                id: 'effect-write-file',
-                title: 'Verify write_file effect',
-                status: 'active',
-                owner: CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
-                dependencies: [],
-                evidence: ['receipt'],
-                createdAt: 1,
-                updatedAt: 1,
-              },
-            ],
-          }),
-        })}
-      />,
-    );
-
-    expect(screen.queryByText('Verify write_file effect')).toBeNull();
-    expect(screen.queryByTestId('agent-plan-widget')).toBeNull();
-    expect(screen.getByText('Work')).toBeTruthy();
   });
 
   it('shows no plan card for work that kept no plan', () => {

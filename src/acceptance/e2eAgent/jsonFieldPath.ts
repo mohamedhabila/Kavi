@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// Kavi — JSON field paths for structural E2E rubrics
+// ---------------------------------------------------------------------------
+
 function readJsonFieldAtPathSegments(value: unknown, path: string): unknown {
   let current = value;
   for (const segment of path.split('.').filter(Boolean)) {
@@ -49,20 +53,4 @@ export function structuralValuesMatch(actual: unknown, expected: string): boolea
     return String(actual) === expected;
   }
   return String(actual ?? '') === expected;
-}
-
-export function extractJsonPayloadFromEvidenceEntry(entry: string): unknown | undefined {
-  const colonIndex = entry.indexOf(':');
-  if (colonIndex < 0) {
-    return undefined;
-  }
-  const payload = entry.slice(colonIndex + 1).trim();
-  if (!payload.startsWith('{') && !payload.startsWith('[')) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(payload);
-  } catch {
-    return undefined;
-  }
 }

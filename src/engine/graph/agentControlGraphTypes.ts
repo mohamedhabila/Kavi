@@ -1,5 +1,4 @@
 import type {
-  AgentGoal,
   AgentPlanStep,
   AgentRunAsyncOperation,
   AgentRunControlGraphAuditEvent,
@@ -90,14 +89,6 @@ export type AgentControlGraphEvent =
       timestamp?: number;
     }
   | {
-      type: 'GOALS_UPDATED';
-      goals: AgentGoal[];
-      reason?: string;
-      /** Internal completion bookkeeping must not become user-facing task memory. */
-      projectToMemoryTasks?: false;
-      timestamp?: number;
-    }
-  | {
       type: 'PLAN_UPDATED';
       plan: AgentPlanStep[];
       timestamp?: number;
@@ -113,12 +104,6 @@ export type AgentControlGraphEvent =
       toolNames: string[];
       updateMode: 'merge' | 'replace';
       reason?: string;
-      timestamp?: number;
-    }
-  | {
-      type: 'GOAL_EVIDENCE_ADDED';
-      goalId: string;
-      evidence: string;
       timestamp?: number;
     }
   | {

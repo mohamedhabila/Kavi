@@ -1,9 +1,6 @@
 import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
-import type { AgentGoal } from '../engine/goals/types';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { ToolEffectDigest } from './toolEffectReceipt';
-
-export type { AgentGoal, AgentGoalCompletionPolicy, AgentGoalStatus } from '../engine/goals/types';
 
 export type AgentRunTaskOwner = 'supervisor' | 'worker' | 'either';
 
@@ -47,14 +44,7 @@ export type AgentRunTerminalReason =
   | 'user_cancelled'
   | 'missing_required_side_effect'
   | 'terminal_review_unavailable'
-  | 'route_blocked'
-  /**
-   * The run ended because a required goal was proven unreachable: every available
-   * path was tried and failed, and the agent reported that instead of stalling.
-   * Distinct from the breakdown reasons above — the turn concluded correctly even
-   * though the objective was not met, so it must not be counted as a malfunction.
-   */
-  | 'goal_infeasible';
+  | 'route_blocked';
 
 export type AgentRunPhaseKey = 'assess' | 'plan' | 'work' | 'review' | 'pilot' | 'deliver';
 
@@ -195,7 +185,6 @@ export interface AgentRunControlGraphToolResultRef extends AgentRunControlGraphT
   failed?: boolean;
   canonicalized?: boolean;
   graphApplied?: boolean;
-  evidence?: string[];
 }
 
 export interface AgentRunControlGraphAuditEvent {
@@ -368,7 +357,6 @@ export interface AgentRunControlGraphState {
   finalizationHoldReason?: string;
   terminalReason?: string;
   activeTaskId?: string;
-  goals?: AgentGoal[];
   plan?: AgentPlanStep[];
   requestUnderstanding?: RequestUnderstandingSnapshot;
   pendingUserInput?: AgentRunControlGraphPendingUserInput;

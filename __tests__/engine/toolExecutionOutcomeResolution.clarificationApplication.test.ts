@@ -27,9 +27,8 @@ describe('tool execution clarification outcome resolution', () => {
       continuation: 'new',
     });
     params.getGraphSnapshot = jest.fn().mockReturnValue({
-      goals: [],
       requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame: entryFrame, goals: [] }),
+        projectRequestUnderstanding({ requestFrame: entryFrame }),
       ),
     });
     params.executableToolCalls = [

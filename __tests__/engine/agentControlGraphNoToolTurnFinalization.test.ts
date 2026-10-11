@@ -1,7 +1,6 @@
 import { resolveAgentControlGraphNoToolTurn } from '../../src/engine/graph/noToolTurnResolution';
-import type { AgentGoal } from '../../src/types/agentRun';
 import type { ToolDefinition } from '../../src/types/tool';
-import { buildBaseParams, createControlGraphWithGoals } from './helpers/noToolTurnResolution';
+import { buildBaseParams } from './helpers/noToolTurnResolution';
 
 describe('agent control graph no-tool finalization', () => {
   it('delivers exhausted recovery text without marking the task successful', async () => {
@@ -50,34 +49,6 @@ describe('agent control graph no-tool finalization', () => {
       }),
     );
     expect(params.onFinalizationHeld).not.toHaveBeenCalled();
-    expect(params.onContinueThinking).not.toHaveBeenCalled();
-  });
-
-  it('finalizes with default persistent pending goals when no blocking goal is active', async () => {
-    const goals: AgentGoal[] = [
-      {
-        id: 'g1',
-        title: 'Build feature',
-        status: 'pending',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ];
-    const params = buildBaseParams();
-    params.controlGraph = createControlGraphWithGoals(goals);
-
-    const result = await resolveAgentControlGraphNoToolTurn(params);
-
-    expect(result).toEqual({ status: 'finalized' });
-    expect(params.applyGraphEvents).not.toHaveBeenCalledWith([
-      {
-        type: 'FINALIZATION_HELD',
-        reason: 'goals_incomplete',
-      },
-    ]);
-    expect(params.finishWithGraphFinalCandidateEvent).toHaveBeenCalled();
     expect(params.onContinueThinking).not.toHaveBeenCalled();
   });
 

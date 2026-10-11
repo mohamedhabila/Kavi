@@ -70,14 +70,9 @@ export function buildTerminalAssignment(
   event: TerminalAgentControlGraphEvent,
 ): Partial<AgentControlGraphMachineContext> {
   const timestamp = getTimestamp(event);
-  const cancellationGoals =
-    event.type === 'CANCELLED'
-      ? context.goals?.filter((goal) => goal.status === 'completed')
-      : undefined;
   return {
     ...(event.type === 'CANCELLED'
       ? {
-          goals: cancellationGoals?.length ? cancellationGoals : undefined,
           activeTaskId: undefined,
         }
       : {}),

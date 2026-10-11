@@ -68,7 +68,7 @@ function buildParams() {
     finishWithGraphFinalCandidateEvent: jest.fn(),
     finishWithGraphTerminalEvent: jest.fn(),
     getCurrentTurnDirectives: jest.fn(() => recoveryDirectives),
-    getGraphSnapshot: jest.fn(() => ({ goals: [] })),
+    getGraphSnapshot: jest.fn(() => ({})),
     publishWorkflowToolResultProgressToAgentControlGraph: jest.fn(),
     recordPerformanceMetrics: jest.fn(),
     recordObservability: jest.fn(),

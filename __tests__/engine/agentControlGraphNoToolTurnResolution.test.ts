@@ -23,7 +23,7 @@ describe('agent control graph no-tool turn resolution', () => {
     });
     params.controlGraph = buildGraphScenarioSnapshot({
       requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame, goals: [] }),
+        projectRequestUnderstanding({ requestFrame }),
       ),
     });
     params.selectedToolNames = new Set(['request_clarification', 'cron']);
@@ -153,7 +153,7 @@ describe('agent control graph no-tool turn resolution', () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
     params.modelTurnAssistantContent = '';
-    params.selectedToolNames = new Set(['update_goals']);
+    params.selectedToolNames = new Set(['update_plan']);
     params.selectedToolCount = 1;
     params.completion = {
       completionStatus: 'complete',
@@ -180,7 +180,7 @@ describe('agent control graph no-tool turn resolution', () => {
     expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
     expect(params.onContinueThinking).toHaveBeenCalledWith('malformed_tool_call_retry');
     expect(params.workingMessages.at(-1)?.content).toContain('[SYSTEM TOOL CALL RETRY]');
-    expect(params.workingMessages.at(-1)?.content).toContain('update_goals');
+    expect(params.workingMessages.at(-1)?.content).toContain('update_plan');
     expect(params.recordTurnDirectives).toHaveBeenCalledWith(
       { incompleteFinalTextRecoveryCount: 1 },
       'malformed_tool_call_retry',
@@ -191,7 +191,7 @@ describe('agent control graph no-tool turn resolution', () => {
     const params = buildBaseParams();
     params.turnAssistantContent = '';
     params.modelTurnAssistantContent = '';
-    params.selectedToolNames = new Set(['update_goals']);
+    params.selectedToolNames = new Set(['update_plan']);
     params.selectedToolCount = 1;
     params.nextFinalizationMaxTokens = 8192;
     params.completion = {

@@ -315,18 +315,6 @@ describe('evaluateE2ERubric', () => {
             turnDirectives: {},
             audit: [],
             updatedAt: 1,
-            goals: [
-              {
-                id: 'meal-plan',
-                title: 'meal-planning-scope',
-                status: 'active',
-                dependencies: [],
-                evidence: [],
-                createdAt: 1,
-                updatedAt: 1,
-                successCriteria: [],
-              },
-            ],
           },
         ],
       }),

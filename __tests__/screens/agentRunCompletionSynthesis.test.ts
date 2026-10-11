@@ -46,19 +46,6 @@ function buildRun(): AgentRun {
       observedToolResults: [],
       pendingAsyncCount: 0,
       lastModelToolNames: [],
-      goals: [
-        {
-          id: 'effect-write-file-c996',
-          title: 'Verify write_file effect',
-          status: 'completed',
-          owner: 'system:effect-completion',
-          dependencies: [],
-          evidence: ['effect_receipt_v2:{"receiptId":"ter_c996"}'],
-          createdAt: 10,
-          updatedAt: 60,
-          completedAt: 60,
-        },
-      ],
       asyncWork: {
         awaitingBackgroundWorkers: false,
         pendingOperations: [],
@@ -108,9 +95,7 @@ describe('agentRunCompletionSynthesis', () => {
     }));
   });
 
-  it('recovers the answer from the conversation, never from bookkeeping on the graph', async () => {
-    // Recovery once returned the latest completed goal's last evidence entry as the
-    // answer. Goals are engine bookkeeping now, so that entry is a receipt.
+  it('recovers the answer by synthesizing it from the conversation', async () => {
     jest.mocked(synthesizeAgentRunFinalAnswer).mockResolvedValueOnce({
       output: 'C996A C996B C996P C996W',
     });
@@ -199,7 +184,6 @@ describe('agentRunCompletionSynthesis', () => {
     });
 
     expect(completion).toEqual({ output: 'C996A C996B C996P C996W', source: 'synthesized' });
-    expect(JSON.stringify(completion)).not.toContain('effect_receipt_v2');
     expect(synthesizeAgentRunFinalAnswer).toHaveBeenCalledTimes(1);
   });
 });

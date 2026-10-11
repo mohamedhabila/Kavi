@@ -71,7 +71,7 @@ describeE2E('E2E delegation eval — selected provider', () => {
           `attempts=${attempt.attemptCount}`,
           `tools=${attempt.result.toolCalls.map((call) => call.name).join(',')}`,
           `graph=${lastGraph?.status ?? 'none'}`,
-          `evidence=${lastGraph?.goals?.map((goal) => `${goal.id}:${goal.evidence.length}`).join('|') ?? 'none'}`,
+          `plan=${lastGraph?.plan?.map((step) => `${step.status}:${step.step}`).join('|') ?? 'none'}`,
           `tokens=${attempt.result.usage.totalTokens}`,
         );
       }

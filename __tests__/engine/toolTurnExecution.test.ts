@@ -15,7 +15,6 @@ import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAu
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
 import { resolveMobileControllerRecoveryPreflight } from '../../src/engine/graph/mobileControllerRecoveryPolicy';
-import { createGoal } from '../../src/engine/goals/types';
 import {
   createPendingToolCall,
   createToolMessage,
@@ -106,7 +105,6 @@ describe('toolTurnExecution', () => {
     const graphEvents = (params.applyGraphEvents as jest.Mock).mock.calls.flatMap(
       ([events]) => events,
     );
-    expect(graphEvents.some((event) => event.type === 'GOALS_UPDATED')).toBe(false);
     expect(graphEvents.some((event) => event.type === 'MODEL_TURN_COMPLETED')).toBe(false);
   });
 
@@ -271,23 +269,26 @@ describe('toolTurnExecution', () => {
     );
   });
 
-  it('commits code-owned effect completion goals before the tool batch begins', async () => {
+  it.each([
+    [
+      'runs an effectful call with structured arguments',
+      '{"path":"draft.txt","content":"done"}',
+      undefined,
+    ],
+    [
+      'refuses an effectful call whose arguments do not parse',
+      'not-json',
+      'effect_arguments_invalid',
+    ],
+  ])('%s without any graph bookkeeping', async (_label, argumentsText, expectedCode) => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    let blocker: string | undefined;
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
-      expect(snapshot.goals).toEqual([
-        expect.objectContaining({
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: [expect.stringMatching(/^evidence\.effect:/u)],
-        }),
-      ]);
-      expect(
-        lifecycle.workflowToolCallBlocker(lifecycle.tc.name, lifecycle.tc.arguments),
-      ).toBeUndefined();
+      blocker = lifecycle.workflowToolCallBlocker(lifecycle.tc.name, lifecycle.tc.arguments);
       return {
         toolCallId: lifecycle.tc.id,
         effectiveToolName: lifecycle.tc.name,
-        result: '{}',
+        result: blocker ?? '{}',
         toolMessage: createToolMessage(),
       };
     });
@@ -296,42 +297,18 @@ describe('toolTurnExecution', () => {
         previewCompletedToolNames: new Set(),
       }),
     ]);
-    let snapshot = { goals: [] as any[] };
-    const applyGraphEvents = jest.fn((events: any[]) => {
-      const goalsUpdated = events.find((event) => event.type === 'GOALS_UPDATED');
-      if (goalsUpdated) snapshot = { goals: goalsUpdated.goals };
-    });
     const params = createParams({
-      pendingToolCalls: [
-        createPendingToolCall({
-          arguments: JSON.stringify({ path: 'draft.txt', content: 'done' }),
-        }),
-      ],
-      getGraphSnapshot: () => snapshot as any,
-      applyGraphEvents,
+      pendingToolCalls: [createPendingToolCall({ arguments: argumentsText })],
     });
 
     await executeAgentControlGraphToolTurn(params);
 
-    const materialization = applyGraphEvents.mock.calls
-      .flatMap(([events]) => events)
-      .find((event) => event.type === 'GOALS_UPDATED');
-    expect(materialization).toEqual(
-      expect.objectContaining({
-        reason: 'effect_completion_contract:add',
-        projectToMemoryTasks: false,
-        goals: [
-          expect.objectContaining({
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: [expect.stringMatching(/^evidence\.effect:/u)],
-          }),
-        ],
-      }),
-    );
-    expect(applyGraphEvents.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedExecuteToolExecutionBatch.mock.invocationCallOrder[0]!,
-    );
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+    if (expectedCode) {
+      expect(JSON.parse(blocker ?? '{}')).toMatchObject({ status: 'error', code: expectedCode });
+    } else {
+      expect(blocker).toBeUndefined();
+    }
   });
 
   it('projects the three-stall recovery guard into tool preflight before dispatch', async () => {
@@ -388,16 +365,6 @@ describe('toolTurnExecution', () => {
     }
     const strategyFingerprint = initial.directives.mobileControllerRecovery.strategyFingerprint;
     const snapshot = {
-      goals: [
-        createGoal({
-          id: 'mobile-recovery-goal',
-          title: 'Complete the requested device task',
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.tool:mobile_ui_action'],
-          now: 100,
-        }),
-      ],
       turnDirectives: {
         forceFinalText: false,
         requireWorkflowTool: false,
@@ -442,11 +409,8 @@ describe('toolTurnExecution', () => {
   });
 
   it('does not arm controller recovery when graph admission rejects the action', async () => {
-    // A mobile_ui_action call sharing a turn with another tool call is always
-    // rejected (an isolated-turn boundary), independent of goal state: since
-    // materializeMobileControllerGoal auto-admits the first-ever call by opening
-    // its own bookkeeping goal (see mobileController/goalAdmission.ts), a bare
-    // missing-goal scenario no longer represents a rejected admission on its own.
+    // A mobile_ui_action call sharing a turn with another tool call is always rejected:
+    // the action must cross its observation boundary alone.
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([
       {
@@ -456,12 +420,12 @@ describe('toolTurnExecution', () => {
       },
       {
         index: 1,
-        toolCallId: 'mobile-before-goal',
+        toolCallId: 'mobile-mixed-turn',
         toolMessage: {
           id: 'blocked-mobile-isolated-turn',
           role: 'tool',
           content: '{"code":"mobile_controller_isolated_turn_required"}',
-          toolCallId: 'mobile-before-goal',
+          toolCallId: 'mobile-mixed-turn',
           timestamp: 1001,
           isError: true,
         },
@@ -478,14 +442,13 @@ describe('toolTurnExecution', () => {
       pendingToolCalls: [
         createPendingToolCall({ id: 'tc-write', name: 'write_file' }),
         {
-          id: 'mobile-before-goal',
+          id: 'mobile-mixed-turn',
           name: 'mobile_ui_action',
           arguments: JSON.stringify({ kind: 'back' }),
         },
       ],
       getGraphSnapshot: () =>
         ({
-          goals: [],
           turnDirectives: {
             forceFinalText: false,
             requireWorkflowTool: false,

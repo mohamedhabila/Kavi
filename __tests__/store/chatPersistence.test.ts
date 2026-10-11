@@ -341,7 +341,7 @@ describe('chatPersistence', () => {
               updatedAt: 8700,
             },
             lastModelToolNames: ['skill__generic__mutate', 'mcp__generic__read'],
-            finalizationHoldReason: 'goals_incomplete',
+            finalizationHoldReason: 'async_waiting_finalization_hold',
             activeTaskId: 'goal-persist',
             performance: {
               modelTurnCount: 2,
@@ -393,7 +393,7 @@ describe('chatPersistence', () => {
           ],
         }),
         lastModelToolNames: ['skill__generic__mutate', 'mcp__generic__read'],
-        finalizationHoldReason: 'goals_incomplete',
+        finalizationHoldReason: 'async_waiting_finalization_hold',
         activeTaskId: 'goal-persist',
         performance: expect.objectContaining({
           modelTurnCount: 2,

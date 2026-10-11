@@ -135,7 +135,6 @@ describe('orchestrator request memory policy', () => {
       graphOwnedRun: true,
       graphSnapshot: {
         status: 'waiting_async',
-        goals: [],
         asyncWork: {
           awaitingBackgroundWorkers: false,
           pendingOperations: [],

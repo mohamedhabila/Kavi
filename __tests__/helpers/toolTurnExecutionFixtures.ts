@@ -69,7 +69,7 @@ export function createToolTurnExecutionParams(
     },
     toolCallHistory: [],
     stagnationSignatures: [],
-    getGraphSnapshot: () => ({ goals: [] }) as any,
+    getGraphSnapshot: () => ({}) as any,
     trackedAsyncOperations: new Map<string, TrackedAsyncOperation>(),
     signal: undefined,
     callbacks: {

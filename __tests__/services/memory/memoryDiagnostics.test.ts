@@ -53,7 +53,7 @@ describe('memoryDiagnostics', () => {
         messages: 100,
         memory_cacheable: 0,
         memory_dynamic: 0,
-        goals: 2,
+        plan: 2,
       },
       totalTokens: 117,
       contextWindow: 128000,
@@ -68,7 +68,7 @@ describe('memoryDiagnostics', () => {
         messages: 200,
         memory_cacheable: 0,
         memory_dynamic: 0,
-        goals: 0,
+        plan: 0,
       },
       totalTokens: 220,
       contextWindow: 128000,
@@ -206,9 +206,9 @@ describe('memoryDiagnostics', () => {
         messages: 80,
         memory_cacheable: 5,
         memory_dynamic: 0,
-        goals: 1,
+        plan: 1,
       }),
-    ).toBe('system:10 · messages:80 · memory_cacheable:5 · goals:1');
+    ).toBe('system:10 · messages:80 · memory_cacheable:5 · plan:1');
 
     expect(formatRetrievalIdList(['a', 'b', 'c', 'd'], 3)).toBe('a,b,c,+1');
     expect(formatRetrievalIdList([])).toBe('—');

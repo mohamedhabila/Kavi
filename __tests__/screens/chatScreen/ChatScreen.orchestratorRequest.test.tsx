@@ -76,18 +76,8 @@ describe('ChatScreen orchestrator requests', () => {
       observedToolResults: [],
       pendingAsyncCount: 0,
       lastModelToolNames: [],
-      activeTaskId: 'goal-persist',
-      goals: [
-        {
-          id: 'goal-persist',
-          title: 'Persist artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1_700_000_000_000,
-          updatedAt: 1_700_000_000_100,
-        },
-      ],
+      activeTaskId: 'persist-artifact',
+      plan: [{ step: 'Persist artifact', status: 'in_progress' }],
       turnDirectives: {
         forceFinalText: false,
         requireWorkflowTool: false,
@@ -104,10 +94,8 @@ describe('ChatScreen orchestrator requests', () => {
     expect(mockUpdateAgentRunControlGraph).toHaveBeenCalledWith(
       'conv1',
       expect.objectContaining({
-        activeTaskId: 'goal-persist',
-        goals: expect.arrayContaining([
-          expect.objectContaining({ id: 'goal-persist', status: 'active' }),
-        ]),
+        activeTaskId: 'persist-artifact',
+        plan: [{ step: 'Persist artifact', status: 'in_progress' }],
       }),
       'run-1',
     );

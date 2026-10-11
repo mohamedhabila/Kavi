@@ -58,19 +58,7 @@ describe('Orchestrator', () => {
       await runOrchestrator(
         {
           ...options,
-          initialAgentControlGraphState: createInitialAgentControlGraphSnapshot({
-            goals: [
-              {
-                id: 'goal-python',
-                title: 'Parse JSON with Python',
-                status: 'active',
-                dependencies: [],
-                evidence: [],
-                createdAt: 1,
-                updatedAt: 1,
-              },
-            ],
-          }),
+          initialAgentControlGraphState: createInitialAgentControlGraphSnapshot(),
         },
         callbacks,
       );

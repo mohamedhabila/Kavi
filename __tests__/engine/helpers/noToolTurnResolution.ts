@@ -1,10 +1,8 @@
 import {
   createInitialAgentControlGraphSnapshot,
-  reduceAgentControlGraph,
   type AgentControlTurnDirectives,
 } from '../../../src/engine/graph/agentControlGraph';
 import type { TrackedAsyncOperation } from '../../../src/engine/pendingAsyncOperations';
-import type { AgentGoal } from '../../../src/types/agentRun';
 import type { Message } from '../../../src/types/message';
 import type { ToolDefinition } from '../../../src/types/tool';
 
@@ -21,12 +19,6 @@ const tools: ToolDefinition[] = [
     input_schema: { type: 'object', properties: {} },
   },
 ];
-
-export function createControlGraphWithGoals(goals: AgentGoal[]) {
-  return reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
-    { type: 'GOALS_UPDATED', goals, timestamp: Date.now() },
-  ]);
-}
 
 export function createPendingOperation(
   overrides: Partial<TrackedAsyncOperation> = {},

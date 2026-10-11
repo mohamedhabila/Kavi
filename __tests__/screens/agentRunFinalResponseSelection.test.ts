@@ -90,20 +90,6 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
         lastModelToolNames: [],
         audit: [],
         updatedAt: 3,
-        goals: [
-          {
-            id: 'constrained',
-            title: 'Constrained result',
-            status: 'completed',
-            completionPolicy: 'blocking',
-            dependencies: [],
-            evidence: ['read_file:ok'],
-            successCriteria: ['evidence.tool:read_file'],
-            createdAt: 1,
-            updatedAt: 2,
-            completedAt: 2,
-          },
-        ],
       },
     });
     const messages = [
@@ -123,7 +109,7 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
           completionStatus: 'complete',
           finishReason: 'tool_calls',
         },
-        toolCalls: [{ id: 'call-1', name: 'update_goals', arguments: '{}', status: 'completed' }],
+        toolCalls: [{ id: 'call-1', name: 'update_plan', arguments: '{}', status: 'completed' }],
       }),
     ];
 

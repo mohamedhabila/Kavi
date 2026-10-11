@@ -110,18 +110,8 @@ describe('ChatScreen agent run resume', () => {
       observedToolResults: [],
       pendingAsyncCount: 1,
       lastModelToolNames: ['expo_eas_workflow_wait'],
-      activeTaskId: 'goal-await-external',
-      goals: [
-        {
-          id: 'goal-await-external',
-          title: 'Wait for external execution',
-          status: 'active',
-          dependencies: [],
-          evidence: ['already-completed'],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ],
+      activeTaskId: 'await-external',
+      plan: [{ step: 'Wait for external execution', status: 'in_progress' }],
       asyncWork: {
         awaitingBackgroundWorkers: false,
         pendingOperations: [pendingOperation],
@@ -173,15 +163,10 @@ describe('ChatScreen agent run resume', () => {
         ],
       }),
     );
-    expect(resumedGraphState.activeTaskId).toBe('goal-await-external');
-    expect(resumedGraphState.goals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'goal-await-external',
-          status: 'active',
-        }),
-      ]),
-    );
+    expect(resumedGraphState.activeTaskId).toBe('await-external');
+    expect(resumedGraphState.plan).toEqual([
+      { step: 'Wait for external execution', status: 'in_progress' },
+    ]);
     expect(resumedGraphState.workflowRoute).toBeUndefined();
   });
 

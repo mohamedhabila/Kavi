@@ -91,7 +91,7 @@ describe('MemoryDiagnosticsPanel', () => {
             messages: 90,
             memory_cacheable: 0,
             memory_dynamic: 8,
-            goals: 1,
+            plan: 1,
           },
           totalTokens: 115,
           contextWindow: 64000,

@@ -20,7 +20,7 @@ describe('budgetAudit', () => {
         messages: 6400,
         memory_cacheable: 300,
         memory_dynamic: 120,
-        goals: 90,
+        plan: 90,
       },
       totalTokens: 8910,
       contextWindow: 128_000,
@@ -29,7 +29,7 @@ describe('budgetAudit', () => {
 
     const entries = getRecentBudgetAuditEntries();
     expect(entries).toHaveLength(1);
-    expect(entries[0]?.layers.goals).toBe(90);
+    expect(entries[0]?.layers.plan).toBe(90);
     expect(entries[0]?.compactionApplied).toBe(true);
   });
 });

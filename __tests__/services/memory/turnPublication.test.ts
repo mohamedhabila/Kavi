@@ -78,18 +78,6 @@ afterEach(async () => {
 describe('publishConversationTurnMemory', () => {
   it('publishes only the exact requested final and seals its exact source-run task', async () => {
     const controlGraph = {
-      goals: [
-        {
-          id: 'goal-exact',
-          title: 'Remember alpha exactly',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          completionPolicy: 'blocking',
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      ],
       activeTaskId: 'goal-exact',
     } as AgentRunControlGraphState;
     setConversation({

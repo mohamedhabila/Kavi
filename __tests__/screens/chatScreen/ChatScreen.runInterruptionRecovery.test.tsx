@@ -44,17 +44,6 @@ describe('ChatScreen run interruption recovery', () => {
             latestSummary: 'Synthesizing final answer from verified worker results.',
             controlGraph: createAgentRunControlGraphState({
               status: 'awaiting_review',
-              goals: [
-                {
-                  id: 'goal-1',
-                  title: 'Analyze Android 16 readiness',
-                  status: 'completed',
-                  dependencies: [],
-                  evidence: ['verified worker findings'],
-                  createdAt: 1,
-                  updatedAt: 2,
-                },
-              ],
             }),
             summary: {
               assistantTurns: 1,
@@ -225,17 +214,6 @@ describe('ChatScreen run interruption recovery', () => {
             goal: params.goal,
             controlGraph: createAgentRunControlGraphState({
               status: 'awaiting_review',
-              goals: [
-                {
-                  id: 'workstream-1',
-                  title: 'Implement the fix',
-                  status: 'completed',
-                  dependencies: [],
-                  evidence: ['Worker finished with verified output before the interruption.'],
-                  createdAt: 1,
-                  updatedAt: 2,
-                },
-              ],
             }),
           }),
         ],

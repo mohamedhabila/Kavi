@@ -196,7 +196,7 @@ describe('MemoryScreen overview tab', () => {
             messages: 50,
             memory_cacheable: 0,
             memory_dynamic: 0,
-            goals: 1,
+            plan: 1,
           },
           totalTokens: 61,
           contextWindow: 128000,

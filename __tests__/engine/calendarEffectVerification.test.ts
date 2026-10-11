@@ -4,7 +4,6 @@ import {
   executeCalendarUpdate,
   type CalendarMutationRuntime,
 } from '../../src/engine/tools/native/calendar/executor';
-import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
 import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
 import { failedToolContent, parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
@@ -46,9 +45,9 @@ describe('calendar effect verification', () => {
       allDay: false,
     });
 
-    const result = parseCompletedToolOutcome(
-      await executeCalendarCreate({ title: 'Planning', startDate, endDate }, calendarRuntime),
-    );
+    const argumentsText = JSON.stringify({ title: 'Planning', startDate, endDate });
+    const outcome = await executeCalendarCreate(JSON.parse(argumentsText), calendarRuntime);
+    const result = parseCompletedToolOutcome(outcome);
 
     expect(result).toMatchObject({
       status: 'created_verified',
@@ -57,11 +56,18 @@ describe('calendar effect verification', () => {
     });
     expect(mockGetEventAsync).toHaveBeenCalledWith('event-1');
     await expect(
-      resolveToolEffectCompletionRequirement({
+      buildToolEffectReceipt({
+        executionRunId: 'execution-run-1',
+        toolCallId: 'tc-calendar',
         toolName: 'calendar_create_event',
-        argumentsText: JSON.stringify({ title: 'Planning', startDate, endDate }),
+        argumentsText,
+        resultText: JSON.stringify(result),
+        transportState: 'returned',
+        resultIsError: outcome.status === 'failed',
       }),
-    ).resolves.toEqual(expect.objectContaining({ kind: 'effectful' }));
+    ).resolves.toEqual(
+      expect.objectContaining({ effectState: 'applied', verificationState: 'verified' }),
+    );
   });
 
   it('returns an applied acknowledgement when create readback does not match', async () => {

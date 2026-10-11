@@ -103,7 +103,6 @@ export function projectMobileControllerOutcomeToAgentRun(input: {
         name: MOBILE_UI_ACTION_TOOL_NAME,
         ...(input.toolMessage.status === 'failed' ? { failed: true } : {}),
         canonicalized: true,
-        evidence: [receipt.receiptId],
       },
       timestamp,
     },

@@ -104,8 +104,7 @@ export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(para
      * A file the worker wrote is an artifact it produced, even though nothing attached it.
      *
      * collectResolvedAttachments reads message attachments, so a worker whose whole job is
-     * to write a document reported artifactCount: 0. Traced on-device, that left the
-     * supervisor's evidence.artifact criterion unsatisfiable by delegation, and the model
+     * to write a document reported artifactCount: 0. Traced on-device, the supervisor then
      * rewrote the file the worker had already produced rather than accept it.
      */
     const attached = collectResolvedAttachments(messages) ?? [];

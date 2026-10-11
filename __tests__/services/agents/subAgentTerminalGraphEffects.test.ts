@@ -64,7 +64,6 @@ describe('sub-agent terminal graph effects', () => {
     expect(nextGraph?.asyncWork.pendingOperations.map((operation) => operation.resourceId)).toEqual(
       ['sub-2'],
     );
-    expect(nextGraph?.goals ?? []).toEqual([]);
   });
 
   it('records nothing for a worker that only started', () => {

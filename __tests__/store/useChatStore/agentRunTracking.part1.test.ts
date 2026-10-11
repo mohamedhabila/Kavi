@@ -144,11 +144,11 @@ describe('useChatStore', () => {
       );
     });
 
-    it('stores lean graph goals and active task state inside the durable control graph', () => {
+    it('stores the plan and active task inside the durable control graph', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-route-state',
-        goal: 'Complete the active goal.',
+        goal: 'Apply the remote changes.',
         timestamp: 1700000002500,
       });
 
@@ -162,27 +162,10 @@ describe('useChatStore', () => {
           observedToolResults: [],
           pendingAsyncCount: 0,
           lastModelToolNames: [],
-          activeTaskId: 'goal-mutate-remote',
-          goals: [
-            {
-              id: 'goal-prepare',
-              title: 'Prepare artifacts',
-              status: 'completed',
-              dependencies: [],
-              evidence: ['prepared'],
-              createdAt: 1700000002500,
-              updatedAt: 1700000002600,
-              completedAt: 1700000002600,
-            },
-            {
-              id: 'goal-mutate-remote',
-              title: 'Apply remote side effects',
-              status: 'active',
-              dependencies: ['goal-prepare'],
-              evidence: [],
-              createdAt: 1700000002500,
-              updatedAt: 1700000002600,
-            },
+          activeTaskId: 'mutate-remote',
+          plan: [
+            { step: 'Prepare artifacts', status: 'completed' },
+            { step: 'Apply remote side effects', status: 'in_progress' },
           ],
           turnDirectives: {
             forceFinalText: false,
@@ -209,15 +192,11 @@ describe('useChatStore', () => {
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
       const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
 
-      expect(run.controlGraph?.activeTaskId).toBe('goal-mutate-remote');
-      expect(run.controlGraph?.goals).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: 'goal-mutate-remote',
-            status: 'active',
-          }),
-        ]),
-      );
+      expect(run.controlGraph?.activeTaskId).toBe('mutate-remote');
+      expect(run.controlGraph?.plan).toEqual([
+        { step: 'Prepare artifacts', status: 'completed' },
+        { step: 'Apply remote side effects', status: 'in_progress' },
+      ]);
       expect(run.controlGraph?.workflowRoute).toBeUndefined();
       expect(run.controlGraph?.workflowProgress).toBeUndefined();
       expect(run.terminalReason).toBe('terminal_blocked');

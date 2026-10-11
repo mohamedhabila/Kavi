@@ -94,7 +94,6 @@
     "eval:long-tasks": "node ./scripts/long-task-eval-harness.js",
     "eval:long-tasks:wall-clock": "node ./scripts/long-task-wall-clock-pilot.js",
     "eval:long-tasks:actual-work": "node ./scripts/long-task-actual-work-pilot.js",
-    "eval:recovery": "jest --runInBand __tests__/acceptance/recoveryBenchmark.test.ts",
     "eval:e2e": "node ./scripts/e2e-agent-eval-harness.js",
     "eval:e2e:assess": "node ./scripts/e2e-assessment-collect.js",
     "eval:e2e:paired": "node ./scripts/e2e-paired-assessment.js",

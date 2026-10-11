@@ -14,7 +14,7 @@ import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailabilit
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import {
   buildUnsupportedEffectContractBlock,
-  resolveToolEffectCompletionRequirement,
+  resolveUnsupportedEffectContract,
 } from '../toolExecution/toolEffectCompletionContract';
 import type { AgentControlPerformance } from './agentControlGraph';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
@@ -109,13 +109,11 @@ export async function executeAgentControlGraphToolBatch(params: {
   const executionToolFilter = (toolName: string): boolean =>
     params.toolFilter ? params.toolFilter(toolName) : true;
   const toolEvidenceWorkingMessages = [...(params.workingMessages ?? [])];
-  const completionRequirements = await Promise.all(
-    params.executableToolCalls.map((toolCall) =>
-      resolveToolEffectCompletionRequirement({
-        toolName: toolCall.name,
-        argumentsText: toolCall.arguments,
-      }),
-    ),
+  const unsupportedEffectContracts = params.executableToolCalls.map((toolCall) =>
+    resolveUnsupportedEffectContract({
+      toolName: toolCall.name,
+      argumentsText: toolCall.arguments,
+    }),
   );
   const workflowBlockerByCallId = new Map<string, string>();
   const hasMixedMobileControllerBoundary =
@@ -133,9 +131,12 @@ export async function executeAgentControlGraphToolBatch(params: {
       workflowBlockerByCallId.set(toolCall.id, MOBILE_CONTROLLER_ISOLATED_TURN_BLOCK);
       continue;
     }
-    const requirement = completionRequirements[index];
-    if (requirement?.kind === 'unsupported') {
-      workflowBlockerByCallId.set(toolCall.id, buildUnsupportedEffectContractBlock(requirement));
+    const unsupportedEffectContract = unsupportedEffectContracts[index];
+    if (unsupportedEffectContract) {
+      workflowBlockerByCallId.set(
+        toolCall.id,
+        buildUnsupportedEffectContractBlock(unsupportedEffectContract),
+      );
     }
   }
 

@@ -1,11 +1,8 @@
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
-import type { AgentControlGraphEvent } from '../../src/engine/graph/agentControlGraph';
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
 import type { ToolExecutionOutcome } from '../../src/engine/graph/toolExecutionOutcomeResolution';
-import { addGoalEvidence } from '../../src/engine/goals/graphState';
-import type { AgentGoal } from '../../src/engine/goals/types';
 
 export const tools: ToolDefinition[] = [
   {
@@ -22,43 +19,6 @@ export function tool(params: Pick<ToolDefinition, 'name' | 'contract'>): ToolDef
     input_schema: { type: 'object', properties: {} },
     ...(params.contract ? { contract: params.contract } : {}),
   };
-}
-
-export function createGoal(overrides: Partial<AgentGoal> & Pick<AgentGoal, 'id'>): AgentGoal {
-  return {
-    title: overrides.id,
-    status: 'active',
-    dependencies: [],
-    evidence: [],
-    createdAt: 1,
-    updatedAt: 1,
-    ...overrides,
-  };
-}
-
-export function extractGoalEvidenceEvents(params: ReturnType<typeof buildBaseParams>) {
-  return params.applyGraphEvents.mock.calls
-    .flatMap(([events]) => events)
-    .filter((event) => event.type === 'GOAL_EVIDENCE_ADDED');
-}
-
-export function applyGoalGraphEvents(
-  graph: { goals: AgentGoal[] },
-  events: ReadonlyArray<AgentControlGraphEvent>,
-): { goals: AgentGoal[] } {
-  let next = graph;
-  for (const event of events) {
-    if (event.type === 'GOALS_UPDATED') {
-      next = { goals: event.goals };
-      continue;
-    }
-    if (event.type === 'GOAL_EVIDENCE_ADDED') {
-      next = {
-        goals: addGoalEvidence(next.goals, event.goalId, event.evidence, event.timestamp),
-      };
-    }
-  }
-  return next;
 }
 
 export function createToolMessage(params: {
@@ -143,7 +103,7 @@ export function buildBaseParams() {
     getModelTurnBlocker: jest.fn(() => undefined),
     finishWithGraphTerminalEvent: jest.fn().mockResolvedValue(undefined),
     finishWaitingForUserInput: jest.fn().mockResolvedValue(undefined),
-    getGraphSnapshot: jest.fn().mockReturnValue({ goals: [] }),
+    getGraphSnapshot: jest.fn().mockReturnValue({}),
     workingMessages,
   };
 }

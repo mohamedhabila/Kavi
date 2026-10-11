@@ -217,18 +217,8 @@ describe('agent control graph run resume preparation', () => {
         controlGraph: createInitialAgentRunControlGraphState({
           status: 'waiting_async',
           iteration: 4,
-          activeTaskId: 'goal-1',
-          goals: [
-            {
-              id: 'goal-1',
-              title: 'Collect sources',
-              status: 'active',
-              dependencies: [],
-              evidence: ['worker:earlier'],
-              createdAt: 1,
-              updatedAt: 2,
-            },
-          ],
+          activeTaskId: 'collect-sources',
+          plan: [{ step: 'Collect sources', status: 'in_progress' }],
           asyncWork: {
             awaitingBackgroundWorkers: true,
             pendingOperations: [
@@ -261,13 +251,8 @@ describe('agent control graph run resume preparation', () => {
     expect(result.initialAgentControlGraphState).toEqual(
       expect.objectContaining({
         status: 'waiting_async',
-        activeTaskId: 'goal-1',
-        goals: [
-          expect.objectContaining({
-            id: 'goal-1',
-            evidence: ['worker:earlier'],
-          }),
-        ],
+        activeTaskId: 'collect-sources',
+        plan: [{ step: 'Collect sources', status: 'in_progress' }],
         asyncWork: expect.objectContaining({
           awaitingBackgroundWorkers: true,
           pendingOperations: [

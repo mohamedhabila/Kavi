@@ -19,7 +19,7 @@ const enqueueIngestionJob = createTestIngestionJobEnqueuer(enqueueStrictIngestio
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-function completedRun(id: string, updatedAt: number, evidence: string) {
+function completedRun(id: string, updatedAt: number) {
   return {
     id,
     userMessageId: `user-${id}`,
@@ -38,21 +38,7 @@ function completedRun(id: string, updatedAt: number, evidence: string) {
       failedTools: 0,
       spawnedSubAgents: 0,
     },
-    controlGraph: createInitialAgentControlGraphSnapshot({
-      goals: [
-        {
-          id: `goal-${id}`,
-          title: `Goal ${id}`,
-          status: 'completed',
-          dependencies: [],
-          evidence: [evidence],
-          createdAt: updatedAt - 1,
-          updatedAt,
-          completedAt: updatedAt,
-        },
-      ],
-      updatedAt,
-    }),
+    controlGraph: createInitialAgentControlGraphSnapshot({ updatedAt }),
   };
 }
 
@@ -84,10 +70,7 @@ beforeEach(() => {
         createdAt: 1,
         updatedAt: 20,
         messages: [],
-        agentRuns: [
-          completedRun('run-old', 10, 'tool:old-evidence'),
-          completedRun('run-new', 20, 'tool:new-evidence'),
-        ],
+        agentRuns: [completedRun('run-old', 10), completedRun('run-new', 20)],
       },
     ],
   } as never);

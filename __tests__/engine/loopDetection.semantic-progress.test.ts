@@ -1,4 +1,3 @@
-import { createGoal } from '../../src/engine/goals/types';
 import {
   CRITICAL_THRESHOLD,
   STAGNANT_PROGRESS_THRESHOLD,
@@ -130,7 +129,7 @@ describe('semantic progress detection', () => {
     });
   });
 
-  it('treats progressive chunks from one large file as information progress without goals', () => {
+  it('treats progressive chunks from one large file as information progress', () => {
     const signatures: IterationProgressSignature[] = [];
     const history: ToolCallRecord[] = [];
     const entry = {
@@ -149,7 +148,7 @@ describe('semantic progress detection', () => {
       );
     }
 
-    expect(detectLoops(history, signatures, { goals: [] })).toEqual({ loopDetected: false });
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
   });
 
   it('allows one repeated terminal chunk before warning on a real semantic stall', () => {
@@ -178,12 +177,12 @@ describe('semantic progress detection', () => {
     recordIterationProgressSignature(signatures, entry);
     history.push(rec('read_file', terminalArgs, terminalResult));
 
-    expect(detectLoops(history, signatures, { goals: [] })).toEqual({ loopDetected: false });
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
 
     recordIterationProgressSignature(signatures, entry);
     history.push(rec('read_file', terminalArgs, terminalResult));
 
-    expect(detectLoops(history, signatures, { goals: [] })).toMatchObject({
+    expect(detectLoops(history, signatures)).toMatchObject({
       loopDetected: true,
       level: 'warning',
       type: 'generic_repeat',
@@ -213,19 +212,7 @@ describe('semantic progress detection', () => {
       );
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'research',
-            title: 'Gather distinct evidence',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Produce a grounded report'],
-          }),
-        ],
-      }),
-    ).toEqual({ loopDetected: false });
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
   });
 
   it('still detects directory traversal that returns no new information', () => {

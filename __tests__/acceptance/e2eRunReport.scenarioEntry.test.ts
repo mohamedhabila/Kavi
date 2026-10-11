@@ -219,22 +219,25 @@ describe('e2eRunReport scenario entries', () => {
               detail: 'PRIVATE-ARBITRARY-AUDIT-DETAIL-NEVER-EXPORT',
             },
           ],
-          goals: [
-            {
-              id: 'PRIVATE-GOAL-ID-NEVER-EXPORT',
-              title: 'PRIVATE-GOAL-TITLE-NEVER-EXPORT',
-              status: 'active',
-              dependencies: [],
-              evidence: [
-                'PRIVATE-EVIDENCE-SOURCE-NEVER-EXPORT:SECRET-EVIDENCE-VALUE',
-                'PRIVATE-EVIDENCE-SOURCE-NEVER-EXPORT:SECOND-SECRET-EVIDENCE-VALUE',
-              ],
-              successCriteria: ['PRIVATE-SUCCESS-CRITERION-NEVER-EXPORT'],
-              completionPolicy: 'blocking',
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          ],
+          // A graph persisted while goals still existed carries them; none of it may leak.
+          ...({
+            goals: [
+              {
+                id: 'PRIVATE-GOAL-ID-NEVER-EXPORT',
+                title: 'PRIVATE-GOAL-TITLE-NEVER-EXPORT',
+                status: 'active',
+                dependencies: [],
+                evidence: [
+                  'PRIVATE-EVIDENCE-SOURCE-NEVER-EXPORT:SECRET-EVIDENCE-VALUE',
+                  'PRIVATE-EVIDENCE-SOURCE-NEVER-EXPORT:SECOND-SECRET-EVIDENCE-VALUE',
+                ],
+                successCriteria: ['PRIVATE-SUCCESS-CRITERION-NEVER-EXPORT'],
+                completionPolicy: 'blocking',
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+          } as object),
           expectedToolCalls: [
             { id: 'PRIVATE-EXPECTED-TOOL-CALL-ID-NEVER-EXPORT', name: 'native_secret_tool' },
           ],
@@ -242,7 +245,7 @@ describe('e2eRunReport scenario entries', () => {
             {
               id: 'PRIVATE-OBSERVED-TOOL-CALL-ID-NEVER-EXPORT',
               name: 'native_secret_tool',
-              evidence: ['PRIVATE-OBSERVED-EVIDENCE-SOURCE-NEVER-EXPORT:value'],
+              ...({ evidence: ['PRIVATE-OBSERVED-EVIDENCE-SOURCE-NEVER-EXPORT:value'] } as object),
             },
           ],
           pendingAsyncCount: 0,
@@ -402,24 +405,7 @@ describe('e2eRunReport scenario entries', () => {
         }),
       ],
     });
-    expect(entry.trace?.graphSnapshots[0]?.goalSummaries).toEqual([
-      expect.objectContaining({
-        goalIdHash: expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
-        status: 'active',
-        completionPolicy: 'blocking',
-        successCriteriaCount: 1,
-        successCriteriaHashes: [
-          expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
-        ],
-        evidenceCount: 2,
-        evidenceSourceHashCounts: [
-          expect.objectContaining({
-            count: 2,
-            valueHash: expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
-          }),
-        ],
-      }),
-    ]);
+    expect(entry.trace?.graphSnapshots[0]).not.toHaveProperty('goalSummaries');
     expect(entry.trace?.graphSnapshots[0]?.selectedToolSurfaceEvents).toHaveLength(1);
     expect(entry.trace?.graphSnapshots[0]?.auditEvents[1]).toMatchObject({
       type: 'OTHER',

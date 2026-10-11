@@ -70,9 +70,6 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
     initial: initialContext.status,
     context: initialContext,
     on: {
-      GOALS_UPDATED: {
-        actions: 'recordGoalsUpdated',
-      },
       PLAN_UPDATED: {
         actions: 'recordPlanUpdated',
       },
@@ -81,9 +78,6 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       },
       SESSION_ACTIVATED_TOOLS_UPDATED: {
         actions: 'recordSessionActivatedToolsUpdated',
-      },
-      GOAL_EVIDENCE_ADDED: {
-        actions: 'recordGoalEvidenceAdded',
       },
       PERFORMANCE_METRICS_RECORDED: {
         actions: 'recordPerformanceMetrics',

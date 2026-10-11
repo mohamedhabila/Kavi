@@ -10,16 +10,8 @@
 //
 // Traced live on an Android emulator. The worker wrote artifacts/tl4/risks.md and
 // terminated `verified_success`, and its result still carried `artifacts: null`.
-// Delegated-artifact evidence is derived from that field, so the supervisor's
-// `evidence.artifact:artifacts/tl4/risks.md` criterion could never be satisfied by
-// the delegation. The model read the graph correctly and concluded it had to do
-// the work itself:
-//
-//   "The risks.md and verify goals need the artifact evidence recorded by a
-//    parent write_file. Let me write risks.md with the verified worker content
-//    to register that evidence."
-//
-// It then rewrote the file the worker had already produced.
+// Told the worker had produced nothing, the supervisor rewrote the file the worker
+// had already produced.
 //
 // Which tools write, which results mean the file exists, and where the path sits
 // in a result are all read from the code-owned effect contracts rather than named
@@ -89,7 +81,7 @@ function readWrittenWorkspacePath(
   /**
    * `artifact.write` covers more than files: canvas_create declares it too, and its
    * resource is a `canvas_surface` identified by surfaceId. Only a resource the contract
-   * calls a workspace file names a path an evidence.artifact criterion can match.
+   * calls a workspace file names a workspace path.
    */
   if (selector.kind !== WORKSPACE_FILE_RESOURCE_KIND) {
     return undefined;
@@ -113,8 +105,8 @@ function readWrittenWorkspacePath(
 /**
  * Workspace paths the transcript shows were produced, in first-seen order.
  *
- * Shaped like the attachment list the delegated-evidence collector already reads, so a
- * written file and an attached file are credited the same way.
+ * Shaped like the attachment list a worker's artifacts already hold, so a written file and
+ * an attached file are reported the same way.
  */
 export function collectDelegatedWorkspaceWrites(
   messages: ReadonlyArray<Pick<Message, 'role' | 'content' | 'toolCalls'>>,

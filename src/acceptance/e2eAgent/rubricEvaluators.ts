@@ -4,10 +4,7 @@
 
 import { createHash } from 'crypto';
 import { resolveGraphWorkingBlockScope } from '../../engine/goals/graphTaskScope';
-import {
-  readJsonFieldAtPath,
-  structuralValuesMatch,
-} from '../../engine/goals/structuralCriterionValues';
+import { readJsonFieldAtPath, structuralValuesMatch } from './jsonFieldPath';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';

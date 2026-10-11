@@ -20,7 +20,6 @@ import {
 } from '../../helpers/orchestratorHarness';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
-import { MOBILE_CONTROLLER_GOAL_OWNER } from '../../../src/engine/mobileController/goalAdmission';
 
 /**
  * The real gateway hits durable memory subsystems this harness does not set up;
@@ -159,7 +158,7 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
     expect(memoryAccessSpy).toHaveBeenCalledWith(expect.objectContaining({ mode: 'chat' }));
   });
 
-  it('materializes the code-owned goal on the first mobile_ui_action call instead of blocking it', async () => {
+  it('dispatches the first mobile_ui_action call of a run', async () => {
     useSettingsStore.setState({ developerModeEnabled: true });
     const conversationId = useChatStore
       .getState()
@@ -238,26 +237,11 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
 
     await runOrchestrator(options, callbacks);
 
-    // The call was actually dispatched, not synthetically blocked by the goal
-    // admission gate: the mock only resolves once we get past the block.
     expect(executeTool).toHaveBeenCalledWith(
       'mobile_ui_action',
       expect.any(String),
       conversationId,
       expect.any(Object),
     );
-    expect(JSON.stringify(mockStreamMessage.mock.calls)).not.toContain(
-      'mobile_controller_goal_required',
-    );
-
-    const lastGraphState =
-      callbacks.calls.onAgentControlGraphStateChange[
-        callbacks.calls.onAgentControlGraphStateChange.length - 1
-      ];
-    expect(
-      (lastGraphState.goals ?? []).some(
-        (goal: any) => goal.owner === MOBILE_CONTROLLER_GOAL_OWNER,
-      ),
-    ).toBe(true);
   });
 });

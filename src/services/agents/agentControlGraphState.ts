@@ -1,5 +1,4 @@
 import type {
-  AgentGoal,
   AgentRunControlGraphAuditEvent,
   AgentRunAsyncOperation,
   AgentRunControlGraphAsyncWorkState,
@@ -14,10 +13,6 @@ import type {
   AgentRunTurnLatency,
 } from '../../types/agentRun';
 import { AGENT_RUN_TURN_LATENCY_STAGES } from '../../types/agentRun';
-import {
-  normalizeGoalCompletionPolicy,
-  resolveDefaultGoalCompletionPolicy,
-} from '../../engine/goals/types';
 import { normalizeAgentPlan } from '../../engine/plan/agentPlan';
 import { normalizeToolNameList } from '../../engine/tools/toolNameNormalization';
 import {
@@ -266,23 +261,12 @@ export function normalizeAgentRunControlGraphToolResultRefs(
     }
 
     seen.add(id);
-    const evidence = Array.isArray(result.evidence)
-      ? Array.from(
-          new Set(
-            result.evidence.filter(
-              (entry: unknown): entry is string =>
-                typeof entry === 'string' && entry.trim().length > 0,
-            ),
-          ),
-        )
-      : [];
     normalized.push({
       id,
       name,
       ...(result.failed ? { failed: true } : {}),
       ...(result.canonicalized ? { canonicalized: true } : {}),
       ...(result.graphApplied ? { graphApplied: true } : {}),
-      ...(evidence.length > 0 ? { evidence } : {}),
     });
   }
 
@@ -311,101 +295,6 @@ export function normalizeAgentRunControlGraphAuditEvents(
     })
     .filter((event): event is AgentRunControlGraphAuditEvent => event !== null)
     .slice(-Math.max(0, maxEvents));
-}
-
-export function normalizeAgentRunControlGraphGoals(
-  goals: ReadonlyArray<Partial<AgentGoal>> | undefined,
-): AgentGoal[] {
-  if (!Array.isArray(goals)) return [];
-
-  const seen = new Set<string>();
-  const normalized: AgentGoal[] = [];
-
-  for (const g of goals) {
-    if (!g || typeof g !== 'object') continue;
-    const id = typeof g.id === 'string' && g.id.trim().length > 0 ? g.id.trim() : '';
-    const title = typeof g.title === 'string' && g.title.trim().length > 0 ? g.title.trim() : '';
-    if (!title) continue;
-    const finalId =
-      id || `goal_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    if (seen.has(finalId)) continue;
-    seen.add(finalId);
-
-    const status =
-      g.status === 'pending' ||
-      g.status === 'active' ||
-      g.status === 'completed' ||
-      g.status === 'blocked'
-        ? g.status
-        : 'pending';
-
-    const dependencies = Array.isArray(g.dependencies)
-      ? g.dependencies.filter(
-          (d: unknown): d is string => typeof d === 'string' && d.trim().length > 0,
-        )
-      : [];
-
-    const evidence = Array.isArray(g.evidence)
-      ? g.evidence.filter((e: unknown): e is string => typeof e === 'string' && e.trim().length > 0)
-      : [];
-
-    const requiredCapabilities = Array.isArray(g.requiredCapabilities)
-      ? g.requiredCapabilities.filter(
-          (c: unknown): c is string => typeof c === 'string' && c.trim().length > 0,
-        )
-      : undefined;
-
-    const requiredResourceKinds = Array.isArray(g.requiredResourceKinds)
-      ? g.requiredResourceKinds.filter(
-          (r: unknown): r is string => typeof r === 'string' && r.trim().length > 0,
-        )
-      : undefined;
-
-    const successCriteria = Array.isArray(g.successCriteria)
-      ? g.successCriteria.filter(
-          (c: unknown): c is string => typeof c === 'string' && c.trim().length > 0,
-        )
-      : undefined;
-
-    const completionPolicy =
-      normalizeGoalCompletionPolicy(g.completionPolicy) ??
-      resolveDefaultGoalCompletionPolicy({ successCriteria });
-    const blockedReason =
-      typeof g.blockedReason === 'string' && g.blockedReason.trim().length > 0
-        ? g.blockedReason.trim()
-        : undefined;
-
-    const owner = g.owner === 'supervisor' || typeof g.owner === 'string' ? g.owner : undefined;
-    const createdAt =
-      typeof g.createdAt === 'number' && Number.isFinite(g.createdAt) ? g.createdAt : Date.now();
-    const updatedAt =
-      typeof g.updatedAt === 'number' && Number.isFinite(g.updatedAt) ? g.updatedAt : createdAt;
-    const completedAt =
-      status === 'completed' && typeof g.completedAt === 'number' && Number.isFinite(g.completedAt)
-        ? g.completedAt
-        : undefined;
-    normalized.push({
-      id: finalId,
-      title,
-      ...(typeof g.description === 'string' && g.description.trim().length > 0
-        ? { description: g.description.trim() }
-        : {}),
-      status,
-      dependencies: Array.from(new Set(dependencies)),
-      evidence: Array.from(new Set(evidence)),
-      createdAt,
-      updatedAt,
-      ...(completedAt ? { completedAt } : {}),
-      ...(owner ? { owner } : {}),
-      ...(requiredCapabilities?.length ? { requiredCapabilities } : {}),
-      ...(requiredResourceKinds?.length ? { requiredResourceKinds } : {}),
-      ...(successCriteria?.length ? { successCriteria } : {}),
-      completionPolicy,
-      ...(blockedReason ? { blockedReason } : {}),
-    });
-  }
-
-  return normalized;
 }
 
 export function normalizeAgentRunControlGraphTurnDirectives(
@@ -453,7 +342,6 @@ export function createInitialAgentRunControlGraphState(
   const finalizationHoldReason = normalizeOptionalText(state.finalizationHoldReason);
   const terminalReason = normalizeOptionalText(state.terminalReason);
   const activeTaskId = normalizeOptionalText(state.activeTaskId);
-  const goals = normalizeAgentRunControlGraphGoals(state.goals);
   const plan = normalizeAgentPlan(state.plan);
   const asyncWork = normalizeAgentRunControlGraphAsyncWorkState(state.asyncWork);
   const performance = normalizeAgentRunControlGraphPerformance(state.performance);
@@ -478,7 +366,6 @@ export function createInitialAgentRunControlGraphState(
     ...(finalizationHoldReason ? { finalizationHoldReason } : {}),
     ...(terminalReason ? { terminalReason } : {}),
     ...(activeTaskId ? { activeTaskId } : {}),
-    ...(goals.length > 0 ? { goals } : {}),
     ...(plan.length > 0 ? { plan } : {}),
     ...(requestUnderstanding ? { requestUnderstanding } : {}),
     ...(pendingUserInput ? { pendingUserInput } : {}),

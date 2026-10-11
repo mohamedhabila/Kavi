@@ -29,20 +29,6 @@ function makeRun(): AgentRun {
       observedToolResults: [],
       pendingAsyncCount: 0,
       lastModelToolNames: [],
-      goals: [
-        {
-          id: 'deliver',
-          title: 'Deliver exact result',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['worker:verified_success'],
-          successCriteria: ['evidence.prefix:worker'],
-          completionPolicy: 'blocking',
-          createdAt: 1,
-          updatedAt: 2,
-          completedAt: 2,
-        },
-      ],
       asyncWork: { awaitingBackgroundWorkers: true, pendingOperations: [], updatedAt: 2 },
       performance: {
         modelTurnCount: 1,

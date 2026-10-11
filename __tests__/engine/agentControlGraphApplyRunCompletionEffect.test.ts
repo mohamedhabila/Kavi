@@ -1,7 +1,6 @@
 import { applyConversationRunCompletionEffect } from '../../src/engine/graph/applyRunCompletionEffect';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 import type { Conversation } from '../../src/types/conversation';
-import { createGoal } from '../../src/engine/goals/types';
 
 describe('applyConversationRunCompletionEffect', () => {
   it('marks the control graph terminal before completing the run', () => {
@@ -209,24 +208,7 @@ describe('applyConversationRunCompletionEffect', () => {
 
   describe('persisted final delivery boundary', () => {
     function conversationAwaitingReview(messages: Conversation['messages']): Conversation {
-      const completedGoal = {
-        ...createGoal({
-          id: 'done',
-          title: 'Completed goal',
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.tool:read_file'],
-          evidence: ['read_file:{"status":"completed"}'],
-          now: 1,
-        }),
-        status: 'completed' as const,
-        updatedAt: 2,
-        completedAt: 2,
-      };
-      const controlGraph = createInitialAgentControlGraphSnapshot({
-        status: 'awaiting_review',
-        goals: [completedGoal],
-      });
+      const controlGraph = createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' });
       return {
         id: 'conv1',
         title: 'Test',

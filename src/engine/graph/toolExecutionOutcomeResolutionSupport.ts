@@ -8,13 +8,6 @@ import {
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { ToolCallRecord } from '../loopDetection';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
-import {
-  effectReceiptEvidenceTargetsCriterion,
-  parseEffectCompletionCriterion,
-} from '../goals/effectCompletionEvidence';
-import { parseToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
-import { isCodeOwnedEffectCompletionGoal, type AgentGoal } from '../goals/types';
-import type { AgentControlGraphEvent } from './agentControlGraph';
 
 export function updateToolCallHistoryResult(params: {
   history: ToolCallRecord[] | undefined;
@@ -42,88 +35,6 @@ export function updateToolCallHistoryResult(params: {
     };
     return;
   }
-}
-
-export function buildTerminalFailedEffectGuardRemovalEvent(params: {
-  goals: ReadonlyArray<AgentGoal>;
-  receiptEvidence: string | undefined;
-}): AgentControlGraphEvent | null {
-  const receipt = params.receiptEvidence
-    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
-    : null;
-  if (!receipt || (receipt.effectState !== 'failed' && receipt.effectState !== 'cancelled')) {
-    return null;
-  }
-
-  const removableGoalIds = new Set(
-    params.goals
-      .filter(
-        (goal) =>
-          isCodeOwnedEffectCompletionGoal(goal) &&
-          (goal.status === 'active' || goal.status === 'blocked') &&
-          (goal.successCriteria ?? []).some((criterion) => {
-            const effectCriterion = parseEffectCompletionCriterion(criterion);
-            return effectCriterion
-              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
-              : false;
-          }),
-      )
-      .map((goal) => goal.id),
-  );
-  if (removableGoalIds.size === 0) return null;
-
-  return {
-    type: 'GOALS_UPDATED',
-    goals: params.goals.filter((goal) => !removableGoalIds.has(goal.id)),
-    reason: 'effect_completion_contract:terminal_failed_retired',
-    projectToMemoryTasks: false,
-    timestamp: Date.now(),
-  };
-}
-
-export function buildAppliedUnverifiedEffectGoalBlockEvent(params: {
-  goals: ReadonlyArray<AgentGoal>;
-  receiptEvidence: string | undefined;
-}): AgentControlGraphEvent | null {
-  const receipt = params.receiptEvidence
-    ? parseToolEffectReceiptEvidence(params.receiptEvidence)
-    : null;
-  if (!receipt || receipt.effectState !== 'applied' || receipt.verificationState === 'verified') {
-    return null;
-  }
-
-  const timestamp = Date.now();
-  const targetGoalIds = new Set(
-    params.goals
-      .filter(
-        (goal) =>
-          goal.status === 'active' &&
-          (goal.successCriteria ?? []).some((criterion) => {
-            const effectCriterion = parseEffectCompletionCriterion(criterion);
-            return effectCriterion
-              ? effectReceiptEvidenceTargetsCriterion(receipt, effectCriterion)
-              : false;
-          }),
-      )
-      .map((goal) => goal.id),
-  );
-  if (targetGoalIds.size === 0) return null;
-
-  return {
-    type: 'GOALS_UPDATED',
-    goals: params.goals.map((goal) =>
-      targetGoalIds.has(goal.id)
-        ? {
-            ...goal,
-            status: 'blocked' as const,
-            blockedReason: `Effect applied but verification was incomplete (${receipt.receiptId}). Do not repeat the mutation.`,
-            updatedAt: timestamp,
-          }
-        : goal,
-    ),
-    reason: 'effect_verification_incomplete',
-    timestamp,
-  };
 }
 
 export function buildClarificationRequestUnderstanding(params: {

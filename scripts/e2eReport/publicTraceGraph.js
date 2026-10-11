@@ -1,9 +1,4 @@
 const {
-  projectGoalHashesByStatus,
-  projectGoalSummary,
-  projectHashCount,
-} = require('./publicTraceGoals');
-const {
   asRecord,
   finiteNumber,
   nonNegativeInteger,
@@ -28,8 +23,6 @@ const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'FINALIZATION_HELD',
   'FINALIZED',
   'FINAL_CANDIDATE_READY',
-  'GOALS_UPDATED',
-  'GOAL_EVIDENCE_ADDED',
   'LOOP_DETECTED',
   'MEMORY_RETRIEVAL',
   'MODEL_TURN_COMPLETED',
@@ -214,18 +207,12 @@ function projectAuditEvent(value) {
 function projectObservedToolResult(value) {
   const source = asRecord(value);
   const nameHash = source ? projectHash(source.nameHash) : null;
-  const evidenceCount = source ? nonNegativeInteger(source.evidenceCount) : null;
-  const evidenceSourceHashCounts = source
-    ? projectArray(source.evidenceSourceHashCounts, projectHashCount)
-    : null;
   if (
     !source ||
     !nameHash ||
     typeof source.failed !== 'boolean' ||
     typeof source.canonicalized !== 'boolean' ||
-    typeof source.graphApplied !== 'boolean' ||
-    evidenceCount === null ||
-    !evidenceSourceHashCounts
+    typeof source.graphApplied !== 'boolean'
   ) {
     return null;
   }
@@ -236,8 +223,6 @@ function projectObservedToolResult(value) {
     failed: source.failed,
     canonicalized: source.canonicalized,
     graphApplied: source.graphApplied,
-    evidenceCount,
-    evidenceSourceHashCounts,
   };
 }
 
@@ -268,10 +253,6 @@ function projectGraphSnapshot(value) {
   const source = asRecord(value);
   const status = source ? safeEnum(source.status, SAFE_GRAPH_STATUSES) : undefined;
   const iteration = source ? nonNegativeInteger(source.iteration) : null;
-  const goalIdHashesByStatus = source
-    ? projectGoalHashesByStatus(source.goalIdHashesByStatus)
-    : null;
-  const goalSummaries = source ? projectArray(source.goalSummaries, projectGoalSummary) : null;
   const expectedToolNames = source ? projectSafeToolNameArray(source.expectedToolNames) : null;
   const expectedToolNameHashes = source ? projectHashArray(source.expectedToolNameHashes) : null;
   const observedToolResults = source
@@ -315,8 +296,6 @@ function projectGraphSnapshot(value) {
   if (
     !status ||
     iteration === null ||
-    !goalIdHashesByStatus ||
-    !goalSummaries ||
     !expectedToolNames ||
     !expectedToolNameHashes ||
     !observedToolResults ||
@@ -334,8 +313,6 @@ function projectGraphSnapshot(value) {
   const projected = {
     status,
     iteration,
-    goalIdHashesByStatus,
-    goalSummaries,
     expectedToolNames,
     expectedToolNameHashes,
     observedToolResults,

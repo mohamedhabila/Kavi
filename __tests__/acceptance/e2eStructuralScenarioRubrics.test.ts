@@ -16,20 +16,10 @@ import {
   E2E_PAIRED_ONLY_SCENARIOS,
 } from '../../src/acceptance/e2eAgent/scenarios';
 import type { E2EScenario } from '../../src/acceptance/e2eAgent/types';
-import {
-  E2E_CALENDAR_MUTATION_SUCCESS_CRITERIA,
-  E2E_CALENDAR_VERIFY_MUTATION_SUCCESS_CRITERIA,
-  E2E_CONTACT_SMS_SUCCESS_CRITERIA,
-  E2E_DEVICE_STATE_SUCCESS_CRITERIA,
-  E2E_MEDIA_STATE_SUCCESS_CRITERIA,
-  E2E_PERMISSION_MAPS_SUCCESS_CRITERIA,
-} from '../../src/acceptance/e2eAgent/scenarioToolSets';
-import { createGoal } from '../../src/engine/goals/types';
 import { evaluateE2EScenarioRubrics } from '../../src/acceptance/e2eAgent/rubricEvaluators';
 import { runE2EScenario } from '../../src/acceptance/e2eAgent/scenarioRunner';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
-import { areGoalSuccessCriteriaSatisfied } from '../../src/engine/goals/completionEvidence';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 const mockRunOrchestrator = jest.fn();
@@ -83,10 +73,7 @@ jest.mock('../../src/acceptance/e2eAgent/providerConfig', () => ({
   isE2EAgentEvalEnabled: () => process.env.RUN_E2E_AGENT_EVAL === '1',
 }));
 
-function buildFinalizedGraphSnapshot(
-  goals?: AgentRunControlGraphState['goals'],
-  activeTaskId?: string,
-): AgentRunControlGraphState {
+function buildFinalizedGraphSnapshot(activeTaskId?: string): AgentRunControlGraphState {
   return {
     version: 1,
     status: 'finalized',
@@ -115,7 +102,6 @@ function buildFinalizedGraphSnapshot(
     },
     audit: [],
     updatedAt: 1,
-    ...(goals?.length ? { goals } : {}),
     ...(activeTaskId ? { activeTaskId } : {}),
   };
 }
@@ -210,20 +196,13 @@ describe('E2E thin runner fixtures', () => {
     expect(scenario).toBeDefined();
 
     let invocation = 0;
-    const firstGraph = buildFinalizedGraphSnapshot([
-      createGoal({
-        id: 'system-derived-inventory',
-        title: 'system-derived-inventory',
-        status: 'active',
-        now: 1,
-      }),
-    ]);
+    const firstGraph = buildFinalizedGraphSnapshot('system-derived-inventory');
 
     mockRunOrchestrator.mockImplementation(async (options, callbacks) => {
       if (invocation === 0) {
         expect(options.initialAgentControlGraphState).toBeUndefined();
       } else {
-        expect(options.initialAgentControlGraphState?.goals?.[0]?.id).toBe(
+        expect(options.initialAgentControlGraphState?.activeTaskId).toBe(
           'system-derived-inventory',
         );
       }
@@ -388,91 +367,6 @@ describe('E2E benchmark structural completion criteria', () => {
         expect.objectContaining({ kind: 'native_fixture_state', path: 'sms.opened' }),
       ]),
     );
-  });
-
-  it('keeps benchmark completion criteria satisfiable by result structures', () => {
-    const goal = (criteria: ReadonlyArray<string>, evidence: ReadonlyArray<string>) =>
-      createGoal({
-        id: 'criteria-check',
-        title: 'criteria-check',
-        status: 'active',
-        successCriteria: [...criteria],
-        evidence: [...evidence],
-        now: 1,
-      });
-
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_CALENDAR_MUTATION_SUCCESS_CRITERIA, [
-          'calendar_create_event:{"status":"created_verified"}',
-          'calendar_update_event:{"status":"updated_verified"}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_CALENDAR_VERIFY_MUTATION_SUCCESS_CRITERIA, [
-          'calendar_list:[{"allowsModifications":true}]',
-          'calendar_create_event:{"status":"created_verified"}',
-          'calendar_update_event:{"status":"updated_verified"}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_CONTACT_SMS_SUCCESS_CRITERIA, [
-          'contacts_search_full:[{"id":"e2e-contact-avery"}]',
-          'sms_compose:{"status":"sms_composer_opened","recipientCount":1}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_DEVICE_STATE_SUCCESS_CRITERIA, [
-          'clipboard:{"status":"written_verified"}',
-          'clipboard:{"status":"read"}',
-          'share:{"status":"handed_off"}',
-          'notification_schedule:{"status":"notification_scheduled"}',
-          'notification_cancel:{"status":"notification_cancelled"}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_PERMISSION_MAPS_SUCCESS_CRITERIA, [
-          'device_permissions:{"current":{"location":"denied","mediaLibrary":"revoked"}}',
-          'location_get_current:{"status":"permission_denied"}',
-          'maps_open:{"status":"maps_opened","targetKind":"query"}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(
-          [
-            'evidence.json_field:fact.predicate:preferred_message_contact',
-            'evidence.json_field:fact.value:Avery',
-          ],
-          [
-            'memory_remember:{"status":"created","fact":{"predicate":"preferred_message_contact","value":"Avery"}}',
-          ],
-        ),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_MEDIA_STATE_SUCCESS_CRITERIA, [
-          'photos_pick:[{"id":"photo-1"},{"id":"photo-2"}]',
-          'screen_record:{"status":"captured"}',
-          'camera_clip:{"status":"recorded"}',
-        ]),
-      ),
-    ).toBe(true);
-    expect(
-      areGoalSuccessCriteriaSatisfied(
-        goal(E2E_CONTACT_SMS_SUCCESS_CRITERIA, ['contacts_search:[{"id":"e2e-contact-avery"}]']),
-      ),
-    ).toBe(false);
   });
 });
 

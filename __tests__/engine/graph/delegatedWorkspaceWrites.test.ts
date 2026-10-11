@@ -1,19 +1,11 @@
 import { collectDelegatedWorkspaceWrites } from '../../../src/engine/graph/delegatedWorkspaceWrites';
-import { collectDelegatedArtifactEvidence } from '../../../src/engine/graph/delegatedToolEvidence';
 import type { Message } from '../../../src/types/message';
 
 // Traced live on an Android emulator. A worker wrote artifacts/tl4/risks.md and terminated
 // verified_success, and its terminal result still carried artifactCount: 0, artifacts: null
 // — because a worker's artifacts come from message attachments, and a file written with
-// write_file attaches nothing.
-//
-// Delegated-artifact evidence reads that field, so the supervisor's
-// evidence.artifact:artifacts/tl4/risks.md criterion could never be satisfied by the
-// delegation. The model read the graph correctly and rewrote the file itself:
-//
-//   "The risks.md and verify goals need the artifact evidence recorded by a parent
-//    write_file. Let me write risks.md with the verified worker content to register
-//    that evidence."
+// write_file attaches nothing. The supervisor, told the worker produced nothing, rewrote
+// the file itself.
 
 function toolResult(name: string, content: string): Message {
   return {
@@ -75,35 +67,6 @@ describe('results that prove no file exists', () => {
   });
 });
 
-describe('the supervisor can now count a delegated deliverable', () => {
-  it('credits the worker path through the evidence collector', () => {
-    // The shape the terminal result carries once the worker's writes are collected.
-    const evidence = collectDelegatedArtifactEvidence({
-      hostToolName: 'sessions_wait',
-      result: JSON.stringify({
-        status: 'completed',
-        completionState: 'verified_success',
-        artifacts: collectDelegatedWorkspaceWrites([toolResult('write_file', WROTE_RISKS)]),
-      }),
-    });
-
-    expect(evidence.some((entry) => entry.includes('artifacts/tl4/risks.md'))).toBe(true);
-  });
-
-  it('credits nothing when the worker did not finish verified', () => {
-    const evidence = collectDelegatedArtifactEvidence({
-      hostToolName: 'sessions_wait',
-      result: JSON.stringify({
-        status: 'error',
-        completionState: 'incomplete',
-        artifacts: collectDelegatedWorkspaceWrites([toolResult('write_file', WROTE_RISKS)]),
-      }),
-    });
-
-    expect(evidence).toEqual([]);
-  });
-});
-
 describe('tools this module never names', () => {
   // Which tools write, which statuses mean the file landed, and where the path sits are
   // all read from the code-owned effect contracts. image_generate proves it: a different
@@ -122,7 +85,7 @@ describe('tools this module never names', () => {
 
   it('ignores an artifact.write whose resource is not a workspace file', () => {
     // canvas_create declares artifact.write, but its resource is a canvas surface
-    // identified by surfaceId — not a path an evidence.artifact criterion can match.
+    // identified by surfaceId — not a workspace path.
     const created = JSON.stringify({ status: 'created', surfaceId: 'surface-1' });
     expect(collectDelegatedWorkspaceWrites([toolResult('canvas_create', created)])).toEqual([]);
   });

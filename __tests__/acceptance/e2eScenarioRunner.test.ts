@@ -407,24 +407,16 @@ describe('runE2EScenario product foreground integration', () => {
 
   it('maps the latest persisted control graph for each agentic turn', async () => {
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onAssistantMessage('Goal complete.', undefined, undefined, completeFinalMetadata);
+      callbacks.onAssistantMessage(
+        'Sources collected.',
+        undefined,
+        undefined,
+        completeFinalMetadata,
+      );
       callbacks.onAgentControlGraphStateChange(
         buildFinalizedGraphSnapshot({
-          activeTaskId: 'goal-a',
-          goals: [
-            {
-              id: 'goal-a',
-              title: 'Collect sources',
-              status: 'completed',
-              completionPolicy: 'blocking',
-              dependencies: [],
-              evidence: ['read_file:source-a.md'],
-              successCriteria: ['evidence.min:1'],
-              createdAt: 1,
-              updatedAt: 2,
-              completedAt: 2,
-            },
-          ],
+          activeTaskId: 'collect-sources',
+          plan: [{ step: 'Collect sources', status: 'completed' }],
         }),
       );
       callbacks.onDone();
@@ -434,9 +426,9 @@ describe('runE2EScenario product foreground integration', () => {
     const result = await runE2EScenario(scenario());
 
     expect(result.graphSnapshots).toHaveLength(1);
-    expect(result.graphSnapshots[0]?.goals?.[0]).toMatchObject({
-      id: 'goal-a',
-      status: 'completed',
+    expect(result.graphSnapshots[0]).toMatchObject({
+      activeTaskId: 'collect-sources',
+      plan: [{ step: 'Collect sources', status: 'completed' }],
     });
   });
 

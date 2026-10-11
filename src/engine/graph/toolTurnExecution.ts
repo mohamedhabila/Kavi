@@ -41,7 +41,6 @@ import {
   buildToolBatchIncompleteObservabilityDetail,
   GRAPH_OBSERVABILITY_AUDIT_TYPES,
 } from './graphObservability';
-import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
@@ -54,7 +53,6 @@ import {
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
-import { materializeMobileControllerGoal } from '../mobileController/goalAdmission';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildClarificationReviewBlock } from './clarificationReviewPolicy';
@@ -270,20 +268,6 @@ export async function executeAgentControlGraphToolTurn(
   let workingMessages = toolTurnPreparation.workingMessages;
   const warningInjectedThisRound = toolTurnPreparation.warningInjectedThisRound;
 
-  const effectGoalMaterialization = await materializeToolEffectCompletionGoals({
-    toolCalls: executableToolCalls,
-    goals: params.getGraphSnapshot().goals,
-    tools: params.groundedRequestScopedTools,
-  });
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-  const goalsAfterEffectMaterialization =
-    effectGoalMaterialization.status === 'materialized'
-      ? effectGoalMaterialization.goals
-      : (params.getGraphSnapshot().goals ?? []);
-  const mobileControllerGoalMaterialization = materializeMobileControllerGoal({
-    toolCalls: executableToolCalls,
-    goals: goalsAfterEffectMaterialization,
-  });
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
@@ -360,23 +344,6 @@ export async function executeAgentControlGraphToolTurn(
         toolTurnPreparation.assistantMetadata,
       );
       const graphEvents: AgentControlGraphEvent[] = [];
-      if (effectGoalMaterialization.status === 'materialized') {
-        graphEvents.push({
-          type: 'GOALS_UPDATED',
-          goals: effectGoalMaterialization.goals,
-          reason: effectGoalMaterialization.reason,
-          projectToMemoryTasks: false,
-          timestamp: effectGoalMaterialization.timestamp,
-        });
-      }
-      if (mobileControllerGoalMaterialization.status === 'materialized') {
-        graphEvents.push({
-          type: 'GOALS_UPDATED',
-          goals: mobileControllerGoalMaterialization.goals,
-          reason: mobileControllerGoalMaterialization.reason,
-          projectToMemoryTasks: false,
-        });
-      }
       graphEvents.push({
         type: 'MODEL_TURN_COMPLETED',
         iteration: params.iteration,

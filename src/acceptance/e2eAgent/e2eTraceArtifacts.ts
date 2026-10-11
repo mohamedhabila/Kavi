@@ -20,7 +20,6 @@ export type {
   E2ERedactedValueFingerprint,
 } from './e2eTraceRedaction';
 export type {
-  E2ERedactedGoalTrace,
   E2ERedactedGraphAuditEvent,
   E2ERedactedGraphAuditType,
   E2ERedactedGraphSnapshotTrace,

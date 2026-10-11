@@ -258,7 +258,7 @@ describe('ChatScreen streaming presentation', () => {
     jest.useRealTimers();
   });
 
-  it('does not project graph goals into the visible plan from streamed assistant prose', async () => {
+  it('does not project streamed assistant prose into the visible plan', async () => {
     jest.useFakeTimers();
 
     const screen = render(<ChatScreen />);
@@ -283,18 +283,6 @@ describe('ChatScreen streaming presentation', () => {
     act(() => {
       callbacks.onAgentControlGraphStateChange?.(
         createAgentRunControlGraphState({
-          goals: [
-            {
-              id: 'inspect',
-              title: 'Inspect repository',
-              description: 'Find the root cause',
-              status: 'active',
-              dependencies: [],
-              evidence: [],
-              createdAt: 1_700_000_000_000,
-              updatedAt: 1_700_000_000_100,
-            },
-          ],
           updatedAt: 1_700_000_000_100,
         }),
       );

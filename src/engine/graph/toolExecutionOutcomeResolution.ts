@@ -7,18 +7,13 @@ import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetad
 import { type TrackedAsyncOperation } from '../pendingAsyncOperations';
 import { type OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import type { ToolCallRecord } from '../loopDetection';
-import { resolveToolEffectPolicy } from '../durability/toolEffectPolicy';
 import { type AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agentControlGraph';
 import { finalizeAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomePostProcessing';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
-import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
-import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
-import { buildToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
-import { collectDelegatedArtifactEvidence } from './delegatedToolEvidence';
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
   extractActivatedToolNamesFromDiscoveryToolResult,
@@ -38,9 +33,7 @@ import {
   type RequestClarificationToolResult,
 } from '../../services/agents/requestClarification';
 import {
-  buildAppliedUnverifiedEffectGoalBlockEvent,
   buildClarificationRequestUnderstanding,
-  buildTerminalFailedEffectGuardRemovalEvent,
   updateToolCallHistoryResult,
 } from './toolExecutionOutcomeResolutionSupport';
 import {
@@ -269,38 +262,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     );
 
     const graphToolCall = canonicalOutcome.toolMessage.toolCalls?.[0];
-    const effectPolicy = resolveToolEffectPolicy(toolName);
-    const isCodeOwnedEffectFreeTool =
-      effectPolicy.source !== 'unknown' &&
-      effectPolicy.effects.every((effect) => effect === 'none');
-    const structuralGoalEvidenceStrings =
-      !canonicalOutcome.toolMessage.isError &&
-      toolResultCanAdvanceWorkflow &&
-      (canonicalOutcome.effectReceipt?.effectState === 'none' || isCodeOwnedEffectFreeTool)
-        ? buildToolGoalEvidenceStrings({
-            toolName,
-            content: canonicalOutcome.toolMessage.content,
-          })
-        : [];
-    const effectReceiptEvidenceStrings = canonicalOutcome.effectReceipt
-      ? [buildToolEffectReceiptEvidence(canonicalOutcome.effectReceipt)]
-      : [];
-    /**
-     * A worker's write leaves its receipt on the worker's graph, so the supervisor's
-     * artifact criterion never saw the deliverable it named. These carry the paths the
-     * worker actually produced, so a supervisor goal can close on the file that exists
-     * instead of re-writing it to manufacture provenance.
-     */
-    const delegatedArtifactEvidenceStrings = collectDelegatedArtifactEvidence({
-      hostToolName: toolName,
-      result: canonicalOutcome.toolMessage.content,
-      isError: canonicalOutcome.toolMessage.isError,
-    });
-    const toolGoalEvidenceStrings = [
-      ...structuralGoalEvidenceStrings,
-      ...effectReceiptEvidenceStrings,
-      ...delegatedArtifactEvidenceStrings,
-    ];
     params.applyGraphEvents([
       {
         type: 'TOOL_RESULT_RECORDED',
@@ -310,7 +271,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
           ...(canonicalOutcome.toolMessage.isError ? { failed: true } : {}),
           ...(canonicalOutcome.canonicalized ? { canonicalized: true } : {}),
           ...(canonicalOutcome.graphApplied ? { graphApplied: true } : {}),
-          ...(toolGoalEvidenceStrings.length > 0 ? { evidence: toolGoalEvidenceStrings } : {}),
         },
       },
     ]);
@@ -331,7 +291,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       ]);
     }
 
-    // ── Auto-link tool results to active goal evidence ───────────────────
     if (!canonicalOutcome.toolMessage.isError && toolResultCanAdvanceWorkflow) {
       const delegationTerminalEvents = buildDelegationToolTerminalGraphEvents({
         toolName,
@@ -340,46 +299,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       });
       if (delegationTerminalEvents.length > 0) {
         params.applyGraphEvents(delegationTerminalEvents);
-      }
-    }
-
-    if (toolResultCanAdvanceWorkflow) {
-      // The router owns which goals may receive evidence — focused goals, declared pending
-      // goals, and closes that still lack their proof. Pre-filtering here to active and
-      // blocked goals silently disabled the latter two.
-      const evidenceRoutableGoals = params.getGraphSnapshot().goals ?? [];
-      const routableEvidenceStrings = toolGoalEvidenceStrings;
-      if (routableEvidenceStrings.length > 0 && evidenceRoutableGoals.length > 0) {
-        const routedEvidence = routeToolEvidenceToActiveGoals({
-          toolName,
-          toolDefinitions: params.groundedRequestScopedTools,
-          goals: evidenceRoutableGoals,
-          evidenceStrings: routableEvidenceStrings,
-        });
-        for (const routed of routedEvidence) {
-          params.applyGraphEvents([
-            {
-              type: 'GOAL_EVIDENCE_ADDED',
-              goalId: routed.goalId,
-              evidence: routed.evidence,
-              timestamp: Date.now(),
-            },
-          ]);
-        }
-        const unverifiedEffectBlockEvent = buildAppliedUnverifiedEffectGoalBlockEvent({
-          goals: params.getGraphSnapshot().goals ?? [],
-          receiptEvidence: effectReceiptEvidenceStrings[0],
-        });
-        if (unverifiedEffectBlockEvent) {
-          params.applyGraphEvents([unverifiedEffectBlockEvent]);
-        }
-        const terminalFailedEffectGuardRemovalEvent = buildTerminalFailedEffectGuardRemovalEvent({
-          goals: params.getGraphSnapshot().goals ?? [],
-          receiptEvidence: effectReceiptEvidenceStrings[0],
-        });
-        if (terminalFailedEffectGuardRemovalEvent) {
-          params.applyGraphEvents([terminalFailedEffectGuardRemovalEvent]);
-        }
       }
     }
 

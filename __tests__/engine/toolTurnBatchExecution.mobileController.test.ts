@@ -4,7 +4,6 @@ import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileControl
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecutionMessages';
-import { createGoal } from '../../src/engine/goals/types';
 
 jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
   executeToolCallLifecycle: jest.fn(),
@@ -55,16 +54,6 @@ function params(
     ],
     completedWorkflowToolNames: new Set<string>(),
     recordPerformanceMetrics: jest.fn(),
-    controlGraphGoals: [
-      createGoal({
-        id: 'mobile-goal',
-        title: 'Complete the requested device task',
-        status: 'active',
-        completionPolicy: 'blocking',
-        successCriteria: ['evidence.tool:mobile_ui_action'],
-        now: 100,
-      }),
-    ],
     agentRunId: 'agent-run-mobile-1',
     executionRunId: 'execution-run-mobile-1',
     onBatchCommitted: jest.fn(),
@@ -147,7 +136,7 @@ describe('mobile controller tool batch execution', () => {
     ).toBe(true);
   });
 
-  it('runs a lone action with no goal to anchor it', async () => {
+  it('runs a lone action', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle) => {
       expect(
         lifecycle.workflowToolCallBlocker?.(lifecycle.tc.name, lifecycle.tc.arguments),
@@ -165,12 +154,9 @@ describe('mobile controller tool batch execution', () => {
       };
     });
 
-    const input = params([
-      { id: 'tc-mobile', name: 'mobile_ui_action', arguments: '{"kind":"back"}' },
-    ]);
-    input.controlGraphGoals = [];
-
-    const outcomes = await executeAgentControlGraphToolBatch(input);
+    const outcomes = await executeAgentControlGraphToolBatch(
+      params([{ id: 'tc-mobile', name: 'mobile_ui_action', arguments: '{"kind":"back"}' }]),
+    );
 
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
     expect(outcomes).toHaveLength(1);

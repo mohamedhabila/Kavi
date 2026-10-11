@@ -20,8 +20,8 @@ E2E and live-provider tests are skipped unless explicitly opted in.
 
 **Tier 2 (`verify:strict`)** runs Tier 1, then:
 
-- `eval:memory` - 3-turn interdependent recall fixtures (>=90% pass rate),
-  chitchat ingestion fixtures, and goal/task unification fixtures.
+- `eval:memory` - 3-turn interdependent recall fixtures (>=90% pass rate) and
+  chitchat ingestion fixtures.
 - `eval:agent` - bootstrap, false-finalize (including `evidence.json_field`, `file_hash`,
   `exit_code` hold fixtures), token efficiency, tool contracts discovery, catalog/describe
   discovery, session tool activation cache, delegation metrics
@@ -580,7 +580,7 @@ maps to at least 1 scenario (`e2eBenchmarkRegistry.ts`).
 
 **Structural rubrics:** graph status, terminal success, completion holds,
 workspace paths and absence, file hashes, memory predicates, native fixture
-state, goal status/criteria, user-turn count, token budgets, cache reads, graph
+state, user-turn count, token budgets, cache reads, graph
 audit observations, ingestion jobs, memory episodes, working-block tokens, and
 turn-attributed tool-call counts for passive no-action guards.
 E2E scenarios do not declare `allowedTools` and do not score `tool_called`,
@@ -595,10 +595,9 @@ regular-expression checks. Unit tests: `e2eAgentRubricEvaluators.test.ts`,
 `graphTaskScope.test.ts`.
 
 **Delegation scenario:** supervisor spawns worker (`sessions_spawn` +
-`waitForCompletion`), worker evidence (`evidence.prefix:worker`), goal
-completion, and graph terminal success. The worker session is mocked; the
-selected E2E provider drives the supervisor tool loop. Goal pins
-`sessions_spawn` via `requiredCapabilities: ['coordinate']`.
+`waitForCompletion`), the worker's result reaches the final answer, and the
+graph ends in terminal success. The worker session is mocked; the selected E2E
+provider drives the supervisor tool loop.
 
 ### Cost and time expectations
 
@@ -626,9 +625,10 @@ Graph observability records `TOOL_SURFACE_TOKEN_AUDIT` after pre-flight budget e
 
 `npm run verify:strict` includes structural delegation acceptance via `__tests__/acceptance/delegationMetrics.test.ts`:
 
-- Spawn gate blocked when `dependsOnWorkstreams` goals are incomplete; allowed when complete
-- Worker terminal → `GOAL_EVIDENCE_ADDED` with `worker:` prefix → completion gate readiness when goal completed
-- Orchestrator passes live `controlGraphGoals` into `sessions_spawn` (no chat-store babysitting)
+- Spawn gate resolves `dependsOnWorkstreams` against the run's workers: blocked while a
+  dependency is missing or has not delivered, allowed once its worker delivered
+- New work gets a workstream id unique among the run's workers; a workstream whose worker is
+  running or already finished is not replaced
 - Terminal delegation tool JSON applies the same graph events as the UI sub-agent bridge
 
 Live E2E delegation (`delegation-worker-finalize`) runs in

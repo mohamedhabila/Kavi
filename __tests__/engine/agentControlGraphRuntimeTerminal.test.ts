@@ -3,7 +3,6 @@ import {
   createInitialAgentControlGraphSnapshot,
   reduceAgentControlGraph,
 } from '../../src/engine/graph/agentControlGraph';
-import { createGoal } from '../../src/engine/goals/types';
 import { emitSessionEvent } from '../../src/services/events/bus';
 
 jest.mock('../../src/services/events/bus', () => ({
@@ -13,23 +12,7 @@ jest.mock('../../src/services/events/bus', () => ({
 const mockedEmitSessionEvent = jest.mocked(emitSessionEvent);
 
 function deliveryPendingSnapshot() {
-  return createInitialAgentControlGraphSnapshot({
-    goals: [
-      {
-        ...createGoal({
-          id: 'done',
-          title: 'Completed goal',
-          status: 'active',
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.tool:read_file'],
-          now: 1,
-        }),
-        status: 'completed' as const,
-        completedAt: 2,
-        updatedAt: 2,
-      },
-    ],
-  });
+  return createInitialAgentControlGraphSnapshot();
 }
 
 function callbacks(onAssistantMessage = jest.fn()) {

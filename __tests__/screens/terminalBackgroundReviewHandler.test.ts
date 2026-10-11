@@ -68,7 +68,6 @@ const run: AgentRun = {
     },
     audit: [],
     updatedAt: 2,
-    goals: [],
   },
 };
 

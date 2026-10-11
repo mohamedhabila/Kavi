@@ -2,7 +2,7 @@
 // Kavi — Lean Agent Control Graph Contract
 // ---------------------------------------------------------------------------
 // Canonical graph-owned snapshot shape for the mobile agent control plane.
-// Planning, completion, memory task linkage, and async work are graph-owned.
+// The plan, completion, memory task scope, and async work are graph-owned.
 // Workflow routes and execution-unit planning surfaces are not part of this contract.
 // ---------------------------------------------------------------------------
 
@@ -10,7 +10,6 @@ import type { AgentRunControlGraphState } from '../../types/agentRun';
 
 /** Fields owned exclusively by the control graph (XState + graph actions). */
 export const LEAN_GRAPH_OWNED_FIELDS = [
-  'goals',
   'plan',
   'asyncWork',
   'turnDirectives',

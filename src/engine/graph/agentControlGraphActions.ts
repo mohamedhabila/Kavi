@@ -1,6 +1,5 @@
 import {
   MAX_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS,
-  normalizeAgentRunControlGraphGoals,
   normalizeAgentRunControlGraphSessionActivatedToolNames,
 } from '../../services/agents/agentControlGraphState';
 import { normalizeAgentPlan } from '../plan/agentPlan';
@@ -19,8 +18,6 @@ import {
   type AgentControlGraphAssignArgs,
 } from './agentControlGraphAssign';
 import { createRecordAsyncWaitingAction } from './agentControlGraphAsyncActions';
-import { addGoalEvidence } from '../goals/graphState';
-import { getActiveGoal } from '../goals/types';
 import { normalizeRequestUnderstandingSnapshot } from '../../services/agents/requestUnderstandingProjection';
 
 export function createAgentControlGraphActions() {
@@ -180,21 +177,6 @@ export function createAgentControlGraphActions() {
         };
       },
     ),
-    recordGoalsUpdated: assignAgentControlGraph(
-      ({ context, event }: AgentControlGraphAssignArgs) => {
-        if (event.type !== 'GOALS_UPDATED') {
-          return {};
-        }
-        const goals = normalizeAgentRunControlGraphGoals(event.goals);
-        const activeGoal = getActiveGoal(goals);
-        return {
-          goals: goals.length > 0 ? goals : undefined,
-          ...(activeGoal ? { activeTaskId: activeGoal.id } : {}),
-          updatedAt: getTimestamp(event),
-          audit: appendAudit(context.audit, event, event.reason),
-        };
-      },
-    ),
     recordPlanUpdated: assignAgentControlGraph(
       ({ context, event }: AgentControlGraphAssignArgs) => {
         if (event.type !== 'PLAN_UPDATED') {
@@ -272,28 +254,6 @@ export function createAgentControlGraphActions() {
             sessionActivatedToolNames.length > 0 ? sessionActivatedToolNames : undefined,
           updatedAt: getTimestamp(event),
           audit: appendAudit(context.audit, event, event.reason),
-        };
-      },
-    ),
-    recordGoalEvidenceAdded: assignAgentControlGraph(
-      ({ context, event }: AgentControlGraphAssignArgs) => {
-        if (event.type !== 'GOAL_EVIDENCE_ADDED') {
-          return {};
-        }
-        const currentGoals = context.goals ?? [];
-        if (currentGoals.length === 0) {
-          return {};
-        }
-        const updatedGoals = addGoalEvidence(
-          currentGoals,
-          event.goalId,
-          event.evidence,
-          getTimestamp(event),
-        );
-        return {
-          goals: updatedGoals,
-          updatedAt: getTimestamp(event),
-          audit: appendAudit(context.audit, event, `evidence:${event.goalId}`),
         };
       },
     ),

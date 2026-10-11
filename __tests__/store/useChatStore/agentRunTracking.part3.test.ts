@@ -373,20 +373,6 @@ describe('useChatStore', () => {
         {
           ...runningRun.controlGraph!,
           status: 'awaiting_review',
-          goals: [
-            {
-              id: 'deliver',
-              title: 'Deliver verified result',
-              status: 'completed',
-              dependencies: [],
-              evidence: ['read_file:{"status":"completed"}'],
-              successCriteria: ['evidence.tool:read_file'],
-              completionPolicy: 'blocking',
-              createdAt: 1700000009200,
-              updatedAt: 1700000009250,
-              completedAt: 1700000009250,
-            },
-          ],
         },
         runId,
       );
