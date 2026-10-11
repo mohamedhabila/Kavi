@@ -346,6 +346,7 @@ async function runScenarioIsolated(
       }
       // Let background extraction finish, as the time before a user's next message would.
       let memoryExtractionSettled = false;
+      const memoryWaitStartedAt = Date.now();
       if (!scenarioDeadlineExceeded) {
         memoryExtractionSettled = await waitForMemoryExtractionIdle(
           Math.min(
@@ -397,6 +398,7 @@ async function runScenarioIsolated(
           finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
           lifecycleBefore,
           memoryExtractionSettled,
+          memoryExtractionWaitMs: Date.now() - memoryWaitStartedAt,
           messages: turnMessages,
           native: {
             stateBefore: nativeStateBefore,

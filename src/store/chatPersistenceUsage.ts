@@ -155,6 +155,10 @@ function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEnt
     : undefined;
   const tokenBuckets = sanitizeUsageTokenBuckets(entry.tokenBuckets);
   const promptCache = sanitizeUsagePromptCacheTelemetry(entry.promptCache);
+  const durationMs =
+    typeof entry.durationMs === 'number' && Number.isFinite(entry.durationMs)
+      ? Math.max(0, entry.durationMs)
+      : undefined;
   const upstreamProvider =
     typeof entry.upstreamProvider === 'string' &&
     entry.upstreamProvider.trim().length > 0 &&
@@ -181,6 +185,7 @@ function sanitizeUsageEntry(entry: ConversationUsageEntry): ConversationUsageEnt
     ...(tokenDetails && Object.keys(tokenDetails).length > 0 ? { tokenDetails } : {}),
     ...(tokenBuckets ? { tokenBuckets } : {}),
     ...(promptCache ? { promptCache } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
     timestamp: entry.timestamp,
   };
 }

@@ -65,6 +65,7 @@ export type E2EPrivateScenarioEvidence = {
       completion: E2EScenarioTurnTrace['completion'];
       agentRun: E2EScenarioTurnTrace['agentRun'];
       memoryExtractionSettled: boolean;
+      memoryExtractionWaitMs: number;
       retrieval: E2EScenarioTurnTrace['retrieval'];
       memoryPrompt: E2EScenarioTurnTrace['memoryPrompt'];
       native: E2EScenarioTurnTrace['native'];
@@ -143,6 +144,7 @@ function projectTurn(
     completion: turn.completion,
     agentRun: turn.agentRun,
     memoryExtractionSettled: turn.memoryExtractionSettled,
+    memoryExtractionWaitMs: turn.memoryExtractionWaitMs,
     retrieval: turn.retrieval,
     memoryPrompt: turn.memoryPrompt,
     native: turn.native,

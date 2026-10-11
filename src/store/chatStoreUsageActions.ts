@@ -71,6 +71,7 @@ export function createUsageStoreActions(
             ...(usage.tokenBuckets ? { tokenBuckets: usage.tokenBuckets } : {}),
             ...(usage.promptCache ? { promptCache: usage.promptCache } : {}),
             ...(usage.upstreamProvider ? { upstreamProvider: usage.upstreamProvider } : {}),
+            ...(usage.durationMs !== undefined ? { durationMs: usage.durationMs } : {}),
             timestamp,
           };
 

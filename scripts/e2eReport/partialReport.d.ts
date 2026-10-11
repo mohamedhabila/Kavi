@@ -1,5 +1,5 @@
 export const PARTIAL_REPORT_SCHEMA_VERSION: 'e2e-partial-report-v2';
-export const SCENARIO_ENTRY_SCHEMA_VERSION: 'e2e-run-report-scenario-v2';
+export const SCENARIO_ENTRY_SCHEMA_VERSION: 'e2e-run-report-scenario-v3';
 
 export type CurrentPartialReport<TEntry> = {
   schemaVersion: typeof PARTIAL_REPORT_SCHEMA_VERSION;

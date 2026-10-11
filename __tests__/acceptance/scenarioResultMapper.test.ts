@@ -64,6 +64,7 @@ describe('scenarioResultMapper tool outcomes', () => {
           },
           run: null,
           memoryExtractionSettled: true,
+          memoryExtractionWaitMs: 0,
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
           memoryPrompt: { status: 'missing', builds: [] },
@@ -99,6 +100,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       finalAssistantCandidateCount: 1,
       run: null,
       memoryExtractionSettled: true,
+      memoryExtractionWaitMs: 0,
       native,
       retrieval: {},
       memoryPrompt: { status: 'missing', builds: [] },
@@ -211,6 +213,7 @@ describe('scenarioResultMapper tool outcomes', () => {
           },
           run: null,
           memoryExtractionSettled: true,
+          memoryExtractionWaitMs: 0,
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
           memoryPrompt: { status: 'missing', builds: [] },
@@ -233,5 +236,70 @@ describe('scenarioResultMapper tool outcomes', () => {
     });
 
     expect(result.completed).toBe(false);
+  });
+
+  it('keeps memory extraction calls out of the conversation usage but in the cost', () => {
+    const entry = (source: 'primary' | 'memory', inputTokens: number, estimatedCost: number) => ({
+      model: 'z-ai/glm-5.3-flash',
+      source,
+      inputTokens,
+      outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: inputTokens + 10,
+      estimatedCost,
+      timestamp: 1,
+    });
+    const driverResult = {
+      conversationId: 'conversation-1',
+      finalConversation: {},
+      memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 1 },
+      turns: [
+        {
+          turnIndex: 0,
+          lifecycleBefore: null,
+          user: { messageId: 'user-1', text: 'hello', timestamp: 1 },
+          route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
+          finalAssistant: null,
+          finalAssistantCandidateCount: 0,
+          completion: {
+            assistantStatus: 'complete',
+            executionCompleted: true,
+            finalResponseCompleted: true,
+            runStatus: 'not_applicable',
+            runCompleted: null,
+            runCompletedAt: null,
+            runTerminalReason: null,
+            graphStatus: null,
+            graphTerminalReason: null,
+          },
+          run: null,
+          memoryExtractionSettled: true,
+          memoryExtractionWaitMs: 0,
+          native: { stateBefore: {}, stateAfter: {}, invocations: [] },
+          retrieval: {},
+          memoryPrompt: { status: 'missing', builds: [] },
+          messages: [],
+          usage: { entries: [entry('primary', 1000, 0.002), entry('memory', 400, 0.001)] },
+          error: null,
+          timedOut: false,
+          durationMs: 1,
+          userMessageId: 'user-1',
+        },
+      ],
+    } as unknown as ForegroundScenarioDriverResult;
+
+    const result = mapForegroundScenarioResult({
+      contentClass: 'synthetic_public',
+      driverResult,
+      durationMs: 1,
+      fixtureId: 'memory-usage-split',
+      requestedUserTurnCount: 1,
+    });
+
+    expect(result.usage).toMatchObject({ inputTokens: 1000, eventCount: 1 });
+    expect(result.turnTraces[0]?.usage).toMatchObject({ inputTokens: 1000, eventCount: 1 });
+    expect(result.memoryUsage).toMatchObject({ inputTokens: 400, eventCount: 1 });
+    expect(result.estimatedCost).toEqual({ status: 'available', usd: 0.003 });
   });
 });

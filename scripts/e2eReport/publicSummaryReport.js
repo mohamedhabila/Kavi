@@ -67,6 +67,7 @@ const SCENARIO_FIELDS = [
   'turnCount',
   'graphStatus',
   'usage',
+  'memoryUsage',
   'tokenBuckets',
   'cache',
   'loopDiagnostics',
@@ -233,11 +234,15 @@ function assertScenario(value, index) {
   if (value.graphStatus !== null && !GRAPH_STATUSES.has(value.graphStatus)) {
     throw new Error(`Invalid ${path}.graphStatus in public E2E summary input.`);
   }
-  if (!isRecord(value.usage)) {
-    throw new Error(`Invalid ${path}.usage in public E2E summary input.`);
-  }
-  for (const field of ['totalTokens', 'cacheReadTokens']) {
-    assertFiniteNumber(value.usage[field], `${path}.usage.${field}`, { minimum: 0 });
+  for (const usageField of ['usage', 'memoryUsage']) {
+    if (!isRecord(value[usageField])) {
+      throw new Error(`Invalid ${path}.${usageField} in public E2E summary input.`);
+    }
+    for (const field of ['totalTokens', 'cacheReadTokens']) {
+      assertFiniteNumber(value[usageField][field], `${path}.${usageField}.${field}`, {
+        minimum: 0,
+      });
+    }
   }
   if (!isRecord(value.loopDiagnostics)) {
     throw new Error(`Invalid ${path}.loopDiagnostics in public E2E summary input.`);

@@ -56,8 +56,8 @@ function buildScenarioRows(report) {
   }
 
   const lines = [
-    '| Scenario | Result | Attempts | Tools | Graph | Tokens | Cache Read | Duration | Issues |',
-    '| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |',
+    '| Scenario | Result | Attempts | Tools | Graph | Tokens | Cache Read | Memory Tokens | Duration | Issues |',
+    '| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |',
   ];
 
   for (const scenario of scenarios) {
@@ -74,6 +74,7 @@ function buildScenarioRows(report) {
         markdownCell(scenario.graphStatus || 'unknown'),
         formatInteger(usage.totalTokens),
         formatInteger(usage.cacheReadTokens),
+        formatInteger((scenario.memoryUsage || {}).totalTokens),
         formatDuration(scenario.durationMs),
         formatInteger(issueCount),
       ]
@@ -172,6 +173,12 @@ function buildE2eReportSummaryMarkdown(input, options = {}) {
     `| Cache read tokens | ${formatInteger(totals.cacheReadTokens)} |`,
     `| Cache write tokens | ${formatInteger(totals.cacheWriteTokens)} |`,
     `| Total tokens | ${formatInteger(totals.totalTokens)} |`,
+    `| Memory extraction tokens | ${formatInteger(
+      (Array.isArray(report.scenarios) ? report.scenarios : []).reduce(
+        (sum, scenario) => sum + asNumber((scenario.memoryUsage || {}).totalTokens),
+        0,
+      ),
+    )} |`,
     `| Duration | ${formatDuration(totals.durationMs)} |`,
     `| Eligible cache read rate | ${formatPercent(cache.eligibleCacheReadRate)} |`,
     `| Target cache read rate | ${formatPercent(cache.targetEligibleCacheReadRate)} |`,

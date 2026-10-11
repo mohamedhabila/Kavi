@@ -77,19 +77,24 @@ function collectToolResults(
   return results;
 }
 
-function buildUsageEvents(turn: ForegroundScenarioTurnSnapshot): TokenUsage[] {
-  return (turn.usage?.entries ?? []).map((entry) => ({
-    inputTokens: entry.inputTokens,
-    outputTokens: entry.outputTokens,
-    cacheReadTokens: entry.cacheReadTokens,
-    cacheWriteTokens: entry.cacheWriteTokens,
-    totalTokens: entry.totalTokens,
-    model: entry.model,
-    ...(entry.tokenDetails ? { tokenDetails: { ...entry.tokenDetails } } : {}),
-    ...(entry.tokenBuckets ? { tokenBuckets: { ...entry.tokenBuckets } } : {}),
-    ...(entry.promptCache ? { promptCache: { ...entry.promptCache } } : {}),
-    ...(entry.upstreamProvider ? { upstreamProvider: entry.upstreamProvider } : {}),
-  }));
+function buildUsageEvents(
+  turn: ForegroundScenarioTurnSnapshot,
+  calls: 'conversation' | 'memory' = 'conversation',
+): TokenUsage[] {
+  return (turn.usage?.entries ?? [])
+    .filter((entry) => (entry.source === 'memory') === (calls === 'memory'))
+    .map((entry) => ({
+      inputTokens: entry.inputTokens,
+      outputTokens: entry.outputTokens,
+      cacheReadTokens: entry.cacheReadTokens,
+      cacheWriteTokens: entry.cacheWriteTokens,
+      totalTokens: entry.totalTokens,
+      model: entry.model,
+      ...(entry.tokenDetails ? { tokenDetails: { ...entry.tokenDetails } } : {}),
+      ...(entry.tokenBuckets ? { tokenBuckets: { ...entry.tokenBuckets } } : {}),
+      ...(entry.promptCache ? { promptCache: { ...entry.promptCache } } : {}),
+      ...(entry.upstreamProvider ? { upstreamProvider: entry.upstreamProvider } : {}),
+    }));
 }
 
 function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTrace {
@@ -118,6 +123,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
         }
       : null,
     memoryExtractionSettled: turn.memoryExtractionSettled,
+    memoryExtractionWaitMs: turn.memoryExtractionWaitMs,
     native: cloneJson(turn.native),
     retrieval: cloneJson(turn.retrieval),
     memoryPrompt: cloneJson(turn.memoryPrompt),
@@ -146,7 +152,10 @@ export function mapForegroundScenarioResult(params: {
   requestedUserTurnCount: number;
 }): E2EScenarioResult {
   const turnTraces = params.driverResult.turns.map(buildTurnTrace);
-  const usageEvents = params.driverResult.turns.flatMap(buildUsageEvents);
+  const usageEvents = params.driverResult.turns.flatMap((turn) => buildUsageEvents(turn));
+  const memoryUsageEvents = params.driverResult.turns.flatMap((turn) =>
+    buildUsageEvents(turn, 'memory'),
+  );
   const usageEntries = params.driverResult.turns.flatMap((turn) => turn.usage?.entries ?? []);
   const errors = params.driverResult.turns.flatMap((turn) => (turn.error ? [turn.error] : []));
 
@@ -160,6 +169,7 @@ export function mapForegroundScenarioResult(params: {
     memoryItems: cloneJson(params.driverResult.memoryItems),
     turnTraces,
     usage: aggregateE2ETokenUsage(usageEvents),
+    memoryUsage: aggregateE2ETokenUsage(memoryUsageEvents),
     estimatedCost: aggregateE2EEstimatedCost(usageEntries),
     errors,
     completed:

@@ -41,6 +41,7 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
     },
     agentRun: null,
     memoryExtractionSettled: true,
+    memoryExtractionWaitMs: 0,
     native: { stateBefore: {}, stateAfter: {}, invocations: [] } as TurnTrace['native'],
     toolCalls: [],
     toolResults: [],

@@ -113,6 +113,7 @@ export function buildPairedTurnTrace(
     },
     agentRun: null,
     memoryExtractionSettled: true,
+    memoryExtractionWaitMs: 0,
     native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
     retrieval,
     memoryPrompt: { status: 'missing', builds: [] },

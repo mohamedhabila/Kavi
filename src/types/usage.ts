@@ -18,6 +18,8 @@ export interface ConversationUsageEntry {
   tokenDetails?: UsageTokenDetails;
   tokenBuckets?: UsageTokenBuckets;
   promptCache?: UsagePromptCacheTelemetry;
+  /** How long the call took, when its caller measured it. */
+  durationMs?: number;
   timestamp: number;
 }
 
@@ -99,7 +101,13 @@ export interface UsagePromptCacheTelemetry {
   prefixDivergenceReason?: UsagePromptCachePrefixDivergenceReason;
 }
 
-export type ConversationUsageSource = 'primary' | 'sub-agent' | 'sub-agent-finalizer' | 'pilot';
+export type ConversationUsageSource =
+  | 'primary'
+  | 'sub-agent'
+  | 'sub-agent-finalizer'
+  | 'pilot'
+  /** Background memory extraction for the conversation's closed turns. */
+  | 'memory';
 
 export interface NormalizedUsage {
   inputTokens: number;

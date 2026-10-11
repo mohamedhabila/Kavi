@@ -103,6 +103,7 @@ function buildPrivateResult(): E2EScenarioResult {
         },
         agentRun: null,
         memoryExtractionSettled: true,
+        memoryExtractionWaitMs: 0,
         native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
         retrieval: {
           sourceThreadIdHash: retrievalEvent.scope.sourceThreadIdHash,

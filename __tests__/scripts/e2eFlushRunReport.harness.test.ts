@@ -54,6 +54,14 @@ function currentPartialEntry(overrides: Record<string, any>) {
     turnCount: 1,
     graphStatus: null,
     usage,
+    memoryUsage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      eventCount: 0,
+    },
     tokenBuckets: usage.tokenBuckets ?? EMPTY_TOKEN_BUCKETS,
     cache: {
       inputTokens,

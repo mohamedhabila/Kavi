@@ -133,6 +133,8 @@ export type E2EScenarioTurnTrace = {
   completion: ForegroundScenarioCompletionSnapshot;
   agentRun: E2EAgentRunTrace | null;
   memoryExtractionSettled: boolean;
+  /** Time spent waiting for background extraction after the reply (not user-facing latency). */
+  memoryExtractionWaitMs: number;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: ForegroundScenarioRetrievalEvidence;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
@@ -153,7 +155,11 @@ export type E2EScenarioResult = {
   memoryItems: ForegroundScenarioMemoryItemsState;
   /** Per-orchestrator-invocation traces for turn-scoped rubrics. */
   turnTraces: ReadonlyArray<E2EScenarioTurnTrace>;
+  /** The conversation's model calls; token budgets are graded on these. */
   usage: E2ETokenUsageSummary;
+  /** Background memory extraction calls, kept apart so budgets measure the conversation. */
+  memoryUsage: E2ETokenUsageSummary;
+  /** Everything the scenario spent, memory extraction included. */
   estimatedCost: E2EEstimatedCostSummary;
   errors: ReadonlyArray<string>;
   completed: boolean;

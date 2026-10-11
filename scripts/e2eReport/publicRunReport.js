@@ -320,6 +320,7 @@ function projectScenario(value) {
     turnCount: finiteNumber(source.turnCount, finiteNumber(source.userTurnCount)),
     graphStatus,
     usage: projectUsage(source.usage),
+    memoryUsage: projectUsage(source.memoryUsage),
     tokenBuckets: projectTokenBuckets(source.tokenBuckets ?? asRecord(source.usage).tokenBuckets),
     cache: projectScenarioCache(source.cache),
     loopDiagnostics: projectLoopDiagnostics(source.loopDiagnostics),

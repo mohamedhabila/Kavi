@@ -59,4 +59,26 @@ describe('upstream provider on recorded usage', () => {
       undefined,
     ]);
   });
+
+  it('keeps a measured call duration and drops one that is not a number', () => {
+    const id = useChatStore.getState().createConversation('p1', 's');
+    useChatStore
+      .getState()
+      .recordConversationUsage(id, { ...usageEntry(), source: 'memory', durationMs: 840 });
+
+    const recorded = useChatStore.getState().conversations[0]!.usage!;
+    expect(recorded.entries[recorded.entries.length - 1]).toEqual(
+      expect.objectContaining({ source: 'memory', durationMs: 840 }),
+    );
+    expect(
+      sanitizeUsage({
+        ...recorded,
+        entries: [
+          usageEntry({ durationMs: 840 }),
+          usageEntry({ durationMs: Number.NaN }),
+          usageEntry(),
+        ],
+      })!.entries.map((entry) => entry.durationMs),
+    ).toEqual([840, undefined, undefined]);
+  });
 });

@@ -158,6 +158,7 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
           ],
         },
         memoryExtractionSettled: true,
+        memoryExtractionWaitMs: 1200,
         native: {
           stateBefore,
           stateAfter,
@@ -236,6 +237,7 @@ describe('public immutable E2E evidence projection', () => {
       },
       memory: {
         extractionSettled: true,
+        extractionWaitMs: 1200,
         promptStatus: 'recorded',
         promptBuildCount: 1,
         promptItemCount: 1,

@@ -157,6 +157,8 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null;
   /** False when background memory extraction did not finish before the turn's deadline. */
   memoryExtractionSettled: boolean;
+  /** How long the turn waited for background extraction after its reply; part of `durationMs`. */
+  memoryExtractionWaitMs: number;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: DeepReadonly<ForegroundScenarioRetrievalEvidence>;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;

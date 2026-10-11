@@ -16,7 +16,7 @@ function projectFiniteNonNegative(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-/** One turn's memory evidence: prompt build counts and whether extraction caught up. */
+/** One turn's memory evidence: prompt builds, and whether and how fast extraction caught up. */
 function projectMemoryTurnEvidence(value) {
   const source = asRecord(value);
   if (!source || typeof source.extractionSettled !== 'boolean') return null;
@@ -28,9 +28,11 @@ function projectMemoryTurnEvidence(value) {
     'maxPromptChars',
   ]);
   const maxPromptBuildMs = projectFiniteNonNegative(source.maxPromptBuildMs);
-  if (!counts || maxPromptBuildMs === null) return null;
+  const extractionWaitMs = projectFiniteNonNegative(source.extractionWaitMs);
+  if (!counts || maxPromptBuildMs === null || extractionWaitMs === null) return null;
   return {
     extractionSettled: source.extractionSettled,
+    extractionWaitMs,
     promptStatus: source.promptStatus,
     ...counts,
     maxPromptBuildMs,

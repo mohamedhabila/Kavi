@@ -21,6 +21,8 @@ export interface ConversationUsageRecordOptions {
   parentSessionId?: string;
   agentRunId?: string;
   estimatedCost?: number;
+  /** How long the call took, when the caller measured it. */
+  durationMs?: number;
   timestamp?: number;
   recordSessionUsage?: boolean;
   emitLog?: boolean;
@@ -50,6 +52,8 @@ function formatUsageSourceLabel(source?: ConversationUsageSource): string | unde
       return 'Sub-agent finalizer';
     case 'pilot':
       return 'Pilot';
+    case 'memory':
+      return 'Memory';
     default:
       return undefined;
   }
@@ -209,6 +213,7 @@ export function recordConversationUsageEvent(options: ConversationUsageRecordOpt
     agentRunId: options.agentRunId,
     timestamp: options.timestamp,
     estimatedCost,
+    ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
   });
 
   if (options.recordSessionUsage) {

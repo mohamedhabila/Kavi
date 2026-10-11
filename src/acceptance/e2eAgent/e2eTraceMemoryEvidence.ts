@@ -4,6 +4,7 @@ import type { E2EScenarioTurnTrace } from './types';
 /** What memory did on one turn: what its prompt showed, and whether extraction caught up. */
 export type E2ERedactedMemoryTurnEvidence = {
   extractionSettled: boolean;
+  extractionWaitMs: number;
   promptStatus: E2EScenarioTurnTrace['memoryPrompt']['status'];
   promptBuildCount: number;
   promptItemCount: number;
@@ -26,6 +27,7 @@ export function buildMemoryTurnEvidence(turn: E2EScenarioTurnTrace): E2ERedacted
   const builds = turn.memoryPrompt.builds;
   return {
     extractionSettled: turn.memoryExtractionSettled,
+    extractionWaitMs: turn.memoryExtractionWaitMs,
     promptStatus: turn.memoryPrompt.status,
     promptBuildCount: builds.length,
     promptItemCount: new Set(builds.flatMap((build) => build.itemIds)).size,

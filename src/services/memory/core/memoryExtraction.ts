@@ -183,7 +183,11 @@ export async function extractConversationMemory(params: {
   let operations: MemoryOperation[];
   try {
     operations = parseExtractionReply(
-      await params.call(buildExtractionPrompt(window.rounds, related), params.signal),
+      await params.call(
+        buildExtractionPrompt(window.rounds, related),
+        params.signal,
+        params.conversationId,
+      ),
     );
   } catch {
     // A preempted call is not a failure; anything else (provider error, malformed reply) is.

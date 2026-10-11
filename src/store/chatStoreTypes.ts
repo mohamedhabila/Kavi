@@ -163,6 +163,7 @@ export interface ChatState {
       agentRunId?: string;
       timestamp?: number;
       estimatedCost?: number;
+      durationMs?: number;
     },
   ) => void;
   addConversationLog: (

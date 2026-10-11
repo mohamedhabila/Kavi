@@ -262,6 +262,7 @@ export function buildE2ERunReportScenarioEntry(params: {
     turnCount: params.result.turnTraces?.length ?? params.result.userTurnCount,
     graphStatus: lastGraph?.status ?? null,
     usage: omitModelCallRows(params.result.usage),
+    memoryUsage: omitModelCallRows(params.result.memoryUsage),
     tokenBuckets: resolveUsageTokenBuckets(params.result.usage),
     cache: buildScenarioCacheSummary(params.result),
     ...(params.result.usage.promptCache ? { promptCache: params.result.usage.promptCache } : {}),

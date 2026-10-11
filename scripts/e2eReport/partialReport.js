@@ -12,7 +12,7 @@ const {
 const { projectPublicRedactedTrace } = require('./publicTraceSchema');
 
 const PARTIAL_REPORT_SCHEMA_VERSION = 'e2e-partial-report-v2';
-const SCENARIO_ENTRY_SCHEMA_VERSION = 'e2e-run-report-scenario-v2';
+const SCENARIO_ENTRY_SCHEMA_VERSION = 'e2e-run-report-scenario-v3';
 
 const REQUIRED_ENTRY_FIELDS = [
   'schemaVersion',
@@ -28,6 +28,7 @@ const REQUIRED_ENTRY_FIELDS = [
   'turnCount',
   'graphStatus',
   'usage',
+  'memoryUsage',
   'tokenBuckets',
   'cache',
   'loopDiagnostics',
@@ -356,6 +357,7 @@ function assertScenarioEntry(entry, index) {
     throw new Error(`Invalid ${prefix}.graphStatus in current evaluation partial report.`);
   }
   assertUsage(entry.usage, `${prefix}.usage`);
+  assertUsage(entry.memoryUsage, `${prefix}.memoryUsage`);
   assertTokenBuckets(entry.tokenBuckets, `${prefix}.tokenBuckets`);
   assertScenarioCache(entry.cache, `${prefix}.cache`);
   assertLoopDiagnostics(entry.loopDiagnostics, `${prefix}.loopDiagnostics`);

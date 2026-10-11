@@ -19,7 +19,7 @@ function buildEntry() {
     toolResultTokens: 0,
   };
   return {
-    schemaVersion: 'e2e-run-report-scenario-v2',
+    schemaVersion: 'e2e-run-report-scenario-v3',
     suite: 'core',
     fixtureId: 'file-write-read',
     contentClass: 'synthetic_public',
@@ -32,6 +32,15 @@ function buildEntry() {
     turnCount: 1,
     graphStatus: 'finalized',
     usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 0,
+      eventCount: 0,
+      tokenBuckets,
+    },
+    memoryUsage: {
       inputTokens: 0,
       outputTokens: 0,
       cacheReadTokens: 0,
@@ -85,7 +94,7 @@ describe('current evaluation partial report contract', () => {
       });
       expect(JSON.parse(readFileSync(partialPath, 'utf8'))).toMatchObject({
         schemaVersion: 'e2e-partial-report-v2',
-        entries: [{ schemaVersion: 'e2e-run-report-scenario-v2' }],
+        entries: [{ schemaVersion: 'e2e-run-report-scenario-v3' }],
       });
     } finally {
       rmSync(directory, { recursive: true, force: true });

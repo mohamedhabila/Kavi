@@ -122,6 +122,7 @@ export type E2ERunReportScenarioEntry = {
   graphStatus: string | null;
   /** Per-call rows (digests, router upstreams) stay in private evidence, not the report. */
   usage: Omit<E2EScenarioResult['usage'], 'calls'>;
+  memoryUsage: Omit<E2EScenarioResult['memoryUsage'], 'calls'>;
   tokenBuckets: UsageTokenBuckets;
   cache: E2ERunReportScenarioCache;
   promptCache?: E2ETokenUsageSummary['promptCache'];

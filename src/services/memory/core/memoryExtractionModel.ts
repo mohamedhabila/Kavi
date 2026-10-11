@@ -4,7 +4,9 @@
 // Users bring their own keys, so extraction runs on a model they configured: the provider
 // chosen in memory settings, otherwise the active chat provider. An on-device model runs
 // extraction only when the user chose it explicitly ("local"): small on-device models
-// extract poorly and the work competes with the chat for the same chip.
+// extract poorly and the work competes with the chat for the same chip. Every call is
+// recorded in the conversation's usage as source "memory", with its tokens, estimated
+// cost and duration, so the user sees what memory costs them.
 // ---------------------------------------------------------------------------
 
 import { useSettingsStore } from '../../../store/useSettingsStore';
@@ -15,6 +17,10 @@ import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { resolveConversationModel, resolveProviderApiKey } from '../../llm/support/providerSupport';
 import { resolveHelperReasoningEffort } from '../../llm/support/reasoningEffortResolution';
 import { readReplyText } from '../../llm/support/replyText';
+import {
+  extractResponseTokenUsage,
+  recordConversationUsageEvent,
+} from '../../usage/conversationUsage';
 import { createTimeoutSignal } from '../../../utils/runtime';
 import { deriveMemoryConsolidationModeFromSettings } from '../memoryConsolidationMode';
 
@@ -22,8 +28,15 @@ const MEMORY_EXTRACTION_TIMEOUT_MS = 60_000;
 export const MEMORY_EXTRACTION_MAX_OPERATIONS = 8;
 const MEMORY_EXTRACTION_MAX_TOKENS = 1_500;
 
-/** Sends one extraction prompt and returns the reply text. Throws on transport failure. */
-export type MemoryExtractionCall = (prompt: string, signal: AbortSignal) => Promise<string>;
+/**
+ * Sends one extraction prompt for `conversationId` and returns the reply text. Throws on
+ * transport failure.
+ */
+export type MemoryExtractionCall = (
+  prompt: string,
+  signal: AbortSignal,
+  conversationId: string,
+) => Promise<string>;
 
 const MEMORY_EXTRACTION_OUTPUT_SCHEMA: StructuredOutputOptions = {
   name: 'memory_operations',
@@ -99,13 +112,14 @@ export async function resolveMemoryExtractionModel(): Promise<MemoryExtractionCa
   const apiKey = await resolveProviderApiKey(provider);
   const llm = new LlmService(apiKey ? { ...provider, apiKey } : provider);
   const reasoningEffort = resolveHelperReasoningEffort(provider, model);
-  return async (prompt, signal) => {
+  return async (prompt, signal, conversationId) => {
     const timeout = createTimeoutSignal(MEMORY_EXTRACTION_TIMEOUT_MS);
     const controller = new AbortController();
     const abort = () => controller.abort();
     if (timeout.aborted || signal.aborted) controller.abort();
     timeout.addEventListener('abort', abort, { once: true });
     signal.addEventListener('abort', abort, { once: true });
+    const startedAt = Date.now();
     try {
       const response = await llm.sendMessage([{ role: 'user', content: prompt }] as never, {
         model,
@@ -115,6 +129,16 @@ export async function resolveMemoryExtractionModel(): Promise<MemoryExtractionCa
         structuredOutput: MEMORY_EXTRACTION_OUTPUT_SCHEMA,
         signal: controller.signal,
       });
+      const usage = extractResponseTokenUsage(response, model);
+      if (usage) {
+        recordConversationUsageEvent({
+          conversationId,
+          usage,
+          providerId: provider.id,
+          source: 'memory',
+          durationMs: Date.now() - startedAt,
+        });
+      }
       return readReplyText(response);
     } finally {
       timeout.removeEventListener('abort', abort);
