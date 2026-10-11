@@ -8,9 +8,6 @@ import {
 import { qualifyMobileControllerCapability } from '../../src/engine/mobileController/validation';
 import { buildMobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
-import { buildEffectCompletionCriterion } from '../../src/engine/goals/effectCompletionEvidence';
-import { buildToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
-import { createGoal } from '../../src/engine/goals/types';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { effectReceipt } from '../helpers/effectDispatchCoordinatorFixtures';
 import { makeTestAgentRun, makeTestConversation, makeTestMessage } from '../helpers/factories';
@@ -147,14 +144,6 @@ describe('MobileWorld graph-owned controller protocol', () => {
       }),
     ).toEqual({ kind: 'ask_user', text: 'Which time should I use?' });
 
-    const completedGoal = createGoal({
-      id: 'mobile-goal',
-      title: 'Complete the mobile task',
-      status: 'completed',
-      completionPolicy: 'blocking',
-      successCriteria: ['evidence.tool:mobile_ui_action'],
-      evidence: ['mobile_ui_action:{"status":"completed"}'],
-    });
     const completedConversation = makeTestConversation({
       id: 'conversation-1',
       messages: [
@@ -185,7 +174,6 @@ describe('MobileWorld graph-owned controller protocol', () => {
           controlGraph: createInitialAgentControlGraphSnapshot({
             status: 'finalized',
             terminalReason: 'completed',
-            goals: [completedGoal],
           }),
         }),
       ],
@@ -198,39 +186,16 @@ describe('MobileWorld graph-owned controller protocol', () => {
     ).toEqual({ kind: 'answer', text: 'Done.' });
   });
 
-  it('emits verified completion only from exact code-owned goal effect evidence', () => {
-    const receipt = effectReceipt();
-    if (!receipt.resource) throw new Error('expected resource-backed receipt');
-    const criterion = buildEffectCompletionCriterion({
-      effectKind: receipt.effectKind,
-      requestDigest: receipt.requestDigest,
-      resource: receipt.resource,
-      verificationState: 'verified',
-    });
-    const completedGoal = createGoal({
-      id: 'verified-goal',
-      title: 'Persist the requested event',
-      status: 'completed',
-      completionPolicy: 'blocking',
-      successCriteria: [criterion],
-      evidence: [buildToolEffectReceiptEvidence(receipt)],
-    });
-    const conversation = makeTestConversation({
+  function finalizedMobileConversation(params: {
+    finalText: string;
+    toolCalls: NonNullable<ReturnType<typeof makeTestMessage>['toolCalls']>;
+  }) {
+    return makeTestConversation({
       id: 'conversation-1',
       messages: [
-        makeTestMessage(1, {
-          content: '',
-          toolCalls: [
-            {
-              id: 'mobile-1',
-              name: 'mobile_ui_action',
-              arguments: '{}',
-              status: 'completed',
-            },
-          ],
-        }),
+        makeTestMessage(1, { content: '', toolCalls: params.toolCalls }),
         makeTestMessage(2, {
-          content: 'The requested event is saved.',
+          content: params.finalText,
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'complete',
@@ -245,21 +210,92 @@ describe('MobileWorld graph-owned controller protocol', () => {
           controlGraph: createInitialAgentControlGraphSnapshot({
             status: 'finalized',
             terminalReason: 'completed',
-            goals: [completedGoal],
           }),
         }),
       ],
     });
+  }
 
-    expect(
-      resolveMobileWorldBridgeEvent({
-        conversation,
-        agentRunId: 'agent-run-1',
-      }),
-    ).toEqual({ kind: 'status', goalStatus: 'complete' });
+  const mobileAction = {
+    id: 'mobile-1',
+    name: 'mobile_ui_action',
+    arguments: '{}',
+    status: 'completed' as const,
+  };
+
+  it("emits verified completion from a verified effect the run's own tool call settled", () => {
+    const conversation = finalizedMobileConversation({
+      finalText: 'The requested event is saved.',
+      toolCalls: [
+        mobileAction,
+        {
+          id: 'tool-call-1',
+          name: 'calendar_update',
+          arguments: '{}',
+          status: 'completed',
+          effectReceipts: [effectReceipt()],
+        },
+      ],
+    });
+
+    expect(resolveMobileWorldBridgeEvent({ conversation, agentRunId: 'agent-run-1' })).toEqual({
+      kind: 'status',
+      goalStatus: 'complete',
+    });
   });
 
-  it('fails closed when a completed mobile run has no structurally proven goal', () => {
+  it.each([
+    ['an acknowledged but unverified effect', { verificationState: 'acknowledged' as const }],
+    [
+      'a failed effect',
+      { effectState: 'failed' as const, verificationState: 'unverified' as const },
+    ],
+  ])('answers with the final text for %s', (_label, overrides) => {
+    const conversation = finalizedMobileConversation({
+      finalText: 'The screen shows the event.',
+      toolCalls: [
+        mobileAction,
+        {
+          id: 'tool-call-1',
+          name: 'calendar_update',
+          arguments: '{}',
+          status: 'completed',
+          effectReceipts: [effectReceipt(overrides)],
+        },
+      ],
+    });
+
+    expect(resolveMobileWorldBridgeEvent({ conversation, agentRunId: 'agent-run-1' })).toEqual({
+      kind: 'answer',
+      text: 'The screen shows the event.',
+    });
+  });
+
+  it('reads only the settled receipt of a retried effect', () => {
+    const conversation = finalizedMobileConversation({
+      finalText: 'The event could not be saved.',
+      toolCalls: [
+        mobileAction,
+        {
+          id: 'tool-call-1',
+          name: 'calendar_update',
+          arguments: '{}',
+          status: 'completed',
+          effectReceipts: [
+            effectReceipt(),
+            effectReceipt({ effectState: 'failed', verificationState: 'unverified' }),
+          ],
+        },
+      ],
+    });
+
+    expect(resolveMobileWorldBridgeEvent({ conversation, agentRunId: 'agent-run-1' })).toEqual({
+      kind: 'answer',
+      text: 'The event could not be saved.',
+    });
+  });
+
+  it('fails closed when a completed mobile run never finalized', () => {
     const conversation = makeTestConversation({
       id: 'conversation-1',
       messages: [

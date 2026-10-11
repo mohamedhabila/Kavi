@@ -14,9 +14,6 @@ import {
 } from '../../src/engine/mobileController/validation';
 import type { ToolEffectDigest } from '../../src/types/toolEffectReceipt';
 import type { Conversation } from '../../src/types/conversation';
-import { areBlockingGoalsStructurallyComplete } from '../../src/engine/goals/completionEvidence';
-import { parseToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
-import { isBlockingGoal } from '../../src/engine/goals/types';
 import {
   buildAgentRunMessageScope,
   getAgentRunMessageSlice,
@@ -244,20 +241,17 @@ export function resolveMobileWorldBridgeEvent(input: {
     return { kind: 'answer', text: finalAssistant.content.trim() };
   }
 
-  const blockingGoals = (run.controlGraph?.goals ?? []).filter(isBlockingGoal);
-  const goalsAreStructurallyComplete =
-    run.controlGraph?.status === 'finalized' &&
-    blockingGoals.length > 0 &&
-    areBlockingGoalsStructurallyComplete(blockingGoals);
-  if (!goalsAreStructurallyComplete) {
+  if (run.controlGraph?.status !== 'finalized') {
     return { kind: 'status', goalStatus: 'infeasible' };
   }
 
-  const hasVerifiedGoalEffect = blockingGoals.some((goal) =>
-    goal.evidence.some((entry) => {
-      const receipt = parseToolEffectReceiptEvidence(entry);
+  // A device task is complete when one of the run's own tool calls settled with a
+  // verified effect; the device actions themselves only drive the screen.
+  const hasVerifiedEffect = runMessages.some((message) =>
+    message.toolCalls?.some((call) => {
+      const receipt = call.effectReceipts?.at(-1);
       return (
-        receipt !== null &&
+        receipt !== undefined &&
         receipt.toolName !== MOBILE_UI_ACTION_TOOL_NAME &&
         receipt.transportState === 'returned' &&
         receipt.effectState === 'applied' &&
@@ -265,7 +259,7 @@ export function resolveMobileWorldBridgeEvent(input: {
       );
     }),
   );
-  return hasVerifiedGoalEffect
+  return hasVerifiedEffect
     ? { kind: 'status', goalStatus: 'complete' }
     : { kind: 'answer', text: finalAssistant.content.trim() };
 }
