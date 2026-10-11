@@ -21,7 +21,7 @@ import {
 } from './memoryAccessPolicy';
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { getQueryProviderEmbeddingVector } from './providerQueryEmbedding';
-import { buildMemoryPromptSection } from './core/memoryPrompt';
+import { prepareMemoryPromptSection } from './core/memoryPrompt';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
@@ -184,7 +184,7 @@ export async function buildUnifiedMemoryAccessContext(
   }
   const latestUserMessage =
     [...scopedMessages].reverse().find((message) => message.role === 'user')?.content ?? '';
-  const memorySection = buildMemoryPromptSection({
+  const memorySection = prepareMemoryPromptSection({
     visibility: { conversationId: request.memoryConversationId },
     latestUserMessage,
   });

@@ -13,8 +13,9 @@
 // never leave the two out of sync.
 //
 // Past turns are indexed per round (the user message and the reply to it), the
-// granularity LongMemEval found best for recalling earlier conversations. The extraction
-// cursor records, per conversation, the last message background extraction has read.
+// granularity LongMemEval found best for recalling earlier conversations. The prompt log
+// records which ids each request's memory section held. The extraction cursor records, per
+// conversation, the last message background extraction has read.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -91,6 +92,18 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
       INSERT INTO memory_turns_fts(memory_turns_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
       INSERT INTO memory_turns_fts(rowid, text) VALUES (new.rowid, new.text);
     END;
+
+    CREATE TABLE IF NOT EXISTS memory_prompt_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id TEXT NOT NULL,
+      at INTEGER NOT NULL,
+      item_ids TEXT NOT NULL,
+      turn_ids TEXT NOT NULL,
+      chars INTEGER NOT NULL CHECK(chars >= 0),
+      duration_ms REAL NOT NULL CHECK(duration_ms >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_prompt_log_conversation
+      ON memory_prompt_log(conversation_id, id);
 
     CREATE TABLE IF NOT EXISTS memory_extraction_cursor (
       conversation_id TEXT PRIMARY KEY,

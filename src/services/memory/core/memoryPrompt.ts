@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
+import { recordMemoryPromptBuild } from './memoryPromptLog';
 import { searchMemoryTurns, type MemoryTurn } from './memoryTurnsStore';
 import {
   listPinnedMemoryItems,
@@ -49,6 +50,8 @@ function renderTurn(turn: MemoryTurn): string {
 export interface MemoryPromptSection {
   text: string;
   itemIds: string[];
+  /** Past turns shown, by the id of the user message that opened each. */
+  turnIds: string[];
 }
 
 /** The memory section for a request, or null when nothing applies. */
@@ -82,6 +85,7 @@ export function buildMemoryPromptSection(params: {
     size += line.length + 1;
   }
   const turnLines: string[] = [];
+  const turnIds: string[] = [];
   for (const turn of searchMemoryTurns({
     query: params.latestUserMessage,
     limit: MEMORY_PROMPT_TURN_LIMIT,
@@ -91,6 +95,7 @@ export function buildMemoryPromptSection(params: {
     const line = renderTurn(turn);
     if (size + line.length + 1 > MEMORY_PROMPT_MAX_CHARS) break;
     turnLines.push(line);
+    turnIds.push(turn.userMessageId);
     size += line.length + 1;
   }
   const sections = [
@@ -98,5 +103,23 @@ export function buildMemoryPromptSection(params: {
     turnLines.length ? `${TURNS_SECTION_HEADER}\n${turnLines.join('\n')}` : '',
   ].filter(Boolean);
   if (sections.length === 0) return null;
-  return { text: sections.join('\n\n'), itemIds };
+  return { text: sections.join('\n\n'), itemIds, turnIds };
+}
+
+/** Builds the section for a request and records what it held and how long it took. */
+export function prepareMemoryPromptSection(params: {
+  visibility: MemoryItemVisibility;
+  latestUserMessage: string;
+}): MemoryPromptSection | null {
+  const startedAt = Date.now();
+  const section = buildMemoryPromptSection(params);
+  recordMemoryPromptBuild({
+    conversationId: params.visibility.conversationId,
+    at: startedAt,
+    itemIds: section?.itemIds ?? [],
+    turnIds: section?.turnIds ?? [],
+    chars: section?.text.length ?? 0,
+    durationMs: Date.now() - startedAt,
+  });
+  return section;
 }
