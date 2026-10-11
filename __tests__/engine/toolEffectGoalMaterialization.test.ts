@@ -1,6 +1,6 @@
 import { createGoal } from '../../src/engine/goals/types';
 import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER } from '../../src/engine/goals/types';
-import { buildToolEffectReceiptEvidence } from '../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
 import { materializeToolEffectCompletionGoals } from '../../src/engine/graph/toolEffectGoalMaterialization';
 import { resolveToolEffectCompletionRequirement } from '../../src/engine/toolExecution/toolEffectCompletionContract';
 import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';

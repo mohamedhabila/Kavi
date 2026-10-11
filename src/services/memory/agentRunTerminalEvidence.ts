@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-import { buildToolEffectReceiptEvidence } from '../../engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from './effectReceiptEvidence';
 import type { AgentRun } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import { fitAgentRunText } from './agentRunEvidenceCompaction';

@@ -4,8 +4,8 @@ import { isCountOnlySuccessCriterion, isSuccessCriterionMet } from './completion
 import {
   effectReceiptEvidenceTargetsCriterion,
   parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { isDelegationOwnedGoal } from './delegation';
 import { isBlockingGoalClosedWithoutProof } from './goalProof';
 import { isCodeOwnedEffectCompletionGoal, type AgentGoal } from './types';

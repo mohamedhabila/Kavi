@@ -11,7 +11,7 @@
 // field at all.
 // ---------------------------------------------------------------------------
 
-import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from './effectCompletionEvidence';
+import { EFFECT_RECEIPT_EVIDENCE_PREFIX } from '../../services/memory/effectReceiptEvidence';
 import {
   extractJsonPayloadFromEvidenceEntry,
   readJsonFieldAtPath,

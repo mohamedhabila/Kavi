@@ -7,8 +7,8 @@ import {
 import {
   effectReceiptEvidenceSatisfiesCriterion,
   parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
 } from './effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { sanitizeWorkspaceRelativePath } from '../../services/workspaces/paths';
 import { readDelegatedArtifactEvidencePath } from './delegation';
 import { EVIDENCE_JSON_FIELD_PATTERN } from './jsonFieldCriterion';

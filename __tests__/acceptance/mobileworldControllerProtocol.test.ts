@@ -8,10 +8,8 @@ import {
 import { qualifyMobileControllerCapability } from '../../src/engine/mobileController/validation';
 import { buildMobileControllerPublishedHandoff } from '../../src/engine/mobileController/publication';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
-import {
-  buildEffectCompletionCriterion,
-  buildToolEffectReceiptEvidence,
-} from '../../src/engine/goals/effectCompletionEvidence';
+import { buildEffectCompletionCriterion } from '../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
 import { createGoal } from '../../src/engine/goals/types';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { effectReceipt } from '../helpers/effectDispatchCoordinatorFixtures';

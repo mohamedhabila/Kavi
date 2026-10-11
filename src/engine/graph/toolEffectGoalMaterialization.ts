@@ -4,9 +4,9 @@ import {
   effectCompletionCriteriaEqual,
   effectReceiptEvidenceTargetsCriterion,
   parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
   type EffectCompletionCriterion,
 } from '../goals/effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { applyGoalMutation } from '../goals/graphState';
 import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER, isBlockingGoal } from '../goals/types';
 import { isDelegationOwnedGoal } from '../goals/delegation';

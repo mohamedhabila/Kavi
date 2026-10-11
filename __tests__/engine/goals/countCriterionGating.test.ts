@@ -4,7 +4,7 @@ import {
   isSuccessCriterionMet,
   resolveGatingSuccessCriteria,
 } from '../../../src/engine/goals/completionEvidence';
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
 import { DELEGATED_WORKER_MIN_EVIDENCE_CRITERION } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';

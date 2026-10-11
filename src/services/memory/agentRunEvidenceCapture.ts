@@ -10,8 +10,8 @@ import type {
 } from '../../types/toolEffectReceipt';
 import {
   parseToolEffectReceiptEvidence,
-  type EffectCompletionResource,
-} from '../../engine/goals/effectCompletionEvidence';
+  type EffectReceiptResource,
+} from './effectReceiptEvidence';
 import {
   STEP_TEXT_LIMITS,
   fitAgentRunText,
@@ -70,7 +70,7 @@ export interface AgentRunEffectReceiptEvidence {
   verificationState: ToolEffectVerificationState;
   requestDigest: ToolEffectDigest;
   resultDigest: ToolEffectDigest;
-  resource: EffectCompletionResource;
+  resource: EffectReceiptResource;
   recordedAt: number;
 }
 

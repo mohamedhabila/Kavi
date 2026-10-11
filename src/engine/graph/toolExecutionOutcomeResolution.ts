@@ -16,7 +16,7 @@ import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
-import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { buildDelegationToolTerminalGraphEvents } from './delegationToolTerminalGraphEffects';
 import { collectDelegatedArtifactEvidence } from './delegatedToolEvidence';
 import {

@@ -1,6 +1,6 @@
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
 import { applyGoalMutation } from '../../../src/engine/goals/graphState';
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
 import { DELEGATED_WORKER_GOAL_OWNER } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';

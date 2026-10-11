@@ -15,7 +15,7 @@ import {
 import type { ToolEffectDigest } from '../../src/types/toolEffectReceipt';
 import type { Conversation } from '../../src/types/conversation';
 import { areBlockingGoalsStructurallyComplete } from '../../src/engine/goals/completionEvidence';
-import { parseToolEffectReceiptEvidence } from '../../src/engine/goals/effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
 import { isBlockingGoal } from '../../src/engine/goals/types';
 import {
   buildAgentRunMessageScope,

@@ -1,9 +1,11 @@
 import {
   buildEffectCompletionCriterion,
-  buildToolEffectReceiptEvidence,
   parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
 } from '../../../src/engine/goals/effectCompletionEvidence';
+import {
+  buildToolEffectReceiptEvidence,
+  parseToolEffectReceiptEvidence,
+} from '../../../src/services/memory/effectReceiptEvidence';
 import { isSuccessCriterionMet } from '../../../src/engine/goals/completionEvidence';
 import { routeToolEvidenceToActiveGoals } from '../../../src/engine/goals/evidenceRouting';
 import { createGoal } from '../../../src/engine/goals/types';

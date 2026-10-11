@@ -1,6 +1,6 @@
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' } }));
 
-import { parseToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import {
   AGENT_RUN_TERMINAL_EVIDENCE_PREFIX,
   buildAgentRunTerminalEvidence,

@@ -1,6 +1,6 @@
 import { applyGoalMutation } from '../../../src/engine/goals/graphState';
 import { createGoal } from '../../../src/engine/goals/types';
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
 // Traced on-device with a mutation log. `moon-facts` declared

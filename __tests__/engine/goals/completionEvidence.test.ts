@@ -7,7 +7,7 @@ import {
   isSuccessCriterionMet,
   resolveSuccessCriterionSurfaceHints,
 } from '../../../src/engine/goals/completionEvidence';
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 

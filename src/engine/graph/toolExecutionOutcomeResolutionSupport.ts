@@ -11,8 +11,8 @@ import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import {
   effectReceiptEvidenceTargetsCriterion,
   parseEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
 } from '../goals/effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../services/memory/effectReceiptEvidence';
 import { isCodeOwnedEffectCompletionGoal, type AgentGoal } from '../goals/types';
 import type { AgentControlGraphEvent } from './agentControlGraph';
 

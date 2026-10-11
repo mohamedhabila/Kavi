@@ -1,9 +1,7 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
 import { areGoalSuccessCriteriaSatisfied } from '../../src/engine/goals/completionEvidence';
-import {
-  buildEffectCompletionCriterion,
-  parseToolEffectReceiptEvidence,
-} from '../../src/engine/goals/effectCompletionEvidence';
+import { buildEffectCompletionCriterion } from '../../src/engine/goals/effectCompletionEvidence';
+import { parseToolEffectReceiptEvidence } from '../../src/services/memory/effectReceiptEvidence';
 import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
 import {
   applyGoalGraphEvents,

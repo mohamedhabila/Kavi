@@ -8,7 +8,7 @@ import {
   CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
   createGoal,
 } from '../../../src/engine/goals/types';
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import { DELEGATED_WORKER_GOAL_OWNER } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 

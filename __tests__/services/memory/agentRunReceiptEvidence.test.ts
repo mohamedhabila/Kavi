@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
+import { buildToolEffectReceiptEvidence } from '../../../src/services/memory/effectReceiptEvidence';
 import { recordAgentRunEvidenceMemory } from '../../../src/services/memory/agentRunEvidenceMemory';
 import {
   AGENT_RUN_TERMINAL_EVIDENCE_PREFIX,
