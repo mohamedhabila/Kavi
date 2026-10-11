@@ -3,7 +3,6 @@ import {
   CRITICAL_THRESHOLD,
   STAGNANT_PROGRESS_THRESHOLD,
   WARNING_THRESHOLD,
-  buildGoalProgressFingerprint,
   buildIterationSemanticProgressFingerprint,
   buildToolMultisetKey,
   detectConsecutiveBlockedPreflightCalls,
@@ -85,15 +84,11 @@ describe('blocked preflight retry detection', () => {
 describe('semantic progress detection', () => {
   it('does not call advancing inspection batches stagnant when one batch also has a failure', () => {
     const signatures: IterationProgressSignature[] = [];
-    const goalProgressFingerprint = buildGoalProgressFingerprint([
-      { id: 'audit', status: 'active', evidence: [] },
-    ]);
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
       recordIterationProgressSignature(signatures, {
         toolMultisetKey: buildToolMultisetKey(['read_file', 'read_file']),
-        goalProgressFingerprint,
-        activeGoalId: 'audit',
+        effectReceiptCount: 0,
         semanticProgressFingerprint: buildIterationSemanticProgressFingerprint([
           rec(
             'read_file',
@@ -120,10 +115,7 @@ describe('semantic progress detection', () => {
     ]);
     const entry: IterationProgressSignature = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'audit', status: 'active', evidence: [] },
-      ]),
-      activeGoalId: 'audit',
+      effectReceiptCount: 0,
       semanticProgressFingerprint,
     };
 
@@ -143,8 +135,7 @@ describe('semantic progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([]),
-      activeGoalId: null,
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < CRITICAL_THRESHOLD; index += 1) {
@@ -166,8 +157,7 @@ describe('semantic progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([]),
-      activeGoalId: null,
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -209,10 +199,7 @@ describe('semantic progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey([toolName]),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'research', status: 'active', evidence: [] },
-      ]),
-      activeGoalId: 'research',
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -246,10 +233,7 @@ describe('semantic progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['list_files']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'audit', status: 'active', evidence: [] },
-      ]),
-      activeGoalId: 'audit',
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {

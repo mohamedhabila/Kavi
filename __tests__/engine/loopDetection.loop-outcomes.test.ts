@@ -4,7 +4,6 @@ import {
   STAGNANT_PROGRESS_THRESHOLD,
   TOOL_CALL_HISTORY_SIZE,
   WARNING_THRESHOLD,
-  buildGoalProgressFingerprint,
   buildToolMultisetKey,
   detectConsecutiveBlockedPreflightCalls,
   detectLoops,
@@ -79,26 +78,11 @@ describe('detectLoops', () => {
     );
   });
 
-  it('changes goal progress fingerprint when a new goal id is added', () => {
-    const before = buildGoalProgressFingerprint([
-      { id: 'scope-a', status: 'active', evidence: [] },
-    ]);
-    const after = buildGoalProgressFingerprint([
-      { id: 'scope-a', status: 'pending', evidence: [] },
-      { id: 'scope-b', status: 'active', evidence: [] },
-    ]);
-
-    expect(before).not.toBe(after);
-    expect(after.startsWith('scope-a,scope-b|')).toBe(true);
-  });
-
   it('escalates stagnant progress to critical for pre-tool deny', () => {
     const signatures: IterationProgressSignature[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['write_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['write_file:done'] },
-      ]),
+      effectReceiptCount: 0,
     };
     for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
       recordIterationProgressSignature(signatures, entry);
@@ -118,7 +102,7 @@ describe('detectLoops', () => {
     const signatures: IterationProgressSignature[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['tool_catalog']),
-      goalProgressFingerprint: '',
+      effectReceiptCount: 0,
     };
     for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
       recordIterationProgressSignature(signatures, entry);
@@ -141,9 +125,7 @@ describe('detectLoops', () => {
     const signatures: IterationProgressSignature[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['read_file:same.txt'] },
-      ]),
+      effectReceiptCount: 0,
     };
     for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
       recordIterationProgressSignature(signatures, entry);

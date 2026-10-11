@@ -13,7 +13,7 @@ import type { OrchestratorState } from '../../types/conversation';
 import type { ToolDefinition } from '../../types/tool';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import {
-  buildGoalProgressFingerprint,
+  countRunEffectReceipts,
   buildIterationSemanticProgressFingerprint,
   buildToolMultisetKey,
   recordIterationProgressSignature,
@@ -498,10 +498,14 @@ export async function executeAgentControlGraphToolTurn(
   });
 
   if (executableToolCalls.length > 0 && toolOutcomeResolution.status !== 'waiting') {
-    const goals = params.getGraphSnapshot().goals ?? [];
     recordIterationProgressSignature(params.stagnationSignatures, {
       toolMultisetKey: buildToolMultisetKey(executableToolCalls.map((toolCall) => toolCall.name)),
-      goalProgressFingerprint: buildGoalProgressFingerprint(goals),
+      effectReceiptCount: countRunEffectReceipts(
+        params.stagnationSignatures,
+        toolExecutionOutcomes.map((outcome) =>
+          'deferredHandoff' in outcome ? undefined : outcome.effectReceipt,
+        ),
+      ),
       semanticProgressFingerprint: buildIterationSemanticProgressFingerprint(
         toolExecutionOutcomes.flatMap((outcome) => {
           if ('deferredHandoff' in outcome) return [];

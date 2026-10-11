@@ -3,8 +3,8 @@ import {
   ERROR_WARNING_THRESHOLD,
   STAGNANT_PROGRESS_THRESHOLD,
   WARNING_THRESHOLD,
-  buildGoalProgressFingerprint,
   buildToolMultisetKey,
+  countRunEffectReceipts,
   detectGenericRepeat,
   detectLoops,
   detectRepeatedErrors,
@@ -84,28 +84,31 @@ describe('detectRepeatedErrors', () => {
 });
 
 describe('stagnant progress detection', () => {
-  it('builds stable multiset and goal fingerprints', () => {
+  it('builds stable multiset keys and counts the effects a run recorded, not its reads', () => {
     expect(buildToolMultisetKey(['write_file', 'read_file', 'write_file'])).toBe(
       'read_file|write_file',
     );
-    expect(
-      buildGoalProgressFingerprint([
-        {
-          id: 'gate-followup',
-          status: 'active',
-          evidence: ['write_file:artifacts/e2e.txt'],
-        },
+    const signatures: IterationProgressSignature[] = [];
+    expect(countRunEffectReceipts(signatures, [])).toBe(0);
+    recordIterationProgressSignature(signatures, {
+      toolMultisetKey: 'write_file',
+      effectReceiptCount: countRunEffectReceipts(signatures, [
+        { effectState: 'applied' },
+        { effectState: 'none' },
+        undefined,
+        { effectState: 'failed' },
       ]),
-    ).toContain('gate-followup:active:1:');
+    });
+    expect(signatures[0]?.effectReceiptCount).toBe(2);
+    expect(countRunEffectReceipts(signatures, [{ effectState: 'handed_off' }])).toBe(3);
+    expect(countRunEffectReceipts(signatures, [{ effectState: 'none' }])).toBe(2);
   });
 
-  it('detects repeated tool multisets without goal progress', () => {
+  it('detects repeated tool multisets that record no new effect', () => {
     const signatures: IterationProgressSignature[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['write_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['write_file:done'] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
@@ -124,9 +127,7 @@ describe('stagnant progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['wait']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'monitor', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -143,9 +144,7 @@ describe('stagnant progress detection', () => {
     const signatures: IterationProgressSignature[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['wait']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'monitor', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
       recordIterationProgressSignature(signatures, entry);
@@ -172,9 +171,7 @@ describe('stagnant progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['wait']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'monitor', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -201,9 +198,7 @@ describe('stagnant progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'audit', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -225,9 +220,7 @@ describe('stagnant progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'audit', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -250,9 +243,7 @@ describe('stagnant progress detection', () => {
     const history: ToolCallRecord[] = [];
     const entry = {
       toolMultisetKey: buildToolMultisetKey(['read_file']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'audit', status: 'active', evidence: [] },
-      ]),
+      effectReceiptCount: 0,
     };
 
     for (let index = 0; index < CRITICAL_THRESHOLD; index += 1) {
@@ -270,27 +261,46 @@ describe('stagnant progress detection', () => {
     });
   });
 
-  it('does not flag stagnant progress when goal evidence advances', () => {
+  it('treats an effect tool answering the same text for new arguments as progress', () => {
+    // A composer reports one status for every distinct draft it saves. Only the receipt
+    // each call records tells these iterations apart.
+    const signatures: IterationProgressSignature[] = [];
+    const history: ToolCallRecord[] = [];
+    for (let index = 0; index < CRITICAL_THRESHOLD; index += 1) {
+      history.push(rec('draft_save', JSON.stringify({ body: `draft ${index}` }), 'Draft saved.'));
+      recordIterationProgressSignature(signatures, {
+        toolMultisetKey: buildToolMultisetKey(['draft_save']),
+        effectReceiptCount: countRunEffectReceipts(signatures, [{ effectState: 'applied' }]),
+      });
+    }
+
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
+
+    const stalled = Array.from({ length: STAGNANT_PROGRESS_THRESHOLD }, () => ({
+      toolMultisetKey: buildToolMultisetKey(['draft_save']),
+      effectReceiptCount: signatures[signatures.length - 1]!.effectReceiptCount,
+    }));
+    expect(detectLoops(history, [...signatures, ...stalled])).toMatchObject({
+      loopDetected: true,
+      type: 'stagnant_progress',
+    });
+  });
+
+  it('does not flag stagnant progress while iterations record new effects', () => {
     const signatures: IterationProgressSignature[] = [];
     const multisetKey = buildToolMultisetKey(['write_file', 'update_plan']);
 
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['write_file:one'] },
-      ]),
+      effectReceiptCount: 1,
     });
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
-      ]),
+      effectReceiptCount: 2,
     });
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
-      ]),
+      effectReceiptCount: 2,
     });
 
     expect(detectStagnantProgress(signatures)).toEqual({ detected: false });

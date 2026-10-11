@@ -4,7 +4,7 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { executeAgentControlGraphToolTurn } from '../../src/engine/graph/toolTurnExecution';
-import { detectLoops } from '../../src/engine/loopDetection';
+import { detectLoops, type IterationProgressSignature } from '../../src/engine/loopDetection';
 import { executeToolExecutionBatch } from '../../src/engine/toolExecution/toolExecutionBatch';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
@@ -115,7 +115,8 @@ describe('toolTurnExecution', () => {
       loopDetected: true,
       level: 'critical',
       type: 'generic_repeat',
-      details: 'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
+      details:
+        'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
     });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
 
@@ -157,7 +158,8 @@ describe('toolTurnExecution', () => {
       loopDetected: true,
       level: 'critical',
       type: 'stagnant_progress',
-      details: 'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
+      details:
+        'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
     });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
 
@@ -501,39 +503,28 @@ describe('toolTurnExecution', () => {
     );
   });
 
-  it('records stagnation signatures after successful tool execution', async () => {
+  it('records stagnation signatures that count the effects the batch applied', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([
       {
         index: 0,
         toolCallId: 'tc-1',
         toolMessage: createToolMessage(),
+        effectReceipt: { effectState: 'applied' } as never,
       },
     ]);
 
-    const stagnationSignatures: Array<{
-      toolMultisetKey: string;
-      goalProgressFingerprint: string;
-    }> = [];
-    const params = createParams({
-      stagnationSignatures,
-      getGraphSnapshot: () =>
-        ({
-          goals: [
-            {
-              id: 'gate-followup',
-              status: 'active',
-              evidence: ['write_file:artifacts/e2e.txt'],
-            },
-          ],
-        }) as any,
-    });
+    const stagnationSignatures: IterationProgressSignature[] = [
+      { toolMultisetKey: 'write_file', effectReceiptCount: 2 },
+    ];
+    const params = createParams({ stagnationSignatures });
 
     await executeAgentControlGraphToolTurn(params);
 
-    expect(stagnationSignatures).toHaveLength(1);
-    expect(stagnationSignatures[0]?.toolMultisetKey).toBe('write_file');
-    expect(stagnationSignatures[0]?.goalProgressFingerprint).toContain('gate-followup:active:1:');
+    expect(stagnationSignatures).toHaveLength(2);
+    expect(stagnationSignatures[1]).toEqual(
+      expect.objectContaining({ toolMultisetKey: 'write_file', effectReceiptCount: 3 }),
+    );
   });
 
   it('blocks the run when batch settles fewer outcomes than executable tool calls', async () => {

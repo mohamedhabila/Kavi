@@ -1,4 +1,4 @@
-import type { AgentGoal } from './goals/types';
+import type { ToolEffectReceipt } from '../types/toolEffectReceipt';
 import type { ToolMessageOutcomeStatus } from './toolExecution/toolMessageOutcome';
 import {
   buildRawToolArgsKey,
@@ -6,7 +6,6 @@ import {
   hashResult,
   hashToolCall,
   normalizeToolNameKey,
-  simpleLoopDetectionHash,
 } from './loopDetectionKeys';
 import {
   countTrailingIdenticalInformationResults,
@@ -46,7 +45,12 @@ export type LoopDetectorKind =
 
 export type IterationProgressSignature = {
   toolMultisetKey: string;
-  goalProgressFingerprint: string;
+  /**
+   * How many receipts the run's effect-bearing tool calls had recorded by the end of this
+   * iteration. A new one is progress the result fingerprints cannot see: an effect tool
+   * called with new arguments may answer with the same text every time.
+   */
+  effectReceiptCount: number;
   semanticProgressFingerprint?: string;
 };
 
@@ -88,7 +92,7 @@ function countTrailingStagnantSignatures(
     const entry = signatures[index];
     if (
       entry?.toolMultisetKey !== latest.toolMultisetKey ||
-      entry.goalProgressFingerprint !== latest.goalProgressFingerprint ||
+      entry.effectReceiptCount !== latest.effectReceiptCount ||
       (entry.semanticProgressFingerprint ?? '') !== (latest.semanticProgressFingerprint ?? '')
     ) {
       break;
@@ -199,26 +203,20 @@ export function buildToolMultisetKey(toolNames: ReadonlyArray<string>): string {
     .join('|');
 }
 
-export function buildGoalProgressFingerprint(
-  goals: ReadonlyArray<Pick<AgentGoal, 'id' | 'status' | 'evidence'>>,
-): string {
-  if (goals.length === 0) {
-    return '';
-  }
-
-  const goalIdsFingerprint = goals
-    .map((goal) => goal.id)
-    .sort()
-    .join(',');
-  const goalStateFingerprint = goals
-    .map(
-      (goal) =>
-        `${goal.id}:${goal.status}:${goal.evidence.length}:${simpleLoopDetectionHash(goal.evidence.join('\n'))}`,
-    )
-    .sort()
-    .join(';');
-
-  return `${goalIdsFingerprint}|${goalStateFingerprint}`;
+/**
+ * The run's effect receipt count after an iteration: the count the previous iteration
+ * ended with, plus this iteration's receipts that record an effect rather than a read.
+ */
+export function countRunEffectReceipts(
+  signatures: ReadonlyArray<IterationProgressSignature>,
+  iterationReceipts: ReadonlyArray<Pick<ToolEffectReceipt, 'effectState'> | undefined>,
+): number {
+  const previous = signatures[signatures.length - 1]?.effectReceiptCount ?? 0;
+  return (
+    previous +
+    iterationReceipts.filter((receipt) => receipt !== undefined && receipt.effectState !== 'none')
+      .length
+  );
 }
 
 export function recordIterationProgressSignature(
@@ -248,7 +246,7 @@ export function detectStagnantProgress(
   const repeatedMultiset = window.every((entry) => entry.toolMultisetKey === first.toolMultisetKey);
   const unchangedProgress = window.every(
     (entry) =>
-      entry.goalProgressFingerprint === first.goalProgressFingerprint &&
+      entry.effectReceiptCount === first.effectReceiptCount &&
       (entry.semanticProgressFingerprint ?? '') === (first.semanticProgressFingerprint ?? ''),
   );
 
