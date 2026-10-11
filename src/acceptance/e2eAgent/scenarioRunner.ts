@@ -26,8 +26,7 @@ import type {
 } from '../../services/memory/memoryAccessPolicy';
 
 const DEFAULT_E2E_SYSTEM_PROMPT =
-  'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks. ' +
-  'Follow active graph goals and their required capabilities.';
+  'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks.';
 
 export type E2EScenarioRunOptions = Readonly<{
   provider?: LlmProviderConfig;
