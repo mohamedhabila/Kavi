@@ -5,6 +5,8 @@ jest.mock('expo-sqlite', () => {
 
 import { makeTestAgentRun, makeTestConversation } from '../../helpers/factories';
 import { closeMemoryDb } from '../../../src/services/memory/database';
+import { resetMemoryCoreSchemaCacheForTests } from '../../../src/services/memory/core/memorySchema';
+import { searchMemoryTurns } from '../../../src/services/memory/core/memoryTurnsStore';
 import {
   __resetIngestionQueueForTests,
   cancelScheduledIngestionDrain,
@@ -60,6 +62,7 @@ beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetFactSchemaCacheForTests();
+  resetMemoryCoreSchemaCacheForTests();
   ensureFactSchema();
   __resetIngestionQueueForTests();
   useSettingsStore.setState({
@@ -115,6 +118,21 @@ describe('publishConversationTurnMemory', () => {
         sourceEndMessageId: 'assistant-new',
       }),
     ).toBeNull();
+  });
+
+  it('indexes the published round so later conversations can recall it', async () => {
+    await publishConversationTurnMemory('conversation-publication', undefined, {
+      sourceEndMessageId: 'assistant-new',
+    });
+
+    expect(searchMemoryTurns({ query: 'beta', limit: 3 })).toEqual([
+      {
+        userMessageId: 'user-new',
+        conversationId: 'conversation-publication',
+        at: 4,
+        text: 'User: Remember beta.\nAssistant: I will remember beta.',
+      },
+    ]);
   });
 
   it('rejects a missing exact final instead of falling back to the latest final', async () => {
@@ -236,6 +254,7 @@ describe('publishConversationTurnMemory', () => {
       }),
     ).resolves.toEqual({ disposition: 'ephemeral_thread', jobId: null });
     expect(countPendingIngestionJobs()).toBe(0);
+    expect(searchMemoryTurns({ query: 'beta', limit: 3 })).toEqual([]);
   });
 
   it('settles a withdrawn exact source without mutating working memory or queue state', async () => {

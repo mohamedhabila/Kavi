@@ -1,5 +1,14 @@
+jest.mock('expo-sqlite', () => {
+  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
+  return makeExpoSqliteMock();
+});
+
 import type { Message } from '../../src/types/message';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
+import { closeMemoryDb } from '../../src/services/memory/database';
+import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
+import { addMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
+import { indexMemoryTurn } from '../../src/services/memory/core/memoryTurnsStore';
 
 jest.mock('../../src/services/memory/localSimilarity', () => {
   const actual = jest.requireActual('../../src/services/memory/localSimilarity');
@@ -72,6 +81,8 @@ import {
   isMemoryProjectionSnapshotDurablyCurrent,
 } from '../../src/services/memory/memoryAuthority';
 
+const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
+
 const RETRIEVAL_PROVIDER: LlmProviderConfig = {
   id: 'retrieval-provider',
   name: 'Retrieval provider',
@@ -140,6 +151,9 @@ describe('memoryAccessGateway', () => {
   beforeEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetMemoryCoreSchemaCacheForTests();
     (canReadLongTermMemory as jest.Mock).mockReturnValue(true);
     (isMemoryReadEpochCurrent as jest.Mock).mockReturnValue(true);
     jest.mocked(isMemoryProjectionSnapshotCurrent).mockReturnValue(true);
@@ -149,6 +163,49 @@ describe('memoryAccessGateway', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  afterAll(() => {
+    closeMemoryDb();
+  });
+
+  it('adds the stored memories and earlier conversations the request relates to', async () => {
+    addMemoryItem({
+      text: 'Sara (the user’s sister) lives in Porto',
+      conversationId: 'memory-1',
+      now: 0,
+    });
+    indexMemoryTurn({
+      conversationId: 'memory-0',
+      userMessageId: 'old-u1',
+      userText: 'Plan my Porto trip to visit Sara',
+      replyText: 'Day one: Ribeira.',
+      at: 0,
+    });
+    const messages: Message[] = [
+      makeMessage({
+        id: 'u1',
+        role: 'user',
+        content: 'When should I visit Sara in Porto?',
+        timestamp: 1,
+      }),
+    ];
+
+    const result = await buildUnifiedMemoryAccessContext({
+      messages,
+      memoryConversationId: 'memory-1',
+      sourceThreadId: 'thread-1',
+      personaId: 'default',
+      taskId: null,
+      mode: 'chat',
+      now: 2,
+    });
+
+    const sections = result.livingMemory?.sections ?? [];
+    expect(sections[0]).toEqual({ text: 'focus section', cacheable: false });
+    expect(sections[1]).toMatchObject({ cacheable: false });
+    expect(sections[1]?.text).toContain('Sara (the user’s sister) lives in Porto');
+    expect(sections[1]?.text).toContain('Plan my Porto trip to visit Sara');
   });
 
   it('loads living memory from full chat history without topic-boundary scoping', async () => {

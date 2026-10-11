@@ -2,6 +2,7 @@ import { resolveGraphTaskId } from '../../engine/graph/graphTaskScope';
 import { useChatStore } from '../../store/useChatStore';
 import type { Conversation } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
+import { indexClosedTurn } from './core/memoryTurnsStore';
 import { recordCompletedTurnForMemory, type RecordCompletedTurnForMemoryResult } from './lifecycle';
 import { resolveCodeOwnedMemoryConversationId } from './memoryScopeIdentity';
 
@@ -52,7 +53,7 @@ function resolvePublicationResult(
   throw new Error(`memory_turn_publication_${result.skipped ?? 'not_enqueued'}`);
 }
 
-/** Publish one exact persisted assistant final into the durable memory queue. */
+/** Publish one exact persisted assistant final into the durable memory queue and the past-turn index. */
 export async function publishConversationTurnMemory(
   conversationId: string,
   activeChatProvider: LlmProviderConfig | undefined,
@@ -80,5 +81,13 @@ export async function publishConversationTurnMemory(
     sourceRunId: options.sourceRunId,
     ...(taskId ? { taskId } : {}),
   });
-  return resolvePublicationResult(result);
+  const publication = resolvePublicationResult(result);
+  if (publication.disposition === 'enqueued') {
+    indexClosedTurn({
+      conversationId: memoryConversationId,
+      messages: conversation.messages,
+      replyMessageId: options.sourceEndMessageId,
+    });
+  }
+  return publication;
 }

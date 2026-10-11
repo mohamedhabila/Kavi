@@ -21,6 +21,7 @@ import {
 } from './memoryAccessPolicy';
 import { createCurrentLocalSimilarityVector } from './localSimilarity';
 import { getQueryProviderEmbeddingVector } from './providerQueryEmbedding';
+import { buildMemoryPromptSection } from './core/memoryPrompt';
 import { buildRecentUserRetrievalQuery } from './retrievalQueryText';
 import { maintainCurrentFactLocalSimilarity } from './localSimilarityBackfill';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
@@ -181,8 +182,17 @@ export async function buildUnifiedMemoryAccessContext(
   ) {
     return unavailableResult();
   }
+  const latestUserMessage =
+    [...scopedMessages].reverse().find((message) => message.role === 'user')?.content ?? '';
+  const memorySection = buildMemoryPromptSection({
+    visibility: { conversationId: request.memoryConversationId },
+    latestUserMessage,
+  });
   const livingMemory: LivingMemoryBridgeOutput = {
     ...livingMemoryResult,
+    sections: memorySection
+      ? [...livingMemoryResult.sections, { text: memorySection.text, cacheable: false }]
+      : livingMemoryResult.sections,
     memoryReadEpoch,
     memoryAuthoritySnapshot: continuedMemoryAuthoritySnapshot,
     consistencyBarrier,
