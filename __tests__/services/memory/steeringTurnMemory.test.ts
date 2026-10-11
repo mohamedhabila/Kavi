@@ -97,6 +97,13 @@ describe('memory over a steered turn', () => {
       status: 'resolved',
       user: { id: 'request' },
       steeringUsers: [{ id: 'steer' }],
+      turnMessages: [
+        { id: 'request' },
+        { id: 'tool-step' },
+        { id: 'call-1-result' },
+        { id: 'steer' },
+        { id: 'final' },
+      ],
       sourceStartMessageId: 'request',
       sourceEndMessageId: 'final',
       priorUserMessageId: 'prior-user',

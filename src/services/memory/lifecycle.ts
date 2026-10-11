@@ -264,7 +264,7 @@ export async function recordCompletedTurnForMemory(
     sourceStartMessageId: closedTurn.sourceStartMessageId,
     sourceEndMessageId: closedTurn.sourceEndMessageId,
     priorUserMessageId: closedTurn.priorUserMessageId,
-    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun),
+    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun, closedTurn.turnMessages),
   });
 
   const policyChangedError = 'memory_turn_publication_policy_changed';

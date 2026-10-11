@@ -68,13 +68,12 @@ function receipt(index: number, recordedAt: number, runId = 'run-receipts'): Too
 
 function terminal(sourceRunId = 'run-receipts', goal = 'Create a calendar event'): string {
   const evidence: AgentRunTerminalEvidence = {
-    version: 1,
+    version: 2,
     sourceRunId,
     goal,
     runStatus: 'completed',
     graphStatus: 'finalized',
     platform: 'ios',
-    completedBlockingGoalCount: 1,
     observedToolCallIds: ['call-1', 'call-2'],
   };
   return `${AGENT_RUN_TERMINAL_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;

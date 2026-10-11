@@ -1,14 +1,15 @@
 import { Platform } from 'react-native';
 
-import type { AgentGoal } from '../../engine/goals/types';
+import { buildToolEffectReceiptEvidence } from '../../engine/goals/effectCompletionEvidence';
 import type { AgentRun } from '../../types/agentRun';
+import type { Message } from '../../types/message';
 import { fitAgentRunText } from './agentRunEvidenceCompaction';
+import { isInternalAgentControlToolName } from './agentRunExperienceEvidencePolicy';
 import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
 export const AGENT_RUN_TERMINAL_EVIDENCE_PREFIX = 'agent_run_terminal_v1:' as const;
 
 const TERMINAL_EVIDENCE_KEYS = [
-  'completedBlockingGoalCount',
   'goal',
   'graphStatus',
   'observedToolCallIds',
@@ -17,17 +18,21 @@ const TERMINAL_EVIDENCE_KEYS = [
   'sourceRunId',
   'version',
 ] as const;
+/** Version 1 also counted the run's completed blocking goals, which runs no longer keep. */
+const LEGACY_V1_TERMINAL_EVIDENCE_KEYS = [
+  'completedBlockingGoalCount',
+  ...TERMINAL_EVIDENCE_KEYS,
+].sort();
 const MAX_GOAL_CHARS = 2_000;
 const MAX_TOOL_CALL_COUNT = 64;
 
 export interface AgentRunTerminalEvidence {
-  version: 1;
+  version: 2;
   sourceRunId: string;
   goal: string;
   runStatus: 'completed';
   graphStatus: 'finalized';
   platform: 'android' | 'ios';
-  completedBlockingGoalCount: number;
   observedToolCallIds: ReadonlyArray<string>;
 }
 
@@ -37,16 +42,19 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-function hasExactKeys(value: Record<string, unknown>): boolean {
+function hasExactKeys(value: Record<string, unknown>, expected: ReadonlyArray<string>): boolean {
   const keys = Object.keys(value).sort();
-  return (
-    keys.length === TERMINAL_EVIDENCE_KEYS.length &&
-    keys.every((key, index) => key === TERMINAL_EVIDENCE_KEYS[index])
-  );
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
-function isBlockingGoal(goal: AgentGoal): boolean {
-  return goal.completionPolicy !== 'persistent';
+function hasVersionedKeys(value: Record<string, unknown>): boolean {
+  if (value.version === 2) return hasExactKeys(value, TERMINAL_EVIDENCE_KEYS);
+  return (
+    value.version === 1 &&
+    hasExactKeys(value, LEGACY_V1_TERMINAL_EVIDENCE_KEYS) &&
+    Number.isSafeInteger(value.completedBlockingGoalCount) &&
+    (value.completedBlockingGoalCount as number) >= 0
+  );
 }
 
 function currentMobilePlatform(): 'android' | 'ios' | null {
@@ -54,17 +62,16 @@ function currentMobilePlatform(): 'android' | 'ios' | null {
 }
 
 /**
- * Encodes a code-owned terminal proof only after the persisted graph and every
- * blocking goal agree that the run completed. The proof is deliberately
- * separate from model-authored final text.
+ * Encodes a code-owned terminal proof only after the run and its persisted graph agree
+ * that the run completed. The proof is deliberately separate from model-authored final
+ * text.
  */
 export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
   const platform = currentMobilePlatform();
   const graph = run.controlGraph;
-  if (!graph || !Array.isArray(graph.goals) || !Array.isArray(graph.observedToolResults)) {
+  if (!graph || !Array.isArray(graph.observedToolResults)) {
     return null;
   }
-  const blockingGoals = graph.goals.filter(isBlockingGoal);
   const observedToolCallIds = graph.observedToolResults.map((result) => result.id);
   const goal = fitAgentRunText(run.goal, MAX_GOAL_CHARS).trim();
   if (
@@ -73,7 +80,6 @@ export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
     !goal ||
     run.status !== 'completed' ||
     graph.status !== 'finalized' ||
-    blockingGoals.some((candidate) => candidate.status !== 'completed') ||
     observedToolCallIds.length > MAX_TOOL_CALL_COUNT ||
     !observedToolCallIds.every(isExactMemoryProvenanceId) ||
     new Set(observedToolCallIds).size !== observedToolCallIds.length
@@ -81,13 +87,12 @@ export function buildAgentRunTerminalEvidence(run: AgentRun): string | null {
     return null;
   }
   const evidence: AgentRunTerminalEvidence = {
-    version: 1,
+    version: 2,
     sourceRunId: run.id,
     goal,
     runStatus: 'completed',
     graphStatus: 'finalized',
     platform,
-    completedBlockingGoalCount: blockingGoals.length,
     observedToolCallIds,
   };
   return `${AGENT_RUN_TERMINAL_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;
@@ -105,9 +110,8 @@ export function parseAgentRunTerminalEvidence(value: string): AgentRunTerminalEv
 }
 
 export function decodeAgentRunTerminalEvidence(value: unknown): AgentRunTerminalEvidence | null {
-  if (!isPlainRecord(value) || !hasExactKeys(value)) return null;
+  if (!isPlainRecord(value) || !hasVersionedKeys(value)) return null;
   if (
-    value.version !== 1 ||
     !isExactMemoryProvenanceId(value.sourceRunId) ||
     typeof value.goal !== 'string' ||
     !value.goal.trim() ||
@@ -116,8 +120,6 @@ export function decodeAgentRunTerminalEvidence(value: unknown): AgentRunTerminal
     value.runStatus !== 'completed' ||
     value.graphStatus !== 'finalized' ||
     (value.platform !== 'android' && value.platform !== 'ios') ||
-    !Number.isSafeInteger(value.completedBlockingGoalCount) ||
-    (value.completedBlockingGoalCount as number) < 0 ||
     !Array.isArray(value.observedToolCallIds) ||
     value.observedToolCallIds.length > MAX_TOOL_CALL_COUNT ||
     !value.observedToolCallIds.every(isExactMemoryProvenanceId) ||
@@ -126,21 +128,45 @@ export function decodeAgentRunTerminalEvidence(value: unknown): AgentRunTerminal
     return null;
   }
   return {
-    version: 1,
+    version: 2,
     sourceRunId: value.sourceRunId,
     goal: value.goal,
     runStatus: 'completed',
     graphStatus: 'finalized',
     platform: value.platform,
-    completedBlockingGoalCount: value.completedBlockingGoalCount as number,
     observedToolCallIds: value.observedToolCallIds,
   };
 }
 
-/** Builds the exact graph evidence payload used by both source fingerprinting and ingestion. */
-export function collectAgentRunMemoryEvidence(run: AgentRun | undefined): string[] {
+/**
+ * The settled receipt of each tool call the turn made, in call order. A tool call keeps
+ * its receipts append-only on the message, so its last receipt is the one its execution
+ * settled with. Internal control-plane tools are how the assistant managed its own work,
+ * not steps of it.
+ */
+function collectTurnEffectReceiptEvidence(turnMessages: ReadonlyArray<Message>): string[] {
+  const evidence: string[] = [];
+  for (const message of turnMessages) {
+    for (const toolCall of message.toolCalls ?? []) {
+      const settled = toolCall.effectReceipts?.at(-1);
+      if (settled && !isInternalAgentControlToolName(settled.toolName)) {
+        evidence.push(buildToolEffectReceiptEvidence(settled));
+      }
+    }
+  }
+  return evidence;
+}
+
+/**
+ * The exact run evidence both source fingerprinting and ingestion use: the receipts the
+ * turn's tool calls recorded, followed by the run's terminal proof.
+ */
+export function collectAgentRunMemoryEvidence(
+  run: AgentRun | undefined,
+  turnMessages: ReadonlyArray<Message>,
+): string[] {
   if (!run) return [];
-  const evidence = run.controlGraph?.goals?.flatMap((goal) => goal.evidence) ?? [];
+  const evidence = collectTurnEffectReceiptEvidence(turnMessages);
   const terminal = buildAgentRunTerminalEvidence(run);
   return terminal ? [...evidence, terminal] : evidence;
 }

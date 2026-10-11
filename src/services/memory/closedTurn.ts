@@ -21,6 +21,8 @@ export type ExactClosedTurnResolution =
       user: Message | undefined;
       /** User messages that steered the turn's run after its request, in order. */
       steeringUsers: Message[];
+      /** The turn's messages, from the request that opened it through its end. */
+      turnMessages: Message[];
       sourceStartMessageId: string | null;
       sourceEndMessageId: string;
       priorUserMessageId: string | null;
@@ -75,6 +77,7 @@ export function resolveClosedTurnEndingAt(
     steeringUsers: messages
       .slice(sourceUserIndex + 1, sourceEnd.index)
       .filter((message) => isSteeringUserMessage(message)),
+    turnMessages: messages.slice(Math.max(sourceUserIndex, 0), sourceEnd.index + 1),
     sourceStartMessageId: user?.id ?? null,
     sourceEndMessageId: sourceEnd.message.id,
     priorUserMessageId,

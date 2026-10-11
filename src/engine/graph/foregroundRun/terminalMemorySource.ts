@@ -103,6 +103,6 @@ export function fingerprintForegroundTerminalMemorySource(params: {
     sourceStartMessageId: closedTurn.sourceStartMessageId,
     sourceEndMessageId: closedTurn.sourceEndMessageId,
     priorUserMessageId: closedTurn.priorUserMessageId,
-    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun),
+    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun, closedTurn.turnMessages),
   }).payloadSha256;
 }

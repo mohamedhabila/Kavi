@@ -61,13 +61,12 @@ function receipt(runId: string, index: number): ToolEffectReceipt {
 
 function terminal(runId: string, goal: string): string {
   const evidence: AgentRunTerminalEvidence = {
-    version: 1,
+    version: 2,
     sourceRunId: runId,
     goal,
     runStatus: 'completed',
     graphStatus: 'finalized',
     platform: 'ios',
-    completedBlockingGoalCount: 1,
     observedToolCallIds: [`call-${runId}-1`, `call-${runId}-2`],
   };
   return `${AGENT_RUN_TERMINAL_EVIDENCE_PREFIX}${JSON.stringify(evidence)}`;

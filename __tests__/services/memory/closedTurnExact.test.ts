@@ -43,7 +43,8 @@ describe('resolveClosedTurnEndingAt', () => {
       finalAssistant('current-assistant', 6),
     ];
 
-    expect(resolveClosedTurnEndingAt(messages, 'current-assistant')).toMatchObject({
+    const closedTurn = resolveClosedTurnEndingAt(messages, 'current-assistant');
+    expect(closedTurn).toMatchObject({
       status: 'resolved',
       assistant: { id: 'current-assistant' },
       user: { id: 'current-user' },
@@ -51,6 +52,9 @@ describe('resolveClosedTurnEndingAt', () => {
       sourceEndMessageId: 'current-assistant',
       priorUserMessageId: 'prior-user',
     });
+    expect(
+      closedTurn.status === 'resolved' && closedTurn.turnMessages.map((message) => message.id),
+    ).toEqual(['current-user', 'tool-assistant', 'tool-result', 'current-assistant']);
   });
 
   it('allows an explicitly final assistant-only turn without inventing a source user', () => {
