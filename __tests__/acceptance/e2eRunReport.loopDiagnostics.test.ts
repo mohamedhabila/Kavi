@@ -116,27 +116,86 @@ describe('e2eRunReport loop diagnostics', () => {
     });
   });
 
+  it('does not call a repeated call stale when its results differ', () => {
+    const call = { name: 'web_search', arguments: '{"query":"rates"}' };
+    const result = buildFixtureResult({
+      toolCalls: [
+        { id: 'tc-1', ...call },
+        { id: 'tc-2', ...call },
+        { id: 'tc-3', ...call },
+      ],
+      toolResults: [
+        { toolCallId: 'tc-1', name: 'web_search', content: '{"items":["a"]}', isError: false },
+        { toolCallId: 'tc-2', name: 'web_search', content: '{"items":["b"]}', isError: false },
+        { toolCallId: 'tc-3', name: 'web_search', content: '{"items":["c"]}', isError: false },
+      ],
+    });
+
+    const entry = buildE2ERunReportScenarioEntry({
+      suite: 'core',
+      result,
+      outcome: { fixtureId: result.fixtureId, passed: true },
+      attemptCount: 1,
+    });
+
+    expect(entry.loopDiagnostics?.repeatedToolCalls).toEqual([
+      expect.objectContaining({ name: 'web_search', count: 3, noNewEvidence: false }),
+    ]);
+  });
+
+  it('calls a repeated call stale when it answered the same every time', () => {
+    const call = { name: 'web_search', arguments: '{"query":"rates"}' };
+    const same = '{"items":["a"]}';
+    const result = buildFixtureResult({
+      toolCalls: [
+        { id: 'tc-1', ...call },
+        { id: 'tc-2', ...call },
+        { id: 'tc-3', ...call },
+      ],
+      toolResults: ['tc-1', 'tc-2', 'tc-3'].map((toolCallId) => ({
+        toolCallId,
+        name: 'web_search',
+        content: same,
+        isError: false,
+      })),
+    });
+
+    const entry = buildE2ERunReportScenarioEntry({
+      suite: 'core',
+      result,
+      outcome: { fixtureId: result.fixtureId, passed: true },
+      attemptCount: 1,
+    });
+
+    expect(entry.loopDiagnostics).toMatchObject({
+      repeatedToolCalls: [
+        expect.objectContaining({ name: 'web_search', count: 3, noNewEvidence: true }),
+      ],
+      passing: false,
+    });
+  });
+
   it('counts repeated finalization holds by hold episode instead of snapshot retention', () => {
     const result = buildFixtureResult({
       graphSnapshots: [
         {
           status: 'running',
-          finalizationHoldReason: 'goals_incomplete',
+          finalizationHoldReason: 'async_waiting_finalization_hold',
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'running',
-          finalizationHoldReason: 'goals_incomplete',
+          finalizationHoldReason: 'async_waiting_finalization_hold',
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'running',
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'running',
-          finalizationHoldReason: 'goals_incomplete',
+          finalizationHoldReason: 'async_waiting_finalization_hold',
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'finalized',
-          finalizationHoldReason: 'goals_incomplete',
+          finalizationHoldReason: 'async_waiting_finalization_hold',
         } as E2EScenarioResult['graphSnapshots'][number],
       ],
     });
@@ -149,7 +208,7 @@ describe('e2eRunReport loop diagnostics', () => {
     });
 
     expect(entry.loopDiagnostics).toMatchObject({
-      repeatedHoldReasons: [{ reason: 'goals_incomplete', count: 2 }],
+      repeatedHoldReasons: [{ reason: 'async_waiting_finalization_hold', count: 2 }],
       passing: true,
     });
   });

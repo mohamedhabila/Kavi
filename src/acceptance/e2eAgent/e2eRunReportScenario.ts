@@ -52,17 +52,6 @@ function resolveUsageTokenBuckets(usage: E2ETokenUsageSummary): UsageTokenBucket
   return usage.tokenBuckets ? { ...usage.tokenBuckets } : emptyUsageTokenBuckets();
 }
 
-function buildGoalEvidenceFingerprints(result: E2EScenarioResult): string[] {
-  return result.graphSnapshots
-    .map((snapshot) =>
-      (snapshot.goals ?? [])
-        .map((goal) => `${goal.id}:${goal.status}:${goal.evidence.join('|')}`)
-        .sort()
-        .join(';'),
-    )
-    .filter(Boolean);
-}
-
 function countCatalogResultsAfterActivation(result: E2EScenarioResult): number {
   const seenCatalogResultIds = new Set<string>();
   let activationSeen = false;
@@ -112,27 +101,33 @@ function countHoldReasonEpisodes(
 function buildScenarioLoopDiagnostics(
   result: E2EScenarioResult,
 ): E2ERunReportScenarioLoopDiagnostics {
-  const toolCounts = new Map<string, { name: string; argsHash: string; count: number }>();
+  const resultByCallId = new Map(
+    result.toolResults.map((toolResult) => [toolResult.toolCallId, toolResult.content]),
+  );
+  const toolCounts = new Map<
+    string,
+    { name: string; argsHash: string; count: number; resultHashes: Set<string> }
+  >();
   for (const call of result.toolCalls) {
     const name = call.name.trim();
     const argsHash = stableHash(call.arguments || '{}');
     const key = `${name}:${argsHash}`;
+    const resultHash = stableHash(resultByCallId.get(call.id) ?? '');
     const existing = toolCounts.get(key);
     if (existing) {
       existing.count += 1;
+      existing.resultHashes.add(resultHash);
     } else {
-      toolCounts.set(key, { name, argsHash, count: 1 });
+      toolCounts.set(key, { name, argsHash, count: 1, resultHashes: new Set([resultHash]) });
     }
   }
 
-  const evidenceFingerprints = buildGoalEvidenceFingerprints(result);
-  const noNewEvidence =
-    evidenceFingerprints.length === 0 || new Set(evidenceFingerprints).size <= 1;
+  // A repeated call that answered the same every time brought nothing new.
   const repeatedToolCalls = Array.from(toolCounts.values())
     .filter((entry) => entry.count > 1)
-    .map((entry) => ({
+    .map(({ resultHashes, ...entry }) => ({
       ...entry,
-      noNewEvidence,
+      noNewEvidence: resultHashes.size <= 1,
     }))
     .sort(
       (left, right) =>
