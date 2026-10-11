@@ -4,6 +4,7 @@ import {
   recoverInterruptedForegroundModelExecutions,
   type ForegroundModelRecoveryDependencies,
 } from '../../src/services/executionJournal/foregroundModelExecutionRecovery';
+import { AMBIGUOUS_EFFECT_RESTART_ERROR } from '../../src/services/executionJournal/toolEffectRestartProjection';
 import type { ForegroundModelExecutionLease } from '../../src/services/executionJournal/foregroundModelExecutionTypes';
 import { createForegroundModelGenerationChangedError } from '../../src/services/runtimeError';
 import type { Conversation } from '../../src/types/conversation';
@@ -334,7 +335,7 @@ describe('foreground model restart recovery planning', () => {
     );
   });
 
-  it('keeps the exact projection open while a tool effect still requires reconciliation', () => {
+  it('closes an interrupted effect as possibly applied instead of waiting for a reconciler', () => {
     const pendingConversation = conversation({
       messages: [
         { id: 'request-1', role: 'user', content: 'Do the work.', timestamp: 1 },
@@ -355,11 +356,18 @@ describe('foreground model restart recovery planning', () => {
         observedAt: 10,
         reason: 'ambiguous_effect',
       })),
-    ).toEqual({
-      kind: 'blocked',
-      runId: 'run-1',
-      reason: 'effect_reconciliation_pending',
-    });
+    ).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        projectionMessageId: 'assistant-1',
+        interruptedTools: [
+          expect.objectContaining({
+            toolCallId: 'tool-1',
+            disposition: expect.objectContaining({ kind: 'reconciliation_required' }),
+          }),
+        ],
+      }),
+    );
   });
 
   it('does not trust an older final when a newer assistant projection is incomplete', () => {
@@ -443,7 +451,9 @@ describe('foreground model restart recovery planning', () => {
 });
 
 describe('foreground model restart recovery execution', () => {
-  it('retains an unresolved generation without mutating or closing its projection', async () => {
+  // Nothing ever settles an ordinary tool's interrupted effect, so retaining the generation
+  // kept the conversation's projection owner forever and every later send was refused.
+  it('closes a generation whose effect was interrupted and releases the conversation', async () => {
     const test = harness(
       conversation({
         messages: [
@@ -466,12 +476,16 @@ describe('foreground model restart recovery execution', () => {
     );
 
     await expect(recoverInterruptedForegroundModelExecutions(test.dependencies)).resolves.toEqual([
-      { kind: 'blocked', runId: 'run-1', reason: 'effect_reconciliation_pending' },
+      { kind: 'recovered', runId: 'run-1', status: 'failed' },
     ]);
-    expect(test.getConversation().messages[1]?.toolCalls?.[0]?.status).toBe('running');
-    expect(test.complete).not.toHaveBeenCalled();
-    expect(test.releaseProjection).not.toHaveBeenCalled();
-    expect(test.flushChatState).not.toHaveBeenCalled();
+    expect(test.getConversation().messages[1]?.toolCalls?.[0]).toMatchObject({
+      status: 'failed',
+      failureKind: 'reconciliation_required',
+      error: AMBIGUOUS_EFFECT_RESTART_ERROR,
+    });
+    expect(test.complete).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+    expect(test.releaseProjection).toHaveBeenCalled();
+    expect(test.getConversation().modelProjectionOwner).toBeUndefined();
   });
 
   it('leaves task-owned tool projection and counting to AgentRun recovery', async () => {

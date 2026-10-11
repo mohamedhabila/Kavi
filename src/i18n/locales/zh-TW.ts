@@ -1710,9 +1710,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: '由於應用程式在完成前重新啟動，工具呼叫被中斷。',
-      reconciliationPendingSummary:
-        '正在等待應用程式重新啟動後工具效果的持久化核對。不會重播任何工具或模型執行。',
-      reconciliationPendingTitle: '工具效果核對待處理',
       interruptedBySupersededRun:
         '由於該次執行被更新的使用者回合取代，工具呼叫被中斷。',
       interruptedByCancelledRun:

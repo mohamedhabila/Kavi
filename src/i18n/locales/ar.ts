@@ -1944,9 +1944,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: 'تم مقاطعة استدعاء الأداة بسبب إعادة تشغيل التطبيق قبل اكتمالها.',
-      reconciliationPendingSummary:
-        'في انتظار تسوية أثر الأداة الدائم بعد إعادة تشغيل التطبيق. لن يُعاد تنفيذ أي أداة أو نموذج.',
-      reconciliationPendingTitle: 'تسوية أثر الأداة معلّقة',
       interruptedBySupersededRun:
         'تم مقاطعة استدعاء الأداة لأن التشغيل استُبدل بدورة مستخدم أحدث.',
       interruptedByCancelledRun:

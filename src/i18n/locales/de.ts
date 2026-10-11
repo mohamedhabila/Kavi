@@ -1852,9 +1852,6 @@ export const de: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: 'Der Tool-Aufruf wurde unterbrochen, da die App vor Abschluss neu gestartet wurde.',
-      reconciliationPendingSummary:
-        'Warten auf den dauerhaften Abgleich der Tool-Effekte nach dem App-Neustart. Es wird keine Tool- oder Modellausführung wiederholt.',
-      reconciliationPendingTitle: 'Tool-Effekt-Abgleich ausstehend',
       interruptedBySupersededRun:
         'Der Tool-Aufruf wurde unterbrochen, da der Lauf durch eine neuere Nutzeranfrage ersetzt wurde.',
       interruptedByCancelledRun:

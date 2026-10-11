@@ -1,3 +1,4 @@
+import { AMBIGUOUS_EFFECT_RESTART_ERROR } from '../../src/services/executionJournal/toolEffectRestartProjection';
 import {
   createInitialAgentRunControlGraphState,
   updateAgentRunControlGraphAsyncWorkState,
@@ -197,7 +198,9 @@ describe('agent-run restart effect reconciliation', () => {
     );
   });
 
-  it('fails closed when a running agent has no exact foreground execution owner', () => {
+  // Without its execution owner the effect cannot be looked up; the call is reported as
+  // possibly applied and the run settles, instead of staying `recovering` forever.
+  it('settles a running agent that has no exact foreground execution owner', () => {
     const resolveToolEffect = jest.fn(() => ({ kind: 'not_dispatched' as const }));
 
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
@@ -206,14 +209,17 @@ describe('agent-run restart effect reconciliation', () => {
     });
 
     expect(recovered.agentRuns?.[0]).toMatchObject({
-      status: 'running',
-      controlGraph: { status: 'recovering' },
+      status: 'failed',
+      controlGraph: { status: 'failed' },
     });
-    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({ status: 'running' });
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({
+      status: 'failed',
+      error: AMBIGUOUS_EFFECT_RESTART_ERROR,
+    });
     expect(resolveToolEffect).not.toHaveBeenCalled();
   });
 
-  it('keeps an ambiguous effect recoverable without terminalizing the run', () => {
+  it('settles a run whose effect was interrupted, reporting the effect as possibly applied', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(conversation(), [], {
       timestamp: 200,
       executionRunIdByConversationAndAgentRun: executionRunOwners,
@@ -223,16 +229,17 @@ describe('agent-run restart effect reconciliation', () => {
         reason: 'ambiguous_effect',
       }),
     });
-    const recoveredRun = recovered.agentRuns?.[0];
-    const toolCall = recovered.messages[1]?.toolCalls?.[0];
 
-    expect(recoveredRun).toMatchObject({
-      status: 'running',
-      summary: { startedTools: 1, completedTools: 0, failedTools: 0 },
-      controlGraph: { status: 'recovering' },
+    expect(recovered.agentRuns?.[0]).toMatchObject({
+      status: 'failed',
+      summary: { startedTools: 1, completedTools: 0, failedTools: 1 },
+      controlGraph: { status: 'failed' },
     });
-    expect(toolCall).toMatchObject({ status: 'running' });
-    expect(toolCall?.error).toBeUndefined();
+    expect(recovered.messages[1]?.toolCalls?.[0]).toMatchObject({
+      status: 'failed',
+      failureKind: 'reconciliation_required',
+      error: AMBIGUOUS_EFFECT_RESTART_ERROR,
+    });
   });
 
   it('preserves a graph-owned mobile handoff for its dedicated host outcome after restart', () => {
@@ -449,45 +456,6 @@ describe('agent-run restart effect reconciliation', () => {
       expect(recovered.activeAgentRunId).toBeUndefined();
     },
   );
-
-  it('requires a fresh review boundary after an ambiguous effect is later verified', () => {
-    const recovered = recoverInterruptedAgentRunsInConversation(
-      conversation({ completeFinal: true }),
-      [],
-      {
-        timestamp: 200,
-        executionRunIdByConversationAndAgentRun: executionRunOwners,
-        resolveToolEffect: () => ({
-          kind: 'reconciliation_required',
-          observedAt: 150,
-          reason: 'ambiguous_effect',
-        }),
-      },
-    );
-
-    expect(recovered.agentRuns?.[0]).toMatchObject({
-      status: 'running',
-      latestSummary: expect.stringContaining('Waiting for durable tool-effect reconciliation'),
-      summary: { completedTools: 0, failedTools: 0 },
-    });
-
-    const verified = recoverInterruptedAgentRunsInConversation(recovered, [], {
-      timestamp: 300,
-      executionRunIdByConversationAndAgentRun: executionRunOwners,
-      resolveToolEffect: () => ({ kind: 'verified', observedAt: 250 }),
-    });
-    expect(verified.agentRuns?.[0]).toMatchObject({
-      status: 'running',
-      currentPhase: 'review',
-      latestSummary: expect.stringContaining('recovery boundary still requires review'),
-      controlGraph: { status: 'recovering' },
-      summary: { completedTools: 1, failedTools: 0 },
-    });
-    expect(verified.messages[1]?.toolCalls?.[0]).toMatchObject({
-      status: 'completed',
-      completedAt: 250,
-    });
-  });
 
   it('accounts for a verified tool even while a recovered worker is still active', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(

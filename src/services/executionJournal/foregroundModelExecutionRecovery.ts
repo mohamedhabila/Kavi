@@ -54,7 +54,6 @@ export const FOREGROUND_MODEL_RECOVERY_BLOCK_REASONS = [
   'task_ownership_missing',
   'projection_owner_missing',
   'projection_owner_changed',
-  'effect_reconciliation_pending',
   'generation_changed',
   'journal_unavailable',
   'memory_publication_pending',
@@ -271,9 +270,6 @@ export function planForegroundModelRestartRecovery(
     executionRunId: lease.runId,
     resolveToolEffect,
   });
-  if (interruptedTools.some((tool) => tool.disposition.kind === 'reconciliation_required')) {
-    return blocked(lease, 'effect_reconciliation_pending');
-  }
   const projection =
     [...ownedAssistantMessages].reverse().find((message) => !message.subAgentEvent) ??
     ownedAssistantMessages.at(-1)!;

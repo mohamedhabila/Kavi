@@ -1774,9 +1774,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: '完了前にアプリが再起動したため、ツール呼び出しが中断されました。',
-      reconciliationPendingSummary:
-        'アプリ再起動後の永続的なツール効果の照合を待っています。ツールやモデルの実行は再生されません。',
-      reconciliationPendingTitle: 'ツール効果の照合が保留中',
       interruptedBySupersededRun:
         'より新しいユーザーターンによって実行が置き換えられたため、ツール呼び出しが中断されました。',
       interruptedByCancelledRun:

@@ -1712,9 +1712,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: '由于应用在完成前重启，工具调用被中断。',
-      reconciliationPendingSummary:
-        '正在等待应用重启后工具效果的持久化核对。不会重放任何工具或模型执行。',
-      reconciliationPendingTitle: '工具效果核对待处理',
       interruptedBySupersededRun:
         '由于该次运行被更新的用户回合取代，工具调用被中断。',
       interruptedByCancelledRun:

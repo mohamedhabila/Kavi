@@ -1845,9 +1845,6 @@ export const en: TranslationMap = {
   toolCall: {
     errors: {
       interruptedByAppRestart: 'Tool call was interrupted because the app restarted before completion.',
-      reconciliationPendingSummary:
-        'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.',
-      reconciliationPendingTitle: 'Tool effect reconciliation pending',
       interruptedBySupersededRun:
         'Tool call was interrupted because the run was superseded by a newer user turn.',
       interruptedByCancelledRun:

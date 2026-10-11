@@ -31,13 +31,6 @@ import { buildAgentControlGraphTerminalEventForCompletion } from '../../engine/g
 function interruptedToolCallError(): string {
   return i18n.t('toolCall.errors.interruptedByAppRestart');
 }
-function effectReconciliationPendingSummary(): string {
-  return i18n.t('toolCall.errors.reconciliationPendingSummary');
-}
-function effectReconciliationPendingTitle(): string {
-  return i18n.t('toolCall.errors.reconciliationPendingTitle');
-}
-
 function controlGraphMatchesRecoveredTerminalStatus(
   controlGraph: AgentRun['controlGraph'],
   status: Extract<AgentRun['status'], 'cancelled' | 'failed'>,
@@ -110,7 +103,6 @@ export function recoverInterruptedAgentRunsInConversation(
             messages: settled.messages,
             completedCount: 0,
             failedCount: settled.settledCount,
-            reconciliationPendingCount: 0,
           };
         })()
       : recoverActiveToolCallsAfterRestart({
@@ -147,47 +139,6 @@ export function recoverInterruptedAgentRunsInConversation(
             run,
             subAgents: recoveredWorkers,
           });
-
-    if (interruptedToolUpdate.reconciliationPendingCount > 0) {
-      const alreadyPending =
-        run.latestSummary === effectReconciliationPendingSummary() &&
-        run.controlGraph?.status === 'recovering';
-      if (alreadyPending) return run;
-
-      didUpdateConversation = true;
-      const reviewPhase = 'review';
-      const nextControlGraph = updateAgentRunControlGraphAsyncWorkState(run.controlGraph, {
-        awaitingBackgroundWorkers: isAgentRunAwaitingBackgroundWorkers(run),
-        pendingOperations: getAgentRunPendingAsyncOperations(run),
-        updatedAt: timestamp,
-      });
-      return appendAgentCheckpoint(
-        {
-          ...run,
-          status: 'running',
-          controlGraph: { ...nextControlGraph, status: 'recovering' },
-          currentPhase: reviewPhase,
-          updatedAt: Math.max(run.updatedAt, timestamp),
-          latestSummary: effectReconciliationPendingSummary(),
-          summary: mergeAgentRunSummary(run.summary, {
-            durationMs: Math.max(0, timestamp - run.createdAt),
-          }),
-          phases: transitionAgentRunPhases(
-            run.phases,
-            reviewPhase,
-            'active',
-            timestamp,
-            effectReconciliationPendingSummary(),
-          ),
-        },
-        {
-          timestamp,
-          kind: 'run',
-          title: effectReconciliationPendingTitle(),
-          detail: effectReconciliationPendingSummary(),
-        },
-      );
-    }
 
     if (!recoveredState) {
       if (!didRecoverTool) return run;

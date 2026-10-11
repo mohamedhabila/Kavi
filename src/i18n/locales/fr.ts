@@ -1892,9 +1892,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: "L'appel à l'outil a été interrompu car l'application a redémarré avant la fin de l'exécution.",
-      reconciliationPendingSummary:
-        "En attente de la réconciliation durable de l'effet de l'outil après le redémarrage de l'application. Aucune exécution d'outil ou de modèle ne sera rejouée.",
-      reconciliationPendingTitle: "Réconciliation de l'effet de l'outil en attente",
       interruptedBySupersededRun:
         "L'appel à l'outil a été interrompu car l'exécution a été remplacée par un tour utilisateur plus récent.",
       interruptedByCancelledRun:

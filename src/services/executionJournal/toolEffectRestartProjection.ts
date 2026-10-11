@@ -4,7 +4,7 @@ import type { ToolEffectRestartDisposition } from './toolEffectRestartDispositio
 export const VERIFIED_EFFECT_RESTART_RESULT =
   'The tool effect completed and was durably verified before the app restarted. The original tool response was not retained; verify current state before relying on details.';
 export const AMBIGUOUS_EFFECT_RESTART_ERROR =
-  'Tool execution was interrupted after durable dispatch. Its effect is ambiguous and requires reconciliation before any retry.';
+  'The app closed while this tool was running. Its effect may or may not have happened, and it will not be retried automatically; check the current state before trying again.';
 
 export function projectToolCallAfterRestart(input: {
   toolCall: ToolCall;

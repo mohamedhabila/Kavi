@@ -1,4 +1,5 @@
 import { recoverActiveToolCallsAfterRestart } from '../../src/store/agentRuns/toolCalls';
+import { AMBIGUOUS_EFFECT_RESTART_ERROR } from '../../src/services/executionJournal/toolEffectRestartProjection';
 import type { Message } from '../../src/types/message';
 
 const TIMESTAMP = 200;
@@ -66,7 +67,9 @@ describe('agent-run tool recovery after restart', () => {
     expect(toolCall?.result).toContain('original tool response was not retained');
   });
 
-  it('keeps an ambiguous dispatched effect active for exact reconciliation', () => {
+  // Nothing ever settles an ordinary tool's interrupted effect, so waiting for that left the
+  // conversation unusable forever (see scratchpad TLA+ EffectRestart: OwnerEventuallyFree).
+  it('marks an interrupted effect as possibly applied instead of waiting for a reconciler', () => {
     const recovered = recover(() => ({
       kind: 'reconciliation_required',
       observedAt: 150,
@@ -74,17 +77,16 @@ describe('agent-run tool recovery after restart', () => {
     }));
     const toolCall = recovered.messages[1]?.toolCalls?.[0];
 
-    expect(recovered).toMatchObject({
-      completedCount: 0,
-      failedCount: 0,
-      reconciliationPendingCount: 1,
+    expect(recovered).toMatchObject({ completedCount: 0, failedCount: 1 });
+    expect(toolCall).toMatchObject({
+      status: 'failed',
+      failureKind: 'reconciliation_required',
+      error: AMBIGUOUS_EFFECT_RESTART_ERROR,
+      completedAt: TIMESTAMP,
     });
-    expect(toolCall).toMatchObject({ status: 'running' });
-    expect(toolCall).not.toHaveProperty('completedAt');
-    expect(toolCall?.error).toBeUndefined();
   });
 
-  it('does not partially project a tool batch while any effect is unresolved', () => {
+  it('settles every call of an interrupted batch on the same launch', () => {
     const toolMessages = messages();
     toolMessages[1]?.toolCalls?.push({
       id: 'tool-call-2',
@@ -111,14 +113,14 @@ describe('agent-run tool recovery after restart', () => {
             },
     });
 
-    expect(recovered).toMatchObject({
-      completedCount: 0,
-      failedCount: 0,
-      reconciliationPendingCount: 1,
-    });
+    expect(recovered).toMatchObject({ completedCount: 1, failedCount: 1 });
     expect(recovered.messages[1]?.toolCalls).toEqual([
-      expect.objectContaining({ id: 'tool-call-1', status: 'running' }),
-      expect.objectContaining({ id: 'tool-call-2', status: 'running' }),
+      expect.objectContaining({ id: 'tool-call-1', status: 'completed' }),
+      expect.objectContaining({
+        id: 'tool-call-2',
+        status: 'failed',
+        error: AMBIGUOUS_EFFECT_RESTART_ERROR,
+      }),
     ]);
   });
 

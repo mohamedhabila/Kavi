@@ -1870,9 +1870,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
   toolCall: {
     errors: {
       interruptedByAppRestart: 'A chamada da ferramenta foi interrompida porque o aplicativo reiniciou antes da conclusão.',
-      reconciliationPendingSummary:
-        'Aguardando a reconciliação durável do efeito da ferramenta após a reinicialização do aplicativo. Nenhuma execução de ferramenta ou modelo será repetida.',
-      reconciliationPendingTitle: 'Reconciliação do efeito da ferramenta pendente',
       interruptedBySupersededRun:
         'A chamada da ferramenta foi interrompida porque a execução foi substituída por um turno de usuário mais recente.',
       interruptedByCancelledRun:

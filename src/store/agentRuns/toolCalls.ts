@@ -117,7 +117,6 @@ export function recoverActiveToolCallsAfterRestart(params: {
   messages: Message[];
   completedCount: number;
   failedCount: number;
-  reconciliationPendingCount: number;
 } {
   const runScope = buildAgentRunMessageScope(params.run);
   const runMessages = getAgentRunMessageSlice(params.messages, runScope);
@@ -126,7 +125,6 @@ export function recoverActiveToolCallsAfterRestart(params: {
       messages: params.messages,
       completedCount: 0,
       failedCount: 0,
-      reconciliationPendingCount: 0,
     };
   }
 
@@ -137,7 +135,6 @@ export function recoverActiveToolCallsAfterRestart(params: {
       messages: params.messages,
       completedCount: 0,
       failedCount: 0,
-      reconciliationPendingCount: 0,
     };
   }
 
@@ -165,17 +162,6 @@ export function recoverActiveToolCallsAfterRestart(params: {
           }))
       : [],
   );
-  const reconciliationPendingCount = activeDispositions.filter(
-    ({ disposition }) => disposition.kind === 'reconciliation_required',
-  ).length;
-  if (reconciliationPendingCount > 0) {
-    return {
-      messages: params.messages,
-      completedCount: 0,
-      failedCount: 0,
-      reconciliationPendingCount,
-    };
-  }
   const dispositionByTool = new Map(
     activeDispositions.map(({ key, disposition }) => [key, disposition]),
   );
@@ -218,13 +204,11 @@ export function recoverActiveToolCallsAfterRestart(params: {
         messages: nextMessages,
         completedCount,
         failedCount,
-        reconciliationPendingCount: 0,
       }
     : {
         messages: params.messages,
         completedCount: 0,
         failedCount: 0,
-        reconciliationPendingCount: 0,
       };
 }
 
