@@ -273,13 +273,6 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
       turnIndex: 1,
       answer: { kind: 'abstention', exactText: 'UNKNOWN' },
     },
-    {
-      kind: 'turn_memory_selection',
-      turnIndex: 1,
-      requiredItems: [],
-      forbiddenItems: [{ contains: ['longmem-known-user', 'KNOWN-CODE-E2E'], scope: 'global' }],
-      maxSelectedItems: 0,
-    },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

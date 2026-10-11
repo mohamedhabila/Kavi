@@ -12,13 +12,7 @@ type E2EMemoryProbeRubric = Extract<
 
 const MAX_EXPECTED_VALUE_CHARS = 256;
 const MAX_EXPECTED_VALUES = 32;
-const SELECTION_RUBRIC_KEYS = new Set([
-  'kind',
-  'turnIndex',
-  'requiredItems',
-  'forbiddenItems',
-  'maxSelectedItems',
-]);
+const SELECTION_RUBRIC_KEYS = new Set(['kind', 'turnIndex', 'requiredItems', 'forbiddenItems']);
 
 function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2EMemoryProbeRubric): string {
   return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.kind}`;
@@ -56,6 +50,26 @@ function hasUniqueCanonicalValues(values: unknown): values is ReadonlyArray<stri
 
 function normalizedIncludes(text: string, value: string): boolean {
   return text.normalize('NFKC').includes(value.normalize('NFKC'));
+}
+
+function searchedMemoryItemIds(turn: E2EScenarioTurnTrace): string[] {
+  return turn.toolResults.flatMap((result) => {
+    if (result.name !== 'memory_search' || result.isError) return [];
+    try {
+      const memories = (JSON.parse(result.content) as { memories?: unknown }).memories;
+      return Array.isArray(memories)
+        ? memories.flatMap((memory) =>
+            isRecord(memory) && typeof memory.id === 'string' ? [memory.id] : [],
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasCanonicalItemExpectations(items: unknown, options: { allowEmpty: boolean }): boolean {
@@ -149,11 +163,9 @@ function evaluateSelection(
   const fixtureId = fixtureIdForRubric(result, rubric);
   if (
     !Object.keys(rubric).every((key) => SELECTION_RUBRIC_KEYS.has(key)) ||
-    !hasCanonicalItemExpectations(rubric.requiredItems, { allowEmpty: true }) ||
+    !hasCanonicalItemExpectations(rubric.requiredItems, { allowEmpty: false }) ||
     (rubric.forbiddenItems !== undefined &&
-      !hasCanonicalItemExpectations(rubric.forbiddenItems, { allowEmpty: false })) ||
-    (rubric.maxSelectedItems !== undefined &&
-      (!Number.isSafeInteger(rubric.maxSelectedItems) || rubric.maxSelectedItems < 0))
+      !hasCanonicalItemExpectations(rubric.forbiddenItems, { allowEmpty: false }))
   ) {
     return invalidOutcome(
       fixtureId,
@@ -166,10 +178,11 @@ function evaluateSelection(
       `turn ${rubric.turnIndex} prompt memory evidence is unavailable`,
     );
   }
-  const selectedIds = new Set(turn.memoryPrompt.builds.flatMap((build) => build.itemIds));
-  if (rubric.maxSelectedItems !== undefined && selectedIds.size > rubric.maxSelectedItems) {
-    return invalidOutcome(fixtureId, `turn ${rubric.turnIndex} selected too many memory items`);
-  }
+  // Memory reaches a turn through its prompt section or through memory_search results.
+  const selectedIds = new Set([
+    ...turn.memoryPrompt.builds.flatMap((build) => build.itemIds),
+    ...searchedMemoryItemIds(turn),
+  ]);
   const selected = result.memoryItems.items.filter((item) => selectedIds.has(item.id));
   if (
     rubric.requiredItems.some(

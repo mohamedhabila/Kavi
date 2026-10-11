@@ -398,20 +398,23 @@ describe('E2E structural mobile assistant scenarios', () => {
     expectNoInternalGraphSeeds(scenario!);
   });
 
-  it('longmem probes grade answers and prompt-selected memory instead of only final DB state', () => {
+  it('longmem probes grade answers and retrieved memory instead of only final DB state', () => {
+    const rubricKinds = (id: string) =>
+      E2E_BENCHMARK_SCENARIOS.find((entry) => entry.id === id)!.rubrics.map(
+        (rubric) => rubric.kind,
+      );
     for (const id of [
       'bench-longmem-delayed-recall',
       'bench-longmem-dual-fact-recall',
       'bench-longmem-knowledge-update-recall',
-      'bench-longmem-abstention-empty-recall',
     ]) {
-      const scenario = E2E_BENCHMARK_SCENARIOS.find((entry) => entry.id === id);
-      expect(scenario).toBeDefined();
-      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'turn_memory_answer')).toBe(true);
-      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'turn_memory_selection')).toBe(
-        true,
+      expect(rubricKinds(id)).toEqual(
+        expect.arrayContaining(['turn_memory_answer', 'turn_memory_selection']),
       );
     }
+    // Nothing is stored about the subject asked for, so abstention is graded on the answer,
+    // the way LongMemEval scores it.
+    expect(rubricKinds('bench-longmem-abstention-empty-recall')).toContain('turn_memory_answer');
   });
 
   it('keeps causal-memory learning turns free of native side effects', () => {

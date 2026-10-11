@@ -211,11 +211,10 @@ export type E2EMemoryItemExpectation = Readonly<{
 }>;
 
 export type E2EMemorySelectionExpectation = Readonly<{
-  /** Each must match a current item the turn's memory section showed. */
+  /** Each must match an item the turn was shown, in its memory section or a memory_search. */
   requiredItems: ReadonlyArray<E2EMemoryItemExpectation>;
-  /** None may match an item the turn's memory section showed. */
+  /** None may match an item the turn was shown. */
   forbiddenItems?: ReadonlyArray<E2EMemoryItemExpectation>;
-  maxSelectedItems?: number;
 }>;
 
 export type E2EMemoryProbeAnswerExpectation =

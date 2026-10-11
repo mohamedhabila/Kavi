@@ -199,39 +199,55 @@ describe('turn-scoped memory probe rubrics', () => {
     ).toMatchObject({ passed: true });
   });
 
-  it('requires an explicit exact abstention and zero selected items', () => {
+  it('requires an explicit exact abstention', () => {
     const known = item('known', 'memory-subject known_code is KNOWN-CODE');
-    const abstain = {
-      kind: 'turn_memory_selection',
+    const abstention = {
+      kind: 'turn_memory_answer',
       turnIndex: 2,
-      requiredItems: [],
-      forbiddenItems: [{ contains: ['KNOWN-CODE'] }],
-      maxSelectedItems: 0,
+      answer: { kind: 'abstention', exactText: 'UNKNOWN' },
     } as const;
 
     expect(
-      evaluateE2ERubric(result({ answer: 'I am not sure.', items: [known], selectedItemIds: [] }), {
-        kind: 'turn_memory_answer',
-        turnIndex: 2,
-        answer: { kind: 'abstention', exactText: 'UNKNOWN' },
-      }),
+      evaluateE2ERubric(
+        result({ answer: 'I am not sure.', items: [known], selectedItemIds: [] }),
+        abstention,
+      ),
     ).toMatchObject({ passed: false, detail: 'turn 2 did not return the explicit abstention' });
     expect(
       evaluateE2ERubric(
-        result({ answer: 'UNKNOWN', items: [known], selectedItemIds: ['known'] }),
-        abstain,
+        result({ answer: ' UNKNOWN \n', items: [known], selectedItemIds: ['known'] }),
+        abstention,
       ),
-    ).toMatchObject({ passed: false, detail: 'turn 2 selected too many memory items' });
-
-    const clean = result({ answer: ' UNKNOWN \n', items: [known], selectedItemIds: [] });
-    expect(
-      evaluateE2ERubric(clean, {
-        kind: 'turn_memory_answer',
-        turnIndex: 2,
-        answer: { kind: 'abstention', exactText: 'UNKNOWN' },
-      }),
     ).toMatchObject({ passed: true });
-    expect(evaluateE2ERubric(clean, abstain)).toMatchObject({ passed: true });
+  });
+
+  it('counts a memory the turn found with memory_search as retrieved', () => {
+    const searched = result({ answer: 'ACCESS-CURRENT', items: [CURRENT], selectedItemIds: [] });
+    const turn = searched.turnTraces[0]!;
+    const withSearch = {
+      ...searched,
+      turnTraces: [
+        {
+          ...turn,
+          toolResults: [
+            {
+              toolCallId: 'search-1',
+              name: 'memory_search',
+              content: JSON.stringify({ ok: true, memories: [{ id: 'current' }] }),
+              isError: false,
+            },
+          ],
+        },
+      ],
+    } as E2EScenarioResult;
+    const selection = {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredItems: [{ contains: ['ACCESS-CURRENT'] }],
+    } as const;
+
+    expect(evaluateE2ERubric(searched, selection)).toMatchObject({ passed: false });
+    expect(evaluateE2ERubric(withSearch, selection)).toMatchObject({ passed: true });
   });
 
   it('fails closed on missing instrumentation and malformed expectations', () => {
