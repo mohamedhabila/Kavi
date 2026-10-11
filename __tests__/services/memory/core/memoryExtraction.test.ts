@@ -186,6 +186,12 @@ describe('extraction reply', () => {
       '- mem_1: Likes tea',
     );
   });
+
+  it('states the shape of an operation, so a model does not put the op name in its text', () => {
+    expect(buildExtractionPrompt(['User: hi'], [])).toContain(
+      '"text": the memory statement itself (null for delete)',
+    );
+  });
 });
 
 describe('extraction run', () => {

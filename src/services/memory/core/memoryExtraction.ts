@@ -164,7 +164,8 @@ Return the memory operations this conversation calls for:
 - add: a lasting fact, preference, plan, decision or person the user shared that is not stored yet. Write one self-contained statement in the user's language that names who or what it is about.
 - update: a stored memory that changed; give its id and the full corrected statement.
 - delete: a stored memory the user said is no longer true; give its id.
-Skip small talk, questions, the assistant's own suggestions and anything already stored. Never store passwords, API keys or tokens. Return no operations when nothing is worth remembering.`;
+Skip small talk, questions, the assistant's own suggestions and anything already stored. Never store passwords, API keys or tokens. Return no operations when nothing is worth remembering.
+Each operation is {"op": "add" | "update" | "delete", "id": the stored memory's id (null for add), "text": the memory statement itself (null for delete)}.`;
 }
 
 class MemoryExtractionReplyInvalid extends Error {
