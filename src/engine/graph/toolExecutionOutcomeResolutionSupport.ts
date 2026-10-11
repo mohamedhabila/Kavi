@@ -155,9 +155,6 @@ export function buildClarificationRequestUnderstanding(params: {
     awaitingExternalOperation: false,
   });
   return summarizeRequestUnderstanding(
-    projectRequestUnderstanding({
-      requestFrame: clarificationFrame,
-      goals: params.graphSnapshot.goals,
-    }),
+    projectRequestUnderstanding({ requestFrame: clarificationFrame }),
   );
 }

@@ -123,7 +123,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
       compactionEngine: iterationParams.compactionEngine,
       compactionContext: {
         openThreads: buildCompactionOpenThreads({
-          goals: iterationParams.graph.getGraphSnapshot().goals ?? [],
+          plan: iterationParams.graph.getGraphSnapshot().plan,
           trackedAsyncOperations: iterationParams.trackedAsyncOperations,
         }),
       },

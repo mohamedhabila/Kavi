@@ -1,19 +1,12 @@
-export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 2 as const;
+export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 3 as const;
 
 export type RequestUnderstandingUnknownReason =
   | 'request_state_unavailable'
-  | 'goal_state_unavailable'
-  | 'no_declared_goal'
-  | 'not_structured'
-  | 'missing_structured_success_criteria'
   | 'not_evaluated_per_effect'
   | 'state_conflict';
 
 export type RequestUnderstandingConflictReason =
-  | 'duplicate_goal_id'
   | 'duplicate_required_information_key'
-  | 'goal_contract_conflict'
-  | 'user_constraint_state_conflict'
   | 'authority_state_conflict';
 
 export type RequestUnderstandingUnknown = Readonly<{
@@ -28,7 +21,7 @@ export type RequestUnderstandingConflict = Readonly<{
 
 export type RequestUnderstandingKnown<T> = Readonly<{
   status: 'known';
-  source: 'request_frame' | 'graph_goal';
+  source: 'request_frame';
   value: T;
 }>;
 
@@ -54,32 +47,6 @@ export type RequestUnderstandingRouting = Readonly<{
     | 'policy_information_unavailable'
     | 'prohibited'
     | 'authorization_required';
-}>;
-
-export type RequestUnderstandingObjective = Readonly<{
-  goalId: string;
-  title: string;
-  titleTruncated: boolean;
-  status: 'pending' | 'active' | 'blocked';
-  completionPolicy: 'blocking' | 'persistent';
-}>;
-
-export type RequestUnderstandingSuccessCondition = Readonly<{
-  goalId: string;
-  criterion: string;
-  criterionTruncated: boolean;
-}>;
-
-export type RequestUnderstandingExecutionRequirement = Readonly<{
-  goalId: string;
-  kind: 'dependency' | 'capability' | 'resource';
-  value: string;
-  valueTruncated: boolean;
-}>;
-
-export type RequestUnderstandingUserConstraint = Readonly<{
-  goalId: string;
-  text: string;
 }>;
 
 export type RequestUnderstandingRequiredInformation = Readonly<{
@@ -116,18 +83,6 @@ export interface RequestUnderstandingProjection {
   version: typeof REQUEST_UNDERSTANDING_PROJECTION_VERSION;
   integrity: 'valid' | 'conflict';
   routing: RequestUnderstandingField<RequestUnderstandingRouting>;
-  declaredObjectives: RequestUnderstandingField<
-    RequestUnderstandingBoundedList<RequestUnderstandingObjective>
-  >;
-  structuredSuccessConditions: RequestUnderstandingField<
-    RequestUnderstandingBoundedList<RequestUnderstandingSuccessCondition>
-  >;
-  executionRequirements: RequestUnderstandingField<
-    RequestUnderstandingBoundedList<RequestUnderstandingExecutionRequirement>
-  >;
-  userConstraints: RequestUnderstandingField<
-    RequestUnderstandingBoundedList<RequestUnderstandingUserConstraint>
-  >;
   registeredRequiredInformation: RequestUnderstandingField<
     RequestUnderstandingBoundedList<RequestUnderstandingRequiredInformation>
   >;
@@ -151,26 +106,6 @@ export interface RequestUnderstandingSnapshot {
         decisionReason: RequestUnderstandingRouting['decisionReason'];
       }>
     | Readonly<{ status: 'unknown' | 'conflict' }>;
-  declaredObjectives: Readonly<{
-    status: RequestUnderstandingFieldStatus;
-    count: number;
-    omittedCount: number;
-  }>;
-  structuredSuccessConditions: Readonly<{
-    status: RequestUnderstandingFieldStatus;
-    count: number;
-    omittedCount: number;
-  }>;
-  executionRequirements: Readonly<{
-    status: RequestUnderstandingFieldStatus;
-    count: number;
-    omittedCount: number;
-  }>;
-  userConstraints: Readonly<{
-    status: RequestUnderstandingFieldStatus;
-    count: number;
-    omittedCount: number;
-  }>;
   registeredRequiredInformation: Readonly<{
     status: RequestUnderstandingFieldStatus;
     count: number;

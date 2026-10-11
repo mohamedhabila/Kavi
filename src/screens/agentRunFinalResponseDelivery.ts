@@ -100,9 +100,7 @@ export function writeSynthesizedFinalResponse(params: {
     finishReason:
       params.synthesized.source === 'synthesized'
         ? 'synthesized_from_evidence'
-        : params.synthesized.source === 'graph'
-          ? 'graph_expected_output'
-          : 'fallback_from_evidence',
+        : 'fallback_from_evidence',
     ...(params.run.terminalReason ? { terminalReason: params.run.terminalReason } : {}),
   });
 

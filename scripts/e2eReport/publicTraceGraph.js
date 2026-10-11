@@ -37,6 +37,7 @@ const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'MODEL_TURN_STARTED',
   'OTHER',
   'PERFORMANCE_METRICS_RECORDED',
+  'PLAN_UPDATED',
   'REQUEST_UNDERSTANDING_PROJECTED',
   'SESSION_ACTIVATED_TOOLS_UPDATED',
   'TOOL_BATCH_INCOMPLETE',
@@ -139,15 +140,9 @@ function projectRequestUnderstandingRouting(value) {
 
 function projectRequestUnderstanding(value) {
   const source = asRecord(value);
-  if (!source || source.version !== 2) return undefined;
+  if (!source || source.version !== 3) return undefined;
   const integrity = safeEnum(source.integrity, SAFE_REQUEST_UNDERSTANDING_INTEGRITY);
   const routing = projectRequestUnderstandingRouting(source.routing);
-  const declaredObjectives = projectRequestUnderstandingList(source.declaredObjectives);
-  const structuredSuccessConditions = projectRequestUnderstandingList(
-    source.structuredSuccessConditions,
-  );
-  const executionRequirements = projectRequestUnderstandingList(source.executionRequirements);
-  const userConstraints = projectRequestUnderstandingList(source.userConstraints);
   const registeredRequiredInformation = projectRequestUnderstandingList(
     source.registeredRequiredInformation,
     true,
@@ -156,29 +151,13 @@ function projectRequestUnderstanding(value) {
   const effectAuthorizationStatus = effectAuthorization
     ? safeEnum(effectAuthorization.status, SAFE_EFFECT_AUTHORIZATION_STATUSES)
     : undefined;
-  if (
-    !integrity ||
-    !routing ||
-    !declaredObjectives ||
-    !structuredSuccessConditions ||
-    !executionRequirements ||
-    !registeredRequiredInformation ||
-    !userConstraints ||
-    !effectAuthorizationStatus
-  ) {
+  if (!integrity || !routing || !registeredRequiredInformation || !effectAuthorizationStatus) {
     return undefined;
   }
   if (registeredRequiredInformation.unresolvedCount > registeredRequiredInformation.count) {
     return undefined;
   }
-  const fieldStatuses = [
-    routing.status,
-    declaredObjectives.status,
-    structuredSuccessConditions.status,
-    executionRequirements.status,
-    userConstraints.status,
-    registeredRequiredInformation.status,
-  ];
+  const fieldStatuses = [routing.status, registeredRequiredInformation.status];
   if (integrity === 'valid' && fieldStatuses.includes('conflict')) {
     return undefined;
   }
@@ -194,13 +173,9 @@ function projectRequestUnderstanding(value) {
     return undefined;
   }
   return {
-    version: 2,
+    version: 3,
     integrity,
     routing,
-    declaredObjectives,
-    structuredSuccessConditions,
-    executionRequirements,
-    userConstraints,
     registeredRequiredInformation,
     effectAuthorization: { status: effectAuthorizationStatus },
   };

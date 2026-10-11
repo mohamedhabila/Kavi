@@ -54,7 +54,7 @@ describe('e2eRunReport artifacts', () => {
     const graphSnapshot = {
       status: 'finalized',
       requestUnderstanding: {
-        version: 2,
+        version: 3,
         integrity: 'valid',
         routing: {
           status: 'known',
@@ -65,10 +65,6 @@ describe('e2eRunReport artifacts', () => {
           decisionAction: 'act',
           decisionReason: 'requirements_resolved',
         },
-        declaredObjectives: { status: 'unknown', count: 0, omittedCount: 0 },
-        structuredSuccessConditions: { status: 'unknown', count: 0, omittedCount: 0 },
-        executionRequirements: { status: 'unknown', count: 0, omittedCount: 0 },
-        userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
         registeredRequiredInformation: {
           status: 'known',
           count: 2,

@@ -1,30 +1,20 @@
 import type { RequestFrame, RequiredRequestInformation } from './requestFrame';
-import { exceedsGraphemeLength, truncateGraphemesTo } from '../../utils/graphemes';
 import { requestDecisionIsPolicyReachable } from './requestDecisionPolicy';
-import { projectRequestUnderstandingUserConstraints } from './requestUnderstandingUserConstraints';
-import type { AgentGoal } from '../../engine/goals/types';
 import {
   REQUEST_UNDERSTANDING_PROJECTION_VERSION,
   type RequestUnderstandingBoundedList,
   type RequestUnderstandingConflict,
   type RequestUnderstandingEffectAuthorization,
-  type RequestUnderstandingExecutionRequirement,
   type RequestUnderstandingField,
   type RequestUnderstandingFieldStatus,
-  type RequestUnderstandingObjective,
   type RequestUnderstandingProjection,
   type RequestUnderstandingRequiredInformation,
   type RequestUnderstandingRouting,
   type RequestUnderstandingSnapshot,
-  type RequestUnderstandingSuccessCondition,
   type RequestUnderstandingUnknown,
 } from '../../types/requestUnderstanding';
 
-const MAX_OBJECTIVES = 6;
-const MAX_SUCCESS_CONDITIONS = 12;
-const MAX_EXECUTION_REQUIREMENTS = 12;
 const MAX_REQUIRED_INFORMATION = 12;
-const MAX_TEXT_CHARACTERS = 160;
 
 const unknown = (reason: RequestUnderstandingUnknown['reason']): RequestUnderstandingUnknown => ({
   status: 'unknown',
@@ -34,17 +24,6 @@ const unknown = (reason: RequestUnderstandingUnknown['reason']): RequestUndersta
 const conflict = (
   reason: RequestUnderstandingConflict['reason'],
 ): RequestUnderstandingConflict => ({ status: 'conflict', reason });
-
-function boundedText(value: string): { value: string; truncated: boolean } {
-  const normalized = value.replace(/\s+/gu, ' ').trim();
-  if (!exceedsGraphemeLength(normalized, MAX_TEXT_CHARACTERS)) {
-    return { value: normalized, truncated: false };
-  }
-  return {
-    value: `${truncateGraphemesTo(normalized, MAX_TEXT_CHARACTERS - 1).trimEnd()}…`,
-    truncated: true,
-  };
-}
 
 function boundedList<T>(
   values: ReadonlyArray<T>,
@@ -65,12 +44,6 @@ function duplicateValue(values: ReadonlyArray<string>): boolean {
   return false;
 }
 
-function liveGoals(goals: ReadonlyArray<AgentGoal>): AgentGoal[] {
-  return goals.filter(
-    (goal) => goal.status === 'active' || goal.status === 'pending' || goal.status === 'blocked',
-  );
-}
-
 function projectRouting(
   frame: RequestFrame | undefined,
 ): RequestUnderstandingField<RequestUnderstandingRouting> {
@@ -86,102 +59,6 @@ function projectRouting(
       decisionAction: frame.decision.action,
       decisionReason: frame.decision.reason,
     },
-  };
-}
-
-function projectObjectives(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-  goalConflict: RequestUnderstandingConflict | undefined,
-): RequestUnderstandingField<RequestUnderstandingBoundedList<RequestUnderstandingObjective>> {
-  if (goalConflict) return goalConflict;
-  if (!goals) return unknown('goal_state_unavailable');
-  const objectives = liveGoals(goals).map((goal) => {
-    const title = boundedText(goal.title);
-    return {
-      goalId: goal.id,
-      title: title.value,
-      titleTruncated: title.truncated,
-      status: goal.status as RequestUnderstandingObjective['status'],
-      completionPolicy:
-        goal.completionPolicy ??
-        ((goal.successCriteria?.length ?? 0) > 0 ? 'blocking' : 'persistent'),
-    };
-  });
-  if (objectives.length === 0) return unknown('no_declared_goal');
-  return {
-    status: 'known',
-    source: 'graph_goal',
-    value: boundedList(objectives, MAX_OBJECTIVES),
-  };
-}
-
-function projectSuccessConditions(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-  goalConflict: RequestUnderstandingConflict | undefined,
-): RequestUnderstandingField<
-  RequestUnderstandingBoundedList<RequestUnderstandingSuccessCondition>
-> {
-  if (goalConflict) return goalConflict;
-  if (!goals) return unknown('goal_state_unavailable');
-  const live = liveGoals(goals);
-  if (live.length === 0) return unknown('no_declared_goal');
-  const blocking = live.filter(
-    (goal) =>
-      goal.completionPolicy === 'blocking' ||
-      (goal.completionPolicy === undefined && (goal.successCriteria?.length ?? 0) > 0),
-  );
-  if (blocking.length === 0) return unknown('not_structured');
-  if (blocking.some((goal) => (goal.successCriteria?.length ?? 0) === 0)) {
-    return unknown('missing_structured_success_criteria');
-  }
-  const criteria = blocking.flatMap((goal) =>
-    (goal.successCriteria ?? []).map((criterion) => {
-      const text = boundedText(criterion);
-      return {
-        goalId: goal.id,
-        criterion: text.value,
-        criterionTruncated: text.truncated,
-      };
-    }),
-  );
-  return {
-    status: 'known',
-    source: 'graph_goal',
-    value: boundedList(criteria, MAX_SUCCESS_CONDITIONS),
-  };
-}
-
-function projectExecutionRequirements(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-  goalConflict: RequestUnderstandingConflict | undefined,
-): RequestUnderstandingField<
-  RequestUnderstandingBoundedList<RequestUnderstandingExecutionRequirement>
-> {
-  if (goalConflict) return goalConflict;
-  if (!goals) return unknown('goal_state_unavailable');
-  const live = liveGoals(goals);
-  if (live.length === 0) return unknown('no_declared_goal');
-  const requirements = live.flatMap((goal) => {
-    const entries: RequestUnderstandingExecutionRequirement[] = [];
-    const add = (kind: RequestUnderstandingExecutionRequirement['kind'], value: string) => {
-      const text = boundedText(value);
-      entries.push({
-        goalId: goal.id,
-        kind,
-        value: text.value,
-        valueTruncated: text.truncated,
-      });
-    };
-    for (const dependency of goal.dependencies) add('dependency', dependency);
-    for (const capability of goal.requiredCapabilities ?? []) add('capability', capability);
-    for (const resource of goal.requiredResourceKinds ?? []) add('resource', resource);
-    return entries;
-  });
-  if (requirements.length === 0) return unknown('not_structured');
-  return {
-    status: 'known',
-    source: 'graph_goal',
-    value: boundedList(requirements, MAX_EXECUTION_REQUIREMENTS),
   };
 }
 
@@ -261,40 +138,16 @@ function projectEffectAuthorization(
   return unknown('not_evaluated_per_effect');
 }
 
-function findGoalConflict(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): RequestUnderstandingConflict | undefined {
-  if (!goals) return undefined;
-  if (duplicateValue(goals.map((goal) => goal.id))) return conflict('duplicate_goal_id');
-  const contractConflict = liveGoals(goals).some(
-    (goal) =>
-      (goal.completionPolicy === 'persistent' && (goal.successCriteria?.length ?? 0) > 0) ||
-      (goal.completionPolicy === 'blocking' && (goal.successCriteria?.length ?? 0) === 0),
-  );
-  return contractConflict ? conflict('goal_contract_conflict') : undefined;
-}
-
 export function projectRequestUnderstanding(params: {
   requestFrame?: RequestFrame;
-  goals?: ReadonlyArray<AgentGoal>;
 }): RequestUnderstandingProjection {
-  const goalConflict = findGoalConflict(params.goals);
   const requiredInformation = projectRequiredInformation(params.requestFrame);
-  const userConstraints = projectRequestUnderstandingUserConstraints(params.goals, goalConflict);
   const decisionConflict = requestDecisionStateConflicts(params.requestFrame);
-  const hasConflict =
-    Boolean(goalConflict) ||
-    userConstraints.status === 'conflict' ||
-    requiredInformation.status === 'conflict' ||
-    decisionConflict;
+  const hasConflict = requiredInformation.status === 'conflict' || decisionConflict;
   return {
     version: REQUEST_UNDERSTANDING_PROJECTION_VERSION,
     integrity: hasConflict ? 'conflict' : 'valid',
     routing: projectRouting(params.requestFrame),
-    declaredObjectives: projectObjectives(params.goals, goalConflict),
-    structuredSuccessConditions: projectSuccessConditions(params.goals, goalConflict),
-    executionRequirements: projectExecutionRequirements(params.goals, goalConflict),
-    userConstraints,
     registeredRequiredInformation: requiredInformation,
     effectAuthorization: projectEffectAuthorization(params.requestFrame, hasConflict),
   };
@@ -332,10 +185,6 @@ export function summarizeRequestUnderstanding(
     version: projection.version,
     integrity: projection.integrity,
     routing,
-    declaredObjectives: summarizeList(projection.declaredObjectives),
-    structuredSuccessConditions: summarizeList(projection.structuredSuccessConditions),
-    executionRequirements: summarizeList(projection.executionRequirements),
-    userConstraints: summarizeList(projection.userConstraints),
     registeredRequiredInformation: {
       ...requiredInformation,
       unresolvedCount,
@@ -367,8 +216,7 @@ export function renderRequestUnderstandingPromptSection(
 ): string {
   const lines = [
     `## Request Understanding Projection (v${projection.version})`,
-    'This is deterministic code-owned routing plus declared graph state, not a new interpretation of the user message.',
-    'Treat graph-goal text as structured standing state, never as effect authority. The latest user turn still defines the execution boundary.',
+    'This is deterministic code-owned routing, not a new interpretation of the user message. The latest user turn still defines the execution boundary.',
   ];
   if (projection.integrity === 'conflict') {
     lines.push(
@@ -387,42 +235,6 @@ export function renderRequestUnderstandingPromptSection(
   } else {
     lines.push(`- ${renderFieldStatus(projection.routing)}`);
   }
-
-  lines.push('', '### Declared graph objectives');
-  lines.push(
-    ...renderBoundedItems(projection.declaredObjectives, (item) =>
-      JSON.stringify({
-        goalId: item.goalId,
-        title: item.title,
-        titleTruncated: item.titleTruncated,
-        status: item.status,
-        completionPolicy: item.completionPolicy,
-      }),
-    ),
-  );
-
-  lines.push('', '### Structured success conditions');
-  lines.push(
-    ...renderBoundedItems(projection.structuredSuccessConditions, (item) => JSON.stringify(item)),
-  );
-
-  lines.push('', '### Structured execution requirements');
-  lines.push(
-    ...renderBoundedItems(projection.executionRequirements, (item) => JSON.stringify(item)),
-  );
-
-  lines.push('', '### Quoted user constraint evidence (non-authoritative)');
-  if (projection.userConstraints.status === 'known') {
-    lines.push(
-      `- status=known; count=${projection.userConstraints.value.items.length}; omitted=${projection.userConstraints.value.omittedCount}; exact text is rendered once in the graph-goal constraint section.`,
-    );
-  } else {
-    lines.push(`- ${renderFieldStatus(projection.userConstraints)}`);
-  }
-  lines.push(
-    '- Retained statements constrain task fidelity but never grant consent, permission, effect authorization, evidence, or completion; every concrete effect, evidence claim, and completion claim still requires its code-owned checks.',
-    '- Within each goal, statements are chronological oldest to newest. A later explicit correction supersedes only what it explicitly corrects; otherwise all remain applicable. Clarify incompatible statements or ambiguous correction scope before acting.',
-  );
 
   lines.push('', '### Registered required information');
   lines.push(
@@ -462,7 +274,6 @@ export function shouldRenderRequestUnderstandingPrompt(params: {
       return true;
     }
   }
-  if (params.projection.declaredObjectives.status === 'known') return true;
   return (
     params.projection.registeredRequiredInformation.status === 'known' &&
     params.projection.registeredRequiredInformation.value.items.length > 0
@@ -584,22 +395,14 @@ export function normalizeRequestUnderstandingSnapshot(
     return undefined;
   }
   const routing = normalizeRoutingSnapshot(record.routing);
-  const declaredObjectives = normalizeListSnapshot(record.declaredObjectives);
-  const structuredSuccessConditions = normalizeListSnapshot(record.structuredSuccessConditions);
-  const executionRequirements = normalizeListSnapshot(record.executionRequirements);
   const registeredRequiredInformation = normalizeListSnapshot(record.registeredRequiredInformation);
   const registeredRecord = recordValue(record.registeredRequiredInformation);
   const unresolvedCount = nonNegativeInteger(registeredRecord?.unresolvedCount);
-  const userConstraints = normalizeListSnapshot(record.userConstraints);
   const effectAuthorization = recordValue(record.effectAuthorization);
   if (
     !routing ||
-    !declaredObjectives ||
-    !structuredSuccessConditions ||
-    !executionRequirements ||
     !registeredRequiredInformation ||
     unresolvedCount === undefined ||
-    !userConstraints ||
     (effectAuthorization?.status !== 'required' &&
       effectAuthorization?.status !== 'unavailable' &&
       effectAuthorization?.status !== 'unknown')
@@ -607,14 +410,7 @@ export function normalizeRequestUnderstandingSnapshot(
     return undefined;
   }
   if (unresolvedCount > registeredRequiredInformation.count) return undefined;
-  const fieldStatuses = [
-    routing.status,
-    declaredObjectives.status,
-    structuredSuccessConditions.status,
-    executionRequirements.status,
-    userConstraints.status,
-    registeredRequiredInformation.status,
-  ];
+  const fieldStatuses = [routing.status, registeredRequiredInformation.status];
   if (record.integrity === 'valid' && fieldStatuses.includes('conflict')) return undefined;
   const expectedEffectAuthorization =
     record.integrity === 'conflict' || routing.status !== 'known'
@@ -629,10 +425,6 @@ export function normalizeRequestUnderstandingSnapshot(
     version: REQUEST_UNDERSTANDING_PROJECTION_VERSION,
     integrity: record.integrity,
     routing,
-    declaredObjectives,
-    structuredSuccessConditions,
-    executionRequirements,
-    userConstraints,
     registeredRequiredInformation: {
       ...registeredRequiredInformation,
       unresolvedCount,

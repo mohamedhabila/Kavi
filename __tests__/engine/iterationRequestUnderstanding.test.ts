@@ -119,7 +119,7 @@ describe('iteration request understanding continuity', () => {
     }));
   });
 
-  it('uses current graph goals and projects their criteria on a later iteration', async () => {
+  it('projects the request route into the prompt on a later iteration, with no goal text', async () => {
     const input = params(2);
     await executeAgentControlGraphIteration(input);
 
@@ -128,11 +128,8 @@ describe('iteration request understanding continuity', () => {
         type: 'REQUEST_UNDERSTANDING_PROJECTED',
         iteration: 2,
         projection: expect.objectContaining({
-          version: 2,
+          version: 3,
           integrity: 'valid',
-          declaredObjectives: { status: 'known', count: 1, omittedCount: 0 },
-          structuredSuccessConditions: { status: 'known', count: 1, omittedCount: 0 },
-          userConstraints: { status: 'unknown', count: 0, omittedCount: 0 },
           effectAuthorization: { status: 'unknown' },
         }),
       }),
@@ -141,12 +138,18 @@ describe('iteration request understanding continuity', () => {
       expect.objectContaining({
         goals: input.graph.getGraphSnapshot().goals,
         promptContextSupport: expect.objectContaining({
-          runtimeContext: expect.stringContaining('## Request Understanding Projection (v2)'),
+          runtimeContext: expect.stringContaining('## Request Understanding Projection (v3)'),
         }),
       }),
     );
     const preparation = mockedPrepareModelTurn.mock.calls[0]?.[0];
-    expect(preparation?.promptContextSupport.runtimeContext).toContain('evidence.tool:write_file');
+    expect(preparation?.promptContextSupport.runtimeContext).toContain('### Code-owned route');
+    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
+      'evidence.tool:write_file',
+    );
+    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
+      'Keep the verified constraint',
+    );
     expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
       'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
     );
@@ -159,9 +162,7 @@ describe('iteration request understanding continuity', () => {
     expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
       expect.objectContaining({
         type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        projection: expect.objectContaining({
-          declaredObjectives: { status: 'unknown', count: 0, omittedCount: 0 },
-        }),
+        projection: expect.objectContaining({ version: 3, integrity: 'valid' }),
       }),
     ]);
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
@@ -170,46 +171,6 @@ describe('iteration request understanding continuity', () => {
           runtimeContext: 'Runtime context',
         }),
       }),
-    );
-  });
-
-  it('preserves an exact structured user constraint on a later iteration', async () => {
-    const goal = createGoal({
-      id: 'constraint-goal',
-      title: 'Respect the user constraint',
-      status: 'active',
-      completionPolicy: 'blocking',
-      successCriteria: ['evidence.tool:write_file'],
-      userConstraints: [
-        {
-          text: 'Do not notify anyone before I review the draft.',
-          sourceMessageId: 'private-source-message-id',
-        },
-      ],
-      now: 1,
-    });
-    const input = params(3, [goal]);
-
-    await executeAgentControlGraphIteration(input);
-
-    expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        iteration: 3,
-        projection: expect.objectContaining({
-          userConstraints: { status: 'known', count: 1, omittedCount: 0 },
-        }),
-      }),
-    ]);
-    const preparation = mockedPrepareModelTurn.mock.calls[0]?.[0];
-    expect(preparation?.promptContextSupport.runtimeContext).toContain(
-      'status=known; count=1; omitted=0',
-    );
-    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
-      'Do not notify anyone before I review the draft.',
-    );
-    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
-      'private-source-message-id',
     );
   });
 

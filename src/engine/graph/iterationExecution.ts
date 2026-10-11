@@ -54,10 +54,7 @@ export async function executeAgentControlGraphIteration(
 
   const graphSnapshot = params.graph.getGraphSnapshot();
   const currentGoals = graphSnapshot.goals ?? [];
-  const requestUnderstanding = projectRequestUnderstanding({
-    requestFrame: params.requestFrame,
-    goals: currentGoals,
-  });
+  const requestUnderstanding = projectRequestUnderstanding({ requestFrame: params.requestFrame });
   const requestUnderstandingSnapshot = summarizeRequestUnderstanding(requestUnderstanding);
   if (
     !areRequestUnderstandingSnapshotsEqual(

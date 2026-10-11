@@ -1,7 +1,6 @@
 import { useChatStore } from '../store/useChatStore';
 import { AgentRun } from '../types/agentRun';
 import { Message } from '../types/message';
-import { readGraphExpectedFinalResponse } from '../engine/graph/goalFinalResponse';
 import {
   buildAgentRunCompletionFallbackOutput,
   buildMissingFinalResponseFallback,
@@ -20,7 +19,7 @@ type Conversation = ReturnType<typeof useChatStore.getState>['conversations'][nu
 export type SynthesizedAgentRunCompletion = {
   output?: string;
   providerReplay?: Message['providerReplay'];
-  source: 'graph' | 'synthesized' | 'fallback' | 'none';
+  source: 'synthesized' | 'fallback' | 'none';
 };
 
 export async function synthesizeAgentRunCompletion(params: {
@@ -55,16 +54,6 @@ export async function synthesizeAgentRunCompletion(params: {
   }
 
   throwIfAbortSignalTriggered(params.signal);
-
-  // Graph-finalized runs deliver goal evidence directly; provider synthesis is recovery-only.
-  const graphExpectedFinalResponse =
-    params.status === 'completed' ? readGraphExpectedFinalResponse(params.run) : undefined;
-  if (graphExpectedFinalResponse) {
-    return {
-      output: graphExpectedFinalResponse,
-      source: 'graph',
-    };
-  }
 
   const liveSubAgentSnapshots = getLiveSubAgentsForRun(conversation, params.run.id);
   const evidence = collectAgentRunFinalizationEvidence(
@@ -105,7 +94,7 @@ export async function synthesizeAgentRunCompletion(params: {
 
   throwIfAbortSignalTriggered(params.signal);
 
-  // Recovery path only: graph did not finalize with goal evidence.
+  // Recovery path: the run ended without delivering a final answer.
   const synthesized = await synthesizeAgentRunFinalAnswer({
     provider: providerContext.provider,
     model: providerContext.model,

@@ -48,11 +48,12 @@ function buildRun(): AgentRun {
       lastModelToolNames: [],
       goals: [
         {
-          id: 'synthesize-final',
-          title: 'Synthesize final response',
+          id: 'effect-write-file-c996',
+          title: 'Verify write_file effect',
           status: 'completed',
+          owner: 'system:effect-completion',
           dependencies: [],
-          evidence: ['C996A C996B C996P C996W'],
+          evidence: ['effect_receipt_v2:{"receiptId":"ter_c996"}'],
           createdAt: 10,
           updatedAt: 60,
           completedAt: 60,
@@ -107,7 +108,12 @@ describe('agentRunCompletionSynthesis', () => {
     }));
   });
 
-  it('uses the graph-owned exact final output before generic fallback synthesis', async () => {
+  it('recovers the answer from the conversation, never from bookkeeping on the graph', async () => {
+    // Recovery once returned the latest completed goal's last evidence entry as the
+    // answer. Goals are engine bookkeeping now, so that entry is a receipt.
+    jest.mocked(synthesizeAgentRunFinalAnswer).mockResolvedValueOnce({
+      output: 'C996A C996B C996P C996W',
+    });
     const run = buildRun();
     const messages: Message[] = [
       buildMessage({
@@ -184,14 +190,17 @@ describe('agentRunCompletionSynthesis', () => {
       conversationId: 'conversation-1',
       run,
       status: 'completed',
+      providerContext: {
+        provider: { id: 'provider-1' },
+        model: 'model-1',
+        systemPromptText: 'System',
+      } as never,
       signal: new AbortController().signal,
     });
 
-    expect(completion).toEqual({
-      output: 'C996A C996B C996P C996W',
-      source: 'graph',
-    });
-    expect(synthesizeAgentRunFinalAnswer).not.toHaveBeenCalled();
+    expect(completion).toEqual({ output: 'C996A C996B C996P C996W', source: 'synthesized' });
+    expect(JSON.stringify(completion)).not.toContain('effect_receipt_v2');
+    expect(synthesizeAgentRunFinalAnswer).toHaveBeenCalledTimes(1);
   });
 
   it('synthesizes completed recovery with exact scoped pending constraints instead of raw graph evidence', async () => {
@@ -352,55 +361,5 @@ describe('agentRunCompletionSynthesis', () => {
         status: 'completed',
       }),
     ).resolves.toEqual({ source: 'none' });
-  });
-
-  it('does not let a settled historical conflict suppress an unconstrained graph final', async () => {
-    const run = buildRun();
-    run.controlGraph!.goals = [
-      {
-        id: 'historical',
-        title: 'Historical goal',
-        status: 'completed',
-        dependencies: [],
-        evidence: [],
-        userConstraintIntegrity: 'conflict',
-        createdAt: 1,
-        updatedAt: 2,
-        completedAt: 2,
-      },
-      {
-        id: 'current',
-        title: 'Current delivery',
-        status: 'completed',
-        dependencies: [],
-        evidence: ['CURRENT_GRAPH_FINAL'],
-        createdAt: 10,
-        updatedAt: 70,
-        completedAt: 70,
-      },
-    ];
-    useChatStore.setState((state) => ({
-      ...state,
-      conversations: [
-        {
-          id: 'conversation-1',
-          title: 'Historical conflict',
-          messages: [],
-          createdAt: 1,
-          updatedAt: 70,
-          logs: [],
-          agentRuns: [run],
-        } as any,
-      ],
-      activeConversationId: 'conversation-1',
-    }));
-
-    await expect(
-      synthesizeAgentRunCompletion({
-        conversationId: 'conversation-1',
-        run,
-        status: 'completed',
-      }),
-    ).resolves.toEqual({ output: 'CURRENT_GRAPH_FINAL', source: 'graph' });
   });
 });
