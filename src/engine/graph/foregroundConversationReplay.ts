@@ -9,11 +9,6 @@ export const FOREGROUND_RETRY_REWIND_REASON =
 
 type RewindConversationActions = {
   cancelConversationRunForRewind: (conversationId: string, reason: string) => void;
-  retireConversationSourcesForRewind: (
-    conversationId: string,
-    messageId: string,
-    reason: 'message_edit' | 'message_retry',
-  ) => void;
   rewindUserMessageForResend: (
     conversationId: string,
     messageId: string,
@@ -65,11 +60,6 @@ export function applyForegroundEditedResend(params: {
     params.conversationId,
     FOREGROUND_EDIT_RESEND_REWIND_REASON,
   );
-  params.actions.retireConversationSourcesForRewind(
-    params.conversationId,
-    params.editingMessageId,
-    'message_edit',
-  );
   const result = params.actions.rewindUserMessageForResend(
     params.conversationId,
     params.editingMessageId,
@@ -99,11 +89,6 @@ export function applyForegroundRetryResend(params: {
   params.actions.cancelConversationRunForRewind(
     params.conversationId,
     FOREGROUND_RETRY_REWIND_REASON,
-  );
-  params.actions.retireConversationSourcesForRewind(
-    params.conversationId,
-    retryUserMessage.id,
-    'message_retry',
   );
   const result = params.actions.rewindUserMessageForResend(
     params.conversationId,

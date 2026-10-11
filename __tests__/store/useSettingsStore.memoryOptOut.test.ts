@@ -3,248 +3,121 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-jest.mock('../../src/services/memory/memoryOptOutRetirement', () => ({
-  retireActiveMemoryPublicationsBeforeOptOut: jest.fn(),
+const mockCancelMemoryExtraction = jest.fn();
+jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  cancelMemoryExtraction: (...args: unknown[]) => mockCancelMemoryExtraction(...args),
+  scheduleMemoryExtraction: jest.fn(),
 }));
 
-import { retireActiveMemoryPublicationsBeforeOptOut } from '../../src/services/memory/memoryOptOutRetirement';
-import { isDurableMemoryPolicyEnabled } from '../../src/services/memory/memoryAuthority';
+import * as memoryAuthority from '../../src/services/memory/memoryAuthority';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import {
-  getConsolidationState,
-  markThreadDirtyForMemory,
-  upsertState,
-} from '../../src/services/memory/consolidatorScheduler';
+  catchUpMemoryCapture,
+  publishConversationTurnMemory,
+} from '../../src/services/memory/core/memoryCapture';
+import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { searchMemoryTurns } from '../../src/services/memory/core/memoryTurnsStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../helpers/chatStoreHarness';
 import { resetSettingsStore } from '../helpers/settingsStoreFixtures';
 
-const retireActivePublications = jest.mocked(retireActiveMemoryPublicationsBeforeOptOut);
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
+  resetMemoryCoreSchemaCacheForTests();
   resetFactSchemaCacheForTests();
   ensureFactSchema();
   useChatStore.setState({ conversations: [] });
   resetSettingsStore();
-  retireActivePublications.mockReset();
-  retireActivePublications.mockReturnValue({
-    status: 'not_required',
-    retiredSourceCount: 0,
-    publicationWithdrawals: [],
-  });
+  mockCancelMemoryExtraction.mockClear();
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   closeMemoryDb();
-  expoSqlite.__resetExpoSqliteForTests();
 });
 
-function addPublicationReceipt(
-  conversationId: string,
-  sourceEndMessageId: string,
-  disposition: null | 'enqueued',
-): void {
+function addClosedTurn(conversationId: string, id: string, timestamp: number): void {
   const store = useChatStore.getState();
   store.addMessage(conversationId, {
-    id: `user-${sourceEndMessageId}`,
+    id: `user-${id}`,
     role: 'user',
-    content: 'طلب',
-    timestamp: 10,
+    content: `طلب ${id}`,
+    timestamp,
   });
   store.addMessage(conversationId, {
-    id: sourceEndMessageId,
+    id,
     role: 'assistant',
-    content: '応答',
-    timestamp: 11,
+    content: `返信します ${id}`,
+    timestamp: timestamp + 1,
     assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
   });
-  expect(
-    store.transitionMessageMemoryPublication(conversationId, sourceEndMessageId, null).status,
-  ).toBe('applied');
-  if (disposition === 'enqueued') {
-    expect(
-      store.transitionMessageMemoryPublication(conversationId, sourceEndMessageId, 'enqueued')
-        .status,
-    ).toBe('applied');
-  }
+}
+
+function indexedTurnIds(): string[] {
+  return searchMemoryTurns({ query: '返信します', limit: 10, includeSensitive: true })
+    .map((turn) => turn.userMessageId)
+    .sort();
 }
 
 describe('settings memory opt-out transition', () => {
-  it('fences unfinished publications exactly once before each false-to-true edge', () => {
-    useSettingsStore.getState().setDisableLongTermMemory(true);
-    expect(retireActivePublications).toHaveBeenCalledTimes(1);
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
-
-    useSettingsStore.getState().setDisableLongTermMemory(true);
-    expect(retireActivePublications).toHaveBeenCalledTimes(1);
-
-    useSettingsStore.getState().setDisableLongTermMemory(false);
-    expect(retireActivePublications).toHaveBeenCalledTimes(2);
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
-
-    useSettingsStore.getState().setDisableLongTermMemory(true);
-    expect(retireActivePublications).toHaveBeenCalledTimes(3);
-  });
-
-  it('keeps the visible and durable policy disabled when retirement fails after fencing', () => {
-    retireActivePublications.mockImplementation(() => {
-      throw new Error('forced_opt_out_retirement_failure');
-    });
-
-    expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
-      'forced_opt_out_retirement_failure',
-    );
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
-    expect(isDurableMemoryPolicyEnabled()).toBe(false);
-  });
-
-  it('keeps settings replacement fail-closed when retirement cannot settle', () => {
-    retireActivePublications.mockImplementation(() => {
-      throw new Error('forced_opt_out_retirement_failure');
-    });
-
-    expect(() =>
-      useSettingsStore
-        .getState()
-        .replaceAllSettings({ disableLongTermMemory: true, theme: 'light' }),
-    ).toThrow('forced_opt_out_retirement_failure');
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
-    expect(useSettingsStore.getState().theme).not.toBe('light');
-    expect(isDurableMemoryPolicyEnabled()).toBe(false);
-  });
-
-  it('refuses to re-enable while prior opt-out settlement still fails', () => {
-    retireActivePublications.mockImplementation(() => {
-      throw new Error('forced_opt_out_retirement_failure');
-    });
-    expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
-      'forced_opt_out_retirement_failure',
-    );
-
-    expect(() => useSettingsStore.getState().setDisableLongTermMemory(false)).toThrow(
-      'forced_opt_out_retirement_failure',
-    );
-    expect(retireActivePublications).toHaveBeenCalledTimes(2);
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
-    expect(isDurableMemoryPolicyEnabled()).toBe(false);
-  });
-
-  it('settles open obligations and only withdraws enqueued work proven active', () => {
-    const openConversationId = useChatStore.getState().createConversation('provider', 'model');
-    const activeConversationId = useChatStore.getState().createConversation('provider', 'model');
-    const completedConversationId = useChatStore.getState().createConversation('provider', 'model');
-    addPublicationReceipt(openConversationId, 'assistant-open', null);
-    addPublicationReceipt(activeConversationId, 'assistant-active', 'enqueued');
-    addPublicationReceipt(completedConversationId, 'assistant-completed', 'enqueued');
-    upsertState({
-      threadId: completedConversationId,
-      lastConsolidatedMessageId: 'assistant-completed',
-      lastConsolidatedAt: 11,
-      turnsSinceLast: 0,
-      now: 11,
-    });
-    retireActivePublications.mockReturnValue({
-      status: 'retired',
-      retiredSourceCount: 3,
-      publicationWithdrawals: [
-        {
-          sourceThreadId: activeConversationId,
-          sourceEndMessageId: 'assistant-active',
-        },
-      ],
-    });
-
+  it('turning memory off stops durable memory and cancels background extraction', () => {
     useSettingsStore.getState().setDisableLongTermMemory(true);
 
-    const conversations = useChatStore.getState().conversations;
-    const disposition = (conversationId: string, sourceEndMessageId: string) =>
-      conversations
-        .find(({ id }) => id === conversationId)
-        ?.messages.find(({ id }) => id === sourceEndMessageId)?.memoryPublication?.disposition;
-    expect(disposition(openConversationId, 'assistant-open')).toBe('opt_out');
-    expect(disposition(activeConversationId, 'assistant-active')).toBe('withdrawn');
-    expect(disposition(completedConversationId, 'assistant-completed')).toBe('enqueued');
-    expect(getConsolidationState(openConversationId)?.lastConsolidatedMessageId).toBe(
-      'assistant-open',
-    );
-    expect(getConsolidationState(activeConversationId)?.lastConsolidatedMessageId).toBe(
-      'assistant-active',
-    );
-    expect(getConsolidationState(completedConversationId)?.lastConsolidatedMessageId).toBe(
-      'assistant-completed',
-    );
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    expect(memoryAuthority.isDurableMemoryPolicyEnabled()).toBe(false);
+    expect(mockCancelMemoryExtraction).toHaveBeenCalledTimes(1);
+
+    useSettingsStore.getState().setDisableLongTermMemory(true);
+    expect(mockCancelMemoryExtraction).toHaveBeenCalledTimes(1);
   });
 
-  it('re-enables after excluded turns and admits only a new post-enable turn', () => {
+  it('never captures what was said while memory was off', () => {
     const conversationId = useChatStore.getState().createConversation('provider', 'model');
-    addPublicationReceipt(conversationId, 'assistant-completed-before-opt-out', 'enqueued');
-    upsertState({
-      threadId: conversationId,
-      lastConsolidatedMessageId: 'assistant-completed-before-opt-out',
-      lastConsolidatedAt: 11,
-      turnsSinceLast: 0,
-      now: 11,
-    });
-    addPublicationReceipt(conversationId, 'assistant-withdrawn-at-opt-out', 'enqueued');
-    retireActivePublications.mockReturnValue({
-      status: 'retired',
-      retiredSourceCount: 3,
-      publicationWithdrawals: [
-        {
-          sourceThreadId: conversationId,
-          sourceEndMessageId: 'assistant-withdrawn-at-opt-out',
-        },
-      ],
-    });
+    addClosedTurn(conversationId, 'before-opt-out', 10);
+    publishConversationTurnMemory(conversationId, 'before-opt-out');
 
     useSettingsStore.getState().setDisableLongTermMemory(true);
-    addPublicationReceipt(conversationId, 'assistant-created-during-opt-out', null);
-    expect(
-      useChatStore
-        .getState()
-        .transitionMessageMemoryPublication(
-          conversationId,
-          'assistant-created-during-opt-out',
-          'opt_out',
-        ).status,
-    ).toBe('applied');
+    addClosedTurn(conversationId, 'during-opt-out', 20);
+    publishConversationTurnMemory(conversationId, 'during-opt-out');
     useSettingsStore.getState().setDisableLongTermMemory(false);
-    addPublicationReceipt(conversationId, 'assistant-created-after-re-enable', null);
+    catchUpMemoryCapture(useChatStore.getState().conversations);
 
-    const messages = useChatStore
-      .getState()
-      .conversations.find(({ id }) => id === conversationId)!.messages;
-    const dirty = markThreadDirtyForMemory({
-      threadId: conversationId,
-      messages,
-      now: 20,
-    });
+    expect(memoryAuthority.isDurableMemoryPolicyEnabled()).toBe(true);
+    expect(indexedTurnIds()).toEqual(['user-before-opt-out']);
 
-    expect(dirty).toMatchObject({ marked: true, newTurns: 2 });
-    expect(getConsolidationState(conversationId)?.lastConsolidatedMessageId).toBe(
-      'assistant-created-during-opt-out',
-    );
-    expect(
-      messages.find(({ id }) => id === 'assistant-completed-before-opt-out')?.memoryPublication
-        ?.disposition,
-    ).toBe('enqueued');
-    expect(
-      messages.find(({ id }) => id === 'assistant-withdrawn-at-opt-out')?.memoryPublication
-        ?.disposition,
-    ).toBe('withdrawn');
+    addClosedTurn(conversationId, 'after-opt-in', 30);
+    publishConversationTurnMemory(conversationId, 'after-opt-in');
+
+    expect(indexedTurnIds()).toEqual(['user-after-opt-in', 'user-before-opt-out']);
   });
 
-  it('applies the same fence-first contract to settings replacement', () => {
-    useSettingsStore.getState().replaceAllSettings({ disableLongTermMemory: true });
-    expect(retireActivePublications).toHaveBeenCalledTimes(1);
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+  it('keeps the visible setting off when the durable policy cannot be written', () => {
+    jest.spyOn(memoryAuthority, 'setDurableMemoryPolicyEnabled').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
 
+    expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
+      'storage unavailable',
+    );
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+  });
+
+  it('applies the same transitions to settings replacement', () => {
+    const conversationId = useChatStore.getState().createConversation('provider', 'model');
+
+    useSettingsStore.getState().replaceAllSettings({ disableLongTermMemory: true });
+    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
+    expect(mockCancelMemoryExtraction).toHaveBeenCalledTimes(1);
+
+    addClosedTurn(conversationId, 'during-opt-out', 20);
     useSettingsStore.getState().replaceAllSettings({ disableLongTermMemory: false });
-    expect(retireActivePublications).toHaveBeenCalledTimes(2);
+    catchUpMemoryCapture(useChatStore.getState().conversations);
+
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
+    expect(indexedTurnIds()).toEqual([]);
   });
 });

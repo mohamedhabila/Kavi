@@ -30,7 +30,7 @@ function result(input: {
   const status = input.promptStatus ?? 'recorded';
   return buildFixtureResult({
     fixtureId: 'memory-probe',
-    memoryItems: { capturedAt: 10, items: input.items },
+    memoryItems: { capturedAt: 10, items: input.items, indexedTurnCount: 0 },
     turnTraces: [
       buildFixtureTurnTrace({
         turnIndex: 2,

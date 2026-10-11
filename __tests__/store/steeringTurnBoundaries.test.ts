@@ -4,7 +4,6 @@ import {
   getProtectedExecutionMessageIds,
   preserveProtectedExecutionMessages,
 } from '../../src/store/chatExecutionMessageProtection';
-import { getMemoryPublicationMutationLockedMessageIds } from '../../src/store/chatMessageMemoryPublicationGuards';
 import { sanitizeMessage } from '../../src/store/chatPersistenceMessages';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
@@ -100,31 +99,6 @@ describe('persistence', () => {
     expect(
       sanitizeMessage({ ...steeredRun()[4]!, steerOfRunId: 'run-1' }, options).steerOfRunId,
     ).toBeUndefined();
-  });
-});
-
-describe('memory publication locks', () => {
-  it('locks the whole steered turn once its final answer is enqueued', () => {
-    const messages: Message[] = [
-      ...steeredRun(),
-      {
-        id: 'final',
-        role: 'assistant',
-        content: 'Here is the plan.',
-        timestamp: 6,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
-        memoryPublication: { version: 1, disposition: 'enqueued' },
-      },
-    ];
-
-    expect([...getMemoryPublicationMutationLockedMessageIds(messages)]).toEqual([
-      'request',
-      'step-1',
-      'call-1-result',
-      'steer',
-      'step-2',
-      'final',
-    ]);
   });
 });
 

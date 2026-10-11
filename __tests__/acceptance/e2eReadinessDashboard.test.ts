@@ -17,17 +17,7 @@ function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2EScenario
     toolCalls: [{ id: 'tc-1', name: 'tool_catalog', arguments: '{"category":"agents"}' }],
     toolResults: [],
     graphSnapshots: [{ status: 'running' } as E2EScenarioResult['graphSnapshots'][number]],
-    memoryFinalState: {
-      capturedAt: 1,
-      scope: {
-        memoryConversationId: 'e2e-tool-catalog',
-        sourceThreadId: 'e2e-tool-catalog',
-      },
-      facts: [],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
+    memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
     turnTraces: [],
     usage: {
       inputTokens: 4096,
@@ -324,7 +314,7 @@ describe('e2eReadinessDashboard', () => {
         }),
         buildTaxonomyEntry({
           fixtureId: 'memory-remember-recall',
-          failedRubricKinds: ['turn_memory_receipt'],
+          failedRubricKinds: ['memory_turns_indexed'],
         }),
         buildTaxonomyEntry({
           fixtureId: 'multi-turn-trip-artifact',

@@ -11,12 +11,10 @@ import {
   MAX_PERSISTED_TAGS,
 } from './chatPersistenceLimits';
 import { sanitizeAgentRun } from './chatPersistenceAgentRuns';
-import { selectMessagesForPersistenceWithOpenMemoryPublicationTurns } from './chatMessageMemoryPublicationGuards';
+import { selectMessagesForPersistence } from './chatMessagePersistenceSelection';
 import { sanitizeMessage } from './chatPersistenceMessages';
 import { truncateText } from './chatPersistencePrimitives';
 import { sanitizeUsage } from './chatPersistenceUsage';
-import { normalizeSemanticMemoryHandoff } from '../services/memory/semanticMemoryHandoff';
-import { isEligibleMessageMemoryPublicationSource } from '../utils/messageMemoryPublication';
 import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 import {
   isMessageArchivedOrQueued,
@@ -24,17 +22,6 @@ import {
 } from '../services/transcriptArchive/transcriptArchive';
 
 const persistedConversationProjectionCache = new WeakMap<Conversation, Conversation>();
-
-function projectValidPublicationSources(conversation: Conversation): Conversation['messages'] {
-  return (conversation.messages ?? []).map((message) => {
-    if (!message.memoryPublication || isEligibleMessageMemoryPublicationSource(message)) {
-      return message;
-    }
-
-    const { memoryPublication: _invalidPublication, ...messageWithoutInvalidPublication } = message;
-    return messageWithoutInvalidPublication;
-  });
-}
 
 function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
   return {
@@ -48,21 +35,15 @@ function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
 }
 
 export function sanitizeConversationForPersistence(conversation: Conversation): Conversation {
-  const messages = selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
-    projectValidPublicationSources(conversation),
+  const messages = selectMessagesForPersistence(
+    conversation.messages ?? [],
     MAX_PERSISTED_MESSAGES,
     getProtectedExecutionMessageIds(conversation),
   );
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);
-  const {
-    semanticMemoryHandoff: rawSemanticMemoryHandoff,
-    ...conversationWithoutSemanticMemoryHandoff
-  } = conversation;
-  const semanticMemoryHandoff = normalizeSemanticMemoryHandoff(rawSemanticMemoryHandoff);
-
   return {
-    ...conversationWithoutSemanticMemoryHandoff,
+    ...conversation,
     title: truncateText(conversation.title, MAX_PERSISTED_LOG_TITLE_CHARS) || conversation.title,
     systemPrompt:
       truncateText(conversation.systemPrompt, MAX_PERSISTED_SYSTEM_PROMPT_CHARS) ||
@@ -81,7 +62,6 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
       .slice(-MAX_PERSISTED_AGENT_RUNS)
       .map((run) => sanitizeAgentRun(run)),
     ...(conversation.usage ? { usage: sanitizeUsage(conversation.usage) } : {}),
-    ...(semanticMemoryHandoff ? { semanticMemoryHandoff } : {}),
   };
 }
 

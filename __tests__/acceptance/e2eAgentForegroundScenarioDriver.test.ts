@@ -5,53 +5,29 @@ jest.mock('expo-sqlite', () => {
 
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import {
-  cancelScheduledIngestionDrain,
-  drainIngestionQueueWithWakeup,
-  getIngestionJob,
-  type IngestionJob,
-} from '../../src/services/memory/ingestionQueue';
-import { listIngestionDurabilityReceipts } from '../../src/services/memory/ingestionStructuralReceiptStore';
-import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
+  cancelMemoryExtraction,
+  scheduleMemoryExtraction,
+  waitForMemoryExtractionIdle,
+} from '../../src/services/memory/core/memoryExtractionWorker';
 import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundScenarioDriver';
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resolveForegroundScenarioFinalAssistant } from '../../src/acceptance/e2eAgent/foregroundScenarioDriverRuntime';
-import { settleForegroundScenarioMemory } from '../../src/acceptance/e2eAgent/foregroundScenarioMemorySettlement';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 import {
-  makeCompletedForegroundScenarioJob as makeCompletedJob,
   makeForegroundScenarioProvider as makeProvider,
-  makeForegroundScenarioProviderReceipt as makeReceipt,
   makeOriginalForegroundScenarioConversation as makeOriginalConversation,
 } from '../helpers/foregroundScenarioDriverFixtures';
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
 }));
-jest.mock('../../src/services/memory/ingestionQueue', () => ({
-  cancelScheduledIngestionDrain: jest.fn(),
-  requestScheduledIngestionDrain: jest.fn(),
-  drainIngestionQueueWithWakeup: jest.fn(async () => ({
-    attempted: 0,
-    completed: 0,
-    completedStructural: 0,
-    completedEnriched: 0,
-    retrying: 0,
-    degraded: 0,
-    deferred: 0,
-    resourceDeferred: 0,
-    failed: 0,
-  })),
-  getIngestionJob: jest.fn(),
-}));
-jest.mock('../../src/services/memory/lifecycle', () => ({
-  loadIngestionJobRuntimeContext: jest.fn(() => ({})),
-  recordCompletedTurnForMemory: jest.fn(),
-}));
-jest.mock('../../src/services/memory/ingestionStructuralReceiptStore', () => ({
-  listIngestionDurabilityReceipts: jest.fn(),
+jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  cancelMemoryExtraction: jest.fn(),
+  scheduleMemoryExtraction: jest.fn(),
+  waitForMemoryExtractionIdle: jest.fn(async () => true),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
   flushChatStorePersistenceNow: jest.fn(async () => undefined),
@@ -60,11 +36,9 @@ jest.mock('../../src/store/chatStorePersistence', () => ({
 
 const mockedRunOrchestrator = jest.mocked(runOrchestrator);
 const completedOrchestratorRun = { terminalDisposition: 'final_candidate' as const };
-const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
-const mockedGetIngestionJob = jest.mocked(getIngestionJob);
-const mockedDrainIngestionQueueWithWakeup = jest.mocked(drainIngestionQueueWithWakeup);
-const mockedCancelScheduledIngestionDrain = jest.mocked(cancelScheduledIngestionDrain);
-const mockedListIngestionDurabilityReceipts = jest.mocked(listIngestionDurabilityReceipts);
+const mockedScheduleMemoryExtraction = jest.mocked(scheduleMemoryExtraction);
+const mockedCancelMemoryExtraction = jest.mocked(cancelMemoryExtraction);
+const mockedWaitForMemoryExtractionIdle = jest.mocked(waitForMemoryExtractionIdle);
 const completeFinalMetadata = buildAssistantMessageMetadata('final', {
   completionStatus: 'complete',
   finishReason: 'stop',
@@ -91,25 +65,7 @@ describe('runForegroundScenario', () => {
       defaultConversationMode: 'agentic',
     });
 
-    let memorySequence = 0;
-    const jobs = new Map<string, IngestionJob>();
-    mockedRecordCompletedTurnForMemory.mockImplementation(async () => {
-      const jobId = `job-${++memorySequence}`;
-      jobs.set(jobId, makeCompletedJob(jobId));
-      return {
-        processed: true,
-        enqueued: true,
-        jobId,
-        episodeId: null,
-        factIds: [],
-        activeFocusUpdated: true,
-        openThreadsUpdated: false,
-        enriched: false,
-      };
-    });
-    mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
-    mockedListIngestionDurabilityReceipts.mockImplementation((jobId) => [makeReceipt(jobId)]);
-
+    mockedWaitForMemoryExtractionIdle.mockResolvedValue(true);
     let responseSequence = 0;
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       responseSequence += 1;
@@ -175,7 +131,7 @@ describe('runForegroundScenario', () => {
       }),
       expect.any(Object),
     );
-    expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
+    expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(2);
     expect(result.turns).toHaveLength(2);
     expect(result.turns[0]).toMatchObject({
       completion: {
@@ -196,20 +152,7 @@ describe('runForegroundScenario', () => {
       run: null,
       timedOut: false,
       user: { text: 'Hello there.', timestamp: 10 },
-      memory: [
-        {
-          publication: { disposition: 'enqueued', jobId: 'job-1' },
-          job: { status: 'completed_enriched' },
-          receipts: [
-            {
-              phase: 'provider_final',
-              jobId: 'job-1',
-              attemptNumber: 1,
-              providerOutcome: 'valid',
-            },
-          ],
-        },
-      ],
+      memoryExtractionSettled: true,
     });
     expect(result.turns[1].route).toEqual({
       directive: 'forced_agentic',
@@ -227,50 +170,14 @@ describe('runForegroundScenario', () => {
       runStatus: 'completed',
       runCompleted: true,
     });
-    expect(result.turns[1].memory).toHaveLength(1);
-    expect(result.turns[1].memory[0]?.receipts).toEqual([makeReceipt('job-2')]);
-    expect(mockedListIngestionDurabilityReceipts.mock.calls).toEqual([
-      ['job-1'],
-      ['job-2'],
-      ['job-1'],
-      ['job-2'],
-    ]);
-    expect(Object.isFrozen(result.turns[1].memory[0]?.receipts)).toBe(true);
-    expect(Object.isFrozen(result.turns[1].memory[0]?.receipts[0])).toBe(true);
-    expect(Object.keys(result.turns[1].memory[0]?.receipts[0] ?? {}).sort()).toEqual(
-      [
-        'activeFocusUpdated',
-        'agentRunMemoryFactIds',
-        'attemptNumber',
-        'bridgedEvidenceFactIds',
-        'deterministicFactIds',
-        'episodeId',
-        'invalidatedFactIds',
-        'jobId',
-        'openThreadsUpdated',
-        'persistedAt',
-        'phase',
-        'providerFactIds',
-        'providerOutcome',
-        'providerOutcomeCode',
-      ].sort(),
-    );
-    expect(JSON.stringify(result.turns[1].memory)).not.toContain('Response 2');
+    expect(result.memoryItems.indexedTurnCount).toBe(2);
     expect(result.turns[0].usage?.totalTokens).toBe(15);
     expect(result.turns[1].usage?.totalTokens).toBe(15);
     expect(Object.isFrozen(result.turns[1].messages)).toBe(true);
     expect(Object.isFrozen(result.turns[1].finalAssistant)).toBe(true);
     expect(Object.isFrozen(result.turns[1].completion)).toBe(true);
     expect(Object.isFrozen(result.turns[1].user)).toBe(true);
-    expect(Object.isFrozen(result.memoryFinalState)).toBe(true);
-    expect(result.memoryFinalState.scope).toEqual({
-      memoryConversationId: 'scenario-conversation',
-      sourceThreadId: 'scenario-conversation',
-    });
-    expect(result.turns[0].memoryEvidence.delta).toMatchObject({
-      facts: { createdIds: [], updatedIds: [], removedIds: [] },
-      episodes: { createdIds: [], updatedIds: [], removedIds: [] },
-    });
+    expect(Object.isFrozen(result.memoryItems)).toBe(true);
     expect(result.turns[1].messages.filter((message) => message.role === 'user')).toHaveLength(1);
     expect(Object.isFrozen(result.finalConversation)).toBe(true);
 
@@ -280,7 +187,7 @@ describe('runForegroundScenario', () => {
       'original-provider',
     ]);
     expect(useSettingsStore.getState().systemPrompt).toBe('Original prompt');
-    expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
+    expect(mockedCancelMemoryExtraction).toHaveBeenCalledTimes(1);
   });
 
   it('covers agentic-to-agentic and agentic-to-chitchat route rotations', async () => {
@@ -320,18 +227,12 @@ describe('runForegroundScenario', () => {
       userMessageId: result.turns[0].userMessageId,
       status: 'completed',
     });
-    expect(result.turns[0].memory).toHaveLength(1);
     expect(result.turns[1]).toMatchObject({
       route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
       run: null,
-      memory: [
-        {
-          publication: { disposition: 'enqueued', jobId: 'job-2' },
-          job: { status: 'completed_enriched' },
-        },
-      ],
     });
-    expect(mockedRecordCompletedTurnForMemory).toHaveBeenCalledTimes(2);
+    expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(2);
+    expect(result.memoryItems.indexedTurnCount).toBe(2);
     expect(result.turns.every((turn) => turn.error === null)).toBe(true);
   });
 
@@ -365,7 +266,7 @@ describe('runForegroundScenario', () => {
       }),
       expect.any(Object),
     );
-    expect(result.turns[0].memory).toHaveLength(1);
+    expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(1);
     expect(result.turns[0].finalAssistantCandidateCount).toBe(1);
     expect(result.turns[0].retrieval).toMatchObject({
       instrumentationStatus: 'missing',
@@ -373,13 +274,8 @@ describe('runForegroundScenario', () => {
     });
   });
 
-  it('reports passive memory settlement separately from foreground completion', async () => {
-    mockedGetIngestionJob.mockReturnValue({
-      ...makeCompletedJob('job-1'),
-      status: 'processing',
-      structuralCompletedAt: null,
-      completedAt: null,
-    });
+  it('reports background extraction separately from foreground completion', async () => {
+    mockedWaitForMemoryExtractionIdle.mockResolvedValue(false);
 
     const result = await runForegroundScenario({
       provider: makeProvider('scenario-provider'),
@@ -398,11 +294,9 @@ describe('runForegroundScenario', () => {
         executionCompleted: true,
         finalResponseCompleted: true,
       },
-      memory: [],
-      memoryEvidence: {
-        settlementError: 'Timed out waiting for memory ingestion job job-1.',
-      },
+      memoryExtractionSettled: false,
     });
+    expect(mockedWaitForMemoryExtractionIdle).toHaveBeenCalledWith(5);
   });
 
   it('applies the product memory opt-out, exact tool surface, and pre-turn identity hook', async () => {
@@ -442,14 +336,9 @@ describe('runForegroundScenario', () => {
         finalResponseCompleted: true,
       },
       error: null,
-      memory: [],
     });
-    expect(
-      result.turns[0].messages.find(
-        (message) => message.id === result.turns[0].finalAssistant?.messageId,
-      )?.memoryPublication,
-    ).toEqual({ version: 1, disposition: 'opt_out' });
-    expect(mockedRecordCompletedTurnForMemory).not.toHaveBeenCalled();
+    expect(result.memoryItems.indexedTurnCount).toBe(0);
+    expect(mockedScheduleMemoryExtraction).not.toHaveBeenCalled();
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
 
@@ -579,7 +468,7 @@ describe('runForegroundScenario', () => {
 
   it('aborts timed-out turns and restores both global stores', async () => {
     let abortedExecutionSettled = false;
-    mockedCancelScheduledIngestionDrain.mockImplementationOnce(async () => {
+    mockedCancelMemoryExtraction.mockImplementationOnce(() => {
       expect(abortedExecutionSettled).toBe(true);
     });
     mockedRunOrchestrator.mockImplementationOnce(async (options) => {
@@ -610,12 +499,11 @@ describe('runForegroundScenario', () => {
     expect(result.turns[0]).toMatchObject({
       timedOut: true,
       error: 'Foreground scenario turn timed out after 5ms.',
-      memory: [],
     });
     expect(abortedExecutionSettled).toBe(true);
     expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
     expect(useSettingsStore.getState().activeProviderId).toBe('original-provider');
-    expect(mockedCancelScheduledIngestionDrain).toHaveBeenCalledTimes(1);
+    expect(mockedCancelMemoryExtraction).toHaveBeenCalledTimes(1);
   });
 
   it('stops after a preflight error instead of running later turns', async () => {
@@ -638,60 +526,8 @@ describe('runForegroundScenario', () => {
     expect(result.turns).toHaveLength(1);
     expect(result.turns[0]).toMatchObject({
       error: 'The selected provider has no API key.',
-      memory: [],
       timedOut: false,
     });
     expect(useChatStore.getState().conversations).toEqual([makeOriginalConversation()]);
-  });
-
-  it('accepts a future pending memory attempt as a stable deferred outcome', async () => {
-    const pendingJob: IngestionJob = {
-      ...makeCompletedJob('job-deferred'),
-      status: 'pending',
-      nextAttemptAt: Date.now() + 60_000,
-      completedAt: null,
-    };
-    mockedGetIngestionJob.mockReturnValue(pendingJob);
-    const priorAttemptReceipt = makeReceipt(pendingJob.id, {
-      providerOutcome: 'malformed',
-      providerOutcomeCode: 'invalid_json',
-      providerFactIds: [],
-    });
-    mockedListIngestionDurabilityReceipts.mockReturnValue([priorAttemptReceipt]);
-    mockedDrainIngestionQueueWithWakeup.mockResolvedValueOnce({
-      attempted: 1,
-      completed: 0,
-      completedStructural: 0,
-      completedEnriched: 0,
-      retrying: 0,
-      degraded: 0,
-      deferred: 1,
-      resourceDeferred: 0,
-      failed: 0,
-    });
-
-    await expect(
-      settleForegroundScenarioMemory(
-        [
-          {
-            promise: Promise.resolve({
-              disposition: 'enqueued',
-              jobId: pendingJob.id,
-            }),
-          },
-        ],
-        100,
-      ),
-    ).resolves.toEqual([
-      {
-        publication: {
-          disposition: 'enqueued',
-          jobId: pendingJob.id,
-        },
-        job: pendingJob,
-        receipts: [priorAttemptReceipt],
-      },
-    ]);
-    expect(mockedListIngestionDurabilityReceipts).toHaveBeenCalledWith(pendingJob.id);
   });
 });

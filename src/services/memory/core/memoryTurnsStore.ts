@@ -149,6 +149,14 @@ export function searchMemoryTurns(params: {
     .map(rowToTurn);
 }
 
+/** Removes the rounds opened by these user messages (they were rewound or deleted). */
+export function deleteMemoryTurnsOpenedBy(userMessageIds: ReadonlyArray<string>): void {
+  const db = readyDb();
+  for (const id of userMessageIds) {
+    db.runSync('DELETE FROM memory_turns WHERE user_message_id = ?', id);
+  }
+}
+
 export function deleteMemoryTurnsFromConversation(conversationId: string): number {
   return readyDb().runSync('DELETE FROM memory_turns WHERE conversation_id = ?', conversationId)
     .changes;

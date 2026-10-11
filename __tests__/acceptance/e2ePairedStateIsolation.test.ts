@@ -42,7 +42,7 @@ describe('paired E2E state isolation', () => {
       'memory_ingestion_receipts',
       'memory_items',
       'memory_migration_state',
-      'memory_extraction_cursor',
+      'memory_capture_cursor',
       'memory_prompt_log',
       'memory_reflections',
       'memory_retrieval_events',

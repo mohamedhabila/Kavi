@@ -17,17 +17,7 @@ function buildFixtureResult(
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [{ status: 'finalized' } as E2EScenarioResult['graphSnapshots'][number]],
-    memoryFinalState: {
-      capturedAt: 1,
-      scope: {
-        memoryConversationId: `conv-${fixtureId}`,
-        sourceThreadId: `conv-${fixtureId}`,
-      },
-      facts: [],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
+    memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
     turnTraces: [],
     usage: {
       inputTokens: 10,

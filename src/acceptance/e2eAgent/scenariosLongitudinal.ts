@@ -34,7 +34,6 @@ function completedTurnRubrics(input: CompletedTurnRubricsInput): E2ERubric[] {
       field: 'agent_run',
       expected: input.agentRunCompleted,
     },
-    { kind: 'turn_memory_receipt', turnIndex: input.turnIndex },
   ];
 }
 
@@ -170,8 +169,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
         path: 'artifacts/project-status.txt',
         contains: OUTCOME_CONTINUITY_TOKEN,
       },
-      { kind: 'ingestion_job_checkpointed', minCount: 2 },
-      { kind: 'memory_episode_count', min: 2 },
+      { kind: 'memory_turns_indexed', min: 2 },
       {
         kind: 'turn_final_response_token',
         turnIndex: 1,

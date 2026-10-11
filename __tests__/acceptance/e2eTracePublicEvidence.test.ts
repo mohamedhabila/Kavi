@@ -17,8 +17,8 @@ const {
   projectUserEvidence,
 } = require('../../scripts/e2eReport/publicTraceExecution');
 const {
-  projectMemoryDeltaEvidence,
   projectMemoryFinalEvidence,
+  projectMemoryTurnEvidence,
 } = require('../../scripts/e2eReport/publicTraceMemory');
 const {
   projectNativeTurnEvidence,
@@ -38,21 +38,34 @@ const PRIVATE_SENTINELS = [
   'PRIVATE-TERMINAL-REASON',
   'PRIVATE-RUN-ID',
   'PRIVATE-RUN-USER-ID',
-  'PRIVATE-FACT-ID',
-  'PRIVATE-FACT-SUBJECT',
-  'PRIVATE-FACT-PREDICATE',
-  'PRIVATE-FACT-CONTENT',
-  'PRIVATE-EPISODE-ID',
-  'PRIVATE-EPISODE-SUMMARY',
-  'PRIVATE-BLOCK-ID',
-  'PRIVATE-BLOCK-CONTENT',
-  'PRIVATE-JOB-ID',
-  'PRIVATE-RECEIPT-FACT-ID',
-  'PRIVATE-DELTA-ID',
+  'PRIVATE-MEMORY-ID',
+  'PRIVATE-MEMORY-CONTENT',
+  'PRIVATE-OLD-MEMORY-ID',
+  'PRIVATE-OLD-MEMORY-CONTENT',
+  'PRIVATE-SENSITIVE-MEMORY',
+  'PRIVATE-TURN-ID',
   'PRIVATE-NATIVE-STATE',
   'PRIVATE-NATIVE-TOOL',
   'PRIVATE-UNKNOWN-FIELD',
 ] as const;
+
+function privateItem(
+  id: string,
+  text: string,
+  extra: Partial<E2EScenarioResult['memoryItems']['items'][number]> = {},
+): E2EScenarioResult['memoryItems']['items'][number] {
+  return {
+    id,
+    text,
+    scope: 'global',
+    pinned: false,
+    sensitive: false,
+    supersededBy: null,
+    createdAt: 1,
+    updatedAt: 1,
+    ...extra,
+  };
+}
 
 function buildPrivateEvidenceResult(): E2EScenarioResult {
   const base = buildFixtureResult();
@@ -64,55 +77,19 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
   return buildFixtureResult({
     fixtureId: 'public-evidence-contract',
     conversationId: 'PRIVATE-CONVERSATION-ID',
-    memoryFinalState: {
+    memoryItems: {
       capturedAt: 2,
-      scope: {
-        memoryConversationId: 'PRIVATE-CONVERSATION-ID',
-        sourceThreadId: 'PRIVATE-CONVERSATION-ID',
-      },
-      facts: [
-        {
-          id: 'PRIVATE-FACT-ID',
-          subjectId: 'PRIVATE-FACT-SUBJECT',
-          predicate: 'PRIVATE-FACT-PREDICATE',
-          objectText: 'PRIVATE-FACT-CONTENT',
-          validAt: 1,
-          expiresAt: null,
-          invalidAt: null,
-          deletedAt: null,
-        },
-        { id: 'fact-invalidated', validAt: 1, expiresAt: null, invalidAt: 2, deletedAt: null },
-        { id: 'fact-deleted', validAt: 1, expiresAt: null, invalidAt: null, deletedAt: 2 },
-        { id: 'fact-future', validAt: 3, expiresAt: null, invalidAt: null, deletedAt: null },
-        { id: 'fact-expired', validAt: 1, expiresAt: 2, invalidAt: null, deletedAt: null },
+      items: [
+        privateItem('PRIVATE-OLD-MEMORY-ID', 'PRIVATE-OLD-MEMORY-CONTENT', {
+          supersededBy: 'PRIVATE-MEMORY-ID',
+        }),
+        privateItem('PRIVATE-MEMORY-ID', 'PRIVATE-MEMORY-CONTENT', { pinned: true }),
+        privateItem('PRIVATE-SENSITIVE-MEMORY-ID', 'PRIVATE-SENSITIVE-MEMORY', {
+          sensitive: true,
+        }),
       ],
-      episodes: [
-        {
-          id: 'PRIVATE-EPISODE-ID',
-          summary: 'PRIVATE-EPISODE-SUMMARY',
-          deletedAt: null,
-        },
-        { id: 'episode-deleted', summary: 'deleted', deletedAt: 2 },
-      ],
-      workingBlocks: [
-        { id: 'PRIVATE-BLOCK-ID', content: 'PRIVATE-BLOCK-CONTENT' },
-        { id: 'block-empty', content: '' },
-      ],
-      ingestionJobs: [
-        {
-          id: 'PRIVATE-JOB-ID',
-          status: 'completed_enriched',
-          providerOutcome: 'valid',
-          outcomeCode: null,
-        },
-        {
-          id: 'job-failed',
-          status: 'failed',
-          providerOutcome: 'provider_error',
-          outcomeCode: 'processing_error',
-        },
-      ],
-    } as E2EScenarioResult['memoryFinalState'],
+      indexedTurnCount: 3,
+    },
     turnTraces: [
       {
         turnIndex: 0,
@@ -169,57 +146,18 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
             durationMs: 25,
           },
         },
-        memory: [
-          {
-            publication: { disposition: 'enqueued', jobId: 'PRIVATE-JOB-ID' },
-            job: {
-              id: 'PRIVATE-JOB-ID',
-              status: 'completed_enriched',
-              providerOutcome: 'valid',
-              outcomeCode: null,
+        memoryPrompt: {
+          status: 'recorded',
+          builds: [
+            {
+              itemIds: ['PRIVATE-MEMORY-ID'],
+              turnIds: ['PRIVATE-TURN-ID'],
+              chars: 120,
+              durationMs: 4,
             },
-            receipts: [
-              {
-                phase: 'provider_final',
-                jobId: 'PRIVATE-JOB-ID',
-                attemptNumber: 1,
-                episodeId: 'PRIVATE-EPISODE-ID',
-                deterministicFactIds: ['PRIVATE-RECEIPT-FACT-ID'],
-                providerFactIds: ['PRIVATE-FACT-ID'],
-                invalidatedFactIds: ['PRIVATE-DELTA-ID'],
-                bridgedEvidenceFactIds: [],
-                agentRunMemoryFactIds: [],
-                activeFocusUpdated: true,
-                openThreadsUpdated: false,
-                providerOutcome: 'valid',
-                providerOutcomeCode: null,
-                persistedAt: 2,
-              },
-            ],
-          },
-        ],
-        memoryEvidence: {
-          delta: {
-            capturedAt: 2,
-            facts: {
-              createdIds: ['PRIVATE-DELTA-ID'],
-              updatedIds: [],
-              removedIds: [],
-            },
-            episodes: { createdIds: [], updatedIds: [], removedIds: [] },
-            workingBlocks: { createdIds: [], updatedIds: [], removedIds: [] },
-            ingestionJobs: {
-              createdIds: ['PRIVATE-JOB-ID'],
-              updatedIds: [],
-              removedIds: [],
-            },
-            invalidatedFactIds: ['PRIVATE-DELTA-ID'],
-            deletedFactIds: [],
-            deletedEpisodeIds: [],
-            clearedWorkingBlockIds: [],
-            completedIngestionJobIds: ['PRIVATE-JOB-ID'],
-          },
+          ],
         },
+        memoryExtractionSettled: true,
         native: {
           stateBefore,
           stateAfter,
@@ -296,28 +234,14 @@ describe('public immutable E2E evidence projection', () => {
         phase: 'deliver',
         summary: { startedTools: 3, completedTools: 2, failedTools: 1 },
       },
-      memoryDelta: {
-        facts: { createdCount: 1 },
-        ingestionJobs: { createdCount: 1 },
-        invalidatedFactCount: 1,
-        completedIngestionJobCount: 1,
-        ingestion: {
-          jobCount: 1,
-          statusCounts: [{ value: 'completed_enriched', count: 1 }],
-          providerOutcomeCounts: [{ value: 'valid', count: 1 }],
-        },
-        persistenceReceipts: {
-          receiptCount: 1,
-          structuralCheckpointReceiptCount: 0,
-          providerFinalReceiptCount: 1,
-          maxAttemptNumber: 1,
-          episodeCount: 1,
-          deterministicFactCount: 1,
-          providerFactCount: 1,
-          invalidatedFactCount: 1,
-          activeFocusUpdateCount: 1,
-          providerOutcomeCounts: [{ value: 'valid', count: 1 }],
-        },
+      memory: {
+        extractionSettled: true,
+        promptStatus: 'recorded',
+        promptBuildCount: 1,
+        promptItemCount: 1,
+        promptTurnCount: 1,
+        maxPromptChars: 120,
+        maxPromptBuildMs: 4,
       },
       native: {
         invocationCount: 1,
@@ -331,23 +255,14 @@ describe('public immutable E2E evidence projection', () => {
     expect(trace.turns[0]?.finalAssistant).not.toHaveProperty('finishReason');
     expect(trace.turns[0]?.finalAssistant).not.toHaveProperty('timestamp');
     expect(trace.turns[0]?.agentRun).not.toHaveProperty('terminalReason');
-    expect(trace.memoryFinal).toMatchObject({
-      factCount: 5,
-      activeFactCount: 1,
-      invalidatedFactCount: 1,
-      deletedFactCount: 1,
-      episodeCount: 2,
-      activeEpisodeCount: 1,
-      deletedEpisodeCount: 1,
-      workingBlockCount: 2,
-      populatedWorkingBlockCount: 1,
-      ingestion: {
-        jobCount: 2,
-        statusCounts: [
-          { value: 'completed_enriched', count: 1 },
-          { value: 'failed', count: 1 },
-        ],
-      },
+    expect(trace.memoryFinal).toEqual({
+      itemCount: 3,
+      currentItemCount: 2,
+      supersededItemCount: 1,
+      pinnedItemCount: 1,
+      sensitiveItemCount: 1,
+      conversationScopedItemCount: 0,
+      indexedTurnCount: 3,
     });
   });
 
@@ -385,7 +300,7 @@ describe('public immutable E2E evidence projection', () => {
     expect(projectFinalAssistantEvidence(sourceTurn?.finalAssistant)).not.toBeUndefined();
     expect(projectCompletionEvidence(sourceTurn?.completion)).not.toBeNull();
     expect(projectAgentRunEvidence(sourceTurn?.agentRun)).not.toBeUndefined();
-    expect(projectMemoryDeltaEvidence(sourceTurn?.memoryDelta)).not.toBeNull();
+    expect(projectMemoryTurnEvidence(sourceTurn?.memory)).not.toBeNull();
     expect(projectMemoryFinalEvidence(trace.memoryFinal)).not.toBeNull();
     const invalidFingerprint = sourceTurn?.native.stateBeforeFingerprints.find(
       (fingerprint) => projectValueFingerprint(fingerprint, SAFE_NATIVE_FIXTURE_PATHS) === null,
@@ -402,8 +317,8 @@ describe('public immutable E2E evidence projection', () => {
     hostile.turns[0].finalAssistant.text = 'PRIVATE-ASSISTANT-TEXT';
     hostile.turns[0].agentRun.latestSummary = 'PRIVATE-ASSISTANT-TEXT';
     hostile.turns[0].route.personaId = 'PRIVATE-CUSTOM-PERSONA';
-    hostile.turns[0].memoryDelta.facts.createdIds = ['PRIVATE-DELTA-ID'];
-    hostile.memoryFinal.facts = [{ objectText: 'PRIVATE-FACT-CONTENT' }];
+    hostile.turns[0].memory.itemIds = ['PRIVATE-MEMORY-ID'];
+    hostile.memoryFinal.items = [{ text: 'PRIVATE-MEMORY-CONTENT' }];
     hostile.turns[0].native.rawState = { text: 'PRIVATE-NATIVE-STATE' };
 
     const projected = projectPublicRedactedTrace(hostile);
@@ -438,85 +353,12 @@ describe('public immutable E2E evidence projection', () => {
     });
   });
 
-  it('rejects receipts that are not attributed to their exact closeout job', () => {
-    const result = buildPrivateEvidenceResult();
-    const receipt = result.turnTraces[0]?.memory[0]?.receipts[0] as unknown as {
-      jobId: string;
-    };
-    receipt.jobId = 'mismatched-job';
-
-    expect(() => buildE2EScenarioTraceSummary({ result })).toThrow(
-      'Memory receipt jobId does not match its turn publication jobId.',
-    );
-  });
-
-  it('reports structural durability without exposing its exact source identity', () => {
-    const result = buildPrivateEvidenceResult();
-    const record = result.turnTraces[0]!.memory[0]!;
-    record.receipts = [
-      {
-        phase: 'structural_checkpoint',
-        jobId: 'PRIVATE-JOB-ID',
-        attemptNumber: 1,
-        source: {
-          memoryConversationId: 'PRIVATE-MEMORY-CONVERSATION',
-          sourceThreadId: 'PRIVATE-SOURCE-THREAD',
-          personaId: 'PRIVATE-PERSONA',
-          taskId: 'PRIVATE-TASK',
-          sourceRunId: 'PRIVATE-RUN-ID',
-          sourceStartMessageId: 'PRIVATE-SOURCE-START',
-          sourceEndMessageId: 'PRIVATE-SOURCE-END',
-          sourceSnapshotSha256: 'a'.repeat(64),
-          sourceAt: 1,
-        },
-        episodeId: 'PRIVATE-EPISODE-ID',
-        deterministicFactIds: ['PRIVATE-STRUCTURAL-FACT-ID'],
-        invalidatedFactIds: [],
-        bridgedEvidenceFactIds: [],
-        agentRunMemoryFactIds: [],
-        activeFocusUpdated: false,
-        openThreadsUpdated: false,
-        persistedAt: 2,
-      },
-    ];
-
-    const trace = buildE2EScenarioTraceSummary({ result });
-    expect(trace.turns[0]!.memoryDelta.persistenceReceipts).toMatchObject({
-      receiptCount: 1,
-      structuralCheckpointReceiptCount: 1,
-      providerFinalReceiptCount: 0,
-      deterministicFactCount: 1,
-      providerFactCount: 0,
-      providerOutcomeCounts: [],
-    });
-    expect(projectPublicRedactedTrace(trace)).not.toBeNull();
-    expect(JSON.stringify(trace)).not.toContain('PRIVATE-SOURCE');
-    expect(JSON.stringify(trace)).not.toContain('PRIVATE-STRUCTURAL-FACT-ID');
-  });
-
-  it('counts facts as active only within the captured validity window', () => {
-    const trace = buildE2EScenarioTraceSummary({ result: buildPrivateEvidenceResult() });
-    expect(trace.memoryFinal).toMatchObject({
-      factCount: 5,
-      activeFactCount: 1,
-      invalidatedFactCount: 1,
-      deletedFactCount: 1,
-    });
-  });
-
   it('rejects unknown strict enums and invalid numeric counters before redaction', () => {
     const invalidRoute = buildPrivateEvidenceResult();
     const route = invalidRoute.turnTraces[0]?.route as unknown as { mode: string };
     route.mode = 'PRIVATE-UNKNOWN-FIELD';
     expect(() => buildE2EScenarioTraceSummary({ result: invalidRoute })).toThrow(
       'turn.route.mode contains an unsupported enum value.',
-    );
-
-    const invalidMemory = buildPrivateEvidenceResult();
-    const job = invalidMemory.memoryFinalState.ingestionJobs[0] as unknown as { status: string };
-    job.status = 'PRIVATE-UNKNOWN-FIELD';
-    expect(() => buildE2EScenarioTraceSummary({ result: invalidMemory })).toThrow(
-      'memory.ingestion.status contains an unsupported enum value.',
     );
 
     const invalidCounter = buildPrivateEvidenceResult();
@@ -571,8 +413,9 @@ describe('public immutable E2E evidence projection', () => {
     const trace = buildE2EScenarioTraceSummary({ result: buildPrivateEvidenceResult() });
     type MutableTrace = {
       durationMs: number;
-      memoryFinal: { ingestion: { statusCounts: Array<{ value: string }> } };
+      memoryFinal: { currentItemCount: number };
       turns: Array<{
+        memory: { promptStatus: string; extractionSettled: unknown };
         route: { mode: string };
         agentRun: { summary: { startedTools: number } };
         finalAssistant: { textLength: number };
@@ -594,7 +437,21 @@ describe('public immutable E2E evidence projection', () => {
     expect(
       projectPublicRedactedTrace(
         mutate((candidate) => {
-          candidate.memoryFinal.ingestion.statusCounts[0].value = 'PRIVATE-UNKNOWN-FIELD';
+          candidate.memoryFinal.currentItemCount += 1;
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      projectPublicRedactedTrace(
+        mutate((candidate) => {
+          candidate.turns[0].memory.promptStatus = 'PRIVATE-UNKNOWN-FIELD';
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      projectPublicRedactedTrace(
+        mutate((candidate) => {
+          candidate.turns[0].memory.extractionSettled = 'yes';
         }),
       ),
     ).toBeNull();

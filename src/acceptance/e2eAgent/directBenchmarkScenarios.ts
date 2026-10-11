@@ -301,7 +301,7 @@ export const DIRECT_LOCOMO_TEMPORAL_CONVERSATION_MEMORY: E2EScenario = {
       path: 'artifacts/locomo-temporal-summary.txt',
       expectedHash: LOCOMO_TEMPORAL_SUMMARY_SHA256,
     },
-    { kind: 'memory_episode_count', min: 5 },
+    { kind: 'memory_turns_indexed', min: 5 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -410,7 +410,7 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
       path: 'artifacts/beam-memory-probes.txt',
       expectedHash: BEAM_MEMORY_PROBES_SHA256,
     },
-    { kind: 'memory_episode_count', min: 6 },
+    { kind: 'memory_turns_indexed', min: 6 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

@@ -3,7 +3,6 @@ import type { ChatState } from './chatStoreTypes';
 export const CHAT_STORE_VERSION = 9;
 
 const RETIRED_COMPACTION_PROFILE_CONTEXT_MIGRATION_VERSION = 8;
-const MEMORY_PUBLICATION_RECEIPT_MIGRATION_VERSION = 9;
 const RETIRED_COMPACTION_PROFILE_CONTEXT_PREFIX = '\n\n## Persistent Context\n';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,32 +48,6 @@ function removeRetiredCompactionProfileContext(persistedState: unknown): unknown
   };
 }
 
-function removePreReceiptMemoryPublicationFromMessages(messages: unknown): unknown {
-  if (!Array.isArray(messages)) return messages;
-  return messages.map((value) => {
-    if (!isRecord(value)) return value;
-    const { memoryPublication: _untrustedMemoryPublication, ...message } = value;
-    return message;
-  });
-}
-
-function removePreReceiptMemoryPublication(persistedState: unknown): unknown {
-  if (!isRecord(persistedState) || !Array.isArray(persistedState.conversations)) {
-    return persistedState;
-  }
-  return {
-    ...persistedState,
-    conversations: persistedState.conversations.map((value) =>
-      isRecord(value)
-        ? {
-            ...value,
-            messages: removePreReceiptMemoryPublicationFromMessages(value.messages),
-          }
-        : value,
-    ),
-  };
-}
-
 export function migrateChatStoreState(
   persistedState: unknown,
   persistedVersion: number,
@@ -83,9 +56,6 @@ export function migrateChatStoreState(
   let migrationInput = persistedState;
   if (version < RETIRED_COMPACTION_PROFILE_CONTEXT_MIGRATION_VERSION) {
     migrationInput = removeRetiredCompactionProfileContext(migrationInput);
-  }
-  if (version < MEMORY_PUBLICATION_RECEIPT_MIGRATION_VERSION) {
-    migrationInput = removePreReceiptMemoryPublication(migrationInput);
   }
   return migrationInput as Partial<ChatState> | undefined;
 }

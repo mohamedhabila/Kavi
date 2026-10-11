@@ -49,7 +49,6 @@ export type E2EBenchmarkStructuralEvidenceKind =
   | 'token_accounting'
   | 'cache_event'
   | 'execution_state'
-  | 'memory_receipt'
   | 'lifecycle_event'
   | 'memory_retrieval'
   | 'assistant_response';
@@ -175,22 +174,18 @@ const FINAL_STATE_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'memory_item',
   'memory_item_absent',
   'native_fixture_state',
-  'working_block_token',
   'worker_result_token',
 ]);
 
 const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'completion_gate_hold',
   'min_user_turns',
-  'ingestion_job_checkpointed',
-  'ingestion_job_completed',
-  'memory_episode_count',
+  'memory_turns_indexed',
   'cache_read_tokens',
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
   'turn_route',
   'turn_completion',
-  'turn_memory_receipt',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
   'turn_clarification',
@@ -251,10 +246,7 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
       return 'native_fixture_state';
     case 'memory_item':
     case 'memory_item_absent':
-    case 'memory_episode_count':
-    case 'ingestion_job_checkpointed':
-    case 'ingestion_job_completed':
-    case 'working_block_token':
+    case 'memory_turns_indexed':
       return 'memory_store';
     case 'token_budget':
       return 'token_accounting';
@@ -265,8 +257,6 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_route':
     case 'turn_completion':
       return 'execution_state';
-    case 'turn_memory_receipt':
-      return 'memory_receipt';
     case 'turn_lifecycle_boundary':
       return 'lifecycle_event';
     case 'turn_final_response_token':

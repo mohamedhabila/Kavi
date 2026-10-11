@@ -25,7 +25,7 @@ import {
   waitForModelProjectionAvailability,
 } from '../../store/modelProjectionOwnership';
 import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
-import { publishConversationTurnMemory } from '../../services/memory/turnPublication';
+import { publishConversationTurnMemory } from '../../services/memory/core/memoryCapture';
 import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
 import { truncateLogDetail } from '../../screens/chatFormatting';
 import {
@@ -51,7 +51,6 @@ import type {
   ForegroundScenarioDriverInput,
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
-  ForegroundScenarioMemoryRecord,
   ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
 
@@ -266,7 +265,6 @@ export function buildForegroundScenarioUsageDelta(
 
 export function createForegroundScenarioRuntime(
   input: ForegroundScenarioDriverInput,
-  memoryRecords: ForegroundScenarioMemoryRecord[],
 ): ForegroundScenarioRuntime {
   const requests = createForegroundScenarioRequestRegistry();
   const streaming = createForegroundScenarioStreamingState();
@@ -276,15 +274,6 @@ export function createForegroundScenarioRuntime(
   let chatError: string | null = null;
   let activeTurnMaxTokens = input.maxTokens;
   let context: ExecuteForegroundConversationRunParams['context'];
-
-  const recordConversationTurnMemory: ExecuteForegroundConversationRunParams['context']['helpers']['recordConversationTurnMemory'] =
-    (conversationId, activeChatProvider, options) => {
-      const promise = publishConversationTurnMemory(conversationId, activeChatProvider, options);
-      memoryRecords.push({
-        promise,
-      });
-      return promise;
-    };
 
   const ensureAgentRunFinalResponse = createAgentRunFinalResponse({
     appendAgentRunCheckpoint: (...args) =>
@@ -397,7 +386,7 @@ export function createForegroundScenarioRuntime(
         useChatStore.getState().conversations.find((candidate) => candidate.id === conversationId),
       getConversations: () => useChatStore.getState().conversations,
       getResumeAgentRun: () => resumeAgentRun,
-      recordConversationTurnMemory,
+      recordConversationTurnMemory: publishConversationTurnMemory,
       requestPersistenceCheckpoint: requestChatStorePersistenceCheckpoint,
       setChatError: (message) => {
         chatError = message;
@@ -440,7 +429,6 @@ export function createForegroundScenarioRuntime(
       createConversation: store.createConversation,
       setAgentRunPhase: store.setAgentRunPhase,
       startAgentRun: store.startAgentRun,
-      transitionMessageMemoryPublication: store.transitionMessageMemoryPublication,
       updateAgentRunAsyncWork: store.updateAgentRunAsyncWork,
       updateAgentRunControlGraph: store.updateAgentRunControlGraph,
       updateAgentRunSummary: store.updateAgentRunSummary,

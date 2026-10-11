@@ -1,4 +1,5 @@
 import { buildE2ERunReportScenarioEntry } from '../../src/acceptance/e2eAgent/e2eRunReport';
+import { E2E_PUBLIC_RUBRIC_KINDS } from '../../src/acceptance/e2eAgent/e2eTraceExecutionPolicy';
 import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
 
 type TaxonomyModule = {
@@ -35,7 +36,10 @@ describe('E2E report stage-attribution taxonomy', () => {
     ['fixture:turn-0:turn_completion:execution', 'turn_completion', 'execution_failure'],
     ['fixture:turn-0:turn_completion:agent_run', 'turn_completion', 'execution_failure'],
     ['fixture:turn-0:turn_completion:final_response', 'turn_completion', 'final_response_failure'],
-    ['fixture:turn-0:turn_memory_receipt', 'turn_memory_receipt', 'memory_write_failure'],
+    ['fixture:memory_item', 'memory_item', 'memory_write_failure'],
+    ['fixture:memory_item_absent', 'memory_item_absent', 'memory_write_failure'],
+    ['fixture:memory_turns_indexed', 'memory_turns_indexed', 'memory_write_failure'],
+    ['fixture:turn-1:turn_memory_selection', 'turn_memory_selection', 'memory_retrieval_miss'],
     [
       'fixture:turn-0:turn_lifecycle_boundary',
       'turn_lifecycle_boundary',
@@ -60,6 +64,15 @@ describe('E2E report stage-attribution taxonomy', () => {
     ).toEqual(['unknown_structural_failure']);
   });
 
+  it('admits every rubric kind the evaluator defines', () => {
+    for (const rubricKind of E2E_PUBLIC_RUBRIC_KINDS) {
+      expect(publicPolicy.RUBRIC_KINDS.has(rubricKind)).toBe(true);
+      expect(taxonomy.parseRubricKind(`fixture:${rubricKind}`)).toBe(
+        rubricKind === 'turn_completion' ? null : rubricKind,
+      );
+    }
+  });
+
   it('admits the precise rubric and category contracts through public projection', () => {
     expect(publicPolicy.RUBRIC_KINDS).toEqual(
       expect.objectContaining({
@@ -69,7 +82,6 @@ describe('E2E report stage-attribution taxonomy', () => {
     for (const rubricKind of [
       'turn_route',
       'turn_completion',
-      'turn_memory_receipt',
       'turn_lifecycle_boundary',
       'turn_clarification',
       'turn_native_invocation_count',

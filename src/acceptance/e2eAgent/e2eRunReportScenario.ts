@@ -194,7 +194,6 @@ function buildRubricAudit(
     }
     if (
       (rubric.kind === 'workspace_file' && Boolean(rubric.contains)) ||
-      rubric.kind === 'working_block_token' ||
       rubric.kind === 'turn_final_response_token' ||
       rubric.kind === 'turn_memory_answer' ||
       (rubric.kind === 'graph_audit_observed' && Boolean(rubric.detailContains))

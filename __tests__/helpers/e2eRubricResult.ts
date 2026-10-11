@@ -1,8 +1,4 @@
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
-import {
-  buildScopedMemoryEvidenceDelta,
-  captureScopedMemoryEvidence,
-} from '../../src/services/memory/evidenceSnapshot';
 
 export function buildE2ERubricResult(
   overrides: Partial<E2EScenarioResult> = {},
@@ -14,15 +10,7 @@ export function buildE2ERubricResult(
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],
-    memoryFinalState: {
-      capturedAt: 1,
-      scope: { memoryConversationId: 'conv-a', sourceThreadId: 'conv-a' },
-      facts: [],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
-    memoryItems: { capturedAt: 1, items: [] },
+    memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
     usage: {
       inputTokens: 0,
       outputTokens: 0,
@@ -38,32 +26,4 @@ export function buildE2ERubricResult(
     turnTraces: [],
     ...overrides,
   };
-}
-
-export function buildE2ERubricResultWithMemoryEvidence(
-  conversationId: string,
-  overrides: Partial<E2EScenarioResult> = {},
-): E2EScenarioResult {
-  const scope = { memoryConversationId: conversationId, sourceThreadId: conversationId };
-  const before = {
-    capturedAt: 0,
-    scope,
-    facts: [],
-    episodes: [],
-    workingBlocks: [],
-    ingestionJobs: [],
-  };
-  const after = captureScopedMemoryEvidence(scope);
-  return buildE2ERubricResult({
-    conversationId,
-    memoryFinalState: after,
-    ...overrides,
-    turnTraces: [
-      {
-        memoryEvidence: {
-          delta: buildScopedMemoryEvidenceDelta(before, after),
-        },
-      } as E2EScenarioResult['turnTraces'][number],
-    ],
-  });
 }

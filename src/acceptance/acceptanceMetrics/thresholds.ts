@@ -6,10 +6,6 @@
 // (verify:strict)" section of docs/testing.md for what each gate covers.
 // ---------------------------------------------------------------------------
 
-export const MEMORY_RECALL_MIN_PASS_RATE = 0.9;
-
-export const MEMORY_CHITCHAT_INGESTION_MIN_PASS_RATE = 1;
-
 export const GOAL_TASK_UNIFICATION_MIN_PASS_RATE = 1;
 
 export const FALSE_FINALIZE_MAX_RATE = 0.05;

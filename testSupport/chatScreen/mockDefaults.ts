@@ -15,7 +15,6 @@ import {
 } from './state';
 import { mockChatRoute, mockOpenDrawer } from './componentMocks';
 import {
-  applyMockMessageMemoryPublicationTransition,
   mockAddConversationLog,
   mockAddMessage,
   mockAddToolCall,
@@ -41,7 +40,6 @@ import {
   mockUpdateMessageEnrichedContent,
   mockUpdateMessageProviderReplay,
   mockUpdateMessageReasoning,
-  mockTransitionMessageMemoryPublication,
   mockUpdateModeInConversation,
   mockUpdateModelInConversation,
   mockUpdatePersonaInConversation,
@@ -102,7 +100,6 @@ export function resetChatScreenTestEnvironment() {
     mockUpdateMessageReasoning,
     mockUpdateMessageProviderReplay,
     mockUpdateMessageAssistantMetadata,
-    mockTransitionMessageMemoryPublication,
     mockAddToolCall,
     mockUpdateToolCallStatus,
     mockUpdateMessageEffect,
@@ -214,9 +211,6 @@ export function resetChatScreenTestEnvironment() {
     },
   );
   mockGetProviderApiKey.mockResolvedValue('sk-test');
-  mockTransitionMessageMemoryPublication.mockImplementation(
-    applyMockMessageMemoryPublicationTransition,
-  );
   mockCancelOwnedExternalRecoveries.mockResolvedValue({
     cancelledRunCount: 0,
     settledRunCount: 0,

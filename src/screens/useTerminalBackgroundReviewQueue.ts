@@ -16,7 +16,7 @@ import type {
 import { getReviewableSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import type { QueueTerminalBackgroundReview } from './subAgentRunBridgeTypes';
 import { handleTerminalBackgroundReview } from './terminalBackgroundReviewHandler';
-import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
+import type { RecordConversationTurnMemory } from '../services/memory/core/memoryCapture';
 import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
@@ -170,8 +170,6 @@ async function runTerminalBackgroundReview(params: {
       updateAgentRunControlGraph: params.updateAgentRunControlGraph,
       updateAgentRunSummary: params.updateAgentRunSummary,
       updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
-      transitionMessageMemoryPublication:
-        useChatStore.getState().transitionMessageMemoryPublication,
     });
   } catch (error) {
     if (!isAbortErrorLike(error, operation.signal)) {

@@ -8,6 +8,7 @@ import type { ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus } from '../../types/message';
 import type { RequestUnderstandingRouting } from '../../types/requestUnderstanding';
 import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
+import type { E2ERubric } from './types';
 
 function completeEnum<All extends string>() {
   return <const Values extends readonly All[]>(
@@ -81,6 +82,36 @@ export const E2E_PUBLIC_TERMINAL_REASONS = completeEnum<AgentRunTerminalReason>(
   'missing_required_side_effect',
   'terminal_review_unavailable',
   'route_blocked',
+]);
+
+/** Every rubric kind, so public reports keep each failed rubric's kind. */
+export const E2E_PUBLIC_RUBRIC_KINDS = completeEnum<E2ERubric['kind']>()([
+  'cache_eligible_read_rate',
+  'cache_prefix_readiness',
+  'cache_read_tokens',
+  'completion_gate_hold',
+  'file_hash',
+  'graph_audit_observed',
+  'graph_status',
+  'graph_terminal_success',
+  'memory_item',
+  'memory_item_absent',
+  'memory_turns_indexed',
+  'min_user_turns',
+  'native_fixture_state',
+  'token_budget',
+  'turn_clarification',
+  'turn_completion',
+  'turn_final_response_token',
+  'turn_lifecycle_boundary',
+  'turn_memory_answer',
+  'turn_memory_selection',
+  'turn_native_invocation_count',
+  'turn_route',
+  'turn_tool_call_count',
+  'worker_result_token',
+  'workspace_file',
+  'workspace_file_absent',
 ]);
 
 export const E2E_PUBLIC_FINISH_REASONS = [

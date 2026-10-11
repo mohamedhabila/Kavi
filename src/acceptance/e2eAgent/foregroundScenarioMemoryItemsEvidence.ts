@@ -39,6 +39,8 @@ export type ForegroundScenarioMemoryItemRecord = Readonly<{
 export type ForegroundScenarioMemoryItemsState = Readonly<{
   capturedAt: number;
   items: ReadonlyArray<ForegroundScenarioMemoryItemRecord>;
+  /** Closed turns in the past-turn index. */
+  indexedTurnCount: number;
 }>;
 
 export type ForegroundScenarioMemoryPromptCapture = Readonly<{
@@ -99,5 +101,7 @@ export function captureForegroundScenarioMemoryItems(
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
-  return { capturedAt: now, items };
+  const indexedTurnCount =
+    db.getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_turns')?.count ?? 0;
+  return { capturedAt: now, items, indexedTurnCount };
 }

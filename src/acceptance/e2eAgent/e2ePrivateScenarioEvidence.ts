@@ -12,7 +12,7 @@ import {
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v7';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v8';
 
 export type E2EPrivateEvidenceProvenance = Readonly<{
   app: E2EAppSourceRevision;
@@ -54,7 +54,6 @@ export type E2EPrivateScenarioEvidence = {
     errors: E2EScenarioResult['errors'];
     usage: E2EScenarioResult['usage'];
     estimatedCost: E2EScenarioResult['estimatedCost'];
-    memoryFinalState: E2EScenarioResult['memoryFinalState'];
     memoryItems: E2EScenarioResult['memoryItems'];
     turns: ReadonlyArray<{
       turnIndex: number;
@@ -65,8 +64,7 @@ export type E2EPrivateScenarioEvidence = {
       finalAssistantCandidateCount: number;
       completion: E2EScenarioTurnTrace['completion'];
       agentRun: E2EScenarioTurnTrace['agentRun'];
-      memory: E2EScenarioTurnTrace['memory'];
-      memoryEvidence: E2EScenarioTurnTrace['memoryEvidence'];
+      memoryExtractionSettled: boolean;
       retrieval: E2EScenarioTurnTrace['retrieval'];
       memoryPrompt: E2EScenarioTurnTrace['memoryPrompt'];
       native: E2EScenarioTurnTrace['native'];
@@ -144,8 +142,7 @@ function projectTurn(
     finalAssistantCandidateCount: turn.finalAssistantCandidateCount,
     completion: turn.completion,
     agentRun: turn.agentRun,
-    memory: turn.memory,
-    memoryEvidence: turn.memoryEvidence,
+    memoryExtractionSettled: turn.memoryExtractionSettled,
     retrieval: turn.retrieval,
     memoryPrompt: turn.memoryPrompt,
     native: turn.native,
@@ -205,7 +202,6 @@ export function buildE2EPrivateScenarioEvidence(params: {
       errors: [...params.result.errors],
       usage: params.result.usage,
       estimatedCost: params.result.estimatedCost,
-      memoryFinalState: params.result.memoryFinalState,
       memoryItems: params.result.memoryItems,
       turns: params.result.turnTraces.map(projectTurn),
     },

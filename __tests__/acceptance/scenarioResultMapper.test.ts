@@ -42,8 +42,7 @@ describe('scenarioResultMapper tool outcomes', () => {
     const driverResult = {
       conversationId: 'conversation-1',
       finalConversation: {},
-      memoryFinalState: {},
-      memoryItems: { capturedAt: 1, items: [] },
+      memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
       turns: [
         {
           turnIndex: 0,
@@ -64,8 +63,7 @@ describe('scenarioResultMapper tool outcomes', () => {
             graphTerminalReason: null,
           },
           run: null,
-          memory: [],
-          memoryEvidence: { delta: {} },
+          memoryExtractionSettled: true,
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
           memoryPrompt: { status: 'missing', builds: [] },
@@ -100,8 +98,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'default' },
       finalAssistantCandidateCount: 1,
       run: null,
-      memory: [],
-      memoryEvidence: { delta: {} },
+      memoryExtractionSettled: true,
       native,
       retrieval: {},
       memoryPrompt: { status: 'missing', builds: [] },
@@ -114,8 +111,7 @@ describe('scenarioResultMapper tool outcomes', () => {
     const driverResult = {
       conversationId: 'conversation-1',
       finalConversation: {},
-      memoryFinalState: {},
-      memoryItems: { capturedAt: 1, items: [] },
+      memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
       turns: [
         {
           ...baseTurn,
@@ -186,8 +182,7 @@ describe('scenarioResultMapper tool outcomes', () => {
     const driverResult = {
       conversationId: 'conversation-1',
       finalConversation: {},
-      memoryFinalState: {},
-      memoryItems: { capturedAt: 1, items: [] },
+      memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
       turns: [
         {
           turnIndex: 0,
@@ -215,8 +210,7 @@ describe('scenarioResultMapper tool outcomes', () => {
             graphTerminalReason: null,
           },
           run: null,
-          memory: [],
-          memoryEvidence: { delta: {} },
+          memoryExtractionSettled: true,
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
           memoryPrompt: { status: 'missing', builds: [] },

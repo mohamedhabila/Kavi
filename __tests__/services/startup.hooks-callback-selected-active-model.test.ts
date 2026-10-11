@@ -27,8 +27,7 @@ const mockMaintainForegroundModelExecutionRetention = jest.fn();
 const mockMaintainTerminalExecutionRetention = jest.fn();
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
-const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
-const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
+const mockCatchUpMemoryCapture = jest.fn();
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const mockChatStoreState = {
@@ -99,9 +98,8 @@ jest.mock('../../src/services/canvas/renderer', () => ({
 jest.mock('../../src/services/events/bus', () => ({
   emitAppEvent: (...args: any[]) => mockEmitAppEvent(...args),
 }));
-jest.mock('../../src/services/memory/lifecycle', () => ({
-  runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
-  runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
+jest.mock('../../src/services/memory/core/memoryCapture', () => ({
+  catchUpMemoryCapture: (...args: any[]) => mockCatchUpMemoryCapture(...args),
 }));
 jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
   initializeDurableRecoveryLifecycle: jest.fn(),

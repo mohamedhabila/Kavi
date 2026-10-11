@@ -197,7 +197,6 @@ describe('retrying a steered answer', () => {
     applyForegroundRetryResend({
       actions: {
         cancelConversationRunForRewind: jest.fn(),
-        retireConversationSourcesForRewind: jest.fn(),
         rewindUserMessageForResend: rewind,
       },
       assistantMessageId: 'final',

@@ -9,11 +9,6 @@ import {
   ensureMemoryCoreSchema,
   resetMemoryCoreSchemaCacheForTests,
 } from '../../services/memory/core/memorySchema';
-import { countEpisodes } from '../../services/memory/episodes/queries';
-import { countCompletedIngestionJobsForThread } from '../../services/memory/ingestionQueue';
-import { resolveGraphWorkingBlockScope } from '../../engine/graph/graphTaskScope';
-import type { AgentRunControlGraphState } from '../../types/agentRun';
-import { getWorkingBlock, type WorkingBlockLabel } from '../../services/memory/workingBlocks';
 
 type ExpoSqliteMock = {
   __resetExpoSqliteForTests?: () => void;
@@ -47,7 +42,7 @@ export const E2E_RESETTABLE_MEMORY_TABLES = [
   'memory_ingestion_receipts',
   'memory_items',
   'memory_migration_state',
-  'memory_extraction_cursor',
+  'memory_capture_cursor',
   'memory_prompt_log',
   'memory_reflections',
   'memory_retrieval_events',
@@ -73,25 +68,4 @@ export function teardownE2EMemorySandbox(): void {
   closeMemoryDb();
   closeExecutionJournalDb();
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
-}
-
-export function countE2ECompletedIngestionJobs(conversationId: string): number {
-  return countCompletedIngestionJobsForThread(conversationId);
-}
-
-export function countE2EEpisodes(conversationId: string): number {
-  return countEpisodes({ conversationId, threadId: conversationId });
-}
-
-export function readE2EWorkingBlockContent(
-  conversationId: string,
-  label: WorkingBlockLabel,
-  graphSnapshots: ReadonlyArray<AgentRunControlGraphState> = [],
-): string {
-  const snapshot = graphSnapshots[graphSnapshots.length - 1];
-  const scope = resolveGraphWorkingBlockScope({
-    conversationId,
-    graphState: snapshot,
-  });
-  return getWorkingBlock(label, scope)?.content ?? '';
 }

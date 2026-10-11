@@ -27,8 +27,7 @@ import {
   type PendingVerifiedProcedureObservation,
 } from '../../../services/memory/verifiedProcedure/executionSession';
 import { resolveGraphTaskId } from '../graphTaskScope';
-import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
-import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
+import { resolveForegroundTerminalProjection } from './terminalProjection';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
 import { buildForegroundOrchestratorMessages } from './modelReadyMessages';
 import { transitionForegroundClarificationAdmission } from './clarificationReplyAdmissionFlow';
@@ -231,19 +230,6 @@ async function executeReservedForegroundConversationRun(
     return;
   }
 
-  const semanticMemoryGate = await enforceSemanticMemoryHandoffGate({
-    signal: abortController.signal,
-    conversation: runConversation,
-    conversationId,
-    durability: context.durability,
-    owner: projectionOwner,
-    closeReservationFailure,
-    clearForegroundRequestIfCurrent,
-    isCurrentRunInvocation,
-    setChatError: context.helpers.setChatError,
-  });
-  if (semanticMemoryGate === 'stopped') return;
-
   const { finalizationProviderContext, model, provider, providerWithApiKey } = preflight;
   const executionContext = resolveForegroundConversationExecutionContext({
     conversation: runConversation,
@@ -382,44 +368,32 @@ async function executeReservedForegroundConversationRun(
       throw new Error('foreground_model_journal_generation_missing');
     }
     let projectionMessageId = runtime.getCurrentAssistantMessageId();
-    let terminalMemorySourceId: string | undefined;
+    let terminalReplyId: string | undefined;
     let journalStatus = status;
     if (!journalTerminal) {
-      if (
-        projectionOwner &&
-        !context.durability.ownsModelProjection(conversationId, projectionOwner)
-      ) {
-        throw new Error('model_projection_ownership_changed');
-      }
-      let projectedConversation = context.helpers.getConversation(conversationId);
-      const publication = await publishForegroundTerminalMemory({
+      const assertProjectionOwnership = () => {
+        if (
+          projectionOwner &&
+          !context.durability.ownsModelProjection(conversationId, projectionOwner)
+        ) {
+          throw new Error('model_projection_ownership_changed');
+        }
+      };
+      assertProjectionOwnership();
+      const projection = resolveForegroundTerminalProjection({
         allowIncompleteHandoff: options?.allowIncompleteHandoff === true,
-        assertProjectionOwnership: () => {
-          if (
-            projectionOwner &&
-            !context.durability.ownsModelProjection(conversationId, projectionOwner)
-          ) {
-            throw new Error('model_projection_ownership_changed');
-          }
-        },
-        conversation: projectedConversation,
-        conversationId,
+        conversation: context.helpers.getConversation(conversationId),
         currentAssistantMessageId: projectionMessageId,
-        finalizationProviderContext,
-        flushChatState: context.durability.flushChatState,
-        getConversation: () => context.helpers.getConversation(conversationId),
-        getConversations: context.helpers.getConversations,
-        memoryConversationId: workspaceTarget.workspaceConversationId,
         orchestratorTerminalDisposition,
-        recordConversationTurnMemory: context.helpers.recordConversationTurnMemory,
         runId: bootstrapResult.trackedAgentRunId,
         status,
-        transitionMessageMemoryPublication: context.store.transitionMessageMemoryPublication,
       });
-      projectedConversation = publication.conversation;
-      journalStatus = publication.journalStatus;
-      projectionMessageId = publication.projectionMessageId;
-      terminalMemorySourceId = publication.terminalMemorySourceId;
+      await context.durability.flushChatState();
+      assertProjectionOwnership();
+      const projectedConversation = context.helpers.getConversation(conversationId);
+      journalStatus = projection.journalStatus;
+      projectionMessageId = projection.projectionMessageId;
+      terminalReplyId = projection.terminalReplyId;
       const projectionState = {
         conversationId,
         requestMessageId,
@@ -442,12 +416,11 @@ async function executeReservedForegroundConversationRun(
         projectionState,
       });
       journalTerminal = true;
+      if (terminalReplyId) {
+        context.helpers.recordConversationTurnMemory(conversationId, terminalReplyId);
+      }
     }
-    if (
-      journalStatus === 'succeeded' &&
-      terminalMemorySourceId &&
-      pendingVerifiedProcedureObservation
-    ) {
+    if (journalStatus === 'succeeded' && terminalReplyId && pendingVerifiedProcedureObservation) {
       const pending = pendingVerifiedProcedureObservation;
       pendingVerifiedProcedureObservation = undefined;
       const finalAgentRun = bootstrapResult.trackedAgentRunId
@@ -459,7 +432,7 @@ async function executeReservedForegroundConversationRun(
         memoryLineage: {
           sourceMessageId: requestMessageId,
           sourceRunId: bootstrapResult.trackedAgentRunId ?? null,
-          sourceTurnId: terminalMemorySourceId,
+          sourceTurnId: terminalReplyId,
           taskId: resolveGraphTaskId(finalAgentRun?.controlGraph?.activeTaskId) ?? null,
         },
         pending,

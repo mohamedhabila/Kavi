@@ -3,14 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-jest.mock('../../src/services/memory/memoryOptOutRetirement', () => ({
-  retireActiveMemoryPublicationsBeforeOptOut: jest.fn(() => ({
-    status: 'not_required',
-    retiredSourceCount: 0,
-    publicationWithdrawals: [],
-  })),
-}));
-
 import { makeMcpServer, makeProvider, resetSettingsStore } from '../helpers/settingsStoreFixtures';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../src/types/provider';

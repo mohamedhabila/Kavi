@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// E2E structural scenario rubrics — mocked orchestrator + memory finalize
+// E2E structural scenario rubrics — mocked orchestrator, real turn capture
 // ---------------------------------------------------------------------------
 
 jest.mock('expo-sqlite', () => {
@@ -33,19 +33,11 @@ jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: (...args: unknown[]) => mockRunOrchestrator(...args),
 }));
 
-jest.mock('../../src/services/memory/lifecycle', () => {
-  const actual = jest.requireActual('../../src/services/memory/lifecycle');
-  return {
-    ...actual,
-    recordCompletedTurnForMemory: jest.fn((input) =>
-      actual.recordCompletedTurnForMemory({
-        ...input,
-        activeChatProvider: undefined,
-        providerEnrichment: false,
-      }),
-    ),
-  };
-});
+jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  cancelMemoryExtraction: jest.fn(),
+  scheduleMemoryExtraction: jest.fn(),
+  waitForMemoryExtractionIdle: jest.fn(async () => true),
+}));
 
 jest.mock('../../src/acceptance/e2eAgent/providerConfig', () => ({
   buildE2EProvider: () => ({
@@ -375,7 +367,7 @@ describe('E2E structural mobile assistant scenarios', () => {
     });
   });
 
-  it('passive chitchat scenario satisfies ingestion and focus rubrics', async () => {
+  it('passive chitchat scenario satisfies its structural rubrics', async () => {
     const scenario = E2E_AGENT_SCENARIOS.find(
       (entry) => entry.id === 'multi-turn-passive-chitchat-memory',
     );

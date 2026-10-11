@@ -14,8 +14,6 @@ import type { Attachment } from '../types/attachment';
 import type {
   AssistantMessageMetadata,
   Message,
-  MessageMemoryPublication,
-  MessageMemoryPublicationDisposition,
   MessageProviderReplay,
   ToolCall,
 } from '../types/message';
@@ -34,21 +32,6 @@ import type {
   ApplyMobileControllerOutcomeInput,
   ApplyMobileControllerOutcomeResult,
 } from './agentRuns/mobileControllerOutcome';
-
-export type TransitionMessageMemoryPublicationResult =
-  | Readonly<{
-      status: 'applied';
-      changed: boolean;
-      publication: MessageMemoryPublication;
-    }>
-  | Readonly<{
-      status: 'rejected';
-      reason:
-        | 'source_unavailable'
-        | 'source_identity_invalid'
-        | 'source_ineligible'
-        | 'transition_conflict';
-    }>;
 
 export type RewindUserMessageForResendResult =
   | Readonly<{
@@ -115,7 +98,7 @@ export interface ChatState {
   updateModeInConversation: (conversationId: string, mode: ConversationMode) => void;
   addMessage: (
     conversationId: string,
-    message: Omit<Message, 'timestamp' | 'id' | 'memoryPublication'> & {
+    message: Omit<Message, 'timestamp' | 'id'> & {
       id?: string;
       timestamp?: number;
     },
@@ -143,11 +126,6 @@ export interface ChatState {
     messageId: string,
     assistantMetadata?: AssistantMessageMetadata,
   ) => void;
-  transitionMessageMemoryPublication: (
-    conversationId: string,
-    messageId: string,
-    disposition: MessageMemoryPublicationDisposition,
-  ) => TransitionMessageMemoryPublicationResult;
   updateMessageEffect: (
     conversationId: string,
     messageId: string,

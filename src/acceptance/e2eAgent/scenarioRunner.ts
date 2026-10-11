@@ -14,7 +14,6 @@ import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDrive
 import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
 import { buildE2EProviderWithDiscoveredCatalog, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
-import { resolveScenarioProviderOutcomeEvidenceRequirements } from './scenarioProviderOutcomeEvidence';
 import { mapForegroundScenarioResult } from './scenarioResultMapper';
 import { resolveE2EScenarioTimeoutMs, resolveE2ETurnTimeoutMs } from './scenarioTimeout';
 import { E2E_DEFAULT_MAX_TOKENS } from './thresholds';
@@ -144,8 +143,6 @@ export async function runE2EScenario(
       ...(options.memoryTimeoutMs !== undefined
         ? { memoryTimeoutMs: options.memoryTimeoutMs }
         : {}),
-      providerOutcomeEvidenceRequirements:
-        resolveScenarioProviderOutcomeEvidenceRequirements(scenario),
       disableLongTermMemory: options.disableLongTermMemory,
       allowedToolNames: options.allowedToolNames,
       beforeTurns: options.beforeTurns,

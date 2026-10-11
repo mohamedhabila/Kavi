@@ -117,8 +117,7 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
           summary: cloneJson(turn.run.summary),
         }
       : null,
-    memory: cloneJson(turn.memory),
-    memoryEvidence: cloneJson(turn.memoryEvidence),
+    memoryExtractionSettled: turn.memoryExtractionSettled,
     native: cloneJson(turn.native),
     retrieval: cloneJson(turn.retrieval),
     memoryPrompt: cloneJson(turn.memoryPrompt),
@@ -158,7 +157,6 @@ export function mapForegroundScenarioResult(params: {
     toolCalls: turnTraces.flatMap((turn) => turn.toolCalls),
     toolResults: turnTraces.flatMap((turn) => turn.toolResults),
     graphSnapshots: turnTraces.flatMap((turn) => turn.graphSnapshots),
-    memoryFinalState: cloneJson(params.driverResult.memoryFinalState),
     memoryItems: cloneJson(params.driverResult.memoryItems),
     turnTraces,
     usage: aggregateE2ETokenUsage(usageEvents),

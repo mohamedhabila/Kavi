@@ -4,11 +4,6 @@
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
 import { sanitizeConversationForPersistence } from '../../../src/store/chatPersistence';
-import {
-  decodeIngestionSourceSnapshot,
-  encodeIngestionSourceSnapshot,
-} from '../../../src/services/memory/ingestionSourceSnapshot';
-import { resolveClosedTurnEndingAt } from '../../../src/services/memory/closedTurn';
 
 describe('useChatStore', () => {
   describe('rewindUserMessageForResend', () => {
@@ -219,91 +214,6 @@ describe('useChatStore', () => {
       expect(after.messages.some((message) => message.id === 'discarded-assistant')).toBe(false);
     });
 
-    it('binds the replacement turn publication and ingestion snapshot to only the fresh user identity', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
-      const store = useChatStore.getState();
-      store.addMessage(convId, {
-        id: 'published-source-start',
-        role: 'user',
-        content: 'Original request',
-        timestamp: 1,
-      });
-      store.addMessage(convId, {
-        id: 'published-source-end',
-        role: 'assistant',
-        content: 'Original response',
-        timestamp: 2,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
-      });
-      expect(
-        store.transitionMessageMemoryPublication(convId, 'published-source-end', null).status,
-      ).toBe('applied');
-      expect(
-        store.transitionMessageMemoryPublication(convId, 'published-source-end', 'enqueued').status,
-      ).toBe('applied');
-      expect(
-        store.transitionMessageMemoryPublication(convId, 'published-source-end', 'withdrawn')
-          .status,
-      ).toBe('applied');
-
-      const replacement = store.rewindUserMessageForResend(
-        convId,
-        'published-source-start',
-        'Replacement request',
-      );
-      expect(replacement.status).toBe('applied');
-      if (replacement.status !== 'applied') throw new Error('expected replacement');
-      store.addMessage(convId, {
-        id: 'replacement-source-end',
-        role: 'assistant',
-        content: 'Replacement response',
-        timestamp: 4,
-        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
-      });
-      expect(
-        store.transitionMessageMemoryPublication(convId, 'replacement-source-end', null),
-      ).toEqual(
-        expect.objectContaining({
-          status: 'applied',
-          publication: { version: 1, disposition: null },
-        }),
-      );
-
-      const conversation = useChatStore
-        .getState()
-        .conversations.find((candidate) => candidate.id === convId)!;
-      expect(resolveClosedTurnEndingAt(conversation.messages, 'replacement-source-end')).toEqual(
-        expect.objectContaining({
-          status: 'resolved',
-          sourceStartMessageId: replacement.replacementMessageId,
-          sourceEndMessageId: 'replacement-source-end',
-        }),
-      );
-      expect(() =>
-        encodeIngestionSourceSnapshot({
-          messages: conversation.messages,
-          sourceStartMessageId: 'published-source-start',
-          sourceEndMessageId: 'replacement-source-end',
-          priorUserMessageId: null,
-        }),
-      ).toThrow('memory_ingestion_source_snapshot_source_start_unavailable');
-
-      const snapshot = decodeIngestionSourceSnapshot(
-        encodeIngestionSourceSnapshot({
-          messages: conversation.messages,
-          sourceStartMessageId: replacement.replacementMessageId,
-          sourceEndMessageId: 'replacement-source-end',
-          priorUserMessageId: null,
-        }),
-      );
-      expect(snapshot.sourceStartMessageId).toBe(replacement.replacementMessageId);
-      expect(snapshot.turnMessages.map((message) => message.id)).toEqual([
-        replacement.replacementMessageId,
-        'replacement-source-end',
-      ]);
-      expect(JSON.stringify(snapshot)).not.toContain('published-source-start');
-    });
-
     it('persists and reloads only the replacement identity and rejects non-user targets', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       const store = useChatStore.getState();
@@ -344,7 +254,6 @@ describe('useChatStore', () => {
         }),
       ]);
       expect(reloaded.messages.some((message) => message.id === 'user-old')).toBe(false);
-      expect(reloaded.messages[0]?.memoryPublication).toBeUndefined();
     });
   });
 });

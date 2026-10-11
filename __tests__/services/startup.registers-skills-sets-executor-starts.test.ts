@@ -32,8 +32,7 @@ const mockMaintainForegroundModelExecutionRetention = jest.fn();
 const mockMaintainTerminalExecutionRetention = jest.fn();
 const mockHydrateCanvasSurfaces = jest.fn().mockResolvedValue(undefined);
 const mockEmitAppEvent = jest.fn().mockResolvedValue(undefined);
-const mockRunMemoryMigrationTick = jest.fn().mockResolvedValue(undefined);
-const mockRunMemoryBackgroundFlush = jest.fn().mockResolvedValue(undefined);
+const mockCatchUpMemoryCapture = jest.fn();
 const mockInitializeDurableRecoveryLifecycle = jest.fn();
 const mockReconcileDurableRecoveryLifecycle = jest.fn().mockResolvedValue(undefined);
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
@@ -122,9 +121,8 @@ jest.mock('../../src/services/canvas/renderer', () => ({
 jest.mock('../../src/services/events/bus', () => ({
   emitAppEvent: (...args: any[]) => mockEmitAppEvent(...args),
 }));
-jest.mock('../../src/services/memory/lifecycle', () => ({
-  runMemoryMigrationTick: (...args: any[]) => mockRunMemoryMigrationTick(...args),
-  runMemoryBackgroundFlush: (...args: any[]) => mockRunMemoryBackgroundFlush(...args),
+jest.mock('../../src/services/memory/core/memoryCapture', () => ({
+  catchUpMemoryCapture: (...args: any[]) => mockCatchUpMemoryCapture(...args),
 }));
 jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
   removeRetiredMemoryArtifacts: (...args: any[]) => mockRemoveRetiredMemoryArtifacts(...args),
@@ -233,8 +231,6 @@ beforeEach(() => {
   mockFlushChatStorePersistenceNow.mockResolvedValue(undefined);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
-  mockRunMemoryMigrationTick.mockResolvedValue(undefined);
-  mockRunMemoryBackgroundFlush.mockResolvedValue(undefined);
   mockSettingsHydrated = true;
   mockChatHydrated = true;
   mockSettingsHydrationListeners.clear();
@@ -398,8 +394,7 @@ describe('initializeServices', () => {
     expect(mockSyncSchedulerWakeNotifications).toHaveBeenCalledWith({ force: true });
     handleAppBackground();
     expect(mockStopScheduler).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
-    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mockCatchUpMemoryCapture).toHaveBeenCalledTimes(1));
   });
   it('initializes durable recovery ownership synchronously on startup', () => {
     const { initializeServices } = require('../../src/services/startup');
@@ -426,33 +421,23 @@ describe('initializeServices', () => {
     expect(mockRecoverInterruptedForegroundModelExecutions).not.toHaveBeenCalled();
     expect(mockChatStoreState.recoverInterruptedAgentRuns).not.toHaveBeenCalled();
   });
-  it('flushes durable memory work before waiting for migration', async () => {
-    mockRunMemoryMigrationTick.mockImplementation(() => new Promise(() => undefined));
-    const { handleAppForeground } = require('../../src/services/startup');
-    handleAppForeground();
-    await waitFor(() => expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1));
-    expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1);
-    expect(mockRunMemoryBackgroundFlush.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRunMemoryMigrationTick.mock.invocationCallOrder[0],
-    );
-  });
   it('does not touch memory until both persisted stores finish hydrating', async () => {
     mockSettingsHydrated = false;
     mockChatHydrated = false;
     const { handleAppForeground } = require('../../src/services/startup');
     handleAppForeground();
     await Promise.resolve();
-    expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
-    expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
+    expect(mockCatchUpMemoryCapture).not.toHaveBeenCalled();
     mockSettingsHydrated = true;
     for (const listener of [...mockSettingsHydrationListeners]) listener();
     await Promise.resolve();
-    expect(mockRunMemoryMigrationTick).not.toHaveBeenCalled();
-    expect(mockRunMemoryBackgroundFlush).not.toHaveBeenCalled();
+    expect(mockCatchUpMemoryCapture).not.toHaveBeenCalled();
     mockChatHydrated = true;
     for (const listener of [...mockChatHydrationListeners]) listener();
-    await waitFor(() => expect(mockRunMemoryMigrationTick).toHaveBeenCalledTimes(1));
-    expect(mockRunMemoryBackgroundFlush).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(mockCatchUpMemoryCapture).toHaveBeenCalledWith(mockChatStoreState.conversations),
+    );
+    expect(mockCatchUpMemoryCapture).toHaveBeenCalledTimes(1);
   });
   it('recovers persisted worker and workflow state on startup', async () => {
     const { initializeServices } = require('../../src/services/startup');

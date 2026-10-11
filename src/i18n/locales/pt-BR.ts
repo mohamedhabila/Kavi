@@ -175,7 +175,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     responseInterruptedByAppRestartBeforeStart:
       'A resposta foi interrompida porque o aplicativo reiniciou antes que a geração pudesse começar. Tente novamente quando estiver pronto.',
     responseStoppedBeforeGenerated: 'Interrompido antes que uma resposta fosse gerada.',
-    memoryHandoffNotReady: 'A memória da conversa anterior ainda não está pronta. Tente novamente ou repita o detalhe de que você precisa.',
     responseStoppedBeforeGenerationTitle: 'Resposta parada antes da geração',
     responseInterruptedByAppRestartTitle: 'Resposta interrompida pela reinicialização do aplicativo',
     responseInterruptedBeforeGenerationTitle: 'Resposta interrompida antes da geração',

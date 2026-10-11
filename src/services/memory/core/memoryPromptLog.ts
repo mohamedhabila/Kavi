@@ -106,3 +106,7 @@ export function latestMemoryPromptBuildId(): number {
       ?.id ?? 0
   );
 }
+
+export function deleteMemoryPromptBuildsFromConversation(conversationId: string): void {
+  readyDb().runSync('DELETE FROM memory_prompt_log WHERE conversation_id = ?', conversationId);
+}

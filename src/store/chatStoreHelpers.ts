@@ -2,7 +2,7 @@ import type { AssistantMessageMetadata, Message, ToolCall } from '../types/messa
 import type { Attachment } from '../types/attachment';
 import type { Conversation } from '../types/conversation';
 import { resolveWorkspaceTargetId } from '../services/workspaces/config';
-import { selectMessagesForPersistenceWithOpenMemoryPublicationTurns } from './chatMessageMemoryPublicationGuards';
+import { selectMessagesForPersistence } from './chatMessagePersistenceSelection';
 import { useSettingsStore } from './useSettingsStore';
 
 export const MAX_MESSAGES_PER_CONVERSATION = 500;
@@ -28,7 +28,7 @@ export function capMessages(
     return messages;
   }
 
-  return selectMessagesForPersistenceWithOpenMemoryPublicationTurns(
+  return selectMessagesForPersistence(
     messages,
     MAX_MESSAGES_PER_CONVERSATION,
     protectedMessageIds,

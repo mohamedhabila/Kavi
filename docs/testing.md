@@ -20,8 +20,9 @@ E2E and live-provider tests are skipped unless explicitly opted in.
 
 **Tier 2 (`verify:strict`)** runs Tier 1, then:
 
-- `eval:memory` - 3-turn interdependent recall fixtures (>=90% pass rate) and
-  chitchat ingestion fixtures.
+- `eval:memory` - the memory contract end to end with a scripted extraction model:
+  cross-conversation recall, extraction and correction, sensitive and credential handling,
+  forgetting, multilingual recall, and no capture while memory is off.
 - `eval:agent` - bootstrap, false-finalize (including `evidence.json_field`, `file_hash`,
   `exit_code` hold fixtures), token efficiency, tool contracts discovery, catalog/describe
   discovery, session tool activation cache, delegation metrics
@@ -32,11 +33,9 @@ E2E and live-provider tests are skipped unless explicitly opted in.
 
 **Tier 3 (`verify:strict:e2e`)** runs Tier 2, then `eval:e2e`: live
 selected-provider multi-turn scenarios through the real graph orchestrator.
-Requires `.env.local` setup below. Structural E2E rubrics such as
-`ingestion_job_checkpointed`, `ingestion_job_completed`, `memory_episode_count`,
-`native_fixture_state`, and
-`working_block_token` are unit-tested in
-`e2eAgentRubricEvaluators.test.ts`; offline scenario checks live in
+Requires `.env.local` setup below. Structural E2E rubrics such as `memory_item`,
+`memory_turns_indexed` and `native_fixture_state` are unit-tested in the
+`e2eAgentRubricEvaluators.*.test.ts` suites; offline scenario checks live in
 `e2eStructuralScenarioRubrics.test.ts`. The live suite pass bar is **>=90%**
 (`E2E_SCENARIO_MIN_PASS_RATE`).
 

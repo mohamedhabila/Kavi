@@ -7,7 +7,7 @@ const {
   projectRouteEvidence,
   projectUserEvidence,
 } = require('./publicTraceExecution');
-const { projectMemoryDeltaEvidence, projectMemoryFinalEvidence } = require('./publicTraceMemory');
+const { projectMemoryFinalEvidence, projectMemoryTurnEvidence } = require('./publicTraceMemory');
 const { projectNativeTurnEvidence, projectStateFingerprints } = require('./publicTraceNative');
 const { isPublicEvaluationId } = require('./publicProjectionPolicy');
 const {
@@ -39,7 +39,7 @@ function projectTurn(value) {
     : null;
   const completion = source ? projectCompletionEvidence(source.completion) : null;
   const agentRun = source ? projectAgentRunEvidence(source.agentRun) : undefined;
-  const memoryDelta = source ? projectMemoryDeltaEvidence(source.memoryDelta) : null;
+  const memory = source ? projectMemoryTurnEvidence(source.memory) : null;
   const native = source ? projectNativeTurnEvidence(source.native) : null;
   const usage = source ? projectPublicUsageTrace(source.usage) : null;
   const toolCalls = source ? projectArray(source.toolCalls, projectToolCall) : null;
@@ -58,7 +58,7 @@ function projectTurn(value) {
     finalAssistantCandidateCount === null ||
     !completion ||
     agentRun === undefined ||
-    !memoryDelta ||
+    !memory ||
     !native ||
     !usage ||
     !toolCalls ||
@@ -77,7 +77,7 @@ function projectTurn(value) {
     finalAssistantCandidateCount,
     completion,
     agentRun,
-    memoryDelta,
+    memory,
     native,
     usage,
     toolCalls,

@@ -14,8 +14,10 @@
 //
 // Past turns are indexed per round (the user message and the reply to it), the
 // granularity LongMemEval found best for recalling earlier conversations. The prompt log
-// records which ids each request's memory section held. The extraction cursor records, per
-// conversation, the last message background extraction has read.
+// records which ids each request's memory section held. The capture cursor records, per
+// chat thread, how far turn indexing and background extraction have read, so a turn closed
+// while the app was killed is caught up on the next launch and one closed while memory was
+// off is never captured afterwards.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -105,10 +107,12 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
     CREATE INDEX IF NOT EXISTS idx_memory_prompt_log_conversation
       ON memory_prompt_log(conversation_id, id);
 
-    CREATE TABLE IF NOT EXISTS memory_extraction_cursor (
-      conversation_id TEXT PRIMARY KEY,
-      last_message_id TEXT NOT NULL,
-      failures INTEGER NOT NULL DEFAULT 0 CHECK(failures >= 0),
+    CREATE TABLE IF NOT EXISTS memory_capture_cursor (
+      thread_id TEXT PRIMARY KEY,
+      indexed_through_at INTEGER NOT NULL DEFAULT 0,
+      extracted_through_id TEXT,
+      extracted_through_at INTEGER NOT NULL DEFAULT 0,
+      extraction_failures INTEGER NOT NULL DEFAULT 0 CHECK(extraction_failures >= 0),
       updated_at INTEGER NOT NULL
     );
   `);

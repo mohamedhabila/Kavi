@@ -8,6 +8,7 @@ import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluator
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import type { E2ERubric } from '../../src/acceptance/e2eAgent/types';
 import { executeMemoryRemember } from '../../src/services/memory/core/memoryItemsTools';
+import { indexMemoryTurn } from '../../src/services/memory/core/memoryTurnsStore';
 import { buildE2ERubricResult } from '../helpers/e2eRubricResult';
 
 function remember(content: string, extra: Record<string, unknown> = {}): string {
@@ -70,5 +71,22 @@ describe('memory item rubrics', () => {
 
     expect(passes({ kind: 'memory_item_absent', contains: [] })).toBe(false);
     expect(passes({ kind: 'memory_item_absent', contains: [' padded '] })).toBe(false);
+  });
+});
+
+describe('past-turn index rubric', () => {
+  it('counts the closed turns the past-turn index holds', () => {
+    expect(passes({ kind: 'memory_turns_indexed', min: 1 })).toBe(false);
+
+    indexMemoryTurn({
+      conversationId: 'conv-memory',
+      userMessageId: 'user-1',
+      userText: 'Book the kayak',
+      replyText: 'Booked.',
+      at: 1,
+    });
+
+    expect(passes({ kind: 'memory_turns_indexed', min: 1 })).toBe(true);
+    expect(passes({ kind: 'memory_turns_indexed', min: 2 })).toBe(false);
   });
 });

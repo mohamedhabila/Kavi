@@ -1,9 +1,6 @@
-import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
-import {
-  captureCompleteMemoryEvidenceForIsolatedEvaluation,
-  type ScopedMemoryEvidenceSnapshot,
-} from '../../services/memory/evidenceSnapshot';
 import { closeMemoryDb } from '../../services/memory/database';
+import { catchUpMemoryCapture } from '../../services/memory/core/memoryCapture';
+import { cancelMemoryExtraction } from '../../services/memory/core/memoryExtractionWorker';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
@@ -11,13 +8,12 @@ import { resolveConversationWorkspaceTarget } from '../../services/conversationW
 import type { ConversationMode } from '../../types/conversation';
 import type {
   ForegroundScenarioLifecycleSnapshot,
-  ForegroundScenarioMemoryFinalState,
+  ForegroundScenarioMemoryScope,
 } from './foregroundScenarioDriverTypes';
+import { captureForegroundScenarioMemoryItems } from './foregroundScenarioMemoryItemsEvidence';
 
-type MemoryScope = ScopedMemoryEvidenceSnapshot['scope'];
-
-function durableMemoryIdentity(snapshot: ForegroundScenarioMemoryFinalState): string {
-  const { capturedAt: _capturedAt, ...durableState } = snapshot;
+function durableMemoryIdentity(): string {
+  const { capturedAt: _capturedAt, ...durableState } = captureForegroundScenarioMemoryItems();
   return JSON.stringify(durableState);
 }
 
@@ -54,23 +50,19 @@ async function discardInMemoryChatStateWithoutPersisting(): Promise<void> {
   }
 }
 
+/** Closes and reopens the app's stores; a launch then catches up on memory as startup does. */
 export async function relaunchForegroundScenarioApp(params: {
   conversationId: string;
-  memoryScope: MemoryScope;
-}): Promise<
-  Readonly<{
-    lifecycle: ForegroundScenarioLifecycleSnapshot;
-    memoryState: ScopedMemoryEvidenceSnapshot;
-  }>
-> {
+}): Promise<Readonly<{ lifecycle: ForegroundScenarioLifecycleSnapshot }>> {
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId);
   if (!conversation) throw new Error(`Conversation ${params.conversationId} is unavailable.`);
   const lastMessageId = conversation.messages[conversation.messages.length - 1]?.id ?? null;
 
-  await cancelScheduledIngestionDrain();
-  const memoryStateAtClose = captureCompleteMemoryEvidenceForIsolatedEvaluation(params.memoryScope);
+  // Killing the app drops background extraction still queued in memory.
+  cancelMemoryExtraction();
+  const memoryStateAtClose = durableMemoryIdentity();
   await flushChatStorePersistenceNow();
   await discardInMemoryChatStateWithoutPersisting();
   if (
@@ -84,10 +76,10 @@ export async function relaunchForegroundScenarioApp(params: {
   closeMemoryDb();
   await useChatStore.persist.rehydrate();
   requirePersistedConversation(params.conversationId, lastMessageId);
-  const reopenedMemory = captureCompleteMemoryEvidenceForIsolatedEvaluation(params.memoryScope);
-  if (durableMemoryIdentity(reopenedMemory) !== durableMemoryIdentity(memoryStateAtClose)) {
+  if (durableMemoryIdentity() !== memoryStateAtClose) {
     throw new Error('Durable memory state changed across app relaunch.');
   }
+  catchUpMemoryCapture(useChatStore.getState().conversations);
 
   return {
     lifecycle: {
@@ -95,7 +87,6 @@ export async function relaunchForegroundScenarioApp(params: {
       chatStore: 'rehydrated',
       memoryStore: 'reopened',
     },
-    memoryState: reopenedMemory,
   };
 }
 
@@ -105,12 +96,10 @@ export function startNewForegroundScenarioConversation(params: {
   model: string;
   systemPrompt: string;
   mode: ConversationMode;
-  memoryStateBefore: ForegroundScenarioMemoryFinalState;
 }): Readonly<{
   conversationId: string;
   lifecycle: ForegroundScenarioLifecycleSnapshot;
-  memoryScope: MemoryScope;
-  memoryState: ScopedMemoryEvidenceSnapshot;
+  memoryScope: ForegroundScenarioMemoryScope;
 }> {
   const store = useChatStore.getState();
   const previousConversation = store.conversations.find(
@@ -120,6 +109,7 @@ export function startNewForegroundScenarioConversation(params: {
     throw new Error(`Conversation ${params.currentConversationId} is unavailable.`);
   }
   const previousConversationIdentity = JSON.stringify(previousConversation);
+  const memoryStateBefore = durableMemoryIdentity();
   const previousConversationMessageCount = previousConversation.messages.length;
   const conversationId = store.createConversation(
     params.providerId,
@@ -155,20 +145,12 @@ export function startNewForegroundScenarioConversation(params: {
     }).workspaceConversationId,
     sourceThreadId: conversationId,
   };
-  const previousScopeMemoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(
-    params.memoryStateBefore.scope,
-  );
-  if (
-    durableMemoryIdentity(previousScopeMemoryState) !==
-    durableMemoryIdentity(params.memoryStateBefore)
-  ) {
+  if (durableMemoryIdentity() !== memoryStateBefore) {
     throw new Error('Durable memory state changed while creating a fresh conversation.');
   }
-  const memoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
   return {
     conversationId,
     memoryScope,
-    memoryState,
     lifecycle: {
       boundary: 'new_conversation',
       chatStore: 'fresh_conversation',

@@ -20,7 +20,6 @@ import { listActiveToolEffectRestartInputs } from '../store/agentRuns/toolCalls'
 import type { Conversation } from '../types/conversation';
 import { useSchedulerStore } from './scheduler/store';
 import { releaseStaleScheduledProjectionOwners } from './scheduler/scheduledProjectionRecovery';
-import { settleOpenMessageMemoryPublications } from './memory/messageMemoryPublicationSettlement';
 
 const REQUIRED_HYDRATION_TIMEOUT_MS = 5_000;
 
@@ -162,7 +161,6 @@ async function recoverPersistedAgentStateForSource(
       hasRepairedStartupAgentRuns = true;
     }
   }
-  await settleOpenMessageMemoryPublications();
   await flushChatStorePersistenceNow();
   maintainExternalExecutionRetention();
 }

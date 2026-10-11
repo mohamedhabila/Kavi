@@ -7,8 +7,6 @@ import { runForegroundScenario } from '../../src/acceptance/e2eAgent/foregroundS
 import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
-import { getIngestionJob, type IngestionJob } from '../../src/services/memory/ingestionQueue';
-import { recordCompletedTurnForMemory } from '../../src/services/memory/lifecycle';
 import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -16,21 +14,10 @@ import type { LlmProviderConfig } from '../../src/types/provider';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 jest.mock('../../src/engine/orchestrator', () => ({ runOrchestrator: jest.fn() }));
-jest.mock('../../src/engine/graph/foregroundRun/semanticMemoryHandoffGate', () => ({
-  enforceSemanticMemoryHandoffGate: jest.fn().mockResolvedValue('continued'),
-}));
-jest.mock('../../src/services/memory/ingestionQueue', () => ({
-  cancelScheduledIngestionDrain: jest.fn(),
-  drainIngestionQueueWithWakeup: jest.fn(),
-  getIngestionJob: jest.fn(),
-  requestScheduledIngestionDrain: jest.fn(),
-}));
-jest.mock('../../src/services/memory/lifecycle', () => ({
-  loadIngestionJobRuntimeContext: jest.fn(() => ({})),
-  recordCompletedTurnForMemory: jest.fn(),
-}));
-jest.mock('../../src/services/memory/ingestionReceiptStore', () => ({
-  listIngestionPersistenceReceipts: jest.fn(() => []),
+jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  cancelMemoryExtraction: jest.fn(),
+  scheduleMemoryExtraction: jest.fn(),
+  waitForMemoryExtractionIdle: jest.fn(async () => true),
 }));
 jest.mock('../../src/store/chatStorePersistence', () => ({
   flushChatStorePersistenceNow: jest.fn(async () => undefined),
@@ -38,42 +25,11 @@ jest.mock('../../src/store/chatStorePersistence', () => ({
 }));
 
 const mockedRunOrchestrator = jest.mocked(runOrchestrator);
-const mockedRecordCompletedTurnForMemory = jest.mocked(recordCompletedTurnForMemory);
-const mockedGetIngestionJob = jest.mocked(getIngestionJob);
 const mockedFlushChatStorePersistenceNow = jest.mocked(flushChatStorePersistenceNow);
 const completeFinalMetadata = buildAssistantMessageMetadata('final', {
   completionStatus: 'complete',
   finishReason: 'stop',
 });
-
-function completedMemoryJob(id: string): IngestionJob {
-  return {
-    id,
-    threadId: 'scenario-conversation',
-    threadTitle: 'Scenario title',
-    memoryConversationId: 'scenario-conversation',
-    taskId: null,
-    sourceRunId: null,
-    chatProviderId: 'scenario-provider',
-    chatModel: 'scenario-provider-model',
-    sourceStartMessageId: null,
-    sourceEndMessageId: `assistant-${id}`,
-    sourceAt: 1,
-    reason: 'turn_completed',
-    status: 'completed_enriched',
-    attemptCount: 1,
-    providerEnrichment: true,
-    providerOutcome: 'valid',
-    outcomeCode: null,
-    nextAttemptAt: null,
-    leaseExpiresAt: null,
-    claimToken: null,
-    structuralCompletedAt: 2,
-    createdAt: 1,
-    updatedAt: 2,
-    completedAt: 2,
-  };
-}
 
 function makeProvider(): LlmProviderConfig {
   return {
@@ -102,23 +58,6 @@ describe('foreground scenario selected mode and outer deadline', () => {
       activeModel: 'scenario-provider-model',
       defaultConversationMode: 'chitchat',
     });
-    const jobs = new Map<string, IngestionJob>();
-    let memorySequence = 0;
-    mockedRecordCompletedTurnForMemory.mockImplementation(async () => {
-      const jobId = `selected-mode-memory-${++memorySequence}`;
-      jobs.set(jobId, completedMemoryJob(jobId));
-      return {
-        processed: true,
-        enqueued: true,
-        jobId,
-        episodeId: null,
-        factIds: [],
-        activeFocusUpdated: false,
-        openThreadsUpdated: false,
-        enriched: false,
-      };
-    });
-    mockedGetIngestionJob.mockImplementation((jobId) => jobs.get(jobId) ?? null);
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onAssistantMessage('Completed.', undefined, undefined, completeFinalMetadata);
       callbacks.onAgentControlGraphStateChange(
@@ -282,28 +221,6 @@ describe('foreground scenario selected mode and outer deadline', () => {
     expect(result.finalConversation.messages).toEqual(
       expect.arrayContaining([expect.objectContaining({ content: 'What do you remember?' })]),
     );
-  });
-
-  it('enforces the outer deadline while durable memory closeout is pending', async () => {
-    jest.useFakeTimers();
-    mockedRecordCompletedTurnForMemory.mockImplementationOnce(() => new Promise(() => undefined));
-    const run = runForegroundScenario({
-      provider: makeProvider(),
-      conversationId: 'scenario-conversation',
-      conversationTitle: 'Scenario title',
-      systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
-      scenarioTimeoutMs: 25,
-      timeoutMs: 1_000,
-      memoryTimeoutMs: 1_000,
-      turns: [{ content: 'Complete, then settle memory.', route: 'production_auto' }],
-    });
-    const rejection = expect(run).rejects.toThrow(
-      'Timed-out foreground execution did not settle before cleanup.',
-    );
-    await jest.advanceTimersByTimeAsync(25);
-    await rejection;
-    jest.useRealTimers();
   });
 
   it('does not let post-turn persistence outlive the outer deadline', async () => {

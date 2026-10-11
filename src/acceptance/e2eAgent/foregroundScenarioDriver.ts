@@ -1,10 +1,9 @@
 import { executeForegroundConversationSend } from '../../engine/graph/foregroundRun/sendExecution';
 import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
-import { cancelScheduledIngestionDrain } from '../../services/memory/ingestionQueue';
 import {
-  buildScopedMemoryEvidenceDelta,
-  captureCompleteMemoryEvidenceForIsolatedEvaluation,
-} from '../../services/memory/evidenceSnapshot';
+  cancelMemoryExtraction,
+  waitForMemoryExtractionIdle,
+} from '../../services/memory/core/memoryExtractionWorker';
 import {
   flushChatStorePersistenceNow,
   requestChatStorePersistenceCheckpoint,
@@ -39,11 +38,6 @@ import {
   resolveForegroundScenarioFinalAssistant,
   resolveForegroundScenarioTurnRun,
 } from './foregroundScenarioDriverRuntime';
-import {
-  settleForegroundScenarioMemory,
-  shouldExpectForegroundMemoryCloseout,
-} from './foregroundScenarioMemorySettlement';
-import { sealForegroundScenarioMemoryEvidenceAfterProviderWait } from './foregroundScenarioMemoryEvidence';
 import { validateForegroundScenarioInput } from './foregroundScenarioInputValidation';
 import { scheduleForegroundScenarioSteer } from './foregroundScenarioSteering';
 import {
@@ -52,7 +46,7 @@ import {
   type ForegroundScenarioDriverInput,
   type ForegroundScenarioDriverResult,
   type ForegroundScenarioLifecycleSnapshot,
-  type ForegroundScenarioMemoryRecord,
+  type ForegroundScenarioMemoryScope,
   type ForegroundScenarioTurnSnapshot,
 } from './foregroundScenarioDriverTypes';
 import { E2E_DEFAULT_MEMORY_TIMEOUT_MS } from './thresholds';
@@ -65,8 +59,6 @@ export type {
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioLifecycleBoundary,
   ForegroundScenarioLifecycleSnapshot,
-  ForegroundScenarioMemorySnapshot,
-  ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
@@ -76,8 +68,6 @@ export type {
 
 const DEFAULT_TURN_TIMEOUT_MS = 120_000;
 const SCENARIO_WALL_CLOCK_TIMEOUT_ERROR = 'Foreground scenario wall-clock deadline exceeded.';
-// Provider enrichment owns a 30-second request deadline; keep settlement
-// independently bounded while allowing persistence and polling to finish.
 
 let scenarioRunTail: Promise<void> = Promise.resolve();
 
@@ -133,7 +123,6 @@ async function runScenarioIsolated(
   await awaitBeforeScenarioDeadline(ensureForegroundScenarioStoresHydrated(), scenarioDeadline);
   const chatSnapshot = useChatStore.getState();
   const settingsSnapshot = useSettingsStore.getState();
-  const memoryRecords: ForegroundScenarioMemoryRecord[] = [];
 
   try {
     useSettingsStore.setState({
@@ -156,7 +145,7 @@ async function runScenarioIsolated(
     await awaitBeforeScenarioDeadline(flushChatStorePersistenceNow(), scenarioDeadline);
 
     let currentConversationId = input.conversationId;
-    let memoryScope = {
+    let memoryScope: ForegroundScenarioMemoryScope = {
       memoryConversationId: resolveConversationWorkspaceTarget({
         conversationId: input.conversationId,
         conversations: useChatStore.getState().conversations,
@@ -174,8 +163,7 @@ async function runScenarioIsolated(
         scenarioDeadline,
       );
     }
-    let previousMemoryState = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
-    let runtime = createForegroundScenarioRuntime(input, memoryRecords);
+    let runtime = createForegroundScenarioRuntime(input);
     const turnSnapshots: ForegroundScenarioTurnSnapshot[] = [];
     for (const [turnIndex, turn] of input.turns.entries()) {
       if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
@@ -191,13 +179,9 @@ async function runScenarioIsolated(
       let lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null = null;
       if (turn.lifecycleBefore === 'app_relaunch') {
         const transition = await awaitBeforeScenarioDeadline(
-          relaunchForegroundScenarioApp({
-            conversationId: currentConversationId,
-            memoryScope,
-          }),
+          relaunchForegroundScenarioApp({ conversationId: currentConversationId }),
           scenarioDeadline,
         );
-        previousMemoryState = transition.memoryState;
         lifecycleBefore = transition.lifecycle;
       } else if (turn.lifecycleBefore === 'new_conversation') {
         const transition = startNewForegroundScenarioConversation({
@@ -206,14 +190,12 @@ async function runScenarioIsolated(
           model: input.provider.model,
           systemPrompt: input.systemPrompt,
           mode: turn.selectedMode ?? input.defaultMode,
-          memoryStateBefore: previousMemoryState,
         });
         currentConversationId = transition.conversationId;
         memoryScope = transition.memoryScope;
-        previousMemoryState = transition.memoryState;
         lifecycleBefore = transition.lifecycle;
       }
-      if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input, memoryRecords);
+      if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input);
       const retrievalCapture = await awaitBeforeScenarioDeadline(
         beginForegroundScenarioRetrievalCapture({
           sourceThreadId: currentConversationId,
@@ -247,7 +229,6 @@ async function runScenarioIsolated(
         )?.id ?? null;
       const messageStartIndex = before.messages.length;
       const usageBefore = before.usage;
-      const memoryRecordStart = memoryRecords.length;
       const userMessageId = generateId();
       runtime.resetChatError();
       runtime.setActiveTurnMaxTokens(turn.maxTokens ?? input.maxTokens);
@@ -363,33 +344,16 @@ async function runScenarioIsolated(
       } catch (error) {
         if (!scenarioDeadlineExceeded) throw error;
       }
-      let memory: Awaited<ReturnType<typeof settleForegroundScenarioMemory>> = [];
-      let memorySettlementError: string | null = null;
+      // Let background extraction finish, as the time before a user's next message would.
+      let memoryExtractionSettled = false;
       if (!scenarioDeadlineExceeded) {
-        const remainingBeforeMemory = remainingScenarioTimeMs(scenarioDeadline);
-        if (remainingBeforeMemory <= 0) {
-          scenarioDeadlineExceeded = true;
-          timedOut = true;
-        } else {
-          const configuredMemoryTimeoutMs = input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS;
-          const memoryTimeoutMs = Math.min(configuredMemoryTimeoutMs, remainingBeforeMemory);
-          try {
-            memory = await settleForegroundScenarioMemory(
-              memoryRecords.slice(memoryRecordStart),
-              memoryTimeoutMs,
-            );
-          } catch (error) {
-            if (remainingScenarioTimeMs(scenarioDeadline) <= 0) {
-              scenarioDeadlineExceeded = true;
-              timedOut = true;
-            } else {
-              memorySettlementError =
-                error instanceof Error ? error.message : 'Foreground memory settlement failed.';
-            }
-          }
-        }
+        memoryExtractionSettled = await waitForMemoryExtractionIdle(
+          Math.min(
+            input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS,
+            remainingScenarioTimeMs(scenarioDeadline),
+          ),
+        );
       }
-      const memoryStateAfter = captureCompleteMemoryEvidenceForIsolatedEvaluation(memoryScope);
       const conversation = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === currentConversationId);
@@ -412,27 +376,11 @@ async function runScenarioIsolated(
       const nativeInvocations =
         getE2ENativeMobileInvocationSnapshots().slice(nativeInvocationStart);
       const chatError = runtime.getChatError();
-      const expectedMemoryCloseouts = shouldExpectForegroundMemoryCloseout({
-        disableLongTermMemory: input.disableLongTermMemory === true,
-        finalAssistantCompleted: finalAssistant?.completionStatus === 'complete',
-        graphStatus: run?.controlGraph?.status,
-        isSideThread: conversation.isSideThread === true,
-        timedOut,
-      })
-        ? 1
-        : 0;
-      const memoryInvariantError =
-        !timedOut &&
-        !chatError &&
-        !memorySettlementError &&
-        memory.length !== expectedMemoryCloseouts
-          ? `Foreground turn recorded ${memory.length} memory closeouts; expected ${expectedMemoryCloseouts}.`
-          : null;
       const turnError = scenarioDeadlineExceeded
         ? SCENARIO_WALL_CLOCK_TIMEOUT_ERROR
         : timedOut
           ? `Foreground scenario turn timed out after ${timeoutMs}ms.`
-          : (chatError ?? memoryInvariantError);
+          : chatError;
       const completion = buildForegroundScenarioCompletionSnapshot({
         error: turnError,
         finalAssistant,
@@ -448,11 +396,7 @@ async function runScenarioIsolated(
           finalAssistant,
           finalAssistantCandidateCount: finalAssistantResolution.candidateCount,
           lifecycleBefore,
-          memory,
-          memoryEvidence: {
-            delta: buildScopedMemoryEvidenceDelta(previousMemoryState, memoryStateAfter),
-            ...(memorySettlementError ? { settlementError: memorySettlementError } : {}),
-          },
+          memoryExtractionSettled,
           messages: turnMessages,
           native: {
             stateBefore: nativeStateBefore,
@@ -477,7 +421,6 @@ async function runScenarioIsolated(
           userMessageId,
         }) as ForegroundScenarioTurnSnapshot,
       );
-      previousMemoryState = memoryStateAfter;
       if (turnError) break;
     }
 
@@ -486,31 +429,18 @@ async function runScenarioIsolated(
       .conversations.find((candidate) => candidate.id === currentConversationId);
     if (!finalConversation)
       throw new Error(`Conversation ${currentConversationId} is unavailable.`);
-    const providerEvidenceTimeoutMs = Math.min(
-      input.memoryTimeoutMs ?? E2E_DEFAULT_MEMORY_TIMEOUT_MS,
-      remainingScenarioTimeMs(scenarioDeadline),
-    );
-    const sealedMemory = await sealForegroundScenarioMemoryEvidenceAfterProviderWait({
-      memoryScope,
-      turns: turnSnapshots,
-      requirements: input.providerOutcomeEvidenceRequirements ?? [],
-      timeoutMs: providerEvidenceTimeoutMs,
-    });
     return cloneAndFreeze({
       conversationId: input.conversationId,
       finalConversation,
-      memoryFinalState: sealedMemory.memoryFinalState,
       memoryItems: captureForegroundScenarioMemoryItems(),
-      turns: sealedMemory.turns,
+      turns: turnSnapshots,
     }) as ForegroundScenarioDriverResult;
   } finally {
     useChatStore.setState(chatSnapshot, true);
     useSettingsStore.setState(settingsSnapshot, true);
     requestChatStorePersistenceCheckpoint(0);
-    const cleanup = Promise.allSettled([
-      cancelScheduledIngestionDrain(),
-      flushChatStorePersistenceNow(),
-    ]).then(() => undefined);
+    cancelMemoryExtraction();
+    const cleanup = flushChatStorePersistenceNow().catch(() => undefined);
     try {
       await awaitBeforeScenarioDeadline(cleanup, scenarioDeadline);
     } catch {

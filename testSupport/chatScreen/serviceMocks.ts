@@ -37,7 +37,7 @@ jest.mock('../../src/services/transcriptArchive/transcriptArchive', () => ({
   purgeArchivedConversationsExcept: jest.fn(() => 0),
 }));
 
-jest.mock('../../src/services/memory/turnPublication', () => ({
+jest.mock('../../src/services/memory/core/memoryCapture', () => ({
   publishConversationTurnMemory: (...args: unknown[]) => mockPublishConversationTurnMemory(...args),
 }));
 

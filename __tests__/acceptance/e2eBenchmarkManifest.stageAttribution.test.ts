@@ -35,11 +35,6 @@ describe('E2E benchmark manifest stage attribution', () => {
         expected: true,
       },
       {
-        kind: 'turn_memory_receipt',
-        turnIndex: 0,
-        providerOutcome: 'valid',
-      },
-      {
         kind: 'turn_lifecycle_boundary',
         turnIndex: 1,
         boundary: 'app_relaunch',
@@ -66,7 +61,7 @@ describe('E2E benchmark manifest stage attribution', () => {
         scope: 'all',
         expectedCount: 0,
       },
-      { kind: 'ingestion_job_checkpointed', minCount: 1 },
+      { kind: 'memory_turns_indexed', min: 1 },
     ];
     const scenario: E2EScenario = {
       ...sourceScenario,
@@ -111,11 +106,6 @@ describe('E2E benchmark manifest stage attribution', () => {
         evidenceKind: 'execution_state',
       },
       {
-        rubricKind: 'turn_memory_receipt',
-        evaluatorKind: 'trajectory',
-        evidenceKind: 'memory_receipt',
-      },
-      {
         rubricKind: 'turn_lifecycle_boundary',
         evaluatorKind: 'trajectory',
         evidenceKind: 'lifecycle_event',
@@ -141,7 +131,7 @@ describe('E2E benchmark manifest stage attribution', () => {
         evidenceKind: 'execution_state',
       },
       {
-        rubricKind: 'ingestion_job_checkpointed',
+        rubricKind: 'memory_turns_indexed',
         evaluatorKind: 'trajectory',
         evidenceKind: 'memory_store',
       },

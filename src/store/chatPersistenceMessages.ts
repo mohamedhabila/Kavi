@@ -31,10 +31,6 @@ import {
   isMemoryRetrievalEventId,
   isValidAssistantMessageMetadata,
 } from '../utils/assistantMessageMetadata';
-import {
-  isEligibleMessageMemoryPublicationSource,
-  normalizeMessageMemoryPublication,
-} from '../utils/messageMemoryPublication';
 
 function sanitizeAssistantMetadata(
   metadata: Message['assistantMetadata'],
@@ -212,12 +208,6 @@ export function sanitizeMessage(
     ? sanitizeProviderReplay(message.providerReplay)
     : undefined;
   const assistantMetadata = sanitizeAssistantMetadata(message.assistantMetadata);
-  const memoryPublication = isEligibleMessageMemoryPublicationSource({
-    ...message,
-    assistantMetadata,
-  })
-    ? normalizeMessageMemoryPublication(message.memoryPublication)
-    : undefined;
 
   return {
     id: message.id,
@@ -249,7 +239,6 @@ export function sanitizeMessage(
       : {}),
     ...(providerReplay ? { providerReplay } : {}),
     ...(assistantMetadata ? { assistantMetadata } : {}),
-    ...(memoryPublication ? { memoryPublication } : {}),
     ...(message.effectId ? { effectId: message.effectId } : {}),
     ...(isSteeringUserMessage(message) ? { steerOfRunId: message.steerOfRunId } : {}),
     ...(message.subAgentEvent

@@ -6,14 +6,9 @@
 // ---------------------------------------------------------------------------
 
 import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
-import { E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES } from './e2eTraceMemoryPolicy';
-import {
-  resolveForegroundScenarioProviderOutcomes,
-  type ForegroundScenarioDriverInput,
-} from './foregroundScenarioDriverTypes';
+import type { ForegroundScenarioDriverInput } from './foregroundScenarioDriverTypes';
 
 const FOREGROUND_PRODUCT_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
-const PROVIDER_OUTCOME_EVIDENCE_VALUES = new Set(E2E_PUBLIC_INGESTION_PROVIDER_OUTCOMES);
 
 function requireTrimmed(value: string, label: string): string {
   const trimmed = value.trim();
@@ -71,30 +66,6 @@ export function validateForegroundScenarioInput(input: ForegroundScenarioDriverI
   validateRequiredPositiveNumber(input.scenarioTimeoutMs, 'scenarioTimeoutMs');
   validatePositiveNumber(input.timeoutMs, 'timeoutMs');
   validatePositiveNumber(input.memoryTimeoutMs, 'memoryTimeoutMs');
-  if (input.providerOutcomeEvidenceRequirements !== undefined) {
-    const requirementKeys = new Set<string>();
-    for (const requirement of input.providerOutcomeEvidenceRequirements) {
-      const providerOutcomes = resolveForegroundScenarioProviderOutcomes(requirement);
-      const hasSingleOutcome = requirement.providerOutcome !== undefined;
-      const hasOutcomeSet = requirement.providerOutcomes !== undefined;
-      if (
-        !Number.isSafeInteger(requirement.turnIndex) ||
-        requirement.turnIndex < 0 ||
-        requirement.turnIndex >= input.turns.length ||
-        hasSingleOutcome === hasOutcomeSet ||
-        providerOutcomes.length === 0 ||
-        new Set(providerOutcomes).size !== providerOutcomes.length ||
-        providerOutcomes.some((outcome) => !PROVIDER_OUTCOME_EVIDENCE_VALUES.has(outcome))
-      ) {
-        throw new Error('providerOutcomeEvidenceRequirements contains an invalid requirement.');
-      }
-      const key = `${requirement.turnIndex}:${[...providerOutcomes].sort().join('|')}`;
-      if (requirementKeys.has(key)) {
-        throw new Error('providerOutcomeEvidenceRequirements must not contain duplicates.');
-      }
-      requirementKeys.add(key);
-    }
-  }
   validateAllowedToolNames(input.allowedToolNames, 'allowedToolNames');
   if (input.disableTools && input.allowedToolNames !== undefined) {
     throw new Error('disableTools and allowedToolNames cannot be configured together.');

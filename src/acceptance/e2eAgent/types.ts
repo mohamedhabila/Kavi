@@ -11,16 +11,12 @@ import type {
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
-import type { IngestionProviderOutcome } from '../../services/memory/ingestionQueue';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioLifecycleBoundary,
   ForegroundScenarioLifecycleSnapshot,
-  ForegroundScenarioMemoryFinalState,
-  ForegroundScenarioMemorySnapshot,
-  ForegroundScenarioMemoryTurnEvidence,
   ForegroundScenarioNativeEvidenceSnapshot,
   ForegroundScenarioRouteDirective,
   ForegroundScenarioSteerDirective,
@@ -136,8 +132,7 @@ export type E2EScenarioTurnTrace = {
   finalAssistantCandidateCount: number;
   completion: ForegroundScenarioCompletionSnapshot;
   agentRun: E2EAgentRunTrace | null;
-  memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
-  memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
+  memoryExtractionSettled: boolean;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: ForegroundScenarioRetrievalEvidence;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
@@ -155,7 +150,6 @@ export type E2EScenarioResult = {
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;
-  memoryFinalState: ForegroundScenarioMemoryFinalState;
   memoryItems: ForegroundScenarioMemoryItemsState;
   /** Per-orchestrator-invocation traces for turn-scoped rubrics. */
   turnTraces: ReadonlyArray<E2EScenarioTurnTrace>;
@@ -276,11 +270,6 @@ export type E2ERubric =
       expected: boolean | null;
     }
   | {
-      kind: 'turn_memory_receipt';
-      turnIndex: number;
-      providerOutcome?: IngestionProviderOutcome;
-    }
-  | {
       kind: 'turn_lifecycle_boundary';
       turnIndex: number;
       boundary: ForegroundScenarioLifecycleBoundary;
@@ -311,9 +300,8 @@ export type E2ERubric =
   | ({ kind: 'turn_memory_selection'; turnIndex: number } & E2EMemorySelectionExpectation)
   /** A delegated worker's result, as a sessions tool returned it, carries this exact token. */
   | { kind: 'worker_result_token'; token: string }
-  | { kind: 'ingestion_job_checkpointed'; minCount?: number }
-  | { kind: 'ingestion_job_completed'; minCount?: number }
-  | { kind: 'memory_episode_count'; min: number }
+  /** At least `min` closed turns were captured in the past-turn index. */
+  | { kind: 'memory_turns_indexed'; min: number }
   | {
       kind: 'native_fixture_state';
       path: string;
@@ -324,11 +312,6 @@ export type E2ERubric =
       path: string;
       expectedHash: string;
       algorithm?: 'sha256';
-    }
-  | {
-      kind: 'working_block_token';
-      label: 'active_focus' | 'open_threads';
-      token: string;
     }
   | {
       kind: 'graph_audit_observed';

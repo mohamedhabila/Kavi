@@ -16,7 +16,6 @@ import {
 } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { captureSemanticMemoryHandoff } from '../../src/services/memory/semanticMemoryHandoff';
 import { listEpisodes } from '../../src/services/memory/episodes/queries';
 import type { Message } from '../../src/types/message';
 
@@ -26,6 +25,8 @@ type BridgeSession = {
   rootConversationId: string;
   messages: Message[];
   turnCount: number;
+  /** Past turns indexed after the latest observation; a question turn must not add any. */
+  indexedTurnCount: number;
 };
 
 const describeLivePilot = process.env.RUN_AMEMGYM_PILOT === '1' ? describe : describe.skip;
@@ -254,6 +255,7 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             rootConversationId: `amemgym-${sessionId}`,
             messages: [],
             turnCount: 0,
+            indexedTurnCount: 0,
           });
           sendJson(response, 200, {
             ok: true,
@@ -311,27 +313,12 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
                 route: 'forced_chitchat',
               },
             ],
-            providerOutcomeEvidenceRequirements: [
-              { turnIndex: 0, providerOutcomes: ['valid', 'empty_valid'] },
-            ],
           });
           const turn = requireCompletedTurn(result);
-          const memory = turn.memory[0];
-          if (
-            !memory ||
-            memory.publication.disposition !== 'enqueued' ||
-            (memory.job?.providerOutcome !== 'valid' &&
-              memory.job?.providerOutcome !== 'empty_valid')
-          ) {
-            throw new Error(
-              `foreground_memory_not_enriched:${memory?.job?.providerOutcome ?? 'missing'}`,
-            );
-          }
+          if (!turn.memoryExtractionSettled) throw new Error('foreground_memory_not_extracted');
           session.messages = cloneMessages(result.finalConversation.messages);
           session.turnCount += 1;
-          const providerFinal = memory.receipts.find(
-            (receipt) => receipt.phase === 'provider_final',
-          );
+          session.indexedTurnCount = result.memoryItems.indexedTurnCount;
           sendJson(response, 200, {
             ok: true,
             response: turn.finalAssistant!.text,
@@ -339,11 +326,10 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             diagnostics: {
               retrieval: retrievalDiagnostics(turn),
               memory: {
-                job_status: memory.job?.status ?? null,
-                provider_outcome: memory.job?.providerOutcome ?? null,
-                episode_persisted: providerFinal?.episodeId != null,
-                deterministic_fact_count: providerFinal?.deterministicFactIds.length ?? 0,
-                provider_fact_count: providerFinal?.providerFactIds.length ?? 0,
+                current_item_count: result.memoryItems.items.filter(
+                  (item) => item.supersededBy === null,
+                ).length,
+                indexed_turn_count: result.memoryItems.indexedTurnCount,
               },
             },
           });
@@ -374,15 +360,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
                 (conversation) => conversation.id === conversationId,
               );
               if (!target) throw new Error('bridge_side_thread_unavailable');
-              const semanticMemoryHandoff = captureSemanticMemoryHandoff({
-                ...target,
-                id: session.rootConversationId,
-                messages: cloneMessages(session.messages),
-                parentConversationId: undefined,
-                isSideThread: undefined,
-                semanticMemoryHandoff: undefined,
-              });
-              if (!semanticMemoryHandoff) throw new Error('bridge_memory_handoff_unavailable');
               useChatStore.setState({
                 conversations: current.conversations.map((conversation) =>
                   conversation.id === conversationId
@@ -390,7 +367,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
                         ...conversation,
                         isSideThread: true,
                         parentConversationId: session.rootConversationId,
-                        semanticMemoryHandoff,
                       }
                     : conversation,
                 ),
@@ -399,13 +375,7 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             },
           });
           const turn = requireCompletedTurn(result);
-          const finalMessage = result.finalConversation.messages.find(
-            (message) => message.id === turn.finalAssistant!.messageId,
-          );
-          if (
-            turn.memory.length !== 0 ||
-            finalMessage?.memoryPublication?.disposition !== 'ephemeral_thread'
-          ) {
+          if (result.memoryItems.indexedTurnCount !== session.indexedTurnCount) {
             throw new Error('amemgym_question_turn_wrote_memory');
           }
           sendJson(response, 200, {

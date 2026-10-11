@@ -51,27 +51,21 @@ function buildPrivateResult(): E2EScenarioResult {
     fixtureId: SCENARIO.id,
     conversationId: SCENARIO.conversationId,
     estimatedCost: { status: 'available', usd: 0.125 },
-    memoryFinalState: {
-      capturedAt: 10,
-      scope: {
-        memoryConversationId: SCENARIO.conversationId,
-        sourceThreadId: SCENARIO.conversationId,
-      },
-      facts: [],
-      episodes: [],
-      workingBlocks: [
+    memoryItems: {
+      capturedAt: 1,
+      items: [
         {
-          id: 'active_focus:private',
-          label: 'active_focus',
-          scopeKey: 'private',
-          conversationId: SCENARIO.conversationId,
-          threadId: SCENARIO.conversationId,
-          taskId: null,
-          content: 'PRIVATE-MEMORY-SENTINEL',
+          id: 'private-memory-item',
+          text: 'PRIVATE-MEMORY-SENTINEL',
+          scope: 'global',
+          pinned: false,
+          sensitive: false,
+          supersededBy: null,
+          createdAt: 10,
           updatedAt: 10,
         },
       ],
-      ingestionJobs: [],
+      indexedTurnCount: 1,
     },
     turnTraces: [
       {
@@ -108,21 +102,7 @@ function buildPrivateResult(): E2EScenarioResult {
           graphTerminalReason: null,
         },
         agentRun: null,
-        memory: [],
-        memoryEvidence: {
-          delta: {
-            capturedAt: 10,
-            facts: { createdIds: [], updatedIds: [], removedIds: [] },
-            episodes: { createdIds: [], updatedIds: [], removedIds: [] },
-            workingBlocks: { createdIds: [], updatedIds: [], removedIds: [] },
-            ingestionJobs: { createdIds: [], updatedIds: [], removedIds: [] },
-            invalidatedFactIds: [],
-            deletedFactIds: [],
-            deletedEpisodeIds: [],
-            clearedWorkingBlockIds: [],
-            completedIngestionJobIds: [],
-          },
-        },
+        memoryExtractionSettled: true,
         native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
         retrieval: {
           sourceThreadIdHash: retrievalEvent.scope.sourceThreadIdHash,
@@ -171,7 +151,7 @@ describe('private E2E scenario evidence', () => {
     });
     const serialized = JSON.stringify(evidence);
 
-    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v7');
+    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v8');
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
     expect(evidence.provenance).toEqual(PRIVATE_PROVENANCE);
     expect(evidence.scenario.requestedTurns).toEqual([

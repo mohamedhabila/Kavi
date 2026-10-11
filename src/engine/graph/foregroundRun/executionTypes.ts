@@ -28,7 +28,7 @@ import type {
   ModelProjectionReleaseResult,
   OwnedModelProjectionMutationResult,
 } from '../../../store/modelProjectionOwnership';
-import type { RecordConversationTurnMemory } from '../../../services/memory/turnPublication';
+import type { RecordConversationTurnMemory } from '../../../services/memory/core/memoryCapture';
 
 export type EnsureCanonicalConversationOptions = {
   providerId?: string;
@@ -65,7 +65,6 @@ export type ForegroundConversationRunStoreActions = Pick<
   | 'createConversation'
   | 'setAgentRunPhase'
   | 'startAgentRun'
-  | 'transitionMessageMemoryPublication'
   | 'updateAgentRunAsyncWork'
   | 'updateAgentRunControlGraph'
   | 'updateAgentRunSummary'

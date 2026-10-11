@@ -59,13 +59,7 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
     userTurns: [{ content: 'plan-weekend-trip-42' }, { content: 'confirm-weekend-plan-42' }],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      { kind: 'ingestion_job_completed', minCount: 1 },
-      { kind: 'memory_episode_count', min: 1 },
-      {
-        kind: 'working_block_token',
-        label: 'active_focus',
-        token: 'weekend-planning-thread',
-      },
+      { kind: 'memory_turns_indexed', min: 1 },
       { kind: 'graph_terminal_success' },
       {
         kind: 'token_budget',

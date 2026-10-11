@@ -429,7 +429,7 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
       coverageStatus: 'external_required',
       scenarioIds: [],
       environmentKinds: ['provider_matrix'],
-      requiredEvidence: ['memory_store', 'memory_receipt', 'memory_retrieval', 'token_accounting'],
+      requiredEvidence: ['memory_store', 'memory_retrieval', 'token_accounting'],
     },
     {
       id: 'state-bench-full-runner',

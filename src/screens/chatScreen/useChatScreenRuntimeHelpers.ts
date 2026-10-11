@@ -2,7 +2,7 @@ import { useCallback, type MutableRefObject } from 'react';
 import {
   publishConversationTurnMemory,
   type RecordConversationTurnMemory,
-} from '../../services/memory/turnPublication';
+} from '../../services/memory/core/memoryCapture';
 import { createAgentRunIdentityKey } from '../../services/agents/agentRunIdentity';
 import { useChatStore } from '../../store/useChatStore';
 import type { ConversationLogEntry } from '../../types/conversation';

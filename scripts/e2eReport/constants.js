@@ -1,3 +1,7 @@
+const {
+  E2E_PUBLIC_RUBRIC_KINDS,
+} = require('../../src/acceptance/e2eAgent/e2eTraceExecutionPolicy.ts');
+
 const ASSESSMENT_MIN_DIMENSION_PASS_RATE = 0.85;
 const READINESS_MIN_PASS_RATE = 0.95;
 const READINESS_MIN_AXIS_PASS_RATE = 0.95;
@@ -31,34 +35,7 @@ const EMPTY_TOKEN_BUCKETS = {
   userTurnTokens: 0,
   toolResultTokens: 0,
 };
-const RUBRIC_KINDS = new Set([
-  'workspace_file',
-  'graph_status',
-  'graph_terminal_success',
-  'completion_gate_hold',
-  'memory_fact',
-  'token_budget',
-  'cache_read_tokens',
-  'min_user_turns',
-  'turn_route',
-  'turn_completion',
-  'turn_memory_receipt',
-  'turn_lifecycle_boundary',
-  'turn_final_response_token',
-  'turn_clarification',
-  'turn_native_invocation_count',
-  'turn_tool_call_count',
-  'turn_memory_answer',
-  'turn_memory_selection',
-  'worker_result_token',
-  'ingestion_job_checkpointed',
-  'ingestion_job_completed',
-  'memory_episode_count',
-  'json_field',
-  'file_hash',
-  'working_block_token',
-  'graph_audit_observed',
-]);
+const RUBRIC_KINDS = new Set(E2E_PUBLIC_RUBRIC_KINDS);
 const FAILURE_CATEGORIES = [
   'discovery_miss',
   'wrong_tool',

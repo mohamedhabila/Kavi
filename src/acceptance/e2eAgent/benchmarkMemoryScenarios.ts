@@ -133,12 +133,7 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
       turnIndex: 2,
       requiredItems: [{ contains: ['longmem-entity', 'LONGMEM-E2E-42'], scope: 'global' }],
     },
-    { kind: 'ingestion_job_completed', minCount: 1 },
-    {
-      kind: 'working_block_token',
-      label: 'active_focus',
-      token: 'longmem-delayed-thread',
-    },
+    { kind: 'memory_turns_indexed', min: 1 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -185,7 +180,7 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
         { contains: ['longmem-dual', 'LONGMEM-DUAL-B'], scope: 'global' },
       ],
     },
-    { kind: 'memory_episode_count', min: 1 },
+    { kind: 'memory_turns_indexed', min: 1 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

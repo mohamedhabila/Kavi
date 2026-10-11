@@ -114,7 +114,7 @@ export const BENCH_BFCL_MULTI_TURN_STATE_CARRY: E2EScenario = {
       path: 'artifacts/state-carry.txt',
       contains: 'BFCL-STATE-E2E-42',
     },
-    { kind: 'ingestion_job_completed', minCount: 1 },
+    { kind: 'memory_turns_indexed', min: 1 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

@@ -3,11 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { createHash } from 'crypto';
-import { resolveGraphWorkingBlockScope } from '../../engine/graph/graphTaskScope';
 import { readJsonFieldAtPath, structuralValuesMatch } from './jsonFieldPath';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';
-import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
 import { evaluateE2EMemoryItemRubric } from './e2eMemoryItemRubricEvaluator';
@@ -387,7 +385,6 @@ export function evaluateE2ERubric(
     }
     case 'turn_route':
     case 'turn_completion':
-    case 'turn_memory_receipt':
     case 'turn_lifecycle_boundary':
     case 'turn_final_response_token':
     case 'turn_clarification':
@@ -413,62 +410,13 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
-    case 'ingestion_job_checkpointed': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const count = memory.ingestionJobs.filter(
-        (job) => job.threadId === memory.scope.sourceThreadId && job.structuralCompletedAt !== null,
-      ).length;
-      const minimum = rubric.minCount ?? 1;
-      if (count < minimum) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `structurally checkpointed ingestion jobs ${count} (expected >= ${minimum})`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'ingestion_job_completed': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const count = memory.ingestionJobs.filter(
-        (job) =>
-          job.threadId === memory.scope.sourceThreadId &&
-          ['completed_structural', 'completed_enriched'].includes(job.status),
-      ).length;
-      const minimum = rubric.minCount ?? 1;
-      if (count < minimum) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `completed ingestion jobs ${count} (expected >= ${minimum})`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'memory_episode_count': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const count = memory.episodes.filter(
-        (episode) =>
-          episode.conversationId === memory.scope.memoryConversationId &&
-          episode.threadId === memory.scope.sourceThreadId &&
-          episode.deletedAt === null,
-      ).length;
+    case 'memory_turns_indexed': {
+      const count = result.memoryItems.indexedTurnCount;
       if (count < rubric.min) {
         return {
           fixtureId,
           passed: false,
-          detail: `episode count ${count} (expected >= ${rubric.min})`,
+          detail: `indexed past turns ${count} (expected >= ${rubric.min})`,
         };
       }
       return { fixtureId, passed: true };
@@ -482,30 +430,6 @@ export function evaluateE2ERubric(
           fixtureId,
           passed: false,
           detail: `native fixture state ${rubric.path}=${String(actual ?? 'missing')} (expected ${rubric.expectedValue})`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'working_block_token': {
-      const memory = result.memoryFinalState;
-      if (!memory) {
-        return { fixtureId, passed: false, detail: 'memory evidence unavailable' };
-      }
-      const scope = resolveGraphWorkingBlockScope({
-        conversationId: memory.scope.memoryConversationId,
-        graphState: getLatestGraphSnapshot(result),
-      });
-      const scopeKey = buildWorkingBlockScopeKey(scope);
-      const content =
-        memory.workingBlocks.find(
-          (block) => block.label === rubric.label && block.scopeKey === scopeKey,
-        )?.content ?? '';
-      if (!content.includes(rubric.token)) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `${rubric.label} missing token ${rubric.token}`,
         };
       }
       return { fixtureId, passed: true };

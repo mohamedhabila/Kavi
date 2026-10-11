@@ -65,7 +65,6 @@ describe('organic mobile-assistant continuity scenario', () => {
             field: 'agent_run',
             expected: mode === 'agentic' ? true : null,
           },
-          { kind: 'turn_memory_receipt', turnIndex },
         ]),
       );
     });
@@ -77,7 +76,6 @@ describe('organic mobile-assistant continuity scenario', () => {
         { kind: 'turn_completion', turnIndex: 6, field: 'agent_run', expected: false },
       ]),
     );
-    expect(scenario.rubrics).not.toContainEqual({ kind: 'turn_memory_receipt', turnIndex: 6 });
   });
 
   it('scores corrected memory, one safe calendar mutation, and exact partial-work recovery', () => {
@@ -163,8 +161,7 @@ describe('organic mobile-assistant continuity scenario', () => {
 
   it('uses end-state and stage evidence without prescribing a tool trajectory', () => {
     expect(scenario.rubrics).toContainEqual({ kind: 'min_user_turns', min: 9 });
-    expect(scenario.rubrics).toContainEqual({ kind: 'ingestion_job_checkpointed', minCount: 8 });
-    expect(scenario.rubrics).toContainEqual({ kind: 'memory_episode_count', min: 8 });
+    expect(scenario.rubrics).toContainEqual({ kind: 'memory_turns_indexed', min: 8 });
     expect(scenario.rubrics).toContainEqual({ kind: 'graph_terminal_success' });
     expect(scenario.rubrics).toContainEqual({
       kind: 'token_budget',

@@ -8,7 +8,7 @@ const mockAddMessage = jest.fn();
 const mockAppendAgentRunCheckpoint = jest.fn();
 const mockUpdateAgentRunSummary = jest.fn();
 const mockAddConversationLog = jest.fn();
-const mockTransitionMessageMemoryPublication = jest.fn();
+const mockPublishConversationTurnMemory = jest.fn();
 
 let mockChatStoreState: any;
 
@@ -48,6 +48,9 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: (...args: any[]) => mockGetProviderApiKey(...args),
 }));
 
+jest.mock('../../src/services/memory/core/memoryCapture', () => ({
+  publishConversationTurnMemory: (...args: unknown[]) => mockPublishConversationTurnMemory(...args),
+}));
 jest.mock('../../src/services/agents/subAgent', () => ({
   listActiveSubAgents: jest.fn(() => []),
 }));
@@ -111,23 +114,6 @@ beforeEach(() => {
         messages: [...conversation.messages, { ...message, timestamp: 5 }],
       }));
     }),
-    transitionMessageMemoryPublication: mockTransitionMessageMemoryPublication.mockImplementation(
-      (conversationId: string, messageId: string, disposition: any) => {
-        updateConversation(conversationId, (conversation) => ({
-          ...conversation,
-          messages: conversation.messages.map((message: any) =>
-            message.id === messageId
-              ? { ...message, memoryPublication: { version: 1, disposition } }
-              : message,
-          ),
-        }));
-        return {
-          status: 'applied',
-          changed: true,
-          publication: { version: 1, disposition },
-        };
-      },
-    ),
     appendAgentRunCheckpoint: mockAppendAgentRunCheckpoint,
     updateAgentRunSummary: mockUpdateAgentRunSummary,
     addConversationLog: mockAddConversationLog,
@@ -441,7 +427,6 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
               completionStatus: 'complete',
               finishReason: 'fallback_from_evidence',
             },
-            memoryPublication: { version: 1, disposition: 'enqueued' },
           },
         ],
         agentRuns: [
@@ -469,7 +454,7 @@ describe('repairTerminalAgentRunsMissingFinalResponses', () => {
 
     expect(repairedRunIds).toEqual([]);
     expect(mockAddMessage).not.toHaveBeenCalled();
-    expect(mockTransitionMessageMemoryPublication).not.toHaveBeenCalled();
+    expect(mockPublishConversationTurnMemory).not.toHaveBeenCalled();
     expect(mockChatStoreState.conversations[0].messages.at(-1)?.id).toBe('final-newer');
   });
 

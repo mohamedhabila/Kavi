@@ -40,47 +40,7 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
       graphTerminalReason: null,
     },
     agentRun: null,
-    memory: [
-      {
-        publication: {
-          disposition: 'enqueued',
-          jobId: 'job-1',
-        },
-        job: null,
-        receipts: [
-          {
-            phase: 'provider_final',
-            jobId: 'job-1',
-            attemptNumber: 1,
-            episodeId: 'episode-1',
-            deterministicFactIds: [],
-            providerFactIds: ['fact-1'],
-            invalidatedFactIds: [],
-            bridgedEvidenceFactIds: [],
-            agentRunMemoryFactIds: [],
-            activeFocusUpdated: true,
-            openThreadsUpdated: false,
-            providerOutcome: 'valid',
-            providerOutcomeCode: null,
-            persistedAt: 12,
-          },
-        ],
-      },
-    ],
-    memoryEvidence: {
-      delta: {
-        capturedAt: 12,
-        facts: { createdIds: [], updatedIds: [], removedIds: [] },
-        episodes: { createdIds: [], updatedIds: [], removedIds: [] },
-        workingBlocks: { createdIds: [], updatedIds: [], removedIds: [] },
-        ingestionJobs: { createdIds: [], updatedIds: [], removedIds: [] },
-        invalidatedFactIds: [],
-        deletedFactIds: [],
-        deletedEpisodeIds: [],
-        clearedWorkingBlockIds: [],
-        completedIngestionJobIds: [],
-      },
-    },
+    memoryExtractionSettled: true,
     native: { stateBefore: {}, stateAfter: {}, invocations: [] } as TurnTrace['native'],
     toolCalls: [],
     toolResults: [],
@@ -106,17 +66,7 @@ function buildResult(turn: TurnTrace = buildTurn()): E2EScenarioResult {
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],
-    memoryFinalState: {
-      capturedAt: 12,
-      scope: {
-        memoryConversationId: 'conversation-1',
-        sourceThreadId: 'conversation-1',
-      },
-      facts: [],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
+    memoryItems: { capturedAt: 1, items: [], indexedTurnCount: 0 },
     turnTraces: [turn],
     usage: {
       inputTokens: 0,
@@ -480,98 +430,6 @@ describe('turn stage-attribution rubrics', () => {
       passed: false,
       detail: 'turn completion field execution has an invalid expected value',
     });
-  });
-
-  it('requires a durable turn receipt and optionally an exact provider outcome', () => {
-    expect(
-      evaluateE2ERubric(buildResult(), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-      }),
-    ).toMatchObject({ passed: true });
-
-    const structuralOnlyTurn = buildTurn({
-      memory: buildTurn().memory.map((snapshot) => ({
-        ...snapshot,
-        receipts: [
-          {
-            phase: 'structural_checkpoint' as const,
-            jobId: 'job-1',
-            attemptNumber: 1,
-            source: {
-              memoryConversationId: 'conversation-1',
-              sourceThreadId: 'conversation-1',
-              personaId: 'default',
-              taskId: null,
-              sourceRunId: null,
-              sourceStartMessageId: 'user-1',
-              sourceEndMessageId: 'assistant-1',
-              sourceSnapshotSha256: 'a'.repeat(64),
-              sourceAt: 10,
-            },
-            episodeId: 'episode-1',
-            deterministicFactIds: ['fact-structural'],
-            invalidatedFactIds: [],
-            bridgedEvidenceFactIds: [],
-            agentRunMemoryFactIds: [],
-            activeFocusUpdated: false,
-            openThreadsUpdated: false,
-            persistedAt: 12,
-          },
-        ],
-      })),
-    });
-    expect(
-      evaluateE2ERubric(buildResult(structuralOnlyTurn), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-      }),
-    ).toMatchObject({ passed: true });
-    expect(
-      evaluateE2ERubric(buildResult(structuralOnlyTurn), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-        providerOutcome: 'valid',
-      }),
-    ).toMatchObject({ passed: false });
-    expect(
-      evaluateE2ERubric(buildResult(), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-        providerOutcome: 'valid',
-      }),
-    ).toMatchObject({ passed: true });
-
-    expect(
-      evaluateE2ERubric(buildResult(), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-        providerOutcome: 'provider_error',
-      }),
-    ).toMatchObject({ passed: false });
-
-    const receiptlessTurn = buildTurn({
-      memory: buildTurn().memory.map((snapshot) => ({ ...snapshot, receipts: [] })),
-    });
-    expect(
-      evaluateE2ERubric(buildResult(receiptlessTurn), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-      }),
-    ).toMatchObject({ passed: false });
-
-    const unrelatedReceiptTurn = buildTurn({
-      memory: buildTurn().memory.map((snapshot) => ({
-        ...snapshot,
-        receipts: snapshot.receipts.map((receipt) => ({ ...receipt, jobId: 'other-job' })),
-      })),
-    });
-    expect(
-      evaluateE2ERubric(buildResult(unrelatedReceiptTurn), {
-        kind: 'turn_memory_receipt',
-        turnIndex: 1,
-      }),
-    ).toMatchObject({ passed: false });
   });
 
   it('requires an observed, fully reopened app-relaunch boundary on the exact turn', () => {

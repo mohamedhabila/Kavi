@@ -24,7 +24,6 @@ type E2ETurnStageRubric = Extract<
     kind:
       | 'turn_route'
       | 'turn_completion'
-      | 'turn_memory_receipt'
       | 'turn_lifecycle_boundary'
       | 'turn_final_response_token'
       | 'turn_clarification'
@@ -123,36 +122,6 @@ export function evaluateE2ETurnStageRubric(
           fixtureId,
           passed: false,
           detail: `turn ${rubric.turnIndex} completion ${rubric.field}=${String(actual)} (expected ${String(rubric.expected)})`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'turn_memory_receipt': {
-      const receipts = turn.memory.flatMap((snapshot) =>
-        snapshot.publication.jobId
-          ? snapshot.receipts.filter((receipt) => receipt.jobId === snapshot.publication.jobId)
-          : [],
-      );
-      if (receipts.length === 0) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `turn ${rubric.turnIndex} durable memory receipt missing`,
-        };
-      }
-      if (
-        rubric.providerOutcome !== undefined &&
-        !receipts.some(
-          (receipt) =>
-            receipt.phase === 'provider_final' &&
-            receipt.providerOutcome === rubric.providerOutcome,
-        )
-      ) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `turn ${rubric.turnIndex} durable memory receipt outcome ${rubric.providerOutcome} not observed`,
         };
       }
       return { fixtureId, passed: true };

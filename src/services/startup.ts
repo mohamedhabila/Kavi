@@ -37,7 +37,7 @@ import { mcpManager } from './mcp/manager';
 import { useApprovalStore } from './remote/approvalStore';
 import { emitAppEvent } from './events/bus';
 import { unrefTimerIfSupported } from '../utils/timers';
-import { runMemoryMigrationTick, runMemoryBackgroundFlush } from './memory/lifecycle';
+import { catchUpMemoryCapture } from './memory/core/memoryCapture';
 import { hydrateTokenCalibrationFromStorage } from './usage/tracker';
 import { initializeMemoryPolicyObservation } from './memory/policy';
 import { removeRetiredMemoryArtifacts } from './memory/retiredMemoryCleanup';
@@ -85,12 +85,10 @@ async function waitForMemoryStoresHydration(): Promise<void> {
   ]);
 }
 
-async function runHydratedMemoryMaintenance(includeMigration: boolean): Promise<void> {
+/** Captures turns that closed while the app was killed, once both stores are loaded. */
+async function catchUpHydratedMemory(): Promise<void> {
   await waitForMemoryStoresHydration();
-  await runMemoryBackgroundFlush();
-  if (includeMigration) {
-    await runMemoryMigrationTick();
-  }
+  catchUpMemoryCapture(useChatStore.getState().conversations);
 }
 
 async function reconnectPersistedMcpServers(): Promise<void> {
@@ -247,9 +245,7 @@ function initializeDeferredStartupServices(): void {
       console.warn('[startup] startup hooks failed:', e),
     );
     void runBootOnLaunchIfPresent();
-    void runHydratedMemoryMaintenance(true).catch((e) =>
-      console.warn('[startup] hydrated memory maintenance failed:', e),
-    );
+    void catchUpHydratedMemory().catch((e) => console.warn('[startup] memory catch-up failed:', e));
     startActiveProviderModelCatalogSync();
   });
 }
@@ -331,9 +327,8 @@ export function initializeServices(): void {
 }
 
 /**
- * Lifecycle hook called when the app moves from background → foreground.
- * Currently used to throttle-tick the memory migration seed runner so the
- * v6→v7 archived-thread backlog drains across sessions.
+ * Lifecycle hook called when the app moves from background → foreground: scheduler
+ * recovery, and memory catch-up for turns closed while the app was suspended.
  */
 export function handleAppForeground(): void {
   void (async () => {
@@ -346,20 +341,14 @@ export function handleAppForeground(): void {
       console.warn('[startup] Foreground wake notification warnings:', wakeResult.warnings);
     }
   })().catch((error) => console.warn('[startup] foreground scheduler recovery failed:', error));
-  void runHydratedMemoryMaintenance(true).catch((e) =>
-    console.warn('[startup] foreground hydrated memory maintenance failed:', e),
+  void catchUpHydratedMemory().catch((e) =>
+    console.warn('[startup] foreground memory catch-up failed:', e),
   );
 }
 
-/**
- * Lifecycle hook called when the app moves to background. Flushes dirty
- * consolidator threads via the configured `consolidationProvider`.
- */
+/** Lifecycle hook called when the app moves to background. */
 export function handleAppBackground(): void {
   stopScheduler();
   abortAllScheduledJobExecutions();
   abortAllHookExecutions();
-  void runHydratedMemoryMaintenance(false).catch((e) =>
-    console.warn('[startup] background hydrated memory flush failed:', e),
-  );
 }

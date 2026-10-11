@@ -80,7 +80,6 @@ describe('E2E longitudinal product scenarios', () => {
               field: 'agent_run',
               expected: mode === 'agentic' ? true : null,
             },
-            { kind: 'turn_memory_receipt', turnIndex },
           ]),
         );
       });
@@ -129,8 +128,7 @@ describe('E2E longitudinal product scenarios', () => {
           path: 'artifacts/project-status.txt',
           contains: 'OUTCOME-CONTINUITY-E2E-42',
         },
-        { kind: 'ingestion_job_checkpointed', minCount: 2 },
-        { kind: 'memory_episode_count', min: 2 },
+        { kind: 'memory_turns_indexed', min: 2 },
         {
           kind: 'turn_final_response_token',
           turnIndex: 1,

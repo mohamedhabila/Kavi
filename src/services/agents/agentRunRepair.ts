@@ -27,7 +27,7 @@ import {
   isHistoricalRunMissingExactRequestAnchor,
 } from './lifecycle/agentRunStateMachine';
 import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
-import { canWriteLongTermMemory } from '../memory/policy';
+import { publishConversationTurnMemory } from '../memory/core/memoryCapture';
 
 const FINAL_RESPONSE_CHECKPOINT_TITLE = 'Final response delivered';
 const MAX_LOG_DETAIL_CHARS = 320;
@@ -249,24 +249,6 @@ function reconcilePersistedCompletedRunGraph(params: {
   return updatedRun?.status === 'completed' && updatedRun.controlGraph?.status === 'finalized';
 }
 
-function initializeRepairedFinalMemoryPublication(params: {
-  conversation: Conversation;
-  finalMessageId: string;
-}): void {
-  const disposition = !canWriteLongTermMemory()
-    ? 'opt_out'
-    : params.conversation.isSideThread
-      ? 'ephemeral_thread'
-      : null;
-  const transition = useChatStore
-    .getState()
-    .transitionMessageMemoryPublication(params.conversation.id, params.finalMessageId, disposition);
-  if (transition.status !== 'applied' || transition.publication.disposition !== disposition) {
-    const reason = transition.status === 'rejected' ? transition.reason : 'disposition_mismatch';
-    throw new Error(`agent_run_repair_memory_publication_${reason}`);
-  }
-}
-
 export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
   activeSubAgents?: ReadonlyArray<SubAgentSnapshot>;
   synthesisSweepBudgetMs?: number;
@@ -389,14 +371,8 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
         });
       }
 
-      initializeRepairedFinalMemoryPublication({
-        conversation: latestConversation,
-        finalMessageId,
-      });
-
-      // The recovered final and its publication intent form one durability
-      // boundary. Startup recovery settles the open receipt after hydration.
       await flushChatStorePersistenceNow();
+      publishConversationTurnMemory(conversation.id, finalMessageId);
 
       const persistedConversation = useChatStore
         .getState()

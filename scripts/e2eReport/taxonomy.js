@@ -59,9 +59,13 @@ function parseRubricKind(fixtureId) {
 
 function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) {
   switch (rubricKind) {
+    case 'workspace_file_absent':
+      if (entry.assessmentDimensions.includes('privacy_safety')) {
+        return ['tool_poisoning_vulnerability'];
+      }
+      return ['wrong_args'];
     case 'workspace_file':
     case 'file_hash':
-    case 'json_field':
       if (entry.assessmentDimensions.includes('privacy_safety')) {
         return ['permission_failure'];
       }
@@ -69,6 +73,11 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
         return ['native_side_effect_failure'];
       }
       return ['wrong_args'];
+    case 'native_fixture_state':
+      if (entry.assessmentDimensions.includes('privacy_safety')) {
+        return ['permission_failure'];
+      }
+      return ['native_side_effect_failure'];
     case 'graph_status':
     case 'graph_terminal_success':
     case 'completion_gate_hold':
@@ -97,16 +106,13 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       return ['wrong_tool'];
     case 'turn_memory_selection':
       return ['memory_retrieval_miss'];
-    case 'memory_fact':
-    case 'memory_episode_count':
-    case 'ingestion_job_checkpointed':
-      return ['memory_write_failure'];
-    case 'ingestion_job_completed':
-    case 'working_block_token':
-      return ['memory_retrieval_miss'];
-    case 'turn_memory_receipt':
+    case 'memory_item':
+    case 'memory_item_absent':
+    case 'memory_turns_indexed':
       return ['memory_write_failure'];
     case 'cache_read_tokens':
+    case 'cache_prefix_readiness':
+    case 'cache_eligible_read_rate':
       return ['cache_prefix_drift'];
     case 'token_budget':
       return ['token_budget_overrun'];

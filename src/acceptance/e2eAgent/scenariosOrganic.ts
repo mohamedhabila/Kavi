@@ -20,7 +20,6 @@ function completedProductionTurnRubrics(
       field: 'agent_run',
       expected: mode === 'agentic' ? true : null,
     },
-    { kind: 'turn_memory_receipt', turnIndex },
   ];
 }
 
@@ -200,8 +199,7 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
       path: 'artifacts/week-plan.txt',
       expectedHash: RECOVERED_WEEK_PLAN_SHA256,
     },
-    { kind: 'ingestion_job_checkpointed', minCount: 8 },
-    { kind: 'memory_episode_count', min: 8 },
+    { kind: 'memory_turns_indexed', min: 8 },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

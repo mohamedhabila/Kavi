@@ -1,17 +1,9 @@
-import type { IngestionJob } from '../../services/memory/ingestionQueue';
-import type { IngestionProviderOutcome } from '../../services/memory/ingestionQueueStore';
-import type { IngestionDurabilityReceipt } from '../../services/memory/ingestionStructuralReceiptStore';
-import type { MemoryTurnPublicationResult } from '../../services/memory/turnPublication';
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Attachment } from '../../types/attachment';
 import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ConversationUsageSummary } from '../../types/usage';
-import type {
-  ScopedMemoryEvidenceDelta,
-  ScopedMemoryEvidenceSnapshot,
-} from '../../services/memory/evidenceSnapshot';
 import type {
   E2ENativeMobileFixtureStateSnapshot,
   E2ENativeMobileInvocationSnapshot,
@@ -33,27 +25,11 @@ export type ForegroundScenarioRouteDirective =
 
 export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
 
-export type ForegroundScenarioProviderOutcomeEvidenceRequirement = Readonly<
-  { turnIndex: number } & (
-    | {
-        providerOutcome: IngestionProviderOutcome;
-        providerOutcomes?: never;
-      }
-    | {
-        providerOutcome?: never;
-        providerOutcomes: ReadonlyArray<IngestionProviderOutcome>;
-      }
-  )
->;
-
-export function resolveForegroundScenarioProviderOutcomes(
-  requirement: ForegroundScenarioProviderOutcomeEvidenceRequirement,
-): ReadonlyArray<IngestionProviderOutcome> {
-  return (
-    requirement.providerOutcomes ??
-    (requirement.providerOutcome === undefined ? [] : [requirement.providerOutcome])
-  );
-}
+/** The conversation whose memory a scenario turn reads and writes, and its chat thread. */
+export type ForegroundScenarioMemoryScope = Readonly<{
+  memoryConversationId: string;
+  sourceThreadId: string;
+}>;
 
 export type ForegroundScenarioLifecycleSnapshot =
   | Readonly<{
@@ -114,11 +90,6 @@ export type ForegroundScenarioDriverInput = {
   maxTokens?: number;
   timeoutMs?: number;
   memoryTimeoutMs?: number;
-  /**
-   * Evaluator-owned provider evidence requirements. Product turns still settle at
-   * the structural checkpoint; these are considered only after every chat turn.
-   */
-  providerOutcomeEvidenceRequirements?: ReadonlyArray<ForegroundScenarioProviderOutcomeEvidenceRequirement>;
   disableLongTermMemory?: boolean;
   disableTools?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
@@ -138,20 +109,6 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
     : T extends object
       ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
       : T;
-
-export type ForegroundScenarioMemorySnapshot = Readonly<{
-  publication: DeepReadonly<MemoryTurnPublicationResult>;
-  job: DeepReadonly<IngestionJob> | null;
-  receipts: ReadonlyArray<DeepReadonly<IngestionDurabilityReceipt>>;
-}>;
-
-export type ForegroundScenarioMemoryTurnEvidence = Readonly<{
-  delta: DeepReadonly<ScopedMemoryEvidenceDelta>;
-  /** Evaluator diagnostic; never changes the foreground chat completion result. */
-  settlementError?: string;
-}>;
-
-export type ForegroundScenarioMemoryFinalState = DeepReadonly<ScopedMemoryEvidenceSnapshot>;
 
 export type ForegroundScenarioNativeEvidenceSnapshot = Readonly<{
   stateBefore: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
@@ -198,8 +155,8 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
   lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null;
-  memory: ReadonlyArray<ForegroundScenarioMemorySnapshot>;
-  memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
+  /** False when background memory extraction did not finish before the turn's deadline. */
+  memoryExtractionSettled: boolean;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: DeepReadonly<ForegroundScenarioRetrievalEvidence>;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
@@ -219,14 +176,9 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
 export type ForegroundScenarioDriverResult = Readonly<{
   conversationId: string;
   finalConversation: DeepReadonly<Conversation>;
-  memoryFinalState: ForegroundScenarioMemoryFinalState;
   memoryItems: ForegroundScenarioMemoryItemsState;
   turns: ReadonlyArray<ForegroundScenarioTurnSnapshot>;
 }>;
-
-export type ForegroundScenarioMemoryRecord = {
-  promise: Promise<MemoryTurnPublicationResult>;
-};
 
 export function cloneAndFreeze<T>(value: T): DeepReadonly<T> {
   const clone = JSON.parse(JSON.stringify(value)) as T;

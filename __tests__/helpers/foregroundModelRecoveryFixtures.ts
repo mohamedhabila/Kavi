@@ -59,6 +59,7 @@ export function harness(
 ) {
   let currentConversation = structuredClone(initialConversation);
   const flushChatState = jest.fn().mockResolvedValue(undefined);
+  const recordConversationTurnMemory = jest.fn();
   const complete = jest.fn().mockResolvedValue(undefined);
   const listPending = jest.fn(
     ({ limit, after }: { limit: number; after?: { createdAt: number; runId: string } }) => {
@@ -98,11 +99,7 @@ export function harness(
     mutateProjection,
     isCurrentProcessRun: () => false,
     flushChatState,
-    settleMemoryPublication: async ({ conversationId, sourceEndMessageId }) => ({
-      conversationId,
-      sourceEndMessageId,
-      status: 'unclassified',
-    }),
+    recordConversationTurnMemory,
     complete,
     releaseProjection,
     clock: () => 20,
@@ -114,6 +111,7 @@ export function harness(
     getConversation: () => currentConversation,
     listPending,
     mutateProjection,
+    recordConversationTurnMemory,
     releaseProjection,
   };
 }

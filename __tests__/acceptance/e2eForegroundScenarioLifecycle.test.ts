@@ -8,14 +8,9 @@ import {
   relaunchForegroundScenarioApp,
   startNewForegroundScenarioConversation,
 } from '../../src/acceptance/e2eAgent/foregroundScenarioLifecycle';
-import {
-  captureCompleteMemoryEvidenceForIsolatedEvaluation,
-  captureScopedMemoryEvidence,
-} from '../../src/services/memory/evidenceSnapshot';
-import { upsertEntity } from '../../src/services/memory/entities';
-import { recordThreadLocalEpisode } from '../../src/services/memory/episodes/mutations';
-import { recordFact } from '../../src/services/memory/facts/mutations';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
+import { captureForegroundScenarioMemoryItems } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
+import { addMemoryItem, searchMemoryItems } from '../../src/services/memory/core/memoryItemsStore';
+import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import {
@@ -26,7 +21,6 @@ import {
 } from '../../src/store/throttledStorage';
 import { useChatStore } from '../../src/store/useChatStore';
 import type { Conversation } from '../../src/types/conversation';
-import { codeOwnedClosedTurnEpisodeFields } from '../helpers/memoryRetirementTestFixtures';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
   __getStore: () => Record<string, string | Uint8Array>;
@@ -35,6 +29,11 @@ const expoFileSystemMock = jest.requireMock('expo-file-system') as {
 const expoSqlite = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests: () => void;
 };
+const mockScheduleMemoryExtraction = jest.fn();
+jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  cancelMemoryExtraction: jest.fn(),
+  scheduleMemoryExtraction: (...args: unknown[]) => mockScheduleMemoryExtraction(...args),
+}));
 
 function makeConversation(): Conversation {
   return {
@@ -81,8 +80,8 @@ beforeEach(async () => {
   await throttledAsyncStorage.removeItem(STORAGE_KEYS.CONVERSATIONS);
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
-  resetFactSchemaCacheForTests();
-  ensureFactSchema();
+  resetMemoryCoreSchemaCacheForTests();
+  mockScheduleMemoryExtraction.mockClear();
 
   useChatStore.setState({
     conversations: [makeConversation()],
@@ -98,40 +97,21 @@ afterEach(async () => {
   closeMemoryDb();
 });
 
-it('rehydrates the production chat store and reopens unchanged durable memory', async () => {
-  const user = upsertEntity({ name: 'user', type: 'self', now: 19 });
-  recordFact({
-    subjectId: user.id,
-    predicate: 'profile_token',
-    objectText: 'RELAUNCH-PROFILE-73',
+it('rehydrates the production chat store, reopens memory and catches up on the closed turn', async () => {
+  addMemoryItem({
+    text: 'Profile token RELAUNCH-PROFILE-73',
     scope: 'conversation',
-    originConversationId: 'relaunch-conversation',
-    originThreadId: 'relaunch-conversation',
+    conversationId: 'relaunch-conversation',
     now: 20,
   });
-  const scope = {
-    memoryConversationId: 'relaunch-conversation',
-    sourceThreadId: 'relaunch-conversation',
-  };
+
   await expect(
-    relaunchForegroundScenarioApp({
-      conversationId: 'relaunch-conversation',
-      memoryScope: scope,
-    }),
-  ).resolves.toMatchObject({
+    relaunchForegroundScenarioApp({ conversationId: 'relaunch-conversation' }),
+  ).resolves.toEqual({
     lifecycle: {
       boundary: 'app_relaunch',
       chatStore: 'rehydrated',
       memoryStore: 'reopened',
-    },
-    memoryState: {
-      scope,
-      facts: expect.arrayContaining([
-        expect.objectContaining({
-          predicate: 'profile_token',
-          objectText: 'RELAUNCH-PROFILE-73',
-        }),
-      ]),
     },
   });
 
@@ -146,10 +126,12 @@ it('rehydrates the production chat store and reopens unchanged durable memory', 
       }),
     ],
   });
-  expect(captureScopedMemoryEvidence(scope).facts).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ predicate: 'profile_token', objectText: 'RELAUNCH-PROFILE-73' }),
-    ]),
+  const memory = captureForegroundScenarioMemoryItems();
+  expect(memory.items.map((item) => item.text)).toEqual(['Profile token RELAUNCH-PROFILE-73']);
+  expect(memory.indexedTurnCount).toBe(1);
+  expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith(
+    'relaunch-conversation',
+    'assistant-before-relaunch',
   );
   expect(readPersistedConversationIds()).toEqual(['relaunch-conversation']);
 
@@ -163,39 +145,19 @@ it('rehydrates the production chat store and reopens unchanged durable memory', 
   expect(readPersistedConversationIds()).toEqual(['relaunch-conversation']);
 });
 
-it('creates a fresh product conversation while preserving owner-global memory', () => {
-  const user = upsertEntity({ name: 'user', type: 'self', now: 12 });
-  recordFact({
-    subjectId: user.id,
-    predicate: 'default_meeting_duration_minutes',
-    objectText: '45',
-    scope: 'global',
+it('creates a fresh product conversation while preserving global memory', () => {
+  addMemoryItem({
+    text: 'Default meeting duration is 45 minutes',
+    conversationId: 'relaunch-conversation',
     now: 13,
   });
-  recordThreadLocalEpisode({
-    conversationId: 'relaunch-conversation',
-    threadId: 'relaunch-conversation',
-    summary: 'The first conversation contains scoped evidence.',
-    messageIds: ['user-before-relaunch', 'assistant-before-relaunch'],
-    ...codeOwnedClosedTurnEpisodeFields({
-      sourceUserMessageId: 'user-before-relaunch',
-      sourceAssistantMessageId: 'assistant-before-relaunch',
-      userContent: 'Remember this.',
-      assistantContent: 'Remembered.',
-    }),
-    now: 14,
-  });
-  const initialScope = {
-    memoryConversationId: 'relaunch-conversation',
-    sourceThreadId: 'relaunch-conversation',
-  };
+
   const transition = startNewForegroundScenarioConversation({
     currentConversationId: 'relaunch-conversation',
     providerId: 'provider-relaunch',
     model: 'model-relaunch',
     systemPrompt: 'Be helpful.',
     mode: 'chitchat',
-    memoryStateBefore: captureCompleteMemoryEvidenceForIsolatedEvaluation(initialScope),
   });
 
   expect(transition.conversationId).not.toBe('relaunch-conversation');
@@ -206,22 +168,14 @@ it('creates a fresh product conversation while preserving owner-global memory', 
     previousConversationMessageCount: 2,
     newConversationInitialMessageCount: 0,
   });
-  expect(transition.memoryState.facts).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        subject: 'user',
-        predicate: 'default_meeting_duration_minutes',
-        objectText: '45',
-        scope: 'global',
-      }),
-    ]),
-  );
-  expect(transition.memoryState.episodes).toEqual([]);
-  expect(captureCompleteMemoryEvidenceForIsolatedEvaluation(initialScope).episodes).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ summary: 'The first conversation contains scoped evidence.' }),
-    ]),
-  );
+  expect(
+    searchMemoryItems({
+      query: 'meeting duration',
+      visibility: { conversationId: transition.conversationId },
+      limit: 5,
+      includeSensitive: false,
+    }).map((item) => item.text),
+  ).toEqual(['Default meeting duration is 45 minutes']);
   expect(
     useChatStore
       .getState()

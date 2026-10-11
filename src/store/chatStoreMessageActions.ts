@@ -18,23 +18,10 @@ import {
   updateConversationById,
   updateConversationMessageById,
 } from './chatStoreHelpers';
-import type {
-  ChatState,
-  RewindUserMessageForResendResult,
-  TransitionMessageMemoryPublicationResult,
-} from './chatStoreTypes';
+import type { ChatState, RewindUserMessageForResendResult } from './chatStoreTypes';
 import { appendToolEffectReceipt } from '../utils/toolEffectReceipt';
-import {
-  isEligibleMessageMemoryPublicationSource,
-  normalizeMessageMemoryPublication,
-  resolveMessageMemoryPublicationTransition,
-} from '../utils/messageMemoryPublication';
-import {
-  assertConversationCompactionMemoryPublicationSourcesSafe,
-  assertMemoryPublicationLockedSourcesUnchanged,
-  dropPartiallyRetainedEnqueuedPublicationSources,
-  preserveCodeOwnedMessageMemoryPublications,
-} from './chatMessageMemoryPublicationMutationFence';
+import { deleteMemoryTurnsOpenedBy } from '../services/memory/core/memoryTurnsStore';
+import { createLogger } from '../utils/logger';
 import {
   getProtectedExecutionMessageIds,
   preserveProtectedExecutionMessages,
@@ -44,31 +31,21 @@ import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewin
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 
+const logger = createLogger('chat-store.messages');
+
+function forgetRewoundTurns(userMessageIds: string[]): void {
+  try {
+    deleteMemoryTurnsOpenedBy(userMessageIds);
+  } catch (error) {
+    // Memory is never allowed to fail a resend; the stale rounds only lose relevance.
+    logger.warn('Could not remove rewound turns from memory.', { error: String(error) });
+  }
+}
+
 function stripUntrustedToolEffectReceipts(toolCall: ToolCall): ToolCall {
   const sanitized = { ...toolCall };
   delete sanitized.effectReceipts;
   return sanitized;
-}
-
-function updateConversationMessageWithMemoryPublicationFence(
-  conversations: ChatState['conversations'],
-  conversationId: string,
-  messageId: string,
-  updater: (message: Message) => Message,
-): ChatState['conversations'] | undefined {
-  return updateConversationById(conversations, conversationId, (conversation) => {
-    const messageIndex = conversation.messages.findIndex((message) => message.id === messageId);
-    if (messageIndex < 0) return conversation;
-
-    const message = conversation.messages[messageIndex];
-    const nextMessage = updater(message);
-    if (nextMessage === message) return conversation;
-
-    const nextMessages = [...conversation.messages];
-    nextMessages[messageIndex] = nextMessage;
-    assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
-    return { ...conversation, messages: nextMessages };
-  });
 }
 
 export function createMessageStoreActions(
@@ -83,7 +60,6 @@ export function createMessageStoreActions(
   | 'updateMessageReasoning'
   | 'updateMessageProviderReplay'
   | 'updateMessageAssistantMetadata'
-  | 'transitionMessageMemoryPublication'
   | 'updateMessageEffect'
   | 'rewindUserMessageForResend'
   | 'setLoading'
@@ -92,14 +68,12 @@ export function createMessageStoreActions(
 > {
   return {
     addMessage: (conversationId, message) => {
-      const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } =
-        message as typeof message & Pick<Message, 'memoryPublication'>;
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
           const timestamp = message.timestamp ?? Date.now();
           const newMessage: Message = {
-            ...trustedMessage,
+            ...message,
             id: message.id || generateId(),
             timestamp,
             ...(message.toolCalls
@@ -112,7 +86,6 @@ export function createMessageStoreActions(
             [...c.messages, newMessage],
             getProtectedExecutionMessageIds(c),
           );
-          assertMemoryPublicationLockedSourcesUnchanged(c.messages, nextMessages);
           return {
             ...c,
             title: shouldAutoTitle ? generateConversationTitle(message.content) : c.title,
@@ -131,27 +104,16 @@ export function createMessageStoreActions(
           conversationId,
           (conversation) => {
             const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
-            let nextMessages = capMessages(
+            const nextMessages = capMessages(
               preserveProtectedExecutionMessages(
                 conversation,
-                preserveCodeOwnedMessageMemoryPublications(
-                  conversation.messages,
-                  selectDurableCompactionMessages(conversation, messages),
-                ),
+                selectDurableCompactionMessages(conversation, messages),
               ),
               protectedMessageIds,
-            );
-            nextMessages = dropPartiallyRetainedEnqueuedPublicationSources(
-              conversation.messages,
-              nextMessages,
             );
             if (nextMessages.length === 0) {
               return conversation;
             }
-            assertConversationCompactionMemoryPublicationSourcesSafe(
-              conversation.messages,
-              nextMessages,
-            );
 
             return {
               ...conversation,
@@ -169,7 +131,7 @@ export function createMessageStoreActions(
 
     updateMessage: (conversationId, messageId, content) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,
@@ -180,7 +142,7 @@ export function createMessageStoreActions(
 
     updateMessageEnrichedContent: (conversationId, messageId, enrichedContent) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,
@@ -192,7 +154,7 @@ export function createMessageStoreActions(
 
     updateMessageAttachments: (conversationId, messageId, attachments) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,
@@ -229,7 +191,7 @@ export function createMessageStoreActions(
 
     updateMessageAssistantMetadata: (conversationId, messageId, assistantMetadata) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,
@@ -245,71 +207,6 @@ export function createMessageStoreActions(
         );
         return conversations ? { conversations } : state;
       }),
-
-    transitionMessageMemoryPublication: (conversationId, messageId, disposition) => {
-      let result: TransitionMessageMemoryPublicationResult = {
-        status: 'rejected',
-        reason: 'source_unavailable',
-      };
-      let shouldCheckpoint = false;
-      set((state) => {
-        const conversationIndexes = state.conversations.flatMap((conversation, index) =>
-          conversation.id === conversationId ? [index] : [],
-        );
-        if (conversationIndexes.length === 0) return state;
-        if (conversationIndexes.length !== 1) {
-          result = { status: 'rejected', reason: 'source_identity_invalid' };
-          return state;
-        }
-        const conversationIndex = conversationIndexes[0];
-        const conversation = state.conversations[conversationIndex];
-        const messageIndexes = conversation.messages.flatMap((message, index) =>
-          message.id === messageId ? [index] : [],
-        );
-        if (messageIndexes.length === 0) return state;
-        if (messageIndexes.length !== 1) {
-          result = { status: 'rejected', reason: 'source_identity_invalid' };
-          return state;
-        }
-        const messageIndex = messageIndexes[0];
-        const message = conversation.messages[messageIndex];
-        if (!isEligibleMessageMemoryPublicationSource(message)) {
-          result = { status: 'rejected', reason: 'source_ineligible' };
-          return state;
-        }
-
-        const current = normalizeMessageMemoryPublication(message.memoryPublication);
-        if (message.memoryPublication !== undefined && current === undefined) {
-          result = { status: 'rejected', reason: 'transition_conflict' };
-          return state;
-        }
-        const transition = resolveMessageMemoryPublicationTransition(current, {
-          version: 1,
-          disposition,
-        });
-        if (!transition.applied) {
-          result = { status: 'rejected', reason: 'transition_conflict' };
-          return state;
-        }
-        result = {
-          status: 'applied',
-          changed: transition.changed,
-          publication: transition.publication,
-        };
-        if (!transition.changed) return state;
-
-        shouldCheckpoint = true;
-        const messages = [...conversation.messages];
-        messages[messageIndex] = { ...message, memoryPublication: transition.publication };
-        const conversations = [...state.conversations];
-        conversations[conversationIndex] = { ...conversation, messages };
-        return { conversations };
-      });
-      if (shouldCheckpoint) {
-        requestChatStorePersistenceCheckpoint();
-      }
-      return result;
-    },
 
     updateMessageEffect: (conversationId, messageId, effectId) =>
       set((state) => {
@@ -328,6 +225,7 @@ export function createMessageStoreActions(
         reason: 'conversation_unavailable',
       };
       let shouldCheckpoint = false;
+      let removedUserMessageIds: string[] = [];
 
       set((state) => {
         const eligibility = resolveRewindUserMessageEligibility({
@@ -354,7 +252,6 @@ export function createMessageStoreActions(
         // A resent message opens a new turn, even one that had steered a run.
         const {
           enrichedContent: _discardedEnrichedContent,
-          memoryPublication: _discardedMemoryPublication,
           steerOfRunId: _discardedSteerOfRunId,
           ...preservedMessage
         } = message;
@@ -365,7 +262,9 @@ export function createMessageStoreActions(
           timestamp: replacementTimestamp,
         };
         const nextMessages = [...conversation.messages.slice(0, messageIndex), replacementMessage];
-        assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, nextMessages);
+        removedUserMessageIds = conversation.messages
+          .slice(messageIndex)
+          .flatMap((removed) => (removed.role === 'user' ? [removed.id] : []));
 
         const nextLogs = (conversation.logs ?? []).filter(
           (entry) => entry.timestamp < rewindTimestamp,
@@ -401,6 +300,8 @@ export function createMessageStoreActions(
       });
 
       if (shouldCheckpoint) requestChatStorePersistenceCheckpoint();
+      // The rewound turns no longer happened, so they leave the past-turn index too.
+      if (removedUserMessageIds.length > 0) forgetRewoundTurns(removedUserMessageIds);
       return result;
     },
 
@@ -409,7 +310,7 @@ export function createMessageStoreActions(
 
     addToolCall: (conversationId, messageId, toolCall) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,
@@ -468,7 +369,7 @@ export function createMessageStoreActions(
 
     updateToolCallStatus: (conversationId, messageId, toolCallId, status, payload) =>
       set((state) => {
-        const conversations = updateConversationMessageWithMemoryPublicationFence(
+        const conversations = updateConversationMessageById(
           state.conversations,
           conversationId,
           messageId,

@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { createAgentRunIdentityKey } from '../../../services/agents/agentRunIdentity';
 import { waitForPersistedAgentRecoveryReadiness } from '../../../services/startupRecovery';
-import { retireConversationSourcesForRewind } from '../../../services/memory/conversationSourceRetirement';
 import { waitForModelProjectionAvailability } from '../../../store/modelProjectionOwnership';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
@@ -172,13 +171,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     ],
   );
 
-  const retireMemorySourcesForRewind = useCallback(
-    (conversationId: string, messageId: string, reason: 'message_edit' | 'message_retry') => {
-      retireConversationSourcesForRewind({ conversationId, messageId, reason });
-    },
-    [],
-  );
-
   const waitForConversationWriteAvailability = useCallback(
     async (conversationId: string, reason: string): Promise<boolean> => {
       abortForegroundRequestForConversation(conversationId, reason);
@@ -320,7 +312,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           applied = applyForegroundEditedResend({
             actions: {
               cancelConversationRunForRewind,
-              retireConversationSourcesForRewind: retireMemorySourcesForRewind,
               rewindUserMessageForResend,
             },
             conversationId,
@@ -353,7 +344,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       handleResend,
       releaseConversationWrite,
       reserveConversationWrite,
-      retireMemorySourcesForRewind,
       setEditingContent,
       setEditingMessageId,
       setChatError,
@@ -381,7 +371,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           applied = applyForegroundRetryResend({
             actions: {
               cancelConversationRunForRewind,
-              retireConversationSourcesForRewind: retireMemorySourcesForRewind,
               rewindUserMessageForResend,
             },
             assistantMessageId: messageId,
@@ -412,7 +401,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       handleResend,
       releaseConversationWrite,
       reserveConversationWrite,
-      retireMemorySourcesForRewind,
       setChatError,
       activeConversation,
       waitForConversationWriteAvailability,

@@ -5,129 +5,13 @@ import {
   getLatestAssistantProjectionFinalResponsePreview,
 } from '../services/agents/lifecycle/agentRunStateMachine';
 import { useChatStore } from '../store/useChatStore';
-import type { Conversation, ConversationLogEntry } from '../types/conversation';
-import type { Message, MessageMemoryPublicationDisposition } from '../types/message';
+import type { ConversationLogEntry } from '../types/conversation';
 import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
-import { resolveConversationWorkspaceTarget } from '../services/conversationWorkspace/ownership';
 import { EnsureAgentRunFinalResponse } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
-import type { RecordConversationTurnMemory } from '../services/memory/turnPublication';
-import { canWriteLongTermMemory } from '../services/memory/policy';
-import { fingerprintForegroundTerminalMemorySource } from '../engine/graph/foregroundRun/terminalMemorySource';
-import {
-  isTerminalMessageMemoryPublication,
-  normalizeMessageMemoryPublication,
-} from '../utils/messageMemoryPublication';
+import type { RecordConversationTurnMemory } from '../services/memory/core/memoryCapture';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
-
-type TerminalMemoryPublicationDisposition = Exclude<MessageMemoryPublicationDisposition, null>;
-
-function resolveUniqueConversation(conversationId: string): Conversation {
-  const matches = useChatStore
-    .getState()
-    .conversations.filter((conversation) => conversation.id === conversationId);
-  if (matches.length !== 1) {
-    throw new Error('background_terminal_memory_conversation_changed');
-  }
-  return matches[0];
-}
-
-function resolveUniqueMessage(conversation: Conversation, messageId: string): Message {
-  const matches = conversation.messages.filter((message) => message.id === messageId);
-  if (matches.length !== 1) {
-    throw new Error('background_terminal_memory_source_changed');
-  }
-  return matches[0];
-}
-
-function resolveUniqueRun(conversation: Conversation, runId: string) {
-  const matches = (conversation.agentRuns ?? []).filter((run) => run.id === runId);
-  if (matches.length !== 1) {
-    throw new Error('background_terminal_memory_run_changed');
-  }
-  return matches[0];
-}
-
-function resolveInitialPublicationDisposition(params: {
-  conversation: Conversation;
-  source: Message;
-  transitionMessageMemoryPublication: ChatStore['transitionMessageMemoryPublication'];
-}): MessageMemoryPublicationDisposition {
-  const current = normalizeMessageMemoryPublication(params.source.memoryPublication);
-  if (params.source.memoryPublication !== undefined && current === undefined) {
-    throw new Error('background_terminal_memory_publication_invalid');
-  }
-  if (isTerminalMessageMemoryPublication(current)) {
-    return current.disposition;
-  }
-
-  const requestedDisposition: MessageMemoryPublicationDisposition = !canWriteLongTermMemory()
-    ? 'opt_out'
-    : params.conversation.isSideThread
-      ? 'ephemeral_thread'
-      : null;
-  const transition = params.transitionMessageMemoryPublication(
-    params.conversation.id,
-    params.source.id,
-    requestedDisposition,
-  );
-  if (transition.status !== 'applied') {
-    throw new Error(`background_terminal_memory_publication_${transition.reason}`);
-  }
-  return transition.publication.disposition;
-}
-
-function transitionToTerminalPublication(params: {
-  conversationId: string;
-  disposition: TerminalMemoryPublicationDisposition;
-  sourceMessageId: string;
-  transitionMessageMemoryPublication: ChatStore['transitionMessageMemoryPublication'];
-}): void {
-  const transition = params.transitionMessageMemoryPublication(
-    params.conversationId,
-    params.sourceMessageId,
-    params.disposition,
-  );
-  if (transition.status !== 'applied') {
-    throw new Error(`background_terminal_memory_publication_${transition.reason}`);
-  }
-}
-
-function assertTerminalMemorySourceCurrent(params: {
-  conversationId: string;
-  expectedFingerprint: string;
-  expectedMemoryConversationId: string;
-  runId: string;
-  sourceMessageId: string;
-}): Conversation {
-  const conversation = resolveUniqueConversation(params.conversationId);
-  const run = resolveUniqueRun(conversation, params.runId);
-  const latestFinalMessageId = findLatestPreferredAgentRunAssistantMessageId(
-    conversation.messages,
-    buildAgentRunMessageScope(run),
-  );
-  if (latestFinalMessageId !== params.sourceMessageId) {
-    throw new Error('background_terminal_memory_source_changed');
-  }
-  const source = resolveUniqueMessage(conversation, params.sourceMessageId);
-  const fingerprint = fingerprintForegroundTerminalMemorySource({
-    conversation,
-    source,
-    sourceRunId: params.runId,
-  });
-  const workspaceTarget = resolveConversationWorkspaceTarget({
-    conversationId: params.conversationId,
-    conversations: useChatStore.getState().conversations,
-  });
-  if (
-    fingerprint !== params.expectedFingerprint ||
-    workspaceTarget.workspaceConversationId !== params.expectedMemoryConversationId
-  ) {
-    throw new Error('background_terminal_memory_source_changed');
-  }
-  return conversation;
-}
 
 export async function handleTerminalBackgroundReview(params: {
   appendConversationLog: ChatStore['addConversationLog'];
@@ -146,7 +30,6 @@ export async function handleTerminalBackgroundReview(params: {
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
-  transitionMessageMemoryPublication: ChatStore['transitionMessageMemoryPublication'];
 }): Promise<void> {
   const { conversation, targetRun, candidateSummary, candidateStatus } = params.context;
   const status = candidateStatus === 'completed' ? 'completed' : 'failed';
@@ -189,66 +72,9 @@ export async function handleTerminalBackgroundReview(params: {
   if (!settledFinalResponse) return;
   latestSummary = settledFinalResponse.content.trim();
 
-  const sourceFingerprint = fingerprintForegroundTerminalMemorySource({
-    conversation: settledConversation,
-    source: settledFinalResponse,
-    sourceRunId: params.runId,
-  });
-  const workspaceTarget = resolveConversationWorkspaceTarget({
-    conversationId: params.conversationId,
-    conversations: useChatStore.getState().conversations,
-  });
-  const memoryConversationId = workspaceTarget.workspaceConversationId;
-  const initialDisposition = resolveInitialPublicationDisposition({
-    conversation: settledConversation,
-    source: settledFinalResponse,
-    transitionMessageMemoryPublication: params.transitionMessageMemoryPublication,
-  });
-
   await params.flushChatState();
   params.assertNotAborted();
-  assertTerminalMemorySourceCurrent({
-    conversationId: params.conversationId,
-    expectedFingerprint: sourceFingerprint,
-    expectedMemoryConversationId: memoryConversationId,
-    runId: params.runId,
-    sourceMessageId: settledFinalResponse.id,
-  });
-
-  if (initialDisposition === null) {
-    const publication = await params.recordConversationTurnMemory(
-      params.conversationId,
-      undefined,
-      {
-        sourceEndMessageId: settledFinalResponse.id,
-        memoryConversationId,
-        sourceRunId: params.runId,
-      },
-    );
-    params.assertNotAborted();
-    assertTerminalMemorySourceCurrent({
-      conversationId: params.conversationId,
-      expectedFingerprint: sourceFingerprint,
-      expectedMemoryConversationId: memoryConversationId,
-      runId: params.runId,
-      sourceMessageId: settledFinalResponse.id,
-    });
-    transitionToTerminalPublication({
-      conversationId: params.conversationId,
-      disposition: publication.disposition,
-      sourceMessageId: settledFinalResponse.id,
-      transitionMessageMemoryPublication: params.transitionMessageMemoryPublication,
-    });
-    await params.flushChatState();
-    params.assertNotAborted();
-    assertTerminalMemorySourceCurrent({
-      conversationId: params.conversationId,
-      expectedFingerprint: sourceFingerprint,
-      expectedMemoryConversationId: memoryConversationId,
-      runId: params.runId,
-      sourceMessageId: settledFinalResponse.id,
-    });
-  }
+  params.recordConversationTurnMemory(params.conversationId, settledFinalResponse.id);
 
   const completed = completeTerminalBackgroundReviewRun({
     appendConversationLog: params.appendConversationLog,

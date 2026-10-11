@@ -8,18 +8,9 @@ import { capMessages } from './chatStoreHelpers';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { useChatStore } from './useChatStore';
 import { unrefTimerIfSupported } from '../utils/timers';
-import {
-  assertMemoryPublicationLockedSourcesUnchanged,
-  preserveCodeOwnedMessageMemoryPublications,
-} from './chatMessageMemoryPublicationMutationFence';
 import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 
 const MODEL_PROJECTION_RELEASE_TIMEOUT_MS = 30_000;
-
-function stripUntrustedMemoryPublication(message: Message): Message {
-  const { memoryPublication: _untrustedMemoryPublication, ...trustedMessage } = message;
-  return trustedMessage;
-}
 
 export type ModelProjectionClaimResult =
   | 'claimed'
@@ -138,9 +129,9 @@ export function claimModelProjection(input: {
       (message) => message.id === input.owner.assistantMessageId,
     );
     const existingMessageIds = new Set(conversation.messages.map((message) => message.id));
-    const messagesBeforeAssistant = (input.messagesBeforeAssistant ?? [])
-      .filter((message) => !existingMessageIds.has(message.id))
-      .map(stripUntrustedMemoryPublication);
+    const messagesBeforeAssistant = (input.messagesBeforeAssistant ?? []).filter(
+      (message) => !existingMessageIds.has(message.id),
+    );
     const requestExists =
       existingMessageIds.has(input.owner.requestMessageId) ||
       messagesBeforeAssistant.some((message) => message.id === input.owner.requestMessageId);
@@ -165,7 +156,7 @@ export function claimModelProjection(input: {
       [
         ...conversation.messages,
         ...messagesBeforeAssistant,
-        ...(assistant ? [] : [stripUntrustedMemoryPublication(input.assistantMessage!)]),
+        ...(assistant ? [] : [input.assistantMessage!]),
       ],
       protectedMessageIds,
     );
@@ -240,15 +231,7 @@ export function mutateOwnedModelProjection<T>(input: {
       result = mutation;
       return state;
     }
-    const messages = preserveCodeOwnedMessageMemoryPublications(
-      conversation.messages,
-      mutation.conversation.messages,
-    );
-    assertMemoryPublicationLockedSourcesUnchanged(conversation.messages, messages);
-    const nextConversation =
-      messages === mutation.conversation.messages
-        ? mutation.conversation
-        : { ...mutation.conversation, messages };
+    const nextConversation = mutation.conversation;
     const conversations = [...state.conversations];
     conversations[conversationIndex] = nextConversation;
     result = { kind: 'applied', value: mutation.value };

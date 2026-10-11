@@ -6,8 +6,6 @@ import {
   getLatestAssistantProjectionFinalResponse,
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { resolveClosedTurnEndingAt } from '../../../services/memory/closedTurn';
-import { encodeIngestionSourceSnapshot } from '../../../services/memory/ingestionSourceSnapshot';
-import { collectAgentRunMemoryEvidence } from '../../../services/memory/agentRunTerminalEvidence';
 import type { ForegroundRunTerminalStatus } from './terminalLifecycle';
 
 type TerminalMemoryConversation = Pick<Conversation, 'agentRuns' | 'messages'>;
@@ -85,24 +83,4 @@ export function resolveForegroundTerminalMemorySource(params: {
     currentAssistantMessageId: params.currentAssistantMessageId,
     status: params.status,
   });
-}
-
-/** Fingerprint the exact bounded source payload that durable memory ingestion will persist. */
-export function fingerprintForegroundTerminalMemorySource(params: {
-  conversation: TerminalMemoryConversation;
-  source: Message;
-  sourceRunId?: string;
-}): string {
-  const closedTurn = resolveClosedTurnEndingAt(params.conversation.messages, params.source.id);
-  if (closedTurn.status !== 'resolved') {
-    throw new Error('foreground_terminal_memory_source_not_closed');
-  }
-  const sourceRun = resolveExactTrackedRun(params.conversation, params.sourceRunId);
-  return encodeIngestionSourceSnapshot({
-    messages: params.conversation.messages,
-    sourceStartMessageId: closedTurn.sourceStartMessageId,
-    sourceEndMessageId: closedTurn.sourceEndMessageId,
-    priorUserMessageId: closedTurn.priorUserMessageId,
-    graphGoalEvidence: collectAgentRunMemoryEvidence(sourceRun, closedTurn.turnMessages),
-  }).payloadSha256;
 }

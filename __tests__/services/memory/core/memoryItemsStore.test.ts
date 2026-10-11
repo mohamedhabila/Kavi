@@ -3,7 +3,7 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb } from '../../../../src/services/memory/database';
+import { closeMemoryDb, getMemoryDb } from '../../../../src/services/memory/database';
 import { resetMemoryCoreSchemaCacheForTests } from '../../../../src/services/memory/core/memorySchema';
 import {
   addMemoryItem,
@@ -156,6 +156,20 @@ describe('memory items', () => {
     expect(search('Global fact', { conversationId: 'conv-2' })).toEqual([
       'Global fact from conversation two',
     ]);
+  });
+
+  it('deletes a correction made in a deleted conversation together with what it replaced', () => {
+    const old = remember('Lives in Utrecht');
+    remember('Lives in Rotterdam', {
+      conversationId: 'conv-2',
+      replaces: (old as { item: { id: string } }).item.id,
+    });
+
+    expect(deleteMemoryItemsFromConversation('conv-2')).toBe(2);
+    expect(
+      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_items')
+        ?.count,
+    ).toBe(0);
   });
 
   it('rejects empty and oversized content', () => {

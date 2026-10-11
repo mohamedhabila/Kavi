@@ -103,19 +103,6 @@ export interface SubAgentMessageEvent {
   snapshot: SubAgentSnapshot;
 }
 
-export type MessageMemoryPublicationDisposition =
-  | null
-  | 'enqueued'
-  | 'opt_out'
-  | 'ephemeral_thread'
-  | 'withdrawn';
-
-/** Content-free durable state for publishing this exact assistant message to memory. */
-export interface MessageMemoryPublication {
-  readonly version: 1;
-  readonly disposition: MessageMemoryPublicationDisposition;
-}
-
 export type MessageCompactionProvenance =
   | Readonly<{
       version: 1;
@@ -148,7 +135,6 @@ export interface Message {
   isSyntheticReasoningPlaceholder?: boolean;
   providerReplay?: MessageProviderReplay;
   assistantMetadata?: AssistantMessageMetadata;
-  memoryPublication?: MessageMemoryPublication;
   /** Code-owned provenance for synthetic context-compaction summaries. */
   compactionProvenance?: MessageCompactionProvenance;
   effectId?: 'confetti' | 'balloons' | 'spotlight';

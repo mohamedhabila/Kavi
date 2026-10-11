@@ -7,7 +7,6 @@ import {
 } from '../../utils/assistantMessageMetadata';
 import { generateId } from '../../utils/id';
 import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
-import { normalizeMessageMemoryPublication } from '../../utils/messageMemoryPublication';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
 import {
@@ -28,9 +27,9 @@ import type {
   ForegroundModelTerminalStatus,
 } from './foregroundModelExecutionTypes';
 import {
-  settleMessageMemoryPublication,
-  type MessageMemoryPublicationSettlementResult,
-} from '../memory/messageMemoryPublicationSettlement';
+  publishConversationTurnMemory,
+  type RecordConversationTurnMemory,
+} from '../memory/core/memoryCapture';
 import { AGENT_RUNTIME_ERROR_CODES, isAgentRuntimeErrorCode } from '../runtimeError';
 import {
   buildToolEffectRestartDispositionResolver,
@@ -56,7 +55,6 @@ export const FOREGROUND_MODEL_RECOVERY_BLOCK_REASONS = [
   'projection_owner_changed',
   'generation_changed',
   'journal_unavailable',
-  'memory_publication_pending',
 ] as const;
 
 export type ForegroundModelRecoveryBlockReason =
@@ -96,11 +94,7 @@ export interface ForegroundModelRecoveryDependencies {
     timestamp: number,
   ): Promise<ForegroundModelRecoveryProjectionMutationResult>;
   flushChatState(): Promise<void>;
-  settleMemoryPublication(input: {
-    conversationId: string;
-    sourceEndMessageId: string;
-    sourceRunId?: string;
-  }): Promise<MessageMemoryPublicationSettlementResult>;
+  recordConversationTurnMemory: RecordConversationTurnMemory;
   complete(input: CompleteForegroundModelExecutionInput): Promise<unknown>;
   releaseProjection(
     lease: ForegroundModelExecutionLease,
@@ -121,7 +115,7 @@ const DEFAULT_DEPENDENCIES: ForegroundModelRecoveryDependencies = {
   listPending: listPendingForegroundModelExecutions,
   mutateProjection: mutateModelProjectionForForegroundRecovery,
   flushChatState: flushChatStorePersistenceNow,
-  settleMemoryPublication: settleMessageMemoryPublication,
+  recordConversationTurnMemory: publishConversationTurnMemory,
   complete: completeForegroundModelExecution,
   isCurrentProcessRun: (lease) => isForegroundModelExecutionOwnedByCurrentProcess(lease.runId),
   releaseProjection: (lease) =>
@@ -436,40 +430,6 @@ function classifyCompletionError(error: unknown): ForegroundModelRecoveryBlockRe
     : 'journal_unavailable';
 }
 
-function hasOpenMemoryPublication(
-  plan: ForegroundModelRecoveryPlan,
-  conversation: Conversation,
-): boolean {
-  const source = conversation.messages.find((message) => message.id === plan.projectionMessageId);
-  return (
-    plan.status === 'succeeded' &&
-    normalizeMessageMemoryPublication(source?.memoryPublication)?.disposition === null
-  );
-}
-
-async function settleRecoveryMemoryPublication(
-  plan: ForegroundModelRecoveryPlan,
-  conversation: Conversation,
-  dependencies: ForegroundModelRecoveryDependencies,
-): Promise<boolean> {
-  if (!hasOpenMemoryPublication(plan, conversation)) return true;
-  try {
-    const settlement = await dependencies.settleMemoryPublication({
-      conversationId: plan.lease.conversationId,
-      sourceEndMessageId: plan.projectionMessageId,
-      ...(plan.lease.taskId !== null ? { sourceRunId: plan.lease.taskId } : {}),
-    });
-    return (
-      settlement.conversationId === plan.lease.conversationId &&
-      settlement.sourceEndMessageId === plan.projectionMessageId &&
-      (settlement.status === 'terminal' || settlement.status === 'settled') &&
-      settlement.disposition !== undefined
-    );
-  } catch {
-    return false;
-  }
-}
-
 /** Repair prior-process chat projections and close their process-bound journal generations. */
 export async function recoverInterruptedForegroundModelExecutions(
   dependencies: ForegroundModelRecoveryDependencies = DEFAULT_DEPENDENCIES,
@@ -547,10 +507,6 @@ export async function recoverInterruptedForegroundModelExecutions(
     result: ForegroundModelRecoveryResult;
   }> = [];
   for (const { plan, conversation } of applied) {
-    if (!(await settleRecoveryMemoryPublication(plan, conversation, dependencies))) {
-      results.push(blocked(plan.lease, 'memory_publication_pending'));
-      continue;
-    }
     try {
       await dependencies.complete({
         lease: plan.lease,
@@ -562,6 +518,12 @@ export async function recoverInterruptedForegroundModelExecutions(
       if (release !== 'released') {
         results.push(blocked(plan.lease, 'generation_changed'));
         continue;
+      }
+      if (plan.status === 'succeeded') {
+        dependencies.recordConversationTurnMemory(
+          plan.lease.conversationId,
+          plan.projectionMessageId,
+        );
       }
       released.push({
         plan,

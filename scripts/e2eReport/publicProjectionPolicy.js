@@ -1,3 +1,5 @@
+const { FAILURE_CATEGORIES: FAILURE_CATEGORY_LIST, RUBRIC_KINDS } = require('./constants');
+
 const MAX_PUBLIC_ITEMS = 1024;
 const CONTENT_CLASSES = new Set(['private', 'synthetic_public']);
 
@@ -35,38 +37,6 @@ function isPublicEvaluationId(value) {
   return value.split('/').every((segment) => segment !== '.' && segment !== '..');
 }
 
-const RUBRIC_KINDS = new Set([
-  'workspace_file',
-  'workspace_file_absent',
-  'graph_status',
-  'graph_terminal_success',
-  'completion_gate_hold',
-  'memory_fact',
-  'memory_fact_absent',
-  'token_budget',
-  'cache_read_tokens',
-  'cache_prefix_readiness',
-  'cache_eligible_read_rate',
-  'min_user_turns',
-  'turn_route',
-  'turn_completion',
-  'turn_memory_receipt',
-  'turn_lifecycle_boundary',
-  'turn_final_response_token',
-  'turn_clarification',
-  'turn_native_invocation_count',
-  'turn_tool_call_count',
-  'turn_memory_answer',
-  'turn_memory_selection',
-  'worker_result_token',
-  'ingestion_job_checkpointed',
-  'ingestion_job_completed',
-  'memory_episode_count',
-  'native_fixture_state',
-  'file_hash',
-  'working_block_token',
-  'graph_audit_observed',
-]);
 const TURN_COMPLETION_FIELDS = new Set(['execution', 'final_response', 'agent_run']);
 
 const GRAPH_STATUSES = new Set([
@@ -84,28 +54,7 @@ const GRAPH_STATUSES = new Set([
   'failed',
 ]);
 
-const FAILURE_CATEGORIES = new Set([
-  'discovery_miss',
-  'wrong_tool',
-  'wrong_args',
-  'missing_clarification',
-  'permission_failure',
-  'execution_route_failure',
-  'execution_failure',
-  'final_response_failure',
-  'goal_state_bug',
-  'memory_retrieval_miss',
-  'memory_write_failure',
-  'tool_poisoning_vulnerability',
-  'cache_prefix_drift',
-  'token_budget_overrun',
-  'loop_control',
-  'native_side_effect_failure',
-  'lifecycle_recovery_failure',
-  'external_runner_required',
-  'grader_quality',
-  'unknown_structural_failure',
-]);
+const FAILURE_CATEGORIES = new Set(FAILURE_CATEGORY_LIST);
 
 const READINESS_CRITERIA = new Set([
   'scenario_coverage',

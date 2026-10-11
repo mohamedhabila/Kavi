@@ -11,18 +11,14 @@ import {
   getLatestAssistantProjectionFinalResponse,
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
-import { canWriteLongTermMemory } from '../../../services/memory/policy';
 import {
-  settleMessageMemoryPublication,
-  type MessageMemoryPublicationSettlementResult,
-} from '../../../services/memory/messageMemoryPublicationSettlement';
+  publishConversationTurnMemory,
+  type RecordConversationTurnMemory,
+} from '../../../services/memory/core/memoryCapture';
 import { flushChatStorePersistenceNow } from '../../../store/chatStorePersistence';
-import type { ChatState } from '../../../store/chatStoreTypes';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Conversation } from '../../../types/conversation';
-import type { Message, MessageMemoryPublicationDisposition } from '../../../types/message';
-import type { LlmProviderConfig } from '../../../types/provider';
-import { normalizeMessageMemoryPublication } from '../../../utils/messageMemoryPublication';
+import type { Message } from '../../../types/message';
 
 type ResolveConversationFinalizationContext = (
   conversation: Conversation,
@@ -34,30 +30,16 @@ type QueueTerminalBackgroundReview = (params: {
   timestamp?: number;
 }) => Promise<void>;
 
-type SettleRecoveredMessageMemoryPublication = (params: {
-  conversationId: string;
-  sourceEndMessageId: string;
-  sourceRunId: string;
-  activeChatProvider?: LlmProviderConfig;
-}) => Promise<MessageMemoryPublicationSettlementResult>;
-
 type TerminalFinalResponseRecoveryDependencies = {
   flushChatState: () => Promise<void>;
   getConversations: () => Conversation[];
-  isMemoryEnabled: () => boolean;
-  settleMemoryPublication: SettleRecoveredMessageMemoryPublication;
-  transitionMessageMemoryPublication: ChatState['transitionMessageMemoryPublication'];
+  recordConversationTurnMemory: RecordConversationTurnMemory;
 };
 
 const DEFAULT_RECOVERY_DEPENDENCIES: TerminalFinalResponseRecoveryDependencies = {
   flushChatState: flushChatStorePersistenceNow,
   getConversations: () => useChatStore.getState().conversations,
-  isMemoryEnabled: canWriteLongTermMemory,
-  settleMemoryPublication: settleMessageMemoryPublication,
-  transitionMessageMemoryPublication: (conversationId, sourceEndMessageId, disposition) =>
-    useChatStore
-      .getState()
-      .transitionMessageMemoryPublication(conversationId, sourceEndMessageId, disposition),
+  recordConversationTurnMemory: publishConversationTurnMemory,
 };
 
 function fail(code: string): never {
@@ -91,73 +73,6 @@ function resolveCandidateRunState(
   };
 }
 
-function readPublicationDisposition(
-  message: Message,
-): MessageMemoryPublicationDisposition | undefined {
-  const publication = normalizeMessageMemoryPublication(message.memoryPublication);
-  if (message.memoryPublication !== undefined && publication === undefined) {
-    return fail('terminal_final_recovery_memory_publication_invalid');
-  }
-  return publication?.disposition;
-}
-
-function initializeRecoveredFinalPublication(params: {
-  candidate: TerminalFinalResponseRecoveryCandidate;
-  conversation: Conversation;
-  dependencies: TerminalFinalResponseRecoveryDependencies;
-  final: Message;
-}): MessageMemoryPublicationDisposition {
-  const existingDisposition = readPublicationDisposition(params.final);
-  if (existingDisposition !== undefined) return existingDisposition;
-
-  const disposition: MessageMemoryPublicationDisposition = !params.dependencies.isMemoryEnabled()
-    ? 'opt_out'
-    : params.conversation.isSideThread
-      ? 'ephemeral_thread'
-      : null;
-  const transition = params.dependencies.transitionMessageMemoryPublication(
-    params.candidate.conversationId,
-    params.final.id,
-    disposition,
-  );
-  if (transition.status !== 'applied') {
-    return fail(`terminal_final_recovery_memory_publication_${transition.reason}`);
-  }
-  return transition.publication.disposition;
-}
-
-function resolveActiveChatProvider(
-  providerContext: ResolvedFinalizationProviderContext | undefined,
-): LlmProviderConfig | undefined {
-  return providerContext
-    ? { ...providerContext.provider, model: providerContext.model }
-    : undefined;
-}
-
-async function flushAndSettleRecoveredFinal(params: {
-  candidate: TerminalFinalResponseRecoveryCandidate;
-  dependencies: TerminalFinalResponseRecoveryDependencies;
-  finalId: string;
-  providerContext: ResolvedFinalizationProviderContext | undefined;
-}): Promise<void> {
-  await params.dependencies.flushChatState();
-
-  const current = resolveCandidateRunState(params.candidate, params.dependencies);
-  if (current?.final?.id !== params.finalId) {
-    return fail('terminal_final_recovery_memory_source_changed');
-  }
-  if (readPublicationDisposition(current.final) === undefined) {
-    return fail('terminal_final_recovery_memory_publication_removed');
-  }
-
-  await params.dependencies.settleMemoryPublication({
-    conversationId: params.candidate.conversationId,
-    sourceEndMessageId: params.finalId,
-    sourceRunId: params.candidate.runId,
-    activeChatProvider: resolveActiveChatProvider(params.providerContext),
-  });
-}
-
 export async function recoverTerminalFinalResponse(
   params: {
     candidate: TerminalFinalResponseRecoveryCandidate;
@@ -167,18 +82,7 @@ export async function recoverTerminalFinalResponse(
   dependencies: TerminalFinalResponseRecoveryDependencies = DEFAULT_RECOVERY_DEPENDENCIES,
 ): Promise<string | undefined> {
   const existing = resolveCandidateRunState(params.candidate, dependencies);
-  if (existing?.final) {
-    const existingDisposition = readPublicationDisposition(existing.final);
-    if (existingDisposition === null) {
-      await flushAndSettleRecoveredFinal({
-        candidate: params.candidate,
-        dependencies,
-        finalId: existing.final.id,
-        providerContext: params.providerContext,
-      });
-    }
-    return existing.final.content.trim();
-  }
+  if (existing?.final) return existing.final.content.trim();
 
   const preview = await params.ensureAgentRunFinalResponse({
     conversationId: params.candidate.conversationId,
@@ -191,24 +95,13 @@ export async function recoverTerminalFinalResponse(
 
   const repaired = resolveCandidateRunState(params.candidate, dependencies);
   if (!repaired?.final) return fail('terminal_final_recovery_final_unavailable');
-
-  initializeRecoveredFinalPublication({
-    candidate: params.candidate,
-    conversation: repaired.conversation,
-    dependencies,
-    final: repaired.final,
-  });
-  await flushAndSettleRecoveredFinal({
-    candidate: params.candidate,
-    dependencies,
-    finalId: repaired.final.id,
-    providerContext: params.providerContext,
-  });
+  await dependencies.flushChatState();
+  dependencies.recordConversationTurnMemory(params.candidate.conversationId, repaired.final.id);
   return preview;
 }
 
 function reportTerminalFinalRecoveryError(error: unknown): void {
-  console.warn('[foreground-recovery] Terminal final memory publication remains pending:', error);
+  console.warn('[foreground-recovery] Terminal final response recovery failed:', error);
 }
 
 export function useForegroundRunRecoveryEffects(params: {

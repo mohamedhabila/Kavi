@@ -72,7 +72,7 @@ function conditionResult(product: boolean): E2EScenarioResult {
   return buildFixtureResult({
     fixtureId: MINI_SCENARIO.id,
     userTurnCount: 1,
-    memoryItems: { capturedAt: 2, items: product ? [item] : [] },
+    memoryItems: { capturedAt: 2, items: product ? [item] : [], indexedTurnCount: 0 },
     turnTraces: [
       buildFixtureTurnTrace({
         lifecycleBefore: {

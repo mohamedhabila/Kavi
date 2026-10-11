@@ -24,10 +24,10 @@ import {
   type E2ERedactedGraphSnapshotTrace,
 } from './e2eTraceGraphSnapshots';
 import {
-  buildMemoryDeltaEvidence,
   buildMemoryFinalEvidence,
-  type E2ERedactedMemoryDeltaEvidence,
+  buildMemoryTurnEvidence,
   type E2ERedactedMemoryFinalEvidence,
+  type E2ERedactedMemoryTurnEvidence,
 } from './e2eTraceMemoryEvidence';
 import {
   buildFinalNativeStateTrace,
@@ -56,7 +56,7 @@ export type E2ERedactedTurnTrace = {
   finalAssistantCandidateCount: number;
   completion: E2ERedactedCompletionEvidence;
   agentRun: E2ERedactedAgentRunEvidence | null;
-  memoryDelta: E2ERedactedMemoryDeltaEvidence;
+  memory: E2ERedactedMemoryTurnEvidence;
   native: E2ERedactedNativeTurnEvidence;
   usage: E2ERedactedUsageTrace;
   toolCalls: E2ERedactedToolCallTrace[];
@@ -101,7 +101,7 @@ function buildTurnTrace(turn: E2EScenarioTurnTrace): E2ERedactedTurnTrace {
     ),
     completion: buildCompletionEvidence(turn.completion),
     agentRun: buildAgentRunEvidence(turn.agentRun),
-    memoryDelta: buildMemoryDeltaEvidence(turn),
+    memory: buildMemoryTurnEvidence(turn),
     native: buildNativeTurnEvidence(turn.native),
     usage: buildUsageTrace(turn.usage),
     toolCalls: turn.toolCalls.map(buildToolCallTrace),
@@ -135,7 +135,7 @@ export function buildE2EScenarioTraceSummary(params: {
     graphSnapshots: tailItems(result.graphSnapshots, MAX_SCENARIO_GRAPH_SNAPSHOTS).map(
       buildGraphSnapshotTrace,
     ),
-    memoryFinal: buildMemoryFinalEvidence(result.memoryFinalState),
+    memoryFinal: buildMemoryFinalEvidence(result.memoryItems),
     nativeFixtureStateFingerprints: buildFinalNativeStateTrace(result),
     turns: result.turnTraces.map(buildTurnTrace),
   };
