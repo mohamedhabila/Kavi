@@ -37,8 +37,6 @@ const MEMORY_TOOLS = [
   'memory_recall',
   'memory_remember',
   'memory_preserve_source',
-  'memory_pin',
-  'memory_unpin',
 ];
 
 async function executeGroundedRemember(input: {

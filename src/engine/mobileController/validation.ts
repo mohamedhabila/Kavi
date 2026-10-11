@@ -584,10 +584,3 @@ export function qualifyMobileControllerOutcome(candidate: unknown): MobileContro
     observedAt,
   });
 }
-
-export function mobileControllerOutcomesMatch(
-  left: MobileControllerOutcome,
-  right: MobileControllerOutcome,
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}

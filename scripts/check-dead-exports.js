@@ -12,10 +12,6 @@ const bannedDeadExports = [
     file: 'src/engine/orchestratorText.ts',
     exportName: 'textReferencesStructuredResource',
   },
-  {
-    file: 'src/engine/toolCategoryNormalization.ts',
-    exportName: 'normalizeExecutionRequirementCategory',
-  },
 ];
 
 function main() {

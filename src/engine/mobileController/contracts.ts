@@ -168,34 +168,3 @@ export interface MobileControllerOutcome {
   readonly stabilization?: MobileControllerStabilizationEvidence;
   readonly observedAt: number;
 }
-
-export type MobileControllerAuditEvent =
-  | Readonly<{
-      type: 'mobile_controller_handoff_pending';
-      handoffId: string;
-      runId: string;
-      executionRunId: string;
-      effectId: string;
-      toolCallId: string;
-      controllerId: string;
-      actionKind: MobileControllerActionKind;
-      actionDigest: ToolEffectDigest;
-      timestamp: number;
-    }>
-  | Readonly<{
-      type: 'mobile_controller_outcome_settled';
-      handoffId: string;
-      outcomeId: string;
-      runId: string;
-      executionRunId: string;
-      effectId: string;
-      toolCallId: string;
-      controllerId: string;
-      actionKind: MobileControllerActionKind;
-      actionDigest: ToolEffectDigest;
-      executionState: ToolExecutionState;
-      effectState: MobileControllerTerminalEffectState;
-      verificationState: ToolEffectVerificationState;
-      observableDelta: MobileControllerObservableDelta;
-      timestamp: number;
-    }>;

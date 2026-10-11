@@ -25,10 +25,6 @@ export function isSessionCoordinationToolName(name: string | undefined): boolean
   return SESSION_COORDINATION_TOOL_NAMES.has(normalizeToolName(name || ''));
 }
 
-export function isSessionInspectionToolName(name: string | undefined): boolean {
-  return SESSION_INSPECTION_TOOL_NAMES.has(normalizeToolName(name || ''));
-}
-
 export function isSessionToolName(name: string | undefined): boolean {
   return SESSION_TOOL_NAMES.has(normalizeToolName(name || ''));
 }

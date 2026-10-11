@@ -211,18 +211,28 @@ describe('builtin memory execution scope', () => {
   });
 
   it.each([
-    ['memory_pin', mockExecuteMemoryPin, { factId: 'fact-pin' }],
-    ['memory_unpin', mockExecuteMemoryUnpin, { factId: 'fact-unpin' }],
-  ] as const)('passes exact code-owned scope to %s mutation', async (name, executor, args) => {
-    await executeBuiltinMemoryTool({ ...BASE_PARAMS, name, args });
+    ['pin', mockExecuteMemoryPin, 'fact-pin'],
+    ['unpin', mockExecuteMemoryUnpin, 'fact-unpin'],
+  ] as const)(
+    'passes exact code-owned scope to memory_manage %s',
+    async (action, executor, factId) => {
+      await executeBuiltinMemoryTool({
+        ...BASE_PARAMS,
+        name: 'memory_manage',
+        args: { action, factId },
+      });
 
-    expect(executor).toHaveBeenCalledWith(args, {
-      memoryConversationId: 'delegated-memory-scope',
-      sourceThreadId: 'child-thread',
-      personaId: 'coder',
-      taskId: 'active-task',
-    });
-  });
+      expect(executor).toHaveBeenCalledWith(
+        { factId },
+        {
+          memoryConversationId: 'delegated-memory-scope',
+          sourceThreadId: 'child-thread',
+          personaId: 'coder',
+          taskId: 'active-task',
+        },
+      );
+    },
+  );
 
   it('passes exact code-owned scope to memory_manage invalidation', async () => {
     await executeBuiltinMemoryTool({

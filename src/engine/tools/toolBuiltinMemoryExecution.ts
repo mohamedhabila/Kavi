@@ -31,8 +31,6 @@ export const BUILTIN_MEMORY_TOOL_NAMES = new Set([
   'memory_recall',
   'memory_remember',
   'memory_preserve_source',
-  'memory_pin',
-  'memory_unpin',
   'memory_forget',
   'memory_manage',
 ]);
@@ -269,8 +267,6 @@ export async function executeBuiltinMemoryTool(
     memoryConversationId,
     context,
   );
-  if (name === 'memory_pin') return executeMemoryPin(args, executionMemoryContext);
-  if (name === 'memory_unpin') return executeMemoryUnpin(args, executionMemoryContext);
 
   if (name === 'memory_manage') {
     const action = manageAction;

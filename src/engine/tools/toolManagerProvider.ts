@@ -4,15 +4,14 @@ import {
   resolveProviderFamily as resolveConfiguredProviderFamily,
 } from '../../services/llm/catalog/providerFamilies';
 
-export const PROVIDER_TOOL_LIMITS: Record<string, number> = {
-  openai: 128,
-  anthropic: 64,
-  openrouter: 128,
-  ollama: 64,
-  gemini: 20,
-  'on-device': 12,
-  default: 128,
-};
+const KNOWN_TOOL_PROVIDER_FAMILIES: ReadonlySet<string> = new Set([
+  'openai',
+  'anthropic',
+  'openrouter',
+  'ollama',
+  'gemini',
+  'on-device',
+]);
 
 export type ToolProviderFamily =
   | 'openai'
@@ -22,18 +21,6 @@ export type ToolProviderFamily =
   | 'openrouter'
   | 'on-device'
   | 'default';
-
-export const PROVIDER_INITIAL_TOOL_SOFT_LIMITS: Record<ToolProviderFamily, number> = {
-  openai: 20,
-  anthropic: 16,
-  gemini: 12,
-  ollama: 12,
-  openrouter: 20,
-  'on-device': 8,
-  default: 20,
-};
-
-export const ON_DEVICE_TOOL_TOKEN_BUDGET = 1800;
 
 function isOnDeviceToolProvider(providerKind?: LlmProviderKind): boolean {
   if (providerKind === 'on-device') {
@@ -125,22 +112,5 @@ export function resolveToolProviderFamily(
     return modelFamily;
   }
 
-  return (PROVIDER_TOOL_LIMITS[lower] ? lower : 'default') as ToolProviderFamily;
-}
-
-export function getProviderToolLimit(
-  providerName: string,
-  baseUrl?: string,
-  model?: string,
-  providerKind?: LlmProviderKind,
-  providerFamily?: LlmProviderFamily,
-): number {
-  const family = resolveToolProviderFamily(
-    providerName,
-    baseUrl,
-    model,
-    providerKind,
-    providerFamily,
-  );
-  return PROVIDER_TOOL_LIMITS[family] ?? PROVIDER_TOOL_LIMITS.default;
+  return (KNOWN_TOOL_PROVIDER_FAMILIES.has(lower) ? lower : 'default') as ToolProviderFamily;
 }

@@ -1,10 +1,8 @@
 import {
   inferToolCapabilityDescriptor,
-  type ToolCapability,
   type ToolCapabilityDescriptor,
   type ToolWorkflowStage,
 } from './capabilityRegistry';
-import { normalizeToolCategoryFamily } from '../toolCategoryNormalization';
 import { normalizeToolName } from './toolNameNormalization';
 
 const PRODUCER_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
@@ -16,22 +14,12 @@ const PRODUCER_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
   'guarded_resource_creation',
 ]);
 
-const OBSERVER_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
-  'monitor_external_execution',
-  'await_external_execution',
-  'verify_evidence',
-]);
-
 export function descriptorForToolName(toolName: string): ToolCapabilityDescriptor {
   const normalizedName = normalizeToolName(toolName);
   return inferToolCapabilityDescriptor({
     name: normalizedName,
     description: normalizedName,
   });
-}
-
-export function descriptorFamily(descriptor: ToolCapabilityDescriptor): string {
-  return normalizeToolCategoryFamily(descriptor.category) ?? descriptor.category;
 }
 
 export function descriptorContinuesExternalExecution(
@@ -48,41 +36,6 @@ export function descriptorStartsExternalExecution(descriptor: ToolCapabilityDesc
   return (
     descriptor.sideEffects.includes('external_run') &&
     !descriptorContinuesExternalExecution(descriptor)
-  );
-}
-
-export function descriptorProducesExternalExecutionEvidence(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
-  return (
-    descriptorStartsExternalExecution(descriptor) &&
-    descriptor.providesEvidence.includes('external_run')
-  );
-}
-
-export function descriptorPassivelyObservesExternalExecution(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
-  return (
-    descriptor.sideEffects.every((sideEffect) => sideEffect === 'none') &&
-    descriptor.workflowStages.some(
-      (stage) => stage === 'monitor_external_execution' || stage === 'await_external_execution',
-    )
-  );
-}
-
-export function capabilitiesForToolNames(toolNames: ReadonlyArray<string>): ToolCapability[] {
-  return Array.from(
-    new Set(toolNames.flatMap((toolName) => descriptorForToolName(toolName).capabilities)),
-  );
-}
-
-export function descriptorHasLocalArtifactProducerEffect(
-  descriptor: ToolCapabilityDescriptor,
-): boolean {
-  return (
-    descriptor.sideEffects.includes('local_artifact') &&
-    descriptor.capabilities.some((capability) => capability === 'write')
   );
 }
 
@@ -113,15 +66,6 @@ export function descriptorHasProducerEffect(descriptor: ToolCapabilityDescriptor
         capability === 'push' ||
         capability === 'deploy' ||
         capability === 'compute',
-    )
-  );
-}
-
-export function descriptorHasObserverEffect(descriptor: ToolCapabilityDescriptor): boolean {
-  return (
-    descriptor.workflowStages.some((stage) => OBSERVER_WORKFLOW_STAGES.has(stage)) ||
-    descriptor.capabilities.some(
-      (capability) => capability === 'monitor' || capability === 'wait' || capability === 'verify',
     )
   );
 }

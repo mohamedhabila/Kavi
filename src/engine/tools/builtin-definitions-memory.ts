@@ -287,33 +287,6 @@ export const MEMORY_PRESERVE_SOURCE_TOOL: ToolDefinition = {
   },
 };
 
-export const MEMORY_PIN_TOOL: ToolDefinition = {
-  name: 'memory_pin',
-  description:
-    'Pin a fact by id so it is always included in the focus header surfaced to the model.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      factId: {
-        type: 'string',
-        description: 'ID returned by memory_recall, memory_remember, or memory_preserve_source.',
-      },
-    },
-    required: ['factId'],
-  },
-};
-
-export const MEMORY_UNPIN_TOOL: ToolDefinition = {
-  name: 'memory_unpin',
-  description:
-    'Remove a pin from a fact so it competes with other facts for focus-header inclusion.',
-  input_schema: {
-    type: 'object',
-    properties: { factId: { type: 'string' } },
-    required: ['factId'],
-  },
-};
-
 export const MEMORY_FORGET_TOOL: ToolDefinition = {
   name: 'memory_forget',
   description:
@@ -377,17 +350,6 @@ export const MEMORY_MANAGE_TOOL: ToolDefinition = {
     workflowStages: ['persist_artifact', 'verify_evidence'],
   },
 };
-
-export const BUILTIN_MEMORY_TOOL_DEFINITIONS: ToolDefinition[] = [
-  MEMORY_SEARCH_TOOL,
-  MEMORY_RECALL_TOOL,
-  MEMORY_REMEMBER_TOOL,
-  MEMORY_PRESERVE_SOURCE_TOOL,
-  MEMORY_PIN_TOOL,
-  MEMORY_UNPIN_TOOL,
-  MEMORY_FORGET_TOOL,
-  MEMORY_MANAGE_TOOL,
-];
 
 export const BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS: ToolDefinition[] = [
   MEMORY_SEARCH_TOOL,

@@ -22,14 +22,3 @@ export function normalizeExplicitToolContractList<T extends string>(
     }),
   );
 }
-
-export function normalizeExplicitToolContractValue<T extends string>(
-  value: string | undefined,
-  allowed: ReadonlySet<string>,
-): T | undefined {
-  const normalized = value?.trim();
-  if (!normalized || !allowed.has(normalized)) {
-    return undefined;
-  }
-  return normalized as T;
-}

@@ -3,8 +3,6 @@ import {
   MEMORY_RECALL_TOOL,
   MEMORY_REMEMBER_TOOL,
   MEMORY_PRESERVE_SOURCE_TOOL,
-  MEMORY_PIN_TOOL,
-  MEMORY_UNPIN_TOOL,
   MEMORY_FORGET_TOOL,
   MEMORY_MANAGE_TOOL,
 } from '../../src/engine/tools/builtin-definitions';
@@ -77,15 +75,6 @@ function parseOutcome(
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-const NEW_MEMORY_TOOL_NAMES = [
-  'memory_recall',
-  'memory_remember',
-  'memory_preserve_source',
-  'memory_pin',
-  'memory_unpin',
-  'memory_forget',
-];
-
 const REGISTERED_MEMORY_TOOL_NAMES = [
   'memory_recall',
   'memory_remember',
@@ -116,18 +105,15 @@ describe('living-memory tool wiring', () => {
     expoSqlite.__resetExpoSqliteForTests();
   });
 
-  it('exports a ToolDefinition for each new memory tool', () => {
+  it('exports a ToolDefinition for each registered memory tool', () => {
     const defs = [
       MEMORY_RECALL_TOOL,
       MEMORY_REMEMBER_TOOL,
       MEMORY_PRESERVE_SOURCE_TOOL,
-      MEMORY_PIN_TOOL,
-      MEMORY_UNPIN_TOOL,
       MEMORY_FORGET_TOOL,
       MEMORY_MANAGE_TOOL,
     ];
-    const expected = [...NEW_MEMORY_TOOL_NAMES, 'memory_manage'].sort();
-    expect(defs.map((d) => d.name).sort()).toEqual(expected);
+    expect(defs.map((d) => d.name).sort()).toEqual([...REGISTERED_MEMORY_TOOL_NAMES].sort());
     for (const def of defs) {
       expect(typeof def.description).toBe('string');
       expect(def.input_schema.type).toBe('object');

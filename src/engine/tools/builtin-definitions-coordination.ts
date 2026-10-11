@@ -140,51 +140,6 @@ export const SPEAK_TOOL: ToolDefinition = {
   },
 };
 
-export const AGENTS_LIST_TOOL: ToolDefinition = {
-  name: 'agents_list',
-  description: 'List all available agent personas and their capabilities.',
-  input_schema: {
-    type: 'object',
-    properties: {},
-    required: [],
-  },
-};
-
-export const AGENTS_SWITCH_TOOL: ToolDefinition = {
-  name: 'agents_switch',
-  description: 'Switch the active agent persona. Changes system prompt and model routing.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      personaId: { type: 'string', description: 'ID of the persona to activate' },
-    },
-    required: ['personaId'],
-  },
-};
-
-export const AGENTS_CONFIGURE_TOOL: ToolDefinition = {
-  name: 'agents_configure',
-  description:
-    "Configure an agent persona's properties like name, model, system prompt, or temperature.",
-  input_schema: {
-    type: 'object',
-    properties: {
-      personaId: { type: 'string', description: 'ID of the persona to configure' },
-      name: { type: 'string', description: 'New display name (optional)' },
-      description: { type: 'string', description: 'New description (optional)' },
-      model: { type: 'string', description: 'Model override (optional)' },
-      providerId: { type: 'string', description: 'Provider override (optional)' },
-      systemPrompt: { type: 'string', description: 'Custom system prompt (optional)' },
-      temperature: { type: 'number', description: 'Temperature 0-2 (optional)' },
-      thinkingLevel: {
-        type: 'string',
-        description: 'Thinking level override: off, low, medium, or high (optional)',
-      },
-    },
-    required: ['personaId'],
-  },
-};
-
 export const AGENTS_TOOL: ToolDefinition = {
   name: 'agents',
   description:

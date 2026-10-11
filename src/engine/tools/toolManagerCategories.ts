@@ -176,38 +176,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   },
 ];
 
-export function formatToolCategoryLabel(category: string): string {
-  const labels: Record<string, string> = {
-    workspace_search: 'Workspace search',
-    code: 'Code / computation',
-    web: 'Web research',
-    browser: 'Browser automation',
-    canvas: 'Canvas previews',
-    ssh: 'SSH / remote access',
-    calendar: 'Calendar',
-    contacts: 'Contacts',
-    expo: 'Expo / EAS',
-    expo_manual_actions: 'Manual Expo actions',
-    sessions: 'Sessions / sub-agents',
-    agents: 'Agent management',
-    media: 'Media tools',
-    device: 'Device tools',
-    communication: 'Communication',
-    workspace_files: 'Workspace files',
-    pdf: 'PDF',
-    cron: 'Automation',
-    memory_search: 'Memory search',
-    github: 'GitHub',
-    mcp: 'MCP tools',
-    skills: 'Skills',
-    other: 'Other',
-  };
-
-  return (
-    labels[category] ?? category.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-  );
-}
-
 export function getToolManagerCategoryForToolName(toolName: string): string {
   for (const category of TOOL_CATEGORIES) {
     if (category.toolNames.includes(toolName)) {
@@ -255,9 +223,4 @@ export function mapDeferredCategoryToToolCatalogCategory(category: string): stri
   };
 
   return mapping[category] ?? null;
-}
-
-export function buildDeferredCategoryDiscoveryHint(category: string): string {
-  const toolCatalogCategory = mapDeferredCategoryToToolCatalogCategory(category);
-  return toolCatalogCategory ? ` Inspect with tool_catalog category="${toolCatalogCategory}".` : '';
 }
