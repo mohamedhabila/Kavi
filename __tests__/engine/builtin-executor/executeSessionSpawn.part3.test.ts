@@ -10,14 +10,7 @@ import {
 
 describe('Builtin Tool Executor', () => {
   describe('executeSessionSpawn part 3', () => {
-    function seedGoalRunConversation(
-      goals: Array<{
-        id: string;
-        title: string;
-        status?: 'pending' | 'active' | 'completed' | 'blocked';
-        dependencies?: string[];
-      }>,
-    ) {
+    function seedRunConversation() {
       const now = 1;
       return {
         id: 'parent-conv-1',
@@ -30,15 +23,6 @@ describe('Builtin Tool Executor', () => {
               version: 1,
               status: 'ready',
               iteration: 1,
-              goals: goals.map((goal) => ({
-                id: goal.id,
-                title: goal.title,
-                status: goal.status ?? 'pending',
-                dependencies: goal.dependencies ?? [],
-                evidence: [],
-                createdAt: now,
-                updatedAt: now,
-              })),
               expectedToolCalls: [],
               observedToolResults: [],
               pendingAsyncCount: 0,
@@ -64,17 +48,25 @@ describe('Builtin Tool Executor', () => {
     }
 
     it('accepts dependency arrays without throwing a configuration error', async () => {
-      const { launchSubAgent } = require('../../../src/services/agents/subAgent');
-      mockChatStoreState.conversations = [
-        seedGoalRunConversation([
-          { id: 'workstream-1', title: 'Architecture', status: 'completed' },
-          {
-            id: 'workstream-2',
-            title: 'Architecture Review',
-            dependencies: ['workstream-1'],
-          },
-        ]),
-      ];
+      const {
+        launchSubAgent,
+        listActiveSubAgents,
+      } = require('../../../src/services/agents/subAgent');
+      listActiveSubAgents.mockReturnValueOnce([
+        {
+          sessionId: 'sub-architecture',
+          parentConversationId: 'parent-conv-1',
+          agentRunId: 'run-42',
+          workstreamId: 'workstream-1',
+          depth: 0,
+          startedAt: 10,
+          updatedAt: 20,
+          status: 'completed',
+          completionState: 'verified_success',
+          sandboxPolicy: 'inherit',
+        },
+      ]);
+      mockChatStoreState.conversations = [seedRunConversation()];
 
       const result = await executeSessionSpawn(
         {
@@ -112,7 +104,7 @@ describe('Builtin Tool Executor', () => {
       );
     });
 
-    it('allows descriptive worker names without forcing a workstream binding', async () => {
+    it('assigns a workstream to a descriptively named worker', async () => {
       const { launchSubAgent } = require('../../../src/services/agents/subAgent');
       mockChatStoreState.conversations = [
         {
@@ -161,7 +153,7 @@ describe('Builtin Tool Executor', () => {
 
       const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('running');
-      expect(parsed.workstreamId).toBeUndefined();
+      expect(parsed.workstreamId).toBe('delegated-workstream');
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Anthropic Research Agent',
@@ -169,7 +161,7 @@ describe('Builtin Tool Executor', () => {
         expect.anything(),
         undefined,
       );
-      expect(launchSubAgent.mock.calls[0][0].workstreamId).toBeUndefined();
+      expect(launchSubAgent.mock.calls[0][0].workstreamId).toBe('delegated-workstream');
     });
 
     it('handles spawn error', async () => {

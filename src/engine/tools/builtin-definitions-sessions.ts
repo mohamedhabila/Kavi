@@ -15,7 +15,7 @@ export const SESSION_SPAWN_TOOL: ToolDefinition = {
       workstreamId: {
         type: 'string',
         description:
-          'Optional. The workstreamId an earlier sessions_spawn result reported, to address that same work again. Omit it to start new work.',
+          'Optional. Names this piece of work; pass the workstreamId an earlier sessions_spawn result reported to address that same work again. Omit it to have one assigned.',
       },
       dependsOnWorkstreams: {
         type: 'array',

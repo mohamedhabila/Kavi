@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { useChatStore } from '../store/useChatStore';
-import { applySubAgentTerminalControlGraphEffects } from '../services/agents/subAgentGoalGraphEffects';
+import { applySubAgentTerminalControlGraphEffects } from '../services/agents/subAgentTerminalGraphEffects';
 import { listActiveSubAgents, onSubAgentEvent } from '../services/agents/subAgent';
 import { buildSubAgentLifecycleMessage } from '../services/agents/lifecycle/presentPhase';
 import {

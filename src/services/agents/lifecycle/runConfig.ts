@@ -153,6 +153,7 @@ export function buildSubAgentSystemPrompt(
   depth: number,
 ): string {
   const workerContract = `## Worker Contract
+- Do only the task you were given. The parent already launched you: do not delegate it again, describe orchestration, or take on sibling or follow-up work.
 - If the task can be completed from the prompt and visible context, answer directly without tools.
 - Use tools only for required information, verification, or side effects.
 - Support, catalog, memory, and coordination tools are not progress by themselves.
@@ -161,6 +162,7 @@ export function buildSubAgentSystemPrompt(
 - Briefly state major tool phases only when it helps coordination.
 - ${PYTHON_EXTENSION_WHEN_NEEDED}
 - ${PYTHON_EXTENSION_POLICY}
+- When the answer needs citations or identifiers, copy them exactly from what you inspected; never reconstruct or invent paths, symbols, headings, or record ids.
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.
 - Otherwise finish with a concise report: outcome, key verified findings, artifacts/actions, and any blocker.
 - If interrupted, timed out, or cancelled, preserve the most useful verified findings in visible text.`;

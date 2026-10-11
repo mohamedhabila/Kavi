@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { Message, ToolCall } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
@@ -87,7 +86,6 @@ export async function executeAgentControlGraphToolBatch(params: {
   completedWorkflowToolNames: Set<string>;
   emitPendingAsyncOperationsChange?: () => void;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
-  controlGraphGoals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   toolCallBlockers?: ReadonlyMap<string, string>;
   agentRunId?: string;
@@ -192,7 +190,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       onPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
       onRecordPerformanceMetrics:
         params.recordPerformanceMetrics as ToolExecutionLifecycleMetricsRecorder,
-      controlGraphGoals: params.controlGraphGoals,
       activeTaskId: params.activeTaskId,
       agentRunId: params.agentRunId,
       executionRunId: params.executionRunId,

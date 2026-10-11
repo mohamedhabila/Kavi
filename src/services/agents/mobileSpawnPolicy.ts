@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 
@@ -96,27 +95,20 @@ export function evaluateMobileSpawnPreflight(
 }
 
 /**
- * Reads the workstream a spawn names. A workstream is the record the run opened for one
- * delegated piece of work; its id is reported back by `sessions_spawn`, so naming it again
- * addresses the same work, and omitting it starts new work.
+ * Reads the workstream a spawn names. A workstream is one delegated piece of work this run
+ * started; `sessions_spawn` reports its id. Any exact id names the new work, so a label
+ * the model chose is taken as given; one a worker already holds is the same work, which
+ * the spawn plan answers with that worker.
  */
 export function resolveSpawnWorkstream(request: {
   workstreamId?: unknown;
-  goals: ReadonlyArray<AgentGoal>;
 }): SpawnWorkstreamResolution {
   if (request.workstreamId === undefined) return { status: 'ready' };
   if (!isExactDurableScopeId(request.workstreamId)) {
     return {
       status: 'error',
-      error: 'workstreamId must be the exact id a sessions_spawn result reported.',
+      error: 'workstreamId must be a short id without spaces or control characters.',
     };
   }
-  const workstreamId = request.workstreamId;
-  if (request.goals.length > 0 && !request.goals.some((goal) => goal.id === workstreamId)) {
-    return {
-      status: 'error',
-      error: `Unknown workstreamId "${workstreamId}"; omit it to start new work.`,
-    };
-  }
-  return { status: 'ready', workstreamId };
+  return { status: 'ready', workstreamId: request.workstreamId };
 }

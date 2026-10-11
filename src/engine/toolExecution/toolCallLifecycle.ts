@@ -279,7 +279,6 @@ export async function executeToolCallLifecycle(
         catalogVisibleToolNames: params.catalogVisibleToolNames
           ? Array.from(params.catalogVisibleToolNames)
           : undefined,
-        controlGraphGoals: params.controlGraphGoals,
         ...(params.activeTaskId ? { activeTaskId: params.activeTaskId } : {}),
         agentRunId: params.agentRunId,
         executionRunId: params.executionRunId,

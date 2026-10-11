@@ -332,17 +332,14 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     }
 
     // ── Auto-link tool results to active goal evidence ───────────────────
-    let delegationEvidenceApplied = false;
     if (!canonicalOutcome.toolMessage.isError && toolResultCanAdvanceWorkflow) {
-      const snapshot = params.getGraphSnapshot();
-      const delegationTerminal = buildDelegationToolTerminalGraphEvents({
+      const delegationTerminalEvents = buildDelegationToolTerminalGraphEvents({
         toolName,
         resultContent: canonicalOutcome.toolMessage.content,
-        run: { controlGraph: snapshot },
+        run: { controlGraph: params.getGraphSnapshot() },
       });
-      if (delegationTerminal.events.length > 0) {
-        params.applyGraphEvents(delegationTerminal.events);
-        delegationEvidenceApplied = delegationTerminal.applied;
+      if (delegationTerminalEvents.length > 0) {
+        params.applyGraphEvents(delegationTerminalEvents);
       }
     }
 
@@ -351,12 +348,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       // goals, and closes that still lack their proof. Pre-filtering here to active and
       // blocked goals silently disabled the latter two.
       const evidenceRoutableGoals = params.getGraphSnapshot().goals ?? [];
-      // Delegated artifacts route on both paths: the delegation branch is exactly the
-      // case that produces them, so excluding them there would drop the only evidence a
-      // supervisor goal can close its artifact criterion on.
-      const routableEvidenceStrings = delegationEvidenceApplied
-        ? [...effectReceiptEvidenceStrings, ...delegatedArtifactEvidenceStrings]
-        : toolGoalEvidenceStrings;
+      const routableEvidenceStrings = toolGoalEvidenceStrings;
       if (routableEvidenceStrings.length > 0 && evidenceRoutableGoals.length > 0) {
         const routedEvidence = routeToolEvidenceToActiveGoals({
           toolName,

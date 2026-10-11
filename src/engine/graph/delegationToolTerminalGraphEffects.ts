@@ -10,16 +10,10 @@ import type {
   SubAgentStatus,
   SubAgentTerminationCause,
 } from '../../types/subAgent';
-import { buildSubAgentTerminalControlGraphEvents } from '../../services/agents/subAgentGoalGraphEffects';
+import { buildSubAgentTerminalControlGraphEvents } from '../../services/agents/subAgentTerminalGraphEffects';
 import { reduceAgentControlGraph } from './agentControlGraph';
 import type { AgentControlGraphEvent } from './agentControlGraphTypes';
 import { normalizeToolName } from '../tools/toolNameNormalization';
-import { applyGoalMutation } from '../goals/graphState';
-import {
-  buildDelegatedWorkerLaunchEvidence,
-  readDelegatedWorkerLaunchSessionId,
-} from '../goals/delegation';
-import { getGoalById } from '../goals/types';
 
 const DELEGATION_TERMINAL_TOOL_NAMES = new Set([
   'sessions_spawn',
@@ -40,14 +34,6 @@ const TERMINAL_STATUSES = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isSuccessfulTerminalStatus(value: unknown): boolean {
-  return typeof value === 'string' && SUCCESSFUL_TERMINAL_STATUSES.has(value.trim().toLowerCase());
-}
-
-function isVerifiedCompletionState(value: unknown): boolean {
-  return value === 'verified_success';
 }
 
 function readString(value: unknown): string | undefined {
@@ -193,88 +179,19 @@ function resolveWorkerLifecycleEvent(status: SubAgentStatus): SubAgentLifecycleE
   return status === 'running' ? 'error' : status;
 }
 
-function buildRunningSpawnGraphEvents(params: {
-  record: Record<string, unknown>;
-  run: Pick<AgentRun, 'controlGraph'>;
-  timestamp: number;
-}): AgentControlGraphEvent[] {
-  const graph = params.run.controlGraph;
-  const sessionId = readString(params.record.sessionId);
-  const goalId = readString(params.record.workstreamId);
-  if (!graph || !sessionId || !goalId || !getGoalById(graph.goals ?? [], goalId)) return [];
-
-  const events: AgentControlGraphEvent[] = [];
-  const activation = applyGoalMutation(
-    graph.goals ?? [],
-    { action: 'activate', goals: [{ id: goalId }] },
-    params.timestamp,
-  );
-  if (activation.errors.length === 0) {
-    events.push({
-      type: 'GOALS_UPDATED',
-      goals: activation.goals,
-      reason: 'delegation:worker_launched',
-      timestamp: params.timestamp,
-    });
-  }
-
-  const launchEvidence = buildDelegatedWorkerLaunchEvidence(sessionId);
-  const goal = getGoalById(graph.goals ?? [], goalId);
-  if (!goal?.evidence.some((entry) => readDelegatedWorkerLaunchSessionId(entry) === sessionId)) {
-    events.push({
-      type: 'GOAL_EVIDENCE_ADDED',
-      goalId,
-      evidence: launchEvidence,
-      timestamp: params.timestamp,
-    });
-  }
-  return events;
-}
-
-function buildBlockedWorkerGoalEvents(params: {
-  worker: SubAgentSnapshot;
-  run: Pick<AgentRun, 'controlGraph'>;
-  timestamp: number;
-}): AgentControlGraphEvent[] {
-  const graph = params.run.controlGraph;
-  const goalId = params.worker.workstreamId?.trim();
-  const existingGoal = graph && goalId ? getGoalById(graph.goals ?? [], goalId) : undefined;
-  if (!graph || !goalId || !existingGoal) return [];
-
-  const reason = `Worker ${params.worker.sessionId} ended with ${params.worker.completionState ?? params.worker.status}.`;
-  const goals = (graph.goals ?? []).map((goal) =>
-    goal.id === goalId
-      ? {
-          ...goal,
-          status: 'blocked' as const,
-          blockedReason: reason,
-          updatedAt: params.timestamp,
-        }
-      : goal,
-  );
-  return [
-    {
-      type: 'GOALS_UPDATED',
-      goals,
-      reason: 'delegation:worker_not_verified',
-      timestamp: params.timestamp,
-    },
-  ];
-}
-
 export function buildDelegationToolTerminalGraphEvents(params: {
   toolName: string;
   resultContent: string;
   run: Pick<AgentRun, 'controlGraph'>;
   timestamp?: number;
-}): { events: AgentControlGraphEvent[]; applied: boolean } {
+}): AgentControlGraphEvent[] {
   const normalizedToolName = normalizeToolName(params.toolName);
   if (!DELEGATION_TERMINAL_TOOL_NAMES.has(normalizedToolName)) {
-    return { events: [], applied: false };
+    return [];
   }
 
   if (!params.run.controlGraph) {
-    return { events: [], applied: false };
+    return [];
   }
 
   let parsed: Record<string, unknown> | undefined;
@@ -282,46 +199,29 @@ export function buildDelegationToolTerminalGraphEvents(params: {
     const raw = JSON.parse(params.resultContent) as unknown;
     parsed = isRecord(raw) ? raw : undefined;
   } catch {
-    return { events: [], applied: false };
+    return [];
   }
 
   if (!parsed) {
-    return { events: [], applied: false };
+    return [];
   }
   parsed = resolveDelegationPayloadFromSpill(parsed, normalizedToolName);
 
   const timestamp = params.timestamp ?? Date.now();
-  if (
-    normalizedToolName === 'sessions_spawn' &&
-    parsed.status === 'running' &&
-    readString(parsed.sessionId)
-  ) {
-    const events = buildRunningSpawnGraphEvents({ record: parsed, run: params.run, timestamp });
-    return { events, applied: events.length > 0 };
-  }
-
   // Each worker's events are built against the graph as the previous worker's left it, so
-  // one worker's evidence, goal materialization and pending-operation removal do not
-  // overwrite another's.
+  // one worker's pending-operation removal does not overwrite another's.
   const events: AgentControlGraphEvent[] = [];
   let run = params.run;
   for (const terminalRecord of parseTerminalDelegationRecords(parsed)) {
     const worker = buildWorkerSnapshotFromTerminalRecord(terminalRecord);
     if (!worker) continue;
 
-    const terminalEvents = buildSubAgentTerminalControlGraphEvents({
+    const workerEvents = buildSubAgentTerminalControlGraphEvents({
       run,
       agent: worker,
       event: resolveWorkerLifecycleEvent(worker.status),
       timestamp,
     });
-    const verified =
-      worker.status === 'completed' &&
-      isSuccessfulTerminalStatus(terminalRecord.status) &&
-      isVerifiedCompletionState(worker.completionState);
-    const workerEvents = verified
-      ? terminalEvents
-      : [...buildBlockedWorkerGoalEvents({ worker, run, timestamp }), ...terminalEvents];
     if (workerEvents.length === 0) continue;
 
     events.push(...workerEvents);
@@ -330,8 +230,5 @@ export function buildDelegationToolTerminalGraphEvents(params: {
     }
   }
 
-  const applied = events.some(
-    (event) => event.type === 'GOAL_EVIDENCE_ADDED' || event.type === 'GOALS_UPDATED',
-  );
-  return { events, applied };
+  return events;
 }

@@ -2,251 +2,95 @@ import { reduceAgentControlGraph } from '../../src/engine/graph/agentControlGrap
 import { buildDelegationToolTerminalGraphEvents } from '../../src/engine/graph/delegationToolTerminalGraphEffects';
 import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 
-describe('delegationToolTerminalGraphEffects', () => {
-  it('emits GOAL_EVIDENCE_ADDED with worker prefix from terminal sessions_spawn JSON', () => {
-    const controlGraph = reduceAgentControlGraph(
-      createInitialAgentRunControlGraphState({ updatedAt: 100 }),
-      [
-        {
-          type: 'GOALS_UPDATED',
-          goals: [
-            {
-              id: 'worker-goal',
-              title: 'Delegated work',
-              status: 'active',
-              dependencies: [],
-              evidence: [],
-              successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          ],
-          timestamp: 100,
-        },
-      ],
-    );
+function pending(sessionId: string) {
+  return {
+    key: `session:${sessionId}`,
+    kind: 'session' as const,
+    resourceId: sessionId,
+    displayName: `Session ${sessionId}`,
+    status: 'running' as const,
+    blocksFinalization: true,
+    lastUpdatedByTool: 'sessions_spawn',
+    updatedAt: 100,
+    monitorToolNames: ['sessions_wait', 'sessions_cancel'],
+    waitToolName: 'sessions_wait',
+    statusArgs: { sessionId },
+    waitArgs: { sessionId },
+  };
+}
 
-    const { events, applied } = buildDelegationToolTerminalGraphEvents({
-      toolName: 'sessions_spawn',
-      resultContent: JSON.stringify({
-        sessionId: 'sub-worker',
-        status: 'completed',
-        completionState: 'verified_success',
-        output: 'E2E-WORKER-EVIDENCE-42',
-        workstreamId: 'worker-goal',
-        toolsUsed: ['write_file'],
-        iterations: 1,
-        depth: 1,
-      }),
-      run: { controlGraph },
-      timestamp: 200,
-    });
+function waitingGraph(sessionIds: string[]) {
+  return reduceAgentControlGraph(createInitialAgentRunControlGraphState({ updatedAt: 100 }), [
+    {
+      type: 'ASYNC_WAITING',
+      pendingAsyncCount: sessionIds.length,
+      pendingOperations: sessionIds.map(pending),
+      timestamp: 100,
+    },
+  ]);
+}
 
-    expect(applied).toBe(true);
-    const evidenceEvent = events.find((event) => event.type === 'GOAL_EVIDENCE_ADDED');
-    expect(evidenceEvent).toMatchObject({
-      type: 'GOAL_EVIDENCE_ADDED',
-      goalId: 'worker-goal',
-    });
-    expect(String((evidenceEvent as { evidence?: string }).evidence)).toContain('worker:');
-    expect(String((evidenceEvent as { evidence?: string }).evidence)).toContain(
-      'E2E-WORKER-EVIDENCE-42',
-    );
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'GOAL_EVIDENCE_ADDED',
-          goalId: 'worker-goal',
-          evidence: 'write_file:worker:sub-worker',
-        }),
-      ]),
-    );
-  });
+function terminalSession(sessionId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId,
+    status: 'completed',
+    terminationCause: 'completed',
+    completionState: 'verified_success',
+    output: `Result from ${sessionId}.`,
+    toolsUsed: [],
+    iterations: 1,
+    depth: 1,
+    ...overrides,
+  };
+}
 
-  it('materializes a missing workstream goal before recording terminal worker evidence', () => {
-    const controlGraph = createInitialAgentRunControlGraphState({ updatedAt: 100 });
+function pendingAfter(events: ReturnType<typeof buildDelegationToolTerminalGraphEvents>) {
+  const last = events.filter((event) => event.type === 'ASYNC_WAITING').at(-1);
+  return last && 'pendingOperations' in last
+    ? (last.pendingOperations ?? []).map((operation) => operation.resourceId)
+    : undefined;
+}
 
-    const { events, applied } = buildDelegationToolTerminalGraphEvents({
-      toolName: 'sessions_spawn',
-      resultContent: JSON.stringify({
-        sessionId: 'sub-worker',
-        status: 'completed',
-        completionState: 'verified_success',
-        output: 'E2E-WORKER-CHAIN-77',
-        workstreamId: 'worker-chain',
-        toolsUsed: ['write_file'],
-        iterations: 1,
-        depth: 1,
-        name: 'Worker chain',
-      }),
-      run: { controlGraph },
-      timestamp: 200,
-    });
-
-    expect(applied).toBe(true);
-    const goalsEvent = events.find((event) => event.type === 'GOALS_UPDATED');
-    expect(goalsEvent).toEqual(expect.objectContaining({ type: 'GOALS_UPDATED' }));
-    expect((goalsEvent as { goals?: Array<{ id: string; status: string }> }).goals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'worker-chain',
-          status: 'active',
-        }),
-      ]),
-    );
-    const evidenceEvent = events.find((event) => event.type === 'GOAL_EVIDENCE_ADDED');
-    expect(evidenceEvent).toMatchObject({
-      type: 'GOAL_EVIDENCE_ADDED',
-      goalId: 'worker-chain',
-    });
-  });
-
-  it('activates the delegated goal and records durable ownership on a running spawn', () => {
-    const controlGraph = reduceAgentControlGraph(
-      createInitialAgentRunControlGraphState({ updatedAt: 100 }),
-      [
-        {
-          type: 'GOALS_UPDATED',
-          goals: [
-            {
-              id: 'parent-goal',
-              title: 'Parent work',
-              status: 'active',
-              completionPolicy: 'blocking',
-              dependencies: [],
-              evidence: [],
-              successCriteria: ['evidence.artifact:artifacts/report.md'],
-              createdAt: 1,
-              updatedAt: 1,
-            },
-            {
-              id: 'worker-goal',
-              title: 'Delegated work',
-              status: 'pending',
-              completionPolicy: 'blocking',
-              owner: 'delegated-worker',
-              requiredCapabilities: ['coordinate'],
-              dependencies: [],
-              evidence: [],
-              successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          ],
-          timestamp: 100,
-        },
-      ],
-    );
-    const { events, applied } = buildDelegationToolTerminalGraphEvents({
-      toolName: 'sessions_spawn',
-      resultContent: JSON.stringify({
-        status: 'running',
-        sessionId: 'sub-worker',
-        workstreamId: 'worker-goal',
-      }),
-      run: { controlGraph },
-      timestamp: 200,
-    });
-
-    expect(applied).toBe(true);
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'GOALS_UPDATED',
-          reason: 'delegation:worker_launched',
-        }),
-        expect.objectContaining({
-          type: 'GOAL_EVIDENCE_ADDED',
-          goalId: 'worker-goal',
-          evidence: 'delegation_launch:sub-worker',
-        }),
-      ]),
-    );
-    const goalsEvent = events.find((event) => event.type === 'GOALS_UPDATED');
-    const goals = (goalsEvent as { goals: Array<{ id: string; status: string }> }).goals;
-    expect(goals.find((goal) => goal.id === 'worker-goal')?.status).toBe('active');
-    expect(goals.find((goal) => goal.id === 'parent-goal')?.status).toBe('active');
-  });
-
-  it('blocks the owned goal when terminal worker prose lacks verified semantic completion', () => {
-    const controlGraph = reduceAgentControlGraph(
-      createInitialAgentRunControlGraphState({ updatedAt: 100 }),
-      [
-        {
-          type: 'GOALS_UPDATED',
-          goals: [
-            {
-              id: 'worker-goal',
-              title: 'Delegated work',
-              status: 'active',
-              completionPolicy: 'blocking',
-              owner: 'delegated-worker',
-              requiredCapabilities: ['coordinate'],
-              dependencies: [],
-              evidence: ['delegation_launch:sub-worker'],
-              successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          ],
-          timestamp: 100,
-        },
-      ],
-    );
-    const { events, applied } = buildDelegationToolTerminalGraphEvents({
-      toolName: 'sessions_spawn',
+describe('delegation tool results release the workers they observed', () => {
+  it('clears every worker a sessions_wait collected from pending work', () => {
+    const events = buildDelegationToolTerminalGraphEvents({
+      toolName: 'sessions_wait',
       resultContent: JSON.stringify({
         status: 'completed',
-        completionState: 'incomplete',
-        sessionId: 'sub-worker',
-        output: 'Looks done to me.',
-        workstreamId: 'worker-goal',
+        sessions: [terminalSession('sub-1'), terminalSession('sub-2')],
       }),
-      run: { controlGraph },
+      run: { controlGraph: waitingGraph(['sub-1', 'sub-2', 'sub-3']) },
       timestamp: 200,
     });
 
-    expect(applied).toBe(true);
-    const goalsEvent = events.find((event) => event.type === 'GOALS_UPDATED');
-    expect(goalsEvent).toEqual(
-      expect.objectContaining({
-        type: 'GOALS_UPDATED',
-        reason: 'delegation:worker_not_verified',
-      }),
-    );
-    const goals = (goalsEvent as { goals: Array<{ id: string; status: string }> }).goals;
-    expect(goals.find((goal) => goal.id === 'worker-goal')?.status).toBe('blocked');
-    expect(events.some((event) => event.type === 'GOAL_EVIDENCE_ADDED')).toBe(false);
+    expect(pendingAfter(events)).toEqual(['sub-3']);
+    expect(events.every((event) => event.type === 'ASYNC_WAITING')).toBe(true);
   });
 
-  it('recovers verified terminal graph evidence from compact spill metadata', () => {
-    const controlGraph = reduceAgentControlGraph(
-      createInitialAgentRunControlGraphState({ updatedAt: 100 }),
-      [
-        {
-          type: 'GOALS_UPDATED',
-          goals: [
-            {
-              id: 'worker-goal',
-              title: 'Delegated work',
-              status: 'active',
-              dependencies: [],
-              evidence: [],
-              successCriteria: [
-                'evidence.prefix:worker',
-                'evidence.min:1',
-                'evidence.tool:read_file',
-              ],
-              createdAt: 1,
-              updatedAt: 1,
-            },
-          ],
-          timestamp: 100,
-        },
-      ],
-    );
+  it('releases a worker whatever state it ended in', () => {
+    const events = buildDelegationToolTerminalGraphEvents({
+      toolName: 'sessions_spawn',
+      resultContent: JSON.stringify(
+        terminalSession('sub-1', { status: 'blocked', completionState: 'blocked' }),
+      ),
+      run: { controlGraph: waitingGraph(['sub-1']) },
+    });
 
-    const { events, applied } = buildDelegationToolTerminalGraphEvents({
+    expect(pendingAfter(events)).toEqual([]);
+  });
+
+  it('records nothing for a worker that is still running', () => {
+    expect(
+      buildDelegationToolTerminalGraphEvents({
+        toolName: 'sessions_spawn',
+        resultContent: JSON.stringify({ status: 'running', sessionId: 'sub-1' }),
+        run: { controlGraph: waitingGraph(['sub-1']) },
+      }),
+    ).toEqual([]);
+  });
+
+  it('reads terminal workers from compact spill metadata', () => {
+    const events = buildDelegationToolTerminalGraphEvents({
       toolName: 'sessions_wait',
       resultContent: JSON.stringify({
         status: 'spilled',
@@ -254,33 +98,30 @@ describe('delegationToolTerminalGraphEffects', () => {
         structuralResult: {
           version: 1,
           kind: 'delegation_sessions',
-          sessions: [
-            {
-              sessionId: 'sub-worker',
-              status: 'completed',
-              completionState: 'verified_success',
-              outputPreview: 'Verified source review.',
-              workstreamId: 'worker-goal',
-              toolsUsed: ['read_file'],
-              iterations: 10,
-              depth: 1,
-            },
-          ],
+          sessions: [{ ...terminalSession('sub-1'), output: undefined, outputPreview: 'Done.' }],
         },
       }),
-      run: { controlGraph },
-      timestamp: 200,
+      run: { controlGraph: waitingGraph(['sub-1']) },
     });
 
-    expect(applied).toBe(true);
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'GOAL_EVIDENCE_ADDED',
-          goalId: 'worker-goal',
-          evidence: 'read_file:worker:sub-worker',
-        }),
-      ]),
-    );
+    expect(pendingAfter(events)).toEqual([]);
+  });
+
+  it('ignores other tools and results that are not JSON', () => {
+    const controlGraph = waitingGraph(['sub-1']);
+    expect(
+      buildDelegationToolTerminalGraphEvents({
+        toolName: 'read_file',
+        resultContent: JSON.stringify(terminalSession('sub-1')),
+        run: { controlGraph },
+      }),
+    ).toEqual([]);
+    expect(
+      buildDelegationToolTerminalGraphEvents({
+        toolName: 'sessions_wait',
+        resultContent: 'not json',
+        run: { controlGraph },
+      }),
+    ).toEqual([]);
   });
 });

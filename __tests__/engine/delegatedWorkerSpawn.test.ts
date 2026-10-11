@@ -1,17 +1,10 @@
 import { resolveDelegatedWorkerSpawnPlan } from '../../src/engine/graph/delegatedWorkerSpawn';
-import {
-  DELEGATED_WORKER_EVIDENCE_CRITERION,
-  DELEGATED_WORKER_GOAL_OWNER,
-  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-} from '../../src/engine/goals/delegation';
 import { buildDelegationFixtureAgentRun } from '../../src/acceptance/acceptanceMetrics/delegationGraphFixtures';
-import type { AgentGoal } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
-function buildConversation(goals: AgentGoal[]): Conversation {
-  const run = buildDelegationFixtureAgentRun(goals, 'run-1');
-
+function buildConversation(): Conversation {
+  const run = buildDelegationFixtureAgentRun('run-1');
   return {
     id: 'conv-1',
     title: 'Spawn fixture',
@@ -25,421 +18,141 @@ function buildConversation(goals: AgentGoal[]): Conversation {
   };
 }
 
-function buildDedicatedWorkerGoal(overrides: Partial<AgentGoal> = {}): AgentGoal {
+function worker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapshot {
   return {
-    id: 'worker-goal',
-    title: 'Delegated work',
-    status: 'active',
-    completionPolicy: 'blocking',
-    owner: DELEGATED_WORKER_GOAL_OWNER,
-    dependencies: [],
-    evidence: [],
-    requiredCapabilities: ['coordinate'],
-    successCriteria: [DELEGATED_WORKER_EVIDENCE_CRITERION, DELEGATED_WORKER_MIN_EVIDENCE_CRITERION],
-    createdAt: 1,
+    sessionId: 'sub-1',
+    parentConversationId: 'conv-1',
+    agentRunId: 'run-1',
+    workstreamId: 'delegated-workstream',
+    depth: 1,
+    startedAt: 1,
     updatedAt: 1,
+    status: 'completed',
+    completionState: 'verified_success',
+    sandboxPolicy: 'inherit',
+    launchState: 'terminal',
     ...overrides,
   };
 }
 
+function plan(
+  request: Parameters<typeof resolveDelegatedWorkerSpawnPlan>[0]['request'],
+  liveWorkers: SubAgentSnapshot[] = [],
+) {
+  const conversation = buildConversation();
+  return resolveDelegatedWorkerSpawnPlan({
+    request,
+    conversation,
+    parentConversationId: conversation.id,
+    agentRunId: conversation.activeAgentRunId,
+    liveWorkers,
+  });
+}
+
 describe('resolveDelegatedWorkerSpawnPlan', () => {
-  it('launches a worker in a run that holds no goals', () => {
-    const conversation = buildConversation([]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Run delegated research.', name: 'researcher' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
+  it('starts new work under a workstream id it assigns', () => {
+    expect(plan({ prompt: 'Run delegated research.' })).toMatchObject({
+      status: 'ready',
+      spawnGate: { status: 'ready', workstreamId: 'delegated-workstream' },
     });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate).toEqual({ status: 'ready', workstreamId: undefined });
   });
 
-  it('uses orchestrator parentGoals when chat store goals are stale', () => {
-    const staleConversation = buildConversation([
-      {
-        id: 'dep-goal',
-        title: 'Prerequisite',
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
+  it('assigns an id the run does not already hold', () => {
+    const result = plan({ prompt: 'Draft the summary.' }, [
+      worker(),
+      worker({ sessionId: 'sub-2', workstreamId: 'delegated-workstream-2' }),
     ]);
 
-    const liveGoals: AgentGoal[] = [
-      {
-        id: 'dep-goal',
-        title: 'Prerequisite',
-        status: 'completed',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      buildDedicatedWorkerGoal({ status: 'pending' }),
-    ];
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Run delegated research.',
-        workstreamId: 'worker-goal',
-        dependsOnWorkstreams: ['dep-goal'],
-      },
-      conversation: staleConversation,
-      parentConversationId: staleConversation.id,
-      agentRunId: staleConversation.activeAgentRunId,
-      liveWorkers: [],
-      parentGoals: liveGoals,
-    });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.goals).toEqual(liveGoals);
+    expect(result.spawnGate).toEqual({ status: 'ready', workstreamId: 'delegated-workstream-3' });
   });
 
-  it('selects the sole pending dedicated worker goal before the active parent goal', () => {
-    const conversation = buildConversation([
-      {
-        id: 'parent-deliverable',
-        title: 'Create the final deliverable',
-        status: 'active',
-        completionPolicy: 'blocking',
-        dependencies: [],
-        evidence: [],
-        successCriteria: ['evidence.artifact:artifacts/report.md'],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      buildDedicatedWorkerGoal({ status: 'pending' }),
-    ]);
+  it("counts only this run's workers when assigning an id", () => {
+    const result = plan({ prompt: 'Draft the summary.' }, [worker({ agentRunId: 'run-other' })]);
 
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Read the assigned sources and return findings.' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate).toEqual({ status: 'ready', workstreamId: 'worker-goal' });
+    expect(result.spawnGate).toEqual({ status: 'ready', workstreamId: 'delegated-workstream' });
   });
 
-  it('requires an exact existing workstream when multiple dedicated goals are eligible', () => {
-    const conversation = buildConversation([
-      buildDedicatedWorkerGoal({ id: 'worker-a', status: 'pending' }),
-      buildDedicatedWorkerGoal({ id: 'worker-b', status: 'pending' }),
-    ]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Run delegated research.' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('error');
-    expect(plan.response).toMatchObject({
-      status: 'error',
-      code: 'workstream_id_required',
-      eligibleGoalIds: ['worker-a', 'worker-b'],
-      repair: {
-        retryable: true,
-        invalidFields: ['workstreamId'],
-      },
-    });
-  });
-
-  it('runs under the workstream an earlier spawn reported', () => {
-    const conversation = buildConversation([
-      {
-        id: 'parent-deliverable',
-        title: 'Create the final deliverable',
-        status: 'active',
-        completionPolicy: 'blocking',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      buildDedicatedWorkerGoal({ status: 'pending' }),
-    ]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Read the assigned sources and return findings.',
-        workstreamId: 'worker-goal',
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate.workstreamId).toBe('worker-goal');
-  });
-
-  it('refuses a workstream nothing reported, and says to omit it for new work', () => {
-    const conversation = buildConversation([buildDedicatedWorkerGoal()]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Run delegated research.', workstreamId: 'research-task' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('error');
-    expect(plan.response).toMatchObject({
-      code: 'invalid_workstream',
-      repair: { retryable: true, invalidFields: ['workstreamId'] },
-    });
-    expect(String(plan.response?.error)).toContain('omit it to start new work');
-  });
-
-  it('returns repairable errors for dependency ids that are not in the current goal graph', () => {
-    const conversation = buildConversation([buildDedicatedWorkerGoal()]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Run delegated research.',
-        workstreamId: 'worker-goal',
-        dependsOnWorkstreams: ['missing-goal'],
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('error');
-    expect(plan.response).toMatchObject({
-      status: 'error',
-      code: 'unresolved_dependency',
-      repair: {
-        retryable: true,
-        invalidFields: ['dependsOnWorkstreams'],
-      },
-    });
+  it('takes a named workstream as given for new work', () => {
+    expect(plan({ prompt: 'Research the market.', workstreamId: 'market-research' })).toMatchObject(
+      { status: 'ready', spawnGate: { status: 'ready', workstreamId: 'market-research' } },
+    );
   });
 
   it('returns a repairable error when workstreamId has a malformed runtime shape', () => {
-    const conversation = buildConversation([buildDedicatedWorkerGoal()]);
+    const result = plan({ prompt: 'Research.', workstreamId: ' padded' });
 
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Run delegated research.',
-        workstreamId: 7 as unknown as string,
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('error');
-    expect(plan.response).toMatchObject({
+    expect(result.status).toBe('error');
+    expect(result.response).toMatchObject({
       status: 'error',
       code: 'invalid_workstream',
-      repair: { retryable: true, invalidFields: ['workstreamId'] },
+      repair: expect.objectContaining({ retryable: true, invalidFields: ['workstreamId'] }),
     });
   });
 
-  it('refuses a workstream that is already complete', () => {
-    const conversation = buildConversation([
-      buildDedicatedWorkerGoal({ id: 'completed-goal', status: 'completed' }),
-    ]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Run delegated research.', workstreamId: 'completed-goal' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('error');
-    expect(plan.response).toMatchObject({
+  it('resolves dependencies against the workers of this run', () => {
+    expect(plan({ prompt: 'Summarize.', dependsOnWorkstreams: ['research'] })).toMatchObject({
       status: 'error',
-      code: 'invalid_workstream',
-      repair: { invalidFields: ['workstreamId'] },
+      response: { code: 'unresolved_dependency', dependsOnWorkstreams: ['research'] },
     });
+
+    const running = worker({ workstreamId: 'research', status: 'running', launchState: 'active' });
+    expect(
+      plan({ prompt: 'Summarize.', dependsOnWorkstreams: ['research'] }, [running]),
+    ).toMatchObject({
+      status: 'blocked',
+      response: { status: 'blocked', dependsOnWorkstreams: ['research'] },
+    });
+
+    const delivered = worker({ workstreamId: 'research' });
+    expect(
+      plan({ prompt: 'Summarize.', dependsOnWorkstreams: ['research'] }, [delivered]),
+    ).toMatchObject({ status: 'ready' });
   });
 
-  it('accepts a coordinate goal with code-owned terminal worker evidence', () => {
-    const conversation = buildConversation([
-      {
-        id: 'worker-goal',
-        title: 'Evidence auditor',
-        status: 'active',
-        completionPolicy: 'blocking',
-        owner: DELEGATED_WORKER_GOAL_OWNER,
-        dependencies: [],
-        evidence: [],
-        requiredCapabilities: ['coordinate'],
-        successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ]);
+  it('does not treat a worker that ended without delivering as a met dependency', () => {
+    const incomplete = worker({ workstreamId: 'research', completionState: 'incomplete' });
 
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Read the source and return findings.',
-        workstreamId: 'worker-goal',
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate).toMatchObject({ status: 'ready', workstreamId: 'worker-goal' });
+    expect(
+      plan({ prompt: 'Summarize.', dependsOnWorkstreams: ['research'] }, [incomplete]),
+    ).toMatchObject({ status: 'blocked' });
   });
 
   it.each(['completed', 'error', 'cancelled'] as const)(
-    'does not replace a %s worker that already owns the same workstream in the current run',
+    'does not replace a %s worker that already owns the workstream in this run',
     (status) => {
-      const conversation = buildConversation([buildDedicatedWorkerGoal()]);
-      const priorWorker: SubAgentSnapshot = {
-        sessionId: `worker-${status}`,
-        parentConversationId: conversation.id,
-        agentRunId: conversation.activeAgentRunId,
-        workstreamId: 'worker-goal',
-        name: 'focused-worker',
-        depth: 0,
-        startedAt: 2,
-        updatedAt: 3,
-        status,
-        sandboxPolicy: 'inherit',
-      };
+      const result = plan({ prompt: 'Run it again.', workstreamId: 'delegated-workstream' }, [
+        worker({ status }),
+      ]);
 
-      const plan = resolveDelegatedWorkerSpawnPlan({
-        request: {
-          prompt: 'Replace the prior worker.',
-          name: 'focused-worker',
-          workstreamId: 'worker-goal',
-        },
-        conversation,
-        parentConversationId: conversation.id,
-        agentRunId: conversation.activeAgentRunId,
-        liveWorkers: [priorWorker],
-      });
-
-      expect(plan.status).toBe('blocked');
-      expect(plan.response).toMatchObject({
-        status: 'blocked',
+      expect(result.status).toBe('blocked');
+      expect(result.response).toMatchObject({
         code: 'worker_workstream_already_owned',
-        sessionId: priorWorker.sessionId,
+        sessionId: 'sub-1',
         workerStatus: status,
       });
     },
   );
 
-  it('rejects replacement from the graph-owned launch receipt after runtime snapshots expire', () => {
-    const conversation = buildConversation([
-      buildDedicatedWorkerGoal({
-        evidence: ['delegation_launch:sub-owned-worker'],
-      }),
+  it('blocks a second worker for a workstream whose worker is running', () => {
+    const result = plan({ prompt: 'Run it again.', workstreamId: 'delegated-workstream' }, [
+      worker({ status: 'running', launchState: 'active' }),
     ]);
 
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Launch another worker for the same unit.',
-        workstreamId: 'worker-goal',
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('blocked');
-    expect(plan.response).toMatchObject({
+    expect(result.response).toEqual({
       status: 'blocked',
-      code: 'worker_workstream_already_owned',
-      sessionId: 'sub-owned-worker',
-      goalId: 'worker-goal',
+      error: 'A worker for this workstream is already running.',
+      sessionId: 'sub-1',
     });
   });
 
-  it('allows the next structured workstream after a terminal worker', () => {
-    const conversation = buildConversation([
-      buildDedicatedWorkerGoal({
-        id: 'worker-goal-a',
-        title: 'First delegated workstream',
-      }),
-      buildDedicatedWorkerGoal({
-        id: 'worker-goal-b',
-        title: 'Second delegated workstream',
-        status: 'pending',
-      }),
+  it('does not reuse the name of a worker that already finished in this run', () => {
+    const result = plan({ prompt: 'Research.', name: 'researcher' }, [
+      worker({ name: 'researcher' }),
     ]);
 
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: { prompt: 'Run the next unit.', workstreamId: 'worker-goal-b' },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [
-        {
-          sessionId: 'worker-a',
-          parentConversationId: conversation.id,
-          agentRunId: conversation.activeAgentRunId,
-          workstreamId: 'worker-goal-a',
-          depth: 0,
-          startedAt: 2,
-          updatedAt: 3,
-          status: 'completed',
-          sandboxPolicy: 'inherit',
-        },
-      ],
-    });
-
-    expect(plan.status).toBe('ready');
-    expect(plan.spawnGate).toMatchObject({ status: 'ready', workstreamId: 'worker-goal-b' });
-  });
-
-  it('does not reuse a terminal worker name after goal structure changes in the same run', () => {
-    const conversation = buildConversation([buildDedicatedWorkerGoal()]);
-    const priorWorker: SubAgentSnapshot = {
-      sessionId: 'worker-unscoped',
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      name: 'evidence auditor',
-      depth: 0,
-      startedAt: 2,
-      updatedAt: 3,
-      status: 'completed',
-      sandboxPolicy: 'inherit',
-    };
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Repeat the audit after compaction.',
-        name: 'evidence auditor',
-        workstreamId: 'worker-goal',
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [priorWorker],
-    });
-
-    expect(plan.status).toBe('blocked');
-    expect(plan.response).toMatchObject({
-      status: 'blocked',
+    expect(result.response).toMatchObject({
       code: 'worker_identity_already_owned',
-      sessionId: priorWorker.sessionId,
-      workerStatus: 'completed',
+      sessionId: 'sub-1',
     });
   });
 });

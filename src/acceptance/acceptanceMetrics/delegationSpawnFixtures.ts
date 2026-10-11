@@ -4,12 +4,6 @@
 
 import { buildDelegationFixtureAgentRun } from './delegationGraphFixtures';
 import type { DelegatedWorkerSpawnRequest } from '../../engine/graph/delegatedWorkerSpawn';
-import {
-  DELEGATED_WORKER_EVIDENCE_CRITERION,
-  DELEGATED_WORKER_GOAL_OWNER,
-  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-} from '../../engine/goals/delegation';
-import type { AgentGoal } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 
@@ -25,27 +19,10 @@ export type DelegationSpawnFixture = {
 };
 
 const NOW = 1;
+const RUN_ID = 'run-delegation';
 
-function goal(overrides: Partial<AgentGoal> = {}): AgentGoal {
-  return {
-    id: 'worker-goal',
-    title: 'Delegated work',
-    status: 'pending',
-    completionPolicy: 'blocking',
-    owner: DELEGATED_WORKER_GOAL_OWNER,
-    dependencies: [],
-    evidence: [],
-    requiredCapabilities: ['coordinate'],
-    successCriteria: [DELEGATED_WORKER_EVIDENCE_CRITERION, DELEGATED_WORKER_MIN_EVIDENCE_CRITERION],
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  };
-}
-
-function buildConversation(goals: AgentGoal[]): Conversation {
-  const run = buildDelegationFixtureAgentRun(goals);
-
+function buildConversation(): Conversation {
+  const run = buildDelegationFixtureAgentRun(RUN_ID);
   return {
     id: 'conv-delegation',
     title: 'Delegation fixture',
@@ -59,75 +36,80 @@ function buildConversation(goals: AgentGoal[]): Conversation {
   };
 }
 
+function worker(overrides: Partial<SubAgentSnapshot>): SubAgentSnapshot {
+  return {
+    sessionId: 'sub-worker',
+    parentConversationId: 'conv-delegation',
+    agentRunId: RUN_ID,
+    depth: 1,
+    startedAt: NOW,
+    updatedAt: NOW,
+    status: 'running',
+    sandboxPolicy: 'inherit',
+    launchState: 'active',
+    ...overrides,
+  };
+}
+
+const DELIVERED_DEPENDENCY = worker({
+  sessionId: 'sub-dependency',
+  workstreamId: 'dep-work',
+  status: 'completed',
+  completionState: 'verified_success',
+  launchState: 'terminal',
+});
+
 export const DELEGATION_SPAWN_FIXTURES: DelegationSpawnFixture[] = [
   {
     id: 'blocked-dependency-incomplete',
     expectation: 'must_block',
-    request: {
-      prompt: 'Research delegated topic.',
-      workstreamId: 'worker-goal',
-      dependsOnWorkstreams: ['dep-goal'],
-    },
-    conversation: buildConversation([
-      goal({ id: 'dep-goal', title: 'Prerequisite', status: 'active' }),
-      goal({ id: 'worker-goal', title: 'Delegated work', status: 'pending' }),
-    ]),
+    request: { prompt: 'Research delegated topic.', dependsOnWorkstreams: ['dep-work'] },
+    conversation: buildConversation(),
+    liveWorkers: [worker({ sessionId: 'sub-dependency', workstreamId: 'dep-work' })],
   },
   {
     id: 'blocked-dependency-missing',
     expectation: 'must_block',
-    request: {
-      prompt: 'Research delegated topic.',
-      workstreamId: 'worker-goal',
-      dependsOnWorkstreams: ['missing-goal'],
-    },
-    conversation: buildConversation([goal({ id: 'worker-goal', status: 'pending' })]),
+    request: { prompt: 'Research delegated topic.', dependsOnWorkstreams: ['missing-work'] },
+    conversation: buildConversation(),
   },
   {
     id: 'allowed-dependency-complete',
     expectation: 'must_ready',
-    request: {
-      prompt: 'Research delegated topic.',
-      workstreamId: 'worker-goal',
-      dependsOnWorkstreams: ['dep-goal'],
-    },
-    conversation: buildConversation([
-      goal({ id: 'dep-goal', title: 'Prerequisite', status: 'completed' }),
-      goal({ id: 'worker-goal', title: 'Delegated work', status: 'pending' }),
-    ]),
+    request: { prompt: 'Research delegated topic.', dependsOnWorkstreams: ['dep-work'] },
+    conversation: buildConversation(),
+    liveWorkers: [DELIVERED_DEPENDENCY],
   },
   {
-    id: 'allowed-no-dependencies',
+    id: 'allowed-new-work',
     expectation: 'must_ready',
-    request: {
-      prompt: 'Research delegated topic.',
-      workstreamId: 'worker-goal',
-    },
-    conversation: buildConversation([goal({ id: 'worker-goal', status: 'active' })]),
+    request: { prompt: 'Research delegated topic.' },
+    conversation: buildConversation(),
+  },
+  {
+    id: 'allowed-named-new-work',
+    expectation: 'must_ready',
+    request: { prompt: 'Research delegated topic.', workstreamId: 'market-research' },
+    conversation: buildConversation(),
+  },
+  {
+    id: 'blocked-workstream-already-delivered',
+    expectation: 'must_block',
+    request: { prompt: 'Research delegated topic.', workstreamId: 'dep-work' },
+    conversation: buildConversation(),
+    liveWorkers: [DELIVERED_DEPENDENCY],
   },
   {
     id: 'blocked-duplicate-running-worker',
     expectation: 'must_block',
     request: {
       prompt: 'Research delegated topic.',
-      workstreamId: 'worker-goal',
+      workstreamId: 'worker-work',
       name: 'researcher',
     },
-    conversation: buildConversation([goal({ id: 'worker-goal', status: 'active' })]),
+    conversation: buildConversation(),
     liveWorkers: [
-      {
-        sessionId: 'sub-running',
-        parentConversationId: 'conv-delegation',
-        agentRunId: 'run-delegation',
-        depth: 1,
-        startedAt: NOW,
-        updatedAt: NOW,
-        status: 'running',
-        sandboxPolicy: 'inherit',
-        launchState: 'active',
-        workstreamId: 'worker-goal',
-        name: 'researcher',
-      },
+      worker({ sessionId: 'sub-running', workstreamId: 'worker-work', name: 'researcher' }),
     ],
   },
 ];

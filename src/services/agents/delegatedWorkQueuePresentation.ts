@@ -40,7 +40,6 @@ interface DelegatedWorkConversation {
   agentRuns?: ReadonlyArray<{
     id: string;
     plan?: { workstreams: ReadonlyArray<{ id: string; title: string }> };
-    controlGraph?: { goals?: ReadonlyArray<{ id: string; title: string }> };
   }>;
 }
 
@@ -158,12 +157,9 @@ function resolveWorkTitle(
   if (!conversation || !runId || !workstreamId) return undefined;
 
   const run = conversation.agentRuns?.find((candidate) => candidate.id === runId);
-  const planTitle = run?.plan?.workstreams
-    .find((workstream) => workstream.id === workstreamId)
-    ?.title.trim();
-  if (planTitle) return planTitle;
   return (
-    run?.controlGraph?.goals?.find((goal) => goal.id === workstreamId)?.title.trim() || undefined
+    run?.plan?.workstreams.find((workstream) => workstream.id === workstreamId)?.title.trim() ||
+    undefined
   );
 }
 

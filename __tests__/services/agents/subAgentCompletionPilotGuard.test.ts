@@ -7,7 +7,7 @@ const SUB_AGENT_COMPLETION_SOURCES = [
   'src/screens/subAgentTerminalReview.ts',
   'src/screens/terminalBackgroundReviewHandler.ts',
   'src/screens/useTerminalBackgroundReviewQueue.ts',
-  'src/services/agents/subAgentGoalGraphEffects.ts',
+  'src/services/agents/subAgentTerminalGraphEffects.ts',
 ];
 
 describe('sub-agent completion path has no Pilot worker review hooks', () => {

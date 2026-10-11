@@ -1,66 +1,37 @@
 import type {
-  AgentGoal,
+  AgentPlanStep,
   AgentRunControlGraphState,
   AgentRunTaskLedgerItem,
   AgentRunTaskStatus,
 } from '../../types/agentRun';
 
-function cloneStringList(values: ReadonlyArray<string>): string[] | undefined {
-  return values.length > 0 ? [...values] : undefined;
-}
-
-function goalStatusToTaskStatus(status: AgentGoal['status']): AgentRunTaskStatus {
+function planStepStatusToTaskStatus(status: AgentPlanStep['status']): AgentRunTaskStatus {
   switch (status) {
     case 'completed':
       return 'done';
-    case 'active':
+    case 'in_progress':
       return 'active';
     default:
       return 'pending';
   }
 }
 
-function goalToTaskLedgerItem(goal: AgentGoal): AgentRunTaskLedgerItem {
-  const owner =
-    goal.owner === 'supervisor' || goal.owner === 'worker' || goal.owner === 'either'
-      ? goal.owner
-      : 'either';
-
-  return {
-    id: goal.id,
-    title: goal.title,
-    status: goalStatusToTaskStatus(goal.status),
-    owner,
-    ...(goal.description ? { goal: goal.description } : {}),
-    ...(goal.dependencies.length > 0 ? { dependencies: cloneStringList(goal.dependencies) } : {}),
-    ...(goal.requiredCapabilities?.length
-      ? { requiredCapabilities: cloneStringList(goal.requiredCapabilities) }
-      : {}),
-    ...(goal.evidence.length > 0 ? { completedEvidence: cloneStringList(goal.evidence) } : {}),
-  };
-}
-
+/** A worker's progress, as the plan it keeps with update_plan states it. */
 export function selectSubAgentTaskLedger(
   graphState: AgentRunControlGraphState | undefined,
 ): AgentRunTaskLedgerItem[] {
-  return (graphState?.goals ?? []).map(goalToTaskLedgerItem);
+  return (graphState?.plan ?? []).map((step, index) => ({
+    id: `step-${index + 1}`,
+    title: step.step,
+    status: planStepStatusToTaskStatus(step.status),
+    owner: 'worker',
+  }));
 }
 
 export function buildSubAgentTaskLedgerSignature(
   ledger: ReadonlyArray<AgentRunTaskLedgerItem>,
 ): string {
-  return ledger
-    .map((item) =>
-      [
-        item.id,
-        item.status,
-        item.goal ?? '',
-        item.requirements?.join(',') ?? '',
-        item.requiredCapabilities?.join(',') ?? '',
-        item.completedEvidence?.join(',') ?? '',
-      ].join(':'),
-    )
-    .join('|');
+  return ledger.map((item) => [item.id, item.status, item.title].join(':')).join('|');
 }
 
 export function describeActiveSubAgentTask(

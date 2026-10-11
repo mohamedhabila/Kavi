@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { Message, ToolCall } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
@@ -69,7 +68,6 @@ export type ToolExecutionLifecycleParams = {
   onPendingAsyncOperationsChange?: () => void;
   onRecordPerformanceMetrics?: ToolExecutionLifecycleMetricsRecorder;
   onBlockedBeforeExecution?: (detail: string, toolName: string) => void;
-  controlGraphGoals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   agentRunId?: string;
   executionRunId: string;

@@ -141,7 +141,7 @@ describe('Sub-Agent Service', () => {
       expect(capturedOptions.toolFilter('write_file')).toBe(false);
     });
 
-    it('stores a worker-owned task ledger from the worker graph state', async () => {
+    it("stores a worker task ledger from the worker's plan", async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       const {
         createInitialAgentControlGraphSnapshot,
@@ -149,17 +149,9 @@ describe('Sub-Agent Service', () => {
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAgentControlGraphStateChange?.(
           createInitialAgentControlGraphSnapshot({
-            goals: [
-              {
-                id: 'worker-read',
-                title: 'Read scoped worker input',
-                status: 'active',
-                owner: 'worker',
-                dependencies: [],
-                evidence: [],
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-              },
+            plan: [
+              { step: 'Read scoped worker input', status: 'in_progress' },
+              { step: 'Summarize it', status: 'pending' },
             ],
           }),
         );
@@ -179,12 +171,8 @@ describe('Sub-Agent Service', () => {
 
       const snapshot = getSubAgent(result.sessionId);
       expect(snapshot?.taskLedger).toEqual([
-        expect.objectContaining({
-          id: 'worker-read',
-          status: 'active',
-          owner: 'worker',
-          title: 'Read scoped worker input',
-        }),
+        { id: 'step-1', status: 'active', owner: 'worker', title: 'Read scoped worker input' },
+        { id: 'step-2', status: 'pending', owner: 'worker', title: 'Summarize it' },
       ]);
     });
 

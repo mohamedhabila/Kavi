@@ -42,7 +42,6 @@ import {
   GRAPH_OBSERVABILITY_AUDIT_TYPES,
 } from './graphObservability';
 import { materializeToolEffectCompletionGoals } from './toolEffectGoalMaterialization';
-import { materializeDelegatedWorkerGoal } from './delegatedWorkerGoalMaterialization';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
@@ -281,15 +280,10 @@ export async function executeAgentControlGraphToolTurn(
     effectGoalMaterialization.status === 'materialized'
       ? effectGoalMaterialization.goals
       : (params.getGraphSnapshot().goals ?? []);
-  const delegationGoalMaterialization = materializeDelegatedWorkerGoal({
+  const mobileControllerGoalMaterialization = materializeMobileControllerGoal({
     toolCalls: executableToolCalls,
     goals: goalsAfterEffectMaterialization,
   });
-  const mobileControllerGoalMaterialization = materializeMobileControllerGoal({
-    toolCalls: executableToolCalls,
-    goals: delegationGoalMaterialization.goals,
-  });
-  const projectedControlGraphGoals = mobileControllerGoalMaterialization.goals;
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
@@ -345,7 +339,6 @@ export async function executeAgentControlGraphToolTurn(
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     emitPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
     recordPerformanceMetrics: params.recordPerformanceMetrics,
-    controlGraphGoals: projectedControlGraphGoals,
     activeTaskId: params.getGraphSnapshot().activeTaskId,
     ...(toolCallBlockers.size > 0 ? { toolCallBlockers } : {}),
     agentRunId: params.agentRunId,
@@ -374,14 +367,6 @@ export async function executeAgentControlGraphToolTurn(
           reason: effectGoalMaterialization.reason,
           projectToMemoryTasks: false,
           timestamp: effectGoalMaterialization.timestamp,
-        });
-      }
-      if (delegationGoalMaterialization.status === 'materialized') {
-        graphEvents.push({
-          type: 'GOALS_UPDATED',
-          goals: delegationGoalMaterialization.goals,
-          reason: delegationGoalMaterialization.reason,
-          projectToMemoryTasks: false,
         });
       }
       if (mobileControllerGoalMaterialization.status === 'materialized') {

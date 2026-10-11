@@ -1,12 +1,10 @@
-import type { AgentGoal, AgentRun } from '../../types/agentRun';
+import type { AgentRun } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import {
   evaluateMobileSpawnPreflight,
   resolveSpawnWorkstream,
 } from '../../services/agents/mobileSpawnPolicy';
-import { isBlockingGoal } from '../goals/types';
-import { isDelegationOwnedGoal, readDelegatedWorkerLaunchSessionId } from '../goals/delegation';
 
 export interface DelegatedWorkerSpawnRequest {
   prompt: string;
@@ -25,22 +23,26 @@ export interface DelegatedWorkerSpawnGate {
 export interface DelegatedWorkerSpawnPlan {
   status: 'ready' | 'error' | 'blocked';
   activeRun?: AgentRun;
-  goals: ReadonlyArray<AgentGoal>;
   spawnGate: DelegatedWorkerSpawnGate;
   response?: Record<string, unknown>;
 }
 
-function hasCoordinateCapability(goal: AgentGoal): boolean {
-  return (goal.requiredCapabilities ?? []).some((capability) => capability.trim() === 'coordinate');
+const WORKSTREAM_ID_BASE = 'delegated-workstream';
+
+/** A new workstream's id: unique among the workstreams this run's workers already hold. */
+function mintWorkstreamId(
+  runWorkers: ReadonlyArray<Pick<SubAgentSnapshot, 'workstreamId'>>,
+): string {
+  const held = new Set(runWorkers.map((worker) => worker.workstreamId).filter(Boolean));
+  if (!held.has(WORKSTREAM_ID_BASE)) return WORKSTREAM_ID_BASE;
+  let ordinal = 2;
+  while (held.has(`${WORKSTREAM_ID_BASE}-${ordinal}`)) ordinal += 1;
+  return `${WORKSTREAM_ID_BASE}-${ordinal}`;
 }
 
-function isIncompleteDedicatedWorkerGoal(goal: AgentGoal): boolean {
-  return (
-    goal.status !== 'completed' &&
-    isBlockingGoal(goal) &&
-    isDelegationOwnedGoal(goal) &&
-    hasCoordinateCapability(goal)
-  );
+/** A worker that delivered its answer, so work depending on it can start. */
+function hasDelivered(worker: Pick<SubAgentSnapshot, 'status' | 'completionState'>): boolean {
+  return worker.status === 'completed' && worker.completionState === 'verified_success';
 }
 
 function resolveDelegatedWorkerActiveRun(
@@ -104,7 +106,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   parentConversationId?: string;
   agentRunId: string | undefined;
   liveWorkers: SubAgentSnapshot[];
-  parentGoals?: ReadonlyArray<AgentGoal>;
   /** The worker session asking to spawn, when a worker is the caller. */
   callerSessionId?: string;
 }): DelegatedWorkerSpawnPlan {
@@ -113,7 +114,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   if (dependencyRefs.error) {
     return {
       status: 'error',
-      goals: [],
       spawnGate: { status: 'blocked', error: dependencyRefs.error },
       response: buildRepairableSpawnArgumentError({
         code: 'invalid_argument_shape',
@@ -124,17 +124,17 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     };
   }
 
-  const goals = [...(params.parentGoals ?? activeRun?.controlGraph?.goals ?? [])];
   const currentRunId = activeRun?.id ?? params.agentRunId?.trim();
+  const runWorkers = currentRunId
+    ? params.liveWorkers.filter((worker) => worker.agentRunId === currentRunId)
+    : [];
   const workstreamResolution = resolveSpawnWorkstream({
     workstreamId: params.request.workstreamId,
-    goals,
   });
   if (workstreamResolution.status === 'error') {
     const error = workstreamResolution.error;
     return {
       status: 'error',
-      goals,
       spawnGate: { status: 'blocked', error },
       response: buildRepairableSpawnArgumentError({
         code: 'invalid_workstream',
@@ -144,79 +144,15 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
       }),
     };
   }
-
-  const explicitWorkstreamId = workstreamResolution.workstreamId;
-  const eligibleDedicatedGoals = goals.filter(isIncompleteDedicatedWorkerGoal);
-  if (!explicitWorkstreamId && eligibleDedicatedGoals.length > 1) {
-    const eligibleGoalIds = eligibleDedicatedGoals.map((goal) => goal.id);
-    const error = 'Several workstreams are open; select one exact workstreamId.';
-    return {
-      status: 'error',
-      goals,
-      spawnGate: { status: 'blocked', error },
-      response: {
-        ...buildRepairableSpawnArgumentError({
-          code: 'workstream_id_required',
-          error,
-          invalidFields: ['workstreamId'],
-          expectedArguments: { workstreamId: { type: 'string', enum: eligibleGoalIds } },
-        }),
-        eligibleGoalIds,
-      },
-    };
-  }
-  const workstreamId =
-    explicitWorkstreamId ||
-    (eligibleDedicatedGoals.length === 1 ? eligibleDedicatedGoals[0].id : undefined);
-  const scopedGoals = workstreamId ? goals.filter((goal) => goal.id === workstreamId) : [];
-  const completedScopedGoal = scopedGoals.find((goal) => goal.status === 'completed');
-  if (completedScopedGoal) {
-    const error = `Workstream "${completedScopedGoal.id}" is already complete; omit workstreamId to start new work.`;
-    return {
-      status: 'error',
-      goals,
-      spawnGate: { status: 'blocked', workstreamId, error },
-      response: buildRepairableSpawnArgumentError({
-        code: 'invalid_workstream',
-        error,
-        invalidFields: ['workstreamId'],
-      }),
-    };
-  }
-
-  const durableLaunchOwner = scopedGoals
-    .flatMap((goal) =>
-      goal.evidence.map((evidence) => ({
-        goal,
-        sessionId: readDelegatedWorkerLaunchSessionId(evidence),
-      })),
-    )
-    .find((entry) => entry.sessionId);
-  if (durableLaunchOwner?.sessionId) {
-    return {
-      status: 'blocked',
-      goals,
-      spawnGate: { status: 'blocked', workstreamId },
-      response: {
-        status: 'blocked',
-        code: 'worker_workstream_already_owned',
-        error: 'A worker already owns this workstream in the current run.',
-        sessionId: durableLaunchOwner.sessionId,
-        goalId: durableLaunchOwner.goal.id,
-        guidance:
-          'Inspect the existing terminal result. Continue that exact session for one recoverable gap, or report its blocker; do not launch a replacement worker for the same work.',
-      },
-    };
-  }
+  const workstreamId = workstreamResolution.workstreamId ?? mintWorkstreamId(runWorkers);
 
   const missingDependencies = dependencyRefs.values.filter(
-    (dependencyId) => !goals.some((candidate) => candidate.id === dependencyId),
+    (dependencyId) => !runWorkers.some((worker) => worker.workstreamId === dependencyId),
   );
   if (missingDependencies.length > 0) {
     const error = `Unknown dependency workstream id(s): ${missingDependencies.join(', ')}`;
     return {
       status: 'error',
-      goals,
       spawnGate: { status: 'blocked', workstreamId, error },
       response: {
         ...buildRepairableSpawnArgumentError({
@@ -232,14 +168,13 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     };
   }
 
-  const incompleteDependencies = dependencyRefs.values.filter((dependencyId) => {
-    const goal = goals.find((candidate) => candidate.id === dependencyId);
-    return goal?.status !== 'completed';
-  });
+  const incompleteDependencies = dependencyRefs.values.filter(
+    (dependencyId) =>
+      !runWorkers.some((worker) => worker.workstreamId === dependencyId && hasDelivered(worker)),
+  );
   if (incompleteDependencies.length > 0) {
     return {
       status: 'blocked',
-      goals,
       spawnGate: {
         status: 'blocked',
         workstreamId,
@@ -264,7 +199,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     // itself until the supervisor's turn timed out (live, delegation-worker-finalize).
     return {
       status: 'blocked',
-      goals,
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
@@ -280,7 +214,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   if (duplicateRunning) {
     return {
       status: 'blocked',
-      goals,
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
@@ -306,7 +239,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   if (priorWorkstreamOwner) {
     return {
       status: 'blocked',
-      goals,
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
@@ -332,7 +264,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   if (priorNamedOwner) {
     return {
       status: 'blocked',
-      goals,
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
@@ -356,7 +287,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   if (spawnPreflight.status === 'blocked') {
     return {
       status: 'blocked',
-      goals,
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
@@ -370,7 +300,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
   return {
     status: 'ready',
     activeRun,
-    goals,
     spawnGate: {
       status: 'ready',
       workstreamId,

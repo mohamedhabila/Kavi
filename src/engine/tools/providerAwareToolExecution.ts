@@ -40,7 +40,6 @@ export async function executeProviderAwareTool(params: {
         providerContext.allProviders,
         providerContext.model || params.context?.model,
         {
-          controlGraphGoals: params.context?.controlGraphGoals,
           agentRunId: params.context?.agentRunId,
           memoryConversationId: params.context?.memoryConversationId,
           ...(params.context?.executionSignal

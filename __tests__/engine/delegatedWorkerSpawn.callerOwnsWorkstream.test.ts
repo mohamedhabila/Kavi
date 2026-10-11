@@ -1,33 +1,13 @@
 import { resolveDelegatedWorkerSpawnPlan } from '../../src/engine/graph/delegatedWorkerSpawn';
-import {
-  DELEGATED_WORKER_EVIDENCE_CRITERION,
-  DELEGATED_WORKER_GOAL_OWNER,
-  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-} from '../../src/engine/goals/delegation';
 import { buildDelegationFixtureAgentRun } from '../../src/acceptance/acceptanceMetrics/delegationGraphFixtures';
-import type { AgentGoal } from '../../src/types/agentRun';
 import type { Conversation } from '../../src/types/conversation';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
-// Live, a worker asked to delegate its own goal was told "A worker for this goal is
+// Live, a worker asked to delegate its own task was told "A worker for this workstream is
 // already running" with its own session id, took that as another worker, and waited on
 // itself until the supervisor's turn timed out.
 
-const goal: AgentGoal = {
-  id: 'worker-task',
-  title: 'Delegated work',
-  status: 'active',
-  completionPolicy: 'blocking',
-  owner: DELEGATED_WORKER_GOAL_OWNER,
-  dependencies: [],
-  evidence: [],
-  requiredCapabilities: ['coordinate'],
-  successCriteria: [DELEGATED_WORKER_EVIDENCE_CRITERION, DELEGATED_WORKER_MIN_EVIDENCE_CRITERION],
-  createdAt: 1,
-  updatedAt: 1,
-};
-
-const run = buildDelegationFixtureAgentRun([goal], 'run-1');
+const run = buildDelegationFixtureAgentRun('run-1');
 const conversation: Conversation = {
   id: 'conv-1',
   title: 'Spawn fixture',

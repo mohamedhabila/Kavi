@@ -274,7 +274,7 @@ describe('toolTurnExecution', () => {
   it('commits code-owned effect completion goals before the tool batch begins', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
-      expect(lifecycle.controlGraphGoals).toEqual([
+      expect(snapshot.goals).toEqual([
         expect.objectContaining({
           status: 'active',
           completionPolicy: 'blocking',

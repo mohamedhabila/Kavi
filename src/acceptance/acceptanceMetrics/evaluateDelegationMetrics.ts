@@ -18,7 +18,7 @@ export function evaluateDelegationMetricOutcomes(): AcceptanceMetricEvaluation {
   return aggregateAcceptanceMetrics([
     buildPassRateSummary({
       metricId: 'delegation-spawn-gate',
-      label: 'Delegated worker spawn blocked/allowed by structural goal deps',
+      label: "Delegated worker spawn blocked/allowed by the run's workers",
       outcomes: spawnOutcomes,
       targetRate: DELEGATION_SUCCESS_MIN_PASS_RATE,
       comparator: 'min',

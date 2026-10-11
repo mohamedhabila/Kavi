@@ -12,7 +12,6 @@ import {
   resolveConversationWorkspaceTarget,
 } from '../../services/conversationWorkspace/ownership';
 import { resolveOwningConversationId } from '../../services/agents/lifecycle/stateMachine';
-import { buildGraphDelegatedWorkerContract } from '../graph/delegatedWorkerContract';
 import { resolveDelegatedWorkerSpawnPlan } from '../graph/delegatedWorkerSpawn';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -89,7 +88,7 @@ export async function executeSessionSpawn(
   inheritedModel?: string,
   executionContext?: Pick<
     ToolExecutionContext,
-    'controlGraphGoals' | 'agentRunId' | 'memoryConversationId' | 'executionSignal'
+    'agentRunId' | 'memoryConversationId' | 'executionSignal'
   >,
 ): Promise<ToolRuntimeOutcome> {
   try {
@@ -165,7 +164,6 @@ export async function executeSessionSpawn(
       parentConversationId,
       agentRunId: executionContext?.agentRunId ?? agentRunId,
       liveWorkers,
-      parentGoals: executionContext?.controlGraphGoals,
       callerSessionId: currentSession?.sessionId,
     });
     if (launchPlan.status !== 'ready') {
@@ -173,19 +171,11 @@ export async function executeSessionSpawn(
     }
 
     const { activeRun, spawnGate } = launchPlan;
-    const goals = launchPlan.goals;
 
     const parentSessionId =
       currentSession?.sessionId || (currentSessionContext ? conversationId : undefined);
-    const workerContract = buildGraphDelegatedWorkerContract({
-      normalizedPrompt: prompt,
-      goalId: spawnGate.workstreamId,
-      goals,
-      configuredTools: sanitizedWorkerTools,
-      availableWorkerTools: sanitizedWorkerTools,
-    });
-    const workerPrompt = workerContract.prompt;
-    const effectiveConfiguredWorkerTools = workerContract.configuredTools ?? sanitizedWorkerTools;
+    // The worker gets the handoff as written; its system prompt carries the Worker Contract.
+    const workerPrompt = prompt;
     const memorySelectionScope = {
       memoryConversationId: resolveCodeOwnedMemoryConversationId(
         executionContext?.memoryConversationId,
@@ -201,9 +191,7 @@ export async function executeSessionSpawn(
       ...memorySelectionScope,
     });
 
-    const workerTools = effectiveConfiguredWorkerTools
-      ? [...effectiveConfiguredWorkerTools]
-      : undefined;
+    const workerTools = sanitizedWorkerTools ? [...sanitizedWorkerTools] : undefined;
     const anchoredWorkspaceInputs: DelegatedWorkspaceInput[] = (
       activeRun?.workflowTaskAnchor?.attachments ?? []
     ).flatMap((attachment) => {
@@ -231,7 +219,7 @@ export async function executeSessionSpawn(
       initialMessages,
       workerModel,
       agentRunId: activeRun?.id ?? agentRunId,
-      workstreamId: workerContract.workstreamId,
+      workstreamId: spawnGate.workstreamId,
       sanitizedName,
       workerTools,
       memorySelectionScope,

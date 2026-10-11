@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { ToolDefinition } from '../../types/tool';
@@ -27,7 +26,6 @@ export interface ToolExecutionContext {
   availableToolNames?: string[];
   /** Code-owned catalog visibility after persona and explicit tool authorization. */
   catalogVisibleToolNames?: string[];
-  controlGraphGoals?: ReadonlyArray<AgentGoal>;
   /** The task the run's memory work is scoped to: the workstream a worker run serves. */
   activeTaskId?: string;
   agentRunId?: string;
