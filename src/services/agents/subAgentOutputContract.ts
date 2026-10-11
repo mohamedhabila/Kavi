@@ -1,13 +1,9 @@
 import type { OrchestratorTerminalDisposition } from '../../engine/orchestrator/types';
-import type { SubAgentCompletionState, SubAgentConfig, SubAgentResult } from '../../types/subAgent';
+import type { SubAgentCompletionState, SubAgentResult } from '../../types/subAgent';
 import {
   FINALIZATION_OUTPUT_TRUNCATION,
   normalizeFinalizationOutputText,
 } from './finalizationText';
-import {
-  hasOperationalEvidenceFromSources,
-  hasVerificationEvidenceFromSources,
-} from './approvalSignals';
 
 export type SubAgentToolResultPreview = {
   toolName: string;
@@ -70,41 +66,33 @@ function stripWorkerReport(output: string, outputTruncation: number): string {
 }
 
 /**
- * Whether an answer-only worker delivered what it was asked for, read from what the
- * runtime observed rather than from text the worker had to append.
- *
- * The worker contract tells such a worker that the runtime tracks its completion state
- * and to focus on the report. The runtime only did that for workers that used tools, so a
- * worker that answered directly — exactly as asked — ended with no state, was filed as
- * incomplete, and its goal never received worker evidence (`delegation-worker-finalize`,
- * live: the worker returned the requested token in 1.2 s and the supervisor blocked).
- * Its run completing with a final answer candidate and a non-empty report is that
- * delivery. A state the worker declares itself still wins.
+ * Whether a worker delivered what it was asked for, read from what the runtime observed
+ * rather than from what anyone claims: its run completed, ended with a final answer, and
+ * left a non-empty report. The parent reads that report as the worker's result, the way
+ * a tool result is read.
  */
-function hasDeliveredInformationAnswer(params: {
-  deliverableKind?: SubAgentConfig['deliverableKind'];
+function hasDeliveredAnswer(params: {
   terminalStatus: SubAgentResult['status'];
   terminalDisposition?: OrchestratorTerminalDisposition;
   report: string;
 }): boolean {
   return (
-    params.deliverableKind === 'information' &&
     params.terminalStatus === 'completed' &&
     params.terminalDisposition === 'final_candidate' &&
     params.report.length > 0
   );
 }
 
+/**
+ * Success is the runtime's call: only a delivered answer is `verified_success`. A state
+ * the worker declares can say less — blocked or incomplete — never more.
+ */
 export function enforceExecutionWorkerOutputContract(params: {
   output: string;
   completionState?: SubAgentCompletionState;
-  toolsUsed: string[];
-  toolResultPreviews: SubAgentToolResultPreview[];
-  requireStructuredExecutionEvidence: boolean;
   terminalStatus: SubAgentResult['status'];
   /** How the worker's own run ended; only a completed run reports one. */
   terminalDisposition?: OrchestratorTerminalDisposition;
-  deliverableKind?: SubAgentConfig['deliverableKind'];
   outputTruncation?: number;
 }): EnforcedExecutionWorkerOutput {
   const outputTruncation = params.outputTruncation ?? FINALIZATION_OUTPUT_TRUNCATION;
@@ -113,67 +101,20 @@ export function enforceExecutionWorkerOutputContract(params: {
     return { output: params.output };
   }
 
-  const declaredCompletionState =
-    params.completionState ?? extractWorkerCompletionState(normalizedOutput);
   const report = stripWorkerReport(normalizedOutput, outputTruncation);
-  const visibleOutput = report || buildWorkerFallbackOutput(params.terminalStatus);
-
-  if (!params.requireStructuredExecutionEvidence) {
-    const completionState =
-      declaredCompletionState ??
-      (hasDeliveredInformationAnswer({
-        deliverableKind: params.deliverableKind,
-        terminalStatus: params.terminalStatus,
-        terminalDisposition: params.terminalDisposition,
-        report,
-      })
+  const declared = params.completionState ?? extractWorkerCompletionState(normalizedOutput);
+  const completionState: SubAgentCompletionState =
+    declared === 'blocked' || declared === 'incomplete'
+      ? declared
+      : hasDeliveredAnswer({
+            terminalStatus: params.terminalStatus,
+            terminalDisposition: params.terminalDisposition,
+            report,
+          })
         ? 'verified_success'
-        : undefined);
-    return {
-      output: visibleOutput,
-      ...(completionState ? { completionState } : {}),
-    };
-  }
-  const completionState = declaredCompletionState;
-
-  const successfulResultPreviews = params.toolResultPreviews
-    .filter((entry) => entry.status !== 'failed')
-    .map((entry) => ({
-      sourceName: entry.toolName,
-      preview: entry.preview,
-    }));
-  const hasExecutionEvidence =
-    hasOperationalEvidenceFromSources({
-      resultPreviewEntries: successfulResultPreviews,
-      includeOpaqueDynamicToolResults: true,
-    }) ||
-    hasVerificationEvidenceFromSources({
-      resultPreviewEntries: successfulResultPreviews,
-    });
-
-  if (params.terminalStatus !== 'completed') {
-    return {
-      output: visibleOutput,
-      completionState: completionState === 'blocked' ? 'blocked' : 'incomplete',
-    };
-  }
-
-  if (completionState === 'verified_success') {
-    return {
-      output: visibleOutput,
-      completionState: hasExecutionEvidence ? 'verified_success' : 'blocked',
-    };
-  }
-
-  if (completionState === 'blocked' || completionState === 'incomplete') {
-    return {
-      output: visibleOutput,
-      completionState,
-    };
-  }
-
+        : 'incomplete';
   return {
-    output: visibleOutput,
-    completionState: 'incomplete',
+    output: report || buildWorkerFallbackOutput(params.terminalStatus),
+    completionState,
   };
 }

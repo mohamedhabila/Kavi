@@ -1,17 +1,12 @@
 import type { OrchestratorTerminalDisposition } from '../../../engine/orchestrator/types';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message } from '../../../types/message';
-import type {
-  SubAgentCompletionState,
-  SubAgentConfig,
-  SubAgentResult,
-} from '../../../types/subAgent';
+import type { SubAgentCompletionState, SubAgentResult } from '../../../types/subAgent';
 import type { TokenUsage } from '../../../types/usage';
 import { normalizeFinalizationOutputText } from '../finalizationText';
 import { synthesizeSubAgentFinalAnswer } from '../subAgentFinalization';
 import {
   enforceExecutionWorkerOutputContract,
-  extractWorkerCompletionState,
   type EnforcedExecutionWorkerOutput,
   type SubAgentToolResultPreview,
 } from '../subAgentOutputContract';
@@ -21,7 +16,6 @@ export async function resolveSubAgentRunOutput(params: {
   status: SubAgentResult['status'];
   /** How the worker's run ended, when it ran to completion. */
   terminalDisposition?: OrchestratorTerminalDisposition;
-  deliverableKind?: SubAgentConfig['deliverableKind'];
   provider: LlmProviderConfig;
   model: string;
   systemPrompt: string;
@@ -37,7 +31,6 @@ export async function resolveSubAgentRunOutput(params: {
   startedAt: number;
   timeoutMs?: number;
   outputTruncation: number;
-  requireStructuredExecutionEvidence: boolean;
   maxToolResultPreviewChars: number;
   finalizationMaxTranscriptMessages: number;
   finalizationMessageCharLimit: number;
@@ -50,18 +43,13 @@ export async function resolveSubAgentRunOutput(params: {
 }): Promise<EnforcedExecutionWorkerOutput> {
   const enforceOutputContract = (
     output: string,
-    terminalStatus: SubAgentResult['status'] = 'completed',
     completionState?: SubAgentCompletionState,
   ): EnforcedExecutionWorkerOutput =>
     enforceExecutionWorkerOutputContract({
       output,
       completionState,
-      toolsUsed: params.toolsUsed,
-      toolResultPreviews: params.toolResultPreviews,
-      requireStructuredExecutionEvidence: params.requireStructuredExecutionEvidence,
-      terminalStatus,
+      terminalStatus: params.status,
       terminalDisposition: params.terminalDisposition,
-      deliverableKind: params.deliverableKind,
       outputTruncation: params.outputTruncation,
     });
 
@@ -93,35 +81,13 @@ export async function resolveSubAgentRunOutput(params: {
   };
 
   if (params.finalNonEmptyContent) {
-    const contractOutput = enforceOutputContract(params.finalNonEmptyContent, params.status);
-    const hasExplicitCompletionState = Boolean(
-      extractWorkerCompletionState(params.finalNonEmptyContent),
-    );
-    const shouldClassifyPreservedOutput =
-      params.status === 'completed' &&
-      params.requireStructuredExecutionEvidence &&
-      params.toolsUsed.length > 0 &&
-      !hasExplicitCompletionState &&
-      contractOutput.completionState === 'incomplete';
-
-    if (shouldClassifyPreservedOutput) {
-      const finalizedOutput = await attemptStructuredFinalization();
-      if (finalizedOutput) {
-        return enforceOutputContract(
-          params.finalNonEmptyContent,
-          params.status,
-          finalizedOutput.completionState,
-        );
-      }
-    }
-
-    return contractOutput;
+    return enforceOutputContract(params.finalNonEmptyContent);
   }
 
   const directOutput =
     params.toolsUsed.length === 0 ? normalizeFinalizationOutputText(params.outputText) : undefined;
   if (directOutput) {
-    return enforceOutputContract(directOutput, params.status);
+    return enforceOutputContract(directOutput);
   }
 
   const hasToolEvidence =
@@ -143,7 +109,6 @@ export async function resolveSubAgentRunOutput(params: {
     if (finalizedOutput) {
       const contractSafeOutput = enforceOutputContract(
         finalizedOutput.report,
-        params.status,
         finalizedOutput.completionState,
       );
       params.onFinalizedOutput(contractSafeOutput.output);
@@ -152,11 +117,11 @@ export async function resolveSubAgentRunOutput(params: {
   }
 
   if (params.lastNonEmptyContent) {
-    return enforceOutputContract(params.lastNonEmptyContent, params.status);
+    return enforceOutputContract(params.lastNonEmptyContent);
   }
 
   if (params.lastSubstantiveToolResult && !params.outputText.trim()) {
-    return enforceOutputContract(params.lastSubstantiveToolResult, params.status);
+    return enforceOutputContract(params.lastSubstantiveToolResult);
   }
 
   return enforceExecutionWorkerOutputContract({
@@ -170,12 +135,8 @@ export async function resolveSubAgentRunOutput(params: {
         maxToolResultPreviewChars: params.maxToolResultPreviewChars,
         outputTruncation: params.outputTruncation,
       }) || '',
-    toolsUsed: params.toolsUsed,
-    toolResultPreviews: params.toolResultPreviews,
-    requireStructuredExecutionEvidence: params.requireStructuredExecutionEvidence,
     terminalStatus: params.status,
     terminalDisposition: params.terminalDisposition,
-    deliverableKind: params.deliverableKind,
     outputTruncation: params.outputTruncation,
   });
 }

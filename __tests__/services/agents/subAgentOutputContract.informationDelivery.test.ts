@@ -12,25 +12,21 @@ jest.mock('../../../src/services/agents/subAgentFinalization', () => ({
 
 // Live on `delegation-worker-finalize`, a worker asked only to return a token returned it
 // in 1.2 s, ended with no completion state, and was filed as incomplete — so its goal
-// never received worker evidence and the supervisor ended blocked. An answer-only
-// worker's delivery is now read from how its run ended.
+// never received worker evidence and the supervisor ended blocked. A worker's delivery is
+// now read from how its run ended.
 
 const ANSWER = 'E2E-WORKER-EVIDENCE-42';
 
 function contract(overrides: Partial<Parameters<typeof enforceExecutionWorkerOutputContract>[0]>) {
   return enforceExecutionWorkerOutputContract({
     output: ANSWER,
-    toolsUsed: [],
-    toolResultPreviews: [],
-    requireStructuredExecutionEvidence: false,
     terminalStatus: 'completed',
     terminalDisposition: 'final_candidate',
-    deliverableKind: 'information',
     ...overrides,
   });
 }
 
-describe('an answer-only worker', () => {
+describe('a worker', () => {
   it('has delivered when its run ends with a final answer', () => {
     expect(contract({})).toEqual({ output: ANSWER, completionState: 'verified_success' });
   });
@@ -45,32 +41,28 @@ describe('an answer-only worker', () => {
   it.each(['blocked', 'yielded', 'waiting', 'failed'] as const)(
     'has not delivered when its run ends %s',
     (terminalDisposition) => {
-      expect(contract({ terminalDisposition }).completionState).toBeUndefined();
+      expect(contract({ terminalDisposition }).completionState).toBe('incomplete');
     },
   );
 
   it('has not delivered when its run did not complete', () => {
-    expect(contract({ terminalStatus: 'timeout' }).completionState).toBeUndefined();
+    expect(contract({ terminalStatus: 'timeout' }).completionState).toBe('incomplete');
   });
 
   it('has not delivered an empty report', () => {
-    expect(contract({ output: 'completion_state: \n' }).completionState).toBeUndefined();
+    expect(contract({ output: 'completion_state: \n' }).completionState).toBe('incomplete');
   });
 
-  it('is not assumed for work whose kind is not an answer', () => {
-    expect(contract({ deliverableKind: 'effect' }).completionState).toBeUndefined();
-    expect(contract({ deliverableKind: undefined }).completionState).toBeUndefined();
-  });
-
-  it('still owes proof when the goal asks for a change in the world', () => {
+  it('cannot claim success for a run that did not complete', () => {
+    // A recovery report written for an aborted worker said it "completed the task
+    // successfully"; success is what the runtime observed, not what a report says.
     expect(
-      contract({ deliverableKind: 'effect', requireStructuredExecutionEvidence: true })
-        .completionState,
+      contract({ terminalStatus: 'error', completionState: 'verified_success' }).completionState,
     ).toBe('incomplete');
   });
 });
 
-describe('resolveSubAgentRunOutput for an answer-only worker', () => {
+describe('resolveSubAgentRunOutput for a worker that answered directly', () => {
   const provider: LlmProviderConfig = {
     id: 'provider-1',
     name: 'Provider',
@@ -86,7 +78,6 @@ describe('resolveSubAgentRunOutput for an answer-only worker', () => {
     const resolved = await resolveSubAgentRunOutput({
       status: 'completed',
       terminalDisposition: 'final_candidate',
-      deliverableKind: 'information',
       provider,
       model: provider.model,
       systemPrompt: 'Worker system prompt',
@@ -102,7 +93,6 @@ describe('resolveSubAgentRunOutput for an answer-only worker', () => {
       startedAt: Date.now(),
       timeoutMs: 60_000,
       outputTruncation: 20_000,
-      requireStructuredExecutionEvidence: false,
       maxToolResultPreviewChars: 1_000,
       finalizationMaxTranscriptMessages: 12,
       finalizationMessageCharLimit: 1_800,

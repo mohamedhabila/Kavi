@@ -143,7 +143,7 @@ describe('Sub-Agent Service', () => {
       expect(result.output).toBe('Final answer: all checks passed.');
     });
 
-    it('classifies terminal worker prose conservatively when execution-backed work omits completion_state', async () => {
+    it('takes a worker final answer as its delivered result without a classification pass', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onAssistantMessage?.('Plan: update the artifact.', [
@@ -172,38 +172,10 @@ describe('Sub-Agent Service', () => {
       );
 
       expect(result.status).toBe('completed');
-      expect(result.completionState).toBe('incomplete');
+      expect(result.completionState).toBe('verified_success');
       expect(result.output).toContain('Final answer: artifact updated.');
       expect(result.output).not.toContain('completion_state:');
-      expect(sendMessageSpy).toHaveBeenCalledTimes(1);
-    });
-
-    it('blocks success claims for execution tasks when no commit/push/deploy evidence exists', async () => {
-      const { runOrchestrator } = require('../../src/engine/orchestrator');
-      sendMessageSpy.mockResolvedValueOnce(
-        makeStructuredFinalizerResponse('تم النشر بنجاح.', 'verified_success') as any,
-      );
-      runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
-        callbacks.onAssistantMessage?.('Investigating files only');
-        callbacks.onToolCallStart?.({ name: 'read_file' });
-        callbacks.onToolCallComplete?.();
-        callbacks.onDone?.();
-        return Promise.resolve({ terminalDisposition: 'final_candidate' });
-      });
-
-      const result = await spawnSubAgent(
-        {
-          parentConversationId: 'p',
-          agentRunId: 'run-exec-no-evidence',
-          workstreamId: 'deploy',
-          prompt: 'Create app, commit, push, and deploy until green.',
-        },
-        mockProvider,
-      );
-
-      expect(result.status).toBe('completed');
-      expect(result.completionState).toBe('blocked');
-      expect(result.output).toBe('تم النشر بنجاح.');
+      expect(sendMessageSpy).not.toHaveBeenCalled();
     });
 
     it('preserves verified_success inspection output for ad hoc workers tracked only by agentRunId', async () => {

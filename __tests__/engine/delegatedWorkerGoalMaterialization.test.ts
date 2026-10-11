@@ -5,7 +5,6 @@ import {
   DELEGATED_WORKER_GOAL_OWNER,
   DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
 } from '../../src/engine/goals/delegation';
-import { resolveDelegatedDeliverableKind } from '../../src/engine/goals/delegationDeliverable';
 import { createGoal } from '../../src/engine/goals/types';
 import type { AgentGoal } from '../../src/types/agentRun';
 
@@ -63,13 +62,6 @@ describe('the graph opens the delegated workstream a spawn needs', () => {
       status: 'ready',
       workstreamId: created?.id,
     });
-  });
-
-  it('marks a worker report as the deliverable, so an answer-only worker can succeed', () => {
-    const materialized = materializeDelegatedWorkerGoal({ toolCalls: SPAWN, goals: [] });
-    const created = materialized.goals.find((goal) => goal.owner === DELEGATED_WORKER_GOAL_OWNER);
-
-    expect(resolveDelegatedDeliverableKind(created)).toBe('information');
   });
 
   it('leaves the parent deliverable untouched rather than repurposing it', () => {

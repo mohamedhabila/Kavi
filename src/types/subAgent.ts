@@ -146,11 +146,6 @@ export interface SubAgentConfig {
   providerId?: string;
   agentRunId?: string;
   workstreamId?: string;
-  /**
-   * What the scoping goal asks this worker to produce. Derived code-owned from that
-   * goal's success criteria at spawn time; never model-supplied and never self-claimed.
-   */
-  deliverableKind?: 'effect' | 'information';
   memorySelectionScope?: SubAgentMemorySelectionScope;
   memoryBundle?: SubAgentMemoryBundle;
   inheritTools?: boolean;

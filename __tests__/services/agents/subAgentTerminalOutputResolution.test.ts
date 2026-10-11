@@ -42,7 +42,6 @@ function baseParams() {
     startedAt: Date.now(),
     timeoutMs: 60_000,
     outputTruncation: 20_000,
-    requireStructuredExecutionEvidence: true,
     maxToolResultPreviewChars: 1_000,
     finalizationMaxTranscriptMessages: 12,
     finalizationMessageCharLimit: 1_800,
@@ -60,12 +59,8 @@ describe('resolveSubAgentRunOutput', () => {
     jest.clearAllMocks();
   });
 
-  it('preserves an exact worker deliverable while classifying its verified read evidence', async () => {
-    mockSynthesizeSubAgentFinalAnswer.mockResolvedValue({
-      report: 'The source-grounded review is complete.',
-      completionState: 'verified_success',
-    });
-    const params = baseParams();
+  it('takes the final answer a worker ended with as its result, without a finalization pass', async () => {
+    const params = { ...baseParams(), terminalDisposition: 'final_candidate' as const };
 
     const result = await resolveSubAgentRunOutput(params);
 
@@ -73,8 +68,8 @@ describe('resolveSubAgentRunOutput', () => {
       output: params.finalNonEmptyContent,
       completionState: 'verified_success',
     });
-    expect(params.onFinalizationStart).toHaveBeenCalledTimes(1);
-    expect(params.onFinalizedOutput).not.toHaveBeenCalled();
+    expect(mockSynthesizeSubAgentFinalAnswer).not.toHaveBeenCalled();
+    expect(params.onFinalizationStart).not.toHaveBeenCalled();
   });
 
   it('does not override an explicit incomplete worker state', async () => {
@@ -89,19 +84,34 @@ describe('resolveSubAgentRunOutput', () => {
     expect(mockSynthesizeSubAgentFinalAnswer).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the only worker tool result failed', async () => {
-    mockSynthesizeSubAgentFinalAnswer.mockResolvedValue({
-      report: 'The review is complete.',
-      completionState: 'verified_success',
-    });
+  it('claims no delivery for a final answer its run did not end on', async () => {
     const params = baseParams();
     params.toolResultPreviews[0].status = 'failed';
 
     const result = await resolveSubAgentRunOutput(params);
 
-    expect(result).toEqual({
-      output: params.finalNonEmptyContent,
-      completionState: 'blocked',
+    expect(result).toEqual({ output: params.finalNonEmptyContent, completionState: 'incomplete' });
+    expect(mockSynthesizeSubAgentFinalAnswer).not.toHaveBeenCalled();
+  });
+
+  it('asks for a report when the worker used tools and left no final answer', async () => {
+    mockSynthesizeSubAgentFinalAnswer.mockResolvedValue({
+      report: 'Read the file; the review is complete.',
+      completionState: 'verified_success',
     });
+    const params = {
+      ...baseParams(),
+      finalNonEmptyContent: '',
+      terminalDisposition: 'final_candidate' as const,
+    };
+
+    const result = await resolveSubAgentRunOutput(params);
+
+    expect(result).toEqual({
+      output: 'Read the file; the review is complete.',
+      completionState: 'verified_success',
+    });
+    expect(params.onFinalizationStart).toHaveBeenCalledTimes(1);
+    expect(params.onFinalizedOutput).toHaveBeenCalledWith('Read the file; the review is complete.');
   });
 });
