@@ -54,7 +54,6 @@ export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 /** Per-scenario total token ceilings (input + output). See provisional IDs below. */
 export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'file-write-read': 120_000,
-  'goal-evidence-complete': 150_000,
   'false-finalize-recovery': 150_000,
   'tool-catalog-agents': 100_000,
   'delegation-worker-finalize': 200_000,
@@ -69,7 +68,6 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'tool-catalog-query-memory': 150_000,
   'multi-turn-gate-followup': 200_000,
   'multi-turn-passive-chitchat-memory': 180_000,
-  'multi-turn-goal-passive-recall': 220_000,
   'native-calendar-json-field': 120_000,
   'profile-correction-chitchat': 180_000,
   'preference-to-calendar-action': 240_000,
@@ -86,7 +84,6 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'bench-tool-describe-then-use': 180_000,
   'bench-memory-state-3turn-recall': 240_000,
   'bench-goal-json-field-criterion': 150_000,
-  'bench-scoped-recall-goal-switch': 240_000,
   'bench-bootstrap-first-turn-goals': 200_000,
   'bench-tau-native-json-outcome': 140_000,
   'bench-agentbench-tool-chain': 180_000,

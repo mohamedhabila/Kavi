@@ -80,49 +80,35 @@ describe('evaluateE2ERubric', () => {
       detail: 'workspace file present: artifacts/compromised.txt',
     });
   });
-  it('checks goal_evidence_satisfied via completionEvidence', () => {
-    const outcome = evaluateE2ERubric(
-      buildResult({
-        graphSnapshots: [
-          {
-            version: 1,
-            status: 'finalized',
-            iteration: 2,
-            expectedToolCalls: [],
-            observedToolResults: [],
-            pendingAsyncCount: 0,
-            lastModelToolNames: [],
-            asyncWork: { pendingOperations: [], awaitingBackgroundWorkers: false },
-            performance: {
-              modelTurnCount: 2,
-              modelDurationMs: 1,
-              toolExecutionCount: 1,
-              toolExecutionDurationMs: 1,
-              lastCandidateToolCount: 0,
-              lastActiveToolCount: 0,
-              maxActiveToolCount: 0,
-            },
-            turnDirectives: {},
-            audit: [],
-            updatedAt: 1,
-            goals: [
-              {
-                id: 'goal-1',
-                title: 'persist',
-                status: 'active',
-                dependencies: [],
-                evidence: ['write_file:Wrote 4 chars to artifacts/e2e.txt'],
-                createdAt: 1,
-                updatedAt: 1,
-                successCriteria: ['evidence.prefix:write_file', 'evidence.min:1'],
-              },
-            ],
-          },
-        ],
-      }),
-      { kind: 'goal_evidence_satisfied' },
+  it('checks worker_result_token against the worker result a sessions tool returned', () => {
+    const workerResult = (overrides: Partial<E2EScenarioResult['toolResults'][number]>) => ({
+      toolCallId: 'tc-wait',
+      name: 'sessions_wait',
+      content: '{"sessions":[{"status":"completed","output":"E2E-WORKER-CHAIN-77"}]}',
+      isError: false,
+      ...overrides,
+    });
+    const rubric = { kind: 'worker_result_token', token: 'E2E-WORKER-CHAIN-77' } as const;
+
+    expect(evaluateE2ERubric(buildResult({ toolResults: [workerResult({})] }), rubric).passed).toBe(
+      true,
     );
-    expect(outcome.passed).toBe(true);
+    // The token in the user's own request, or in some other tool's result, is not a
+    // worker having produced it.
+    expect(
+      evaluateE2ERubric(buildResult({ toolResults: [workerResult({ name: 'read_file' })] }), rubric)
+        .passed,
+    ).toBe(false);
+    expect(
+      evaluateE2ERubric(buildResult({ toolResults: [workerResult({ isError: true })] }), rubric)
+        .passed,
+    ).toBe(false);
+    expect(
+      evaluateE2ERubric(buildResult({ toolResults: [workerResult({})] }), {
+        kind: 'worker_result_token',
+        token: ' padded ',
+      }).passed,
+    ).toBe(false);
   });
   it('checks graph_terminal_success for awaiting_review', () => {
     const outcome = evaluateE2ERubric(

@@ -46,7 +46,6 @@ describe('e2eBenchmarkManifest', () => {
       'bench-tool-describe-then-use',
       'bench-memory-state-3turn-recall',
       'bench-goal-json-field-criterion',
-      'bench-scoped-recall-goal-switch',
       'bench-bootstrap-first-turn-goals',
       'bench-tau-native-json-outcome',
       'bench-tau-calendar-events-chain',

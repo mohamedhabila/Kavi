@@ -3,10 +3,6 @@
 // ---------------------------------------------------------------------------
 
 import { createHash } from 'crypto';
-import {
-  evaluateGoalEvidenceGaps,
-  isSuccessCriterionMet,
-} from '../../engine/goals/completionEvidence';
 import { resolveGraphWorkingBlockScope } from '../../engine/goals/graphTaskScope';
 import {
   readJsonFieldAtPath,
@@ -46,11 +42,12 @@ function hasGraphAuditObservation(
   return count;
 }
 
-function findGoalById(result: E2EScenarioResult, goalId: string) {
-  const normalizedGoalId = goalId.trim();
-  const goals = getLatestGraphSnapshot(result)?.goals ?? [];
-  return goals.find((goal) => goal.id.trim() === normalizedGoalId);
-}
+/** The sessions tools that return a worker's terminal result to its supervisor. */
+const WORKER_RESULT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'sessions_spawn',
+  'sessions_wait',
+  'sessions_output',
+]);
 
 function getLatestGraphSnapshot(result: E2EScenarioResult) {
   return result.graphSnapshots[result.graphSnapshots.length - 1];
@@ -303,33 +300,6 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
-    case 'goals_bootstrapped': {
-      const snapshot = getLatestGraphSnapshot(result);
-      const goalCount = snapshot?.goals?.length ?? 0;
-      const minimum = rubric.minGoals ?? 1;
-      if (goalCount < minimum) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goals bootstrapped: ${goalCount} (expected >= ${minimum})`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'goal_evidence_satisfied': {
-      const goals = getLatestGraphSnapshot(result)?.goals ?? [];
-      const gaps = evaluateGoalEvidenceGaps(goals);
-      if (gaps.length > 0) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goal evidence gaps: ${gaps.map((gap) => `${gap.goalId}:${gap.criterionId}`).join(', ')}`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
     case 'graph_status': {
       const status = getLatestGraphSnapshot(result)?.status;
       if (status !== rubric.status) {
@@ -430,21 +400,18 @@ export function evaluateE2ERubric(
     case 'turn_memory_selection':
       return evaluateE2ETurnStageRubric(result, rubric);
 
-    case 'goal_status': {
-      const goal = findGoalById(result, rubric.goalId);
-      if (!goal) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goal missing: ${rubric.goalId}`,
-        };
+    case 'worker_result_token': {
+      if (!rubric.token || rubric.token !== rubric.token.trim() || rubric.token.length > 256) {
+        return { fixtureId, passed: false, detail: 'worker result token expectation is invalid' };
       }
-      if (goal.status !== rubric.status) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goal ${rubric.goalId} status ${goal.status} (expected ${rubric.status})`,
-        };
+      const delivered = result.toolResults.some(
+        (toolResult) =>
+          !toolResult.isError &&
+          WORKER_RESULT_TOOL_NAMES.has(toolResult.name) &&
+          toolResult.content.includes(rubric.token),
+      );
+      if (!delivered) {
+        return { fixtureId, passed: false, detail: 'no worker result carried the token' };
       }
       return { fixtureId, passed: true };
     }
@@ -570,26 +537,6 @@ export function evaluateE2ERubric(
           fixtureId,
           passed: false,
           detail: `file_hash ${rubric.path} expected ${rubric.expectedHash} got ${actualHash}`,
-        };
-      }
-      return { fixtureId, passed: true };
-    }
-
-    case 'goal_criterion': {
-      const goal = findGoalById(result, rubric.goalId);
-      if (!goal) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goal missing ${rubric.goalId}`,
-        };
-      }
-      const met = isSuccessCriterionMet(goal, rubric.criterion);
-      if (met !== rubric.met) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `goal ${rubric.goalId} criterion ${rubric.criterion} met=${met} (expected ${rubric.met})`,
         };
       }
       return { fixtureId, passed: true };

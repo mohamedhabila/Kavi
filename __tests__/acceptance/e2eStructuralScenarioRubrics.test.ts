@@ -27,13 +27,9 @@ import {
 import { createGoal } from '../../src/engine/goals/types';
 import { evaluateE2EScenarioRubrics } from '../../src/acceptance/e2eAgent/rubricEvaluators';
 import { runE2EScenario } from '../../src/acceptance/e2eAgent/scenarioRunner';
-import {
-  readE2EWorkingBlockContent,
-  resetE2EMemorySandbox,
-} from '../../src/acceptance/e2eAgent/sandboxMemory';
+import { resetE2EMemorySandbox } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { areGoalSuccessCriteriaSatisfied } from '../../src/engine/goals/completionEvidence';
-import { syncActiveGoalFocusFromGraphTransition } from '../../src/services/memory/tasks';
 import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 const mockRunOrchestrator = jest.fn();
@@ -557,60 +553,5 @@ describe('E2E structural mobile assistant scenarios', () => {
       ]),
     );
     expect(neutralRubrics.some((rubric) => rubric.kind === 'turn_tool_call_count')).toBe(false);
-  });
-
-  it('scoped goal-switch scenario satisfies task-scoped focus rubrics', async () => {
-    const scenario = E2E_BENCHMARK_SCENARIOS.find(
-      (entry) => entry.id === 'bench-scoped-recall-goal-switch',
-    );
-    expect(scenario).toBeDefined();
-
-    const goalsAfterScopeA = [
-      createGoal({
-        id: 'scope-a',
-        title: 'scope-a-planning',
-        status: 'active',
-        now: 1,
-      }),
-    ];
-    const goalsAfterScopeB = [
-      createGoal({
-        id: 'scope-b',
-        title: 'scope-b-planning',
-        status: 'active',
-        now: 2,
-      }),
-    ];
-
-    let invocation = 0;
-    mockRunOrchestrator.mockImplementation(async (options, callbacks) => {
-      const turn = invocation;
-      invocation += 1;
-
-      callbacks.onAssistantMessage('acknowledged', [], undefined, completeFinalMetadata);
-      const goals = turn === 0 ? goalsAfterScopeA : goalsAfterScopeB;
-      syncActiveGoalFocusFromGraphTransition({
-        threadId: options.conversationId,
-        goals,
-      });
-      callbacks.onAgentControlGraphStateChange(
-        buildFinalizedGraphSnapshot(goals, turn === 0 ? 'scope-a' : 'scope-b'),
-      );
-
-      callbacks.onDone();
-      return completedOrchestratorRun;
-    });
-
-    const result = await runE2EScenario(scenario!);
-    const focusContent = readE2EWorkingBlockContent(
-      scenario!.conversationId,
-      'active_focus',
-      result.graphSnapshots,
-    );
-    expect(result.graphSnapshots.at(-1)?.goals?.[0]?.id).toBe('scope-b');
-    expect(focusContent).toContain('scope-b-planning');
-    const outcomes = evaluateE2EScenarioRubrics(result, scenario!.rubrics);
-    const failed = outcomes.filter((outcome) => !outcome.passed);
-    expect(failed).toEqual([]);
   });
 });

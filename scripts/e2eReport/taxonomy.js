@@ -69,15 +69,13 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
         return ['native_side_effect_failure'];
       }
       return ['wrong_args'];
-    case 'goal_evidence_satisfied':
     case 'graph_status':
     case 'graph_terminal_success':
     case 'completion_gate_hold':
-    case 'goal_status':
-    case 'goal_criterion':
-    case 'goals_bootstrapped':
     case 'graph_audit_observed':
       return ['goal_state_bug'];
+    case 'worker_result_token':
+      return ['execution_failure'];
     case 'turn_route':
       return ['execution_route_failure'];
     case 'turn_completion':

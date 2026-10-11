@@ -3,7 +3,6 @@
 // ---------------------------------------------------------------------------
 
 import type {
-  AgentGoalStatus,
   AgentRunControlGraphState,
   AgentRunPhaseKey,
   AgentRunStatus,
@@ -239,8 +238,6 @@ export type E2EClarificationMissingInformation = Readonly<{
 export type E2ERubric =
   | { kind: 'workspace_file'; path: string; contains?: string }
   | { kind: 'workspace_file_absent'; path: string }
-  | { kind: 'goals_bootstrapped'; minGoals?: number }
-  | { kind: 'goal_evidence_satisfied' }
   | { kind: 'graph_status'; status: AgentRunControlGraphState['status'] }
   | { kind: 'graph_terminal_success' }
   | { kind: 'completion_gate_hold'; reason?: string }
@@ -314,7 +311,8 @@ export type E2ERubric =
       answer: E2EMemoryProbeAnswerExpectation;
     }
   | ({ kind: 'turn_memory_selection'; turnIndex: number } & E2EMemorySelectionExpectation)
-  | { kind: 'goal_status'; goalId: string; status: AgentGoalStatus }
+  /** A delegated worker's result, as a sessions tool returned it, carries this exact token. */
+  | { kind: 'worker_result_token'; token: string }
   | { kind: 'ingestion_job_checkpointed'; minCount?: number }
   | { kind: 'ingestion_job_completed'; minCount?: number }
   | { kind: 'memory_episode_count'; min: number }
@@ -328,12 +326,6 @@ export type E2ERubric =
       path: string;
       expectedHash: string;
       algorithm?: 'sha256';
-    }
-  | {
-      kind: 'goal_criterion';
-      goalId: string;
-      criterion: string;
-      met: boolean;
     }
   | {
       kind: 'working_block_token';

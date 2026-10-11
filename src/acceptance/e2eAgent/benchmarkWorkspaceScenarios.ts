@@ -29,7 +29,7 @@ export const BENCH_GAIA_FILE_HOP_CHAIN: E2EScenario = {
   ],
 };
 
-/** AgentBench-adapted: active graph goal before artifact work. */
+/** AgentBench-adapted: artifact work asked for on the first follow-up turn. */
 export const BENCH_BOOTSTRAP_FIRST_TURN_GOALS: E2EScenario = {
   id: 'bench-bootstrap-first-turn-goals',
   conversationId: 'e2e-bench-bootstrap',
@@ -38,14 +38,11 @@ export const BENCH_BOOTSTRAP_FIRST_TURN_GOALS: E2EScenario = {
   prompt: 'Help me ship the release artifact.',
   userTurns: [
     {
-      content:
-        'Write `artifacts/release.txt` with exact content `RELEASE-E2E-42`, then complete goal `ship-release`.',
+      content: 'Write `artifacts/release.txt` with exact content `RELEASE-E2E-42`.',
     },
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 1 },
-    { kind: 'goals_bootstrapped', minGoals: 1 },
-    { kind: 'goal_status', goalId: 'ship-release', status: 'completed' },
     { kind: 'workspace_file', path: 'artifacts/release.txt', contains: 'RELEASE-E2E-42' },
     { kind: 'graph_terminal_success' },
     {

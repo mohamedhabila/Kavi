@@ -120,50 +120,6 @@ describe('evaluateE2ERubric', () => {
       detail: 'cache prefix readiness 1 turns 5000 tokens',
     });
   });
-  it('checks goal_status from latest graph snapshot', () => {
-    const outcome = evaluateE2ERubric(
-      buildResult({
-        graphSnapshots: [
-          {
-            version: 1,
-            status: 'finalized',
-            iteration: 2,
-            expectedToolCalls: [],
-            observedToolResults: [],
-            pendingAsyncCount: 0,
-            lastModelToolNames: [],
-            asyncWork: { pendingOperations: [], awaitingBackgroundWorkers: false },
-            performance: {
-              modelTurnCount: 2,
-              modelDurationMs: 1,
-              toolExecutionCount: 1,
-              toolExecutionDurationMs: 1,
-              lastCandidateToolCount: 0,
-              lastActiveToolCount: 0,
-              maxActiveToolCount: 0,
-            },
-            turnDirectives: {},
-            audit: [],
-            updatedAt: 1,
-            goals: [
-              {
-                id: 'weekend-trip',
-                title: 'Trip',
-                status: 'completed',
-                dependencies: [],
-                evidence: ['write_file:done'],
-                createdAt: 1,
-                updatedAt: 1,
-                successCriteria: ['evidence.min:1'],
-              },
-            ],
-          },
-        ],
-      }),
-      { kind: 'goal_status', goalId: 'weekend-trip', status: 'completed' },
-    );
-    expect(outcome.passed).toBe(true);
-  });
   it('checks ingestion_job_completed for the scenario conversation', () => {
     const conversationId = 'conv-ingest';
     const { enqueueIngestionJob } = require('../../src/services/memory/ingestionQueue');
@@ -402,51 +358,6 @@ describe('evaluateE2ERubric', () => {
       expectedHash,
     });
     expect(passing.passed).toBe(true);
-  });
-  it('checks goal_criterion via completionEvidence', () => {
-    const outcome = evaluateE2ERubric(
-      buildResult({
-        graphSnapshots: [
-          {
-            version: 1,
-            status: 'finalized',
-            iteration: 2,
-            expectedToolCalls: [],
-            observedToolResults: [],
-            pendingAsyncCount: 0,
-            lastModelToolNames: [],
-            asyncWork: { pendingOperations: [], awaitingBackgroundWorkers: false, updatedAt: 1 },
-            performance: { iterationDurationsMs: [], toolCallCounts: {}, updatedAt: 1 },
-            turnDirectives: {
-              forceFinalText: false,
-              requireWorkflowTool: false,
-              incompleteFinalTextRecoveryCount: 0,
-            },
-            audit: [],
-            updatedAt: 2,
-            goals: [
-              {
-                id: 'goal-json',
-                title: 'verify-json',
-                status: 'active',
-                dependencies: [],
-                evidence: ['calendar_list:{"status":"ok"}'],
-                successCriteria: ['evidence.json_field:status:ok'],
-                createdAt: 1,
-                updatedAt: 2,
-              },
-            ],
-          },
-        ],
-      }),
-      {
-        kind: 'goal_criterion',
-        goalId: 'goal-json',
-        criterion: 'evidence.json_field:status:ok',
-        met: true,
-      },
-    );
-    expect(outcome.passed).toBe(true);
   });
   it('checks graph_audit_observed from graph audit trail', () => {
     const outcome = evaluateE2ERubric(

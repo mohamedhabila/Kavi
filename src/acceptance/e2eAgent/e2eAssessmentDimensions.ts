@@ -26,7 +26,7 @@ export const E2E_ASSESSMENT_DIMENSION_LABELS: Readonly<Record<E2EAssessmentDimen
   token_efficiency: 'Token efficiency (budgets, cache, surface audit)',
   memory: 'Memory (explicit recall, passive ingestion, scoped focus)',
   delegation: 'Delegation (spawn, worker evidence, coordinate capability)',
-  outcome_validators: 'Outcome validators (native fixture state, file_hash, goal_criterion)',
+  outcome_validators: 'Outcome validators (native fixture state, file_hash)',
   control_graph: 'Control graph (gates, evidence, terminal success)',
   mobile_native: 'Mobile-native execution (permissions, device state, native apps)',
   privacy_safety: 'Privacy and safety (sensitive native surfaces, redaction, approval)',

@@ -209,15 +209,6 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['tool_usage', 'task_completion', 'token_efficiency'],
   },
-  'goal-evidence-complete': {
-    benchmarkFamilies: ['kavi-core'],
-    assessmentDimensions: [
-      'task_understanding',
-      'task_completion',
-      'control_graph',
-      'outcome_validators',
-    ],
-  },
   'false-finalize-recovery': {
     benchmarkFamilies: ['kavi-core'],
     assessmentDimensions: ['control_graph', 'task_completion', 'outcome_validators'],
@@ -261,10 +252,6 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'multi-turn-passive-chitchat-memory': {
     benchmarkFamilies: ['kavi-core', 'memory-agent-bench-adapted'],
     assessmentDimensions: ['memory', 'task_understanding'],
-  },
-  'multi-turn-goal-passive-recall': {
-    benchmarkFamilies: ['kavi-core', 'state-bench-adapted', 'memory-agent-bench-adapted'],
-    assessmentDimensions: ['memory', 'task_understanding', 'control_graph'],
   },
   'native-calendar-json-field': {
     benchmarkFamilies: ['kavi-core', 'tau-bench-adapted'],
@@ -352,10 +339,6 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'bench-goal-json-field-criterion': {
     benchmarkFamilies: ['tau-bench-adapted'],
     assessmentDimensions: ['outcome_validators', 'control_graph', 'task_completion'],
-  },
-  'bench-scoped-recall-goal-switch': {
-    benchmarkFamilies: ['state-bench-adapted', 'memory-agent-bench-adapted'],
-    assessmentDimensions: ['memory', 'task_understanding', 'control_graph'],
   },
   'bench-bootstrap-first-turn-goals': {
     benchmarkFamilies: ['agentbench-adapted', 'kavi-core'],

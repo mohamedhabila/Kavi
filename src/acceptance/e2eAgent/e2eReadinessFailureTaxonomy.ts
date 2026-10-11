@@ -21,8 +21,6 @@ const TURN_COMPLETION_FIELDS: ReadonlySet<E2ETurnCompletionField> = new Set([
 const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'workspace_file',
   'workspace_file_absent',
-  'goals_bootstrapped',
-  'goal_evidence_satisfied',
   'graph_status',
   'graph_terminal_success',
   'completion_gate_hold',
@@ -43,13 +41,12 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_tool_call_count',
   'turn_memory_answer',
   'turn_memory_selection',
-  'goal_status',
+  'worker_result_token',
   'ingestion_job_checkpointed',
   'ingestion_job_completed',
   'memory_episode_count',
   'native_fixture_state',
   'file_hash',
-  'goal_criterion',
   'working_block_token',
   'graph_audit_observed',
 ]);
@@ -153,15 +150,13 @@ function rubricFailureCategories(
         return ['permission_failure'];
       }
       return ['native_side_effect_failure'];
-    case 'goal_evidence_satisfied':
     case 'graph_status':
     case 'graph_terminal_success':
     case 'completion_gate_hold':
-    case 'goal_status':
-    case 'goal_criterion':
-    case 'goals_bootstrapped':
     case 'graph_audit_observed':
       return ['goal_state_bug'];
+    case 'worker_result_token':
+      return ['execution_failure'];
     case 'turn_route':
       return ['execution_route_failure'];
     case 'turn_completion':

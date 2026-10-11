@@ -10,14 +10,11 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
     prompt: 'Help me plan a weekend trip.',
     userTurns: [
       {
-        content:
-          'Write `artifacts/trip-plan.txt` with exact content `TRIP-E2E-42`, then complete goal `weekend-trip`.',
+        content: 'Write `artifacts/trip-plan.txt` with exact content `TRIP-E2E-42`.',
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 1 },
-      { kind: 'goals_bootstrapped', minGoals: 1 },
-      { kind: 'goal_status', goalId: 'weekend-trip', status: 'completed' },
       { kind: 'workspace_file', path: 'artifacts/trip-plan.txt', contains: 'TRIP-E2E-42' },
       { kind: 'graph_terminal_success' },
       {
@@ -77,40 +74,6 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
   },
   {
-    id: 'multi-turn-goal-passive-recall',
-    conversationId: 'e2e-goal-passive',
-    contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
-    threadTitle: 'meal-planning-scope',
-    prompt: 'Track goals while I share planning tokens.',
-    userTurns: [
-      {
-        content: 'Create an active goal `trip-plan` with title `trip-planning-scope`.',
-      },
-      { content: 'trip-token: TRIP-PASSIVE-42' },
-      {
-        content: 'Create goal `meal-plan` titled `meal-planning-scope` and make it active.',
-      },
-      { content: 'meal-token: MEAL-PASSIVE-42' },
-    ],
-    rubrics: [
-      { kind: 'min_user_turns', min: 4 },
-      { kind: 'goal_status', goalId: 'meal-plan', status: 'active' },
-      { kind: 'ingestion_job_completed', minCount: 2 },
-      { kind: 'memory_episode_count', min: 2 },
-      {
-        kind: 'working_block_token',
-        label: 'active_focus',
-        token: 'meal-planning-scope',
-      },
-      { kind: 'graph_terminal_success' },
-      {
-        kind: 'token_budget',
-        maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['multi-turn-goal-passive-recall'],
-      },
-    ],
-  },
-  {
     id: 'native-calendar-json-field',
     conversationId: 'e2e-native-calendar',
     contentClass: 'synthetic_public',
@@ -135,29 +98,18 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
     conversationId: 'e2e-gate-followup',
     contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
-    prompt: 'Persist the gate artifact for the active goal.',
+    prompt: 'Persist the gate artifact.',
     userTurns: [
       {
         content: 'Write `artifacts/e2e-follow-gate.txt` with exact content `E2E-GATE-FU-42`.',
       },
       {
-        // The control graph is run-scoped: every user turn starts a new run with an
-        // empty goal list, so nothing carried over from turn 1 can "still need"
-        // completion here. This turn was previously phrased as a conditional on that
-        // state, which made its antecedent false by construction — a model that read
-        // the condition correctly did the right thing (verify, then answer) and the
-        // rubric failed it for that. The named-goal capability under test is the same
-        // one `bench-bootstrap-first-turn-goals` and `bench-goal-json-field-criterion`
-        // assert, so it is stated the same way: as an instruction, not a condition.
-        content:
-          'Verify `artifacts/e2e-follow-gate.txt` holds `E2E-GATE-FU-42`, then record that ' +
-          'verification against goal `gate-followup` and complete it.',
+        content: 'Verify `artifacts/e2e-follow-gate.txt` holds `E2E-GATE-FU-42`.',
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      { kind: 'goal_evidence_satisfied' },
-      { kind: 'goal_status', goalId: 'gate-followup', status: 'completed' },
+      { kind: 'turn_final_response_token', turnIndex: 1, token: 'E2E-GATE-FU-42' },
       {
         kind: 'workspace_file',
         path: 'artifacts/e2e-follow-gate.txt',

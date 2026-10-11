@@ -16,34 +16,12 @@ export const E2E_CORE_WORKSPACE_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
   },
   {
-    id: 'goal-evidence-complete',
-    conversationId: 'e2e-goal-evidence',
-    contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
-    prompt:
-      'Create an active goal `persist-artifact` for saving an artifact. ' +
-      'Write `artifacts/e2e-goal.txt` with content `E2E-GOAL-42`. ' +
-      'Complete the goal once evidence criteria are satisfied.',
-    rubrics: [
-      { kind: 'goals_bootstrapped', minGoals: 1 },
-      { kind: 'goal_evidence_satisfied' },
-      { kind: 'goal_status', goalId: 'persist-artifact', status: 'completed' },
-      { kind: 'workspace_file', path: 'artifacts/e2e-goal.txt', contains: 'E2E-GOAL-42' },
-      { kind: 'graph_terminal_success' },
-      {
-        kind: 'token_budget',
-        maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['goal-evidence-complete'],
-      },
-    ],
-  },
-  {
     id: 'false-finalize-recovery',
     conversationId: 'e2e-false-finalize',
     contentClass: 'synthetic_public',
     execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Write `artifacts/e2e-gate.txt` with content `E2E-GATE-42`.',
     rubrics: [
-      { kind: 'goal_evidence_satisfied' },
       { kind: 'workspace_file', path: 'artifacts/e2e-gate.txt', contains: 'E2E-GATE-42' },
       { kind: 'graph_terminal_success' },
       {

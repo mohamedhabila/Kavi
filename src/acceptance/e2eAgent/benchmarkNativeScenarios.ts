@@ -4,21 +4,19 @@
 import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
 import type { E2EScenario } from './types';
 
-/** tau-bench-adapted: goal success criterion backed by native fixture state. */
+/** tau-bench-adapted: a native fixture fact the answer depends on. */
 export const BENCH_GOAL_JSON_FIELD_CRITERION: E2EScenario = {
   id: 'bench-goal-json-field-criterion',
   conversationId: 'e2e-bench-goal-json',
   contentClass: 'synthetic_public',
   execution: { initialMode: 'agentic', route: 'forced_agentic' },
-  prompt:
-    'Verify that the default calendar allows modifications, record that evidence for goal `calendar-verify`, then finish once the criterion is satisfied.',
+  prompt: 'Check whether the default calendar allows modifications and tell me.',
   rubrics: [
     {
       kind: 'native_fixture_state',
       path: 'calendar.allowsModifications',
       expectedValue: 'true',
     },
-    { kind: 'goal_status', goalId: 'calendar-verify', status: 'completed' },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',

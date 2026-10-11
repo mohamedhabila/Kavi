@@ -255,7 +255,6 @@ export function listE2EBenchmarkRequirements(): E2EBenchmarkRequirement[] {
         'bench-memory-state-3turn-recall',
         'bench-longmem-delayed-recall',
         'bench-longmem-dual-fact-recall',
-        'bench-scoped-recall-goal-switch',
         'direct-beam-long-dialogue-multi-probe',
       ],
       environmentKinds: ['node_fixture'],

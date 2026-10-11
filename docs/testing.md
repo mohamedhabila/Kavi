@@ -490,7 +490,7 @@ Assessment axes (for evidence-based readiness and benchmark coverage):
 | `token_efficiency`   | Per-scenario budgets, cache reads, `TOOL_SURFACE_TOKEN_AUDIT`                           |
 | `memory`             | Explicit recall, passive ingestion, scoped working blocks                               |
 | `delegation`         | Spawn, worker evidence, coordinate capability                                           |
-| `outcome_validators` | `native_fixture_state`, `file_hash`, `goal_criterion`                                   |
+| `outcome_validators` | `native_fixture_state`, `file_hash`                                                     |
 | `control_graph`      | Evidence gates, holds, terminal success                                                 |
 | `mobile_native`      | Permission-aware device actions, native app state, and mobile fixtures                  |
 | `privacy_safety`     | Sensitive native surfaces, redaction, untrusted content, and approval boundaries        |
@@ -634,9 +634,8 @@ Graph observability records `TOOL_SURFACE_TOKEN_AUDIT` after pre-flight budget e
 Live E2E delegation (`delegation-worker-finalize`) runs in
 `__tests__/acceptance/e2eDelegationMetrics.test.ts` separately from the core
 and benchmark scenario suite. It uses a mocked worker session and structural
-rubrics (`sessions_spawn`, `goal_evidence_satisfied`,
-`graph_terminal_success`). The worker goal pins `sessions_spawn` via
-`requiredCapabilities: ['coordinate']`.
+rubrics (`worker_result_token`, `turn_final_response_token`,
+`graph_terminal_success`): a worker's result must carry the token and reach the answer.
 
 ## Tool contract coverage
 

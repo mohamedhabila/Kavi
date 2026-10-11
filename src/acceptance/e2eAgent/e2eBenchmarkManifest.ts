@@ -170,19 +170,16 @@ const FINAL_STATE_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'workspace_file',
   'workspace_file_absent',
   'file_hash',
-  'goal_evidence_satisfied',
   'graph_status',
   'graph_terminal_success',
   'memory_fact',
   'memory_fact_absent',
-  'goal_status',
   'native_fixture_state',
-  'goal_criterion',
   'working_block_token',
+  'worker_result_token',
 ]);
 
 const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
-  'goals_bootstrapped',
   'completion_gate_hold',
   'min_user_turns',
   'ingestion_job_checkpointed',
@@ -279,17 +276,14 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_native_invocation_count':
       return 'native_fixture_state';
     case 'turn_tool_call_count':
+    case 'worker_result_token':
       return 'execution_state';
     case 'turn_memory_selection':
       return 'memory_retrieval';
-    case 'goals_bootstrapped':
-    case 'goal_evidence_satisfied':
     case 'graph_status':
     case 'graph_terminal_success':
     case 'completion_gate_hold':
     case 'min_user_turns':
-    case 'goal_status':
-    case 'goal_criterion':
     case 'graph_audit_observed':
       return 'graph_state';
   }

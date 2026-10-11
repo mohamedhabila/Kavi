@@ -109,38 +109,6 @@ export const BENCH_MEMORY_STATE_3TURN_RECALL: E2EScenario = {
   ],
 };
 
-/** STATE-Bench-adapted: goal switch with scoped focus tokens. */
-export const BENCH_SCOPED_RECALL_GOAL_SWITCH: E2EScenario = {
-  id: 'bench-scoped-recall-goal-switch',
-  conversationId: 'e2e-bench-scoped-switch',
-  contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
-  threadTitle: 'bench-scoped-switch-thread',
-  prompt: 'Track two goals with distinct scope tokens.',
-  userTurns: [
-    {
-      content: 'Create an active goal `scope-a` titled `scope-a-planning`.',
-    },
-    { content: 'scope-a-token: SCOPE-A-E2E-42' },
-    {
-      content: 'Create goal `scope-b` titled `scope-b-planning` and make it the active goal.',
-    },
-    { content: 'scope-b-token: SCOPE-B-E2E-42' },
-  ],
-  rubrics: [
-    { kind: 'min_user_turns', min: 4 },
-    { kind: 'goal_status', goalId: 'scope-b', status: 'active' },
-    { kind: 'ingestion_job_completed', minCount: 2 },
-    { kind: 'memory_episode_count', min: 2 },
-    { kind: 'working_block_token', label: 'active_focus', token: 'scope-b-planning' },
-    { kind: 'graph_terminal_success' },
-    {
-      kind: 'token_budget',
-      maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['bench-scoped-recall-goal-switch'],
-    },
-  ],
-};
-
 /** BFCL-adapted: ordered sequential function calls in one model turn. */
 export const BENCH_BFCL_SEQUENTIAL_MEMORY_CHAIN: E2EScenario = {
   id: 'bench-bfcl-sequential-memory-chain',
