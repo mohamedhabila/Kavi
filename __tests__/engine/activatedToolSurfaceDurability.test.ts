@@ -1,5 +1,4 @@
 import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
-import { createGoal } from '../../src/engine/goals/types';
 import { CORE_DOMAIN_TOOLS } from '../../src/engine/tools/domains/core';
 import { tools } from '../helpers/turnToolSurfaceHarness';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -25,12 +24,10 @@ function surfaceNames(params: {
   observed?: string[];
   activated?: string[];
   recent?: string[];
-  goals?: ReturnType<typeof createGoal>[];
   conversationMode?: 'chitchat';
 }): string[] {
   return resolveTurnToolSurface({
     allTools,
-    goals: params.goals ?? [],
     pendingAsyncMonitorToolNames: new Set(),
     observedToolNames: params.observed ?? [],
     recentContinuationToolNames: new Set(params.recent ?? []),
@@ -57,18 +54,6 @@ describe('an explicitly activated tool survives its own success', () => {
     ).toContain('python');
   });
 
-  it('keeps it once a completed goal holds evidence produced by it', () => {
-    // A completed goal citing `python:` evidence used to evict it through a second path.
-    const completed = createGoal({
-      id: 'compute',
-      title: 'Run the simulation',
-      status: 'completed',
-      evidence: ['python:200000 trials'],
-    });
-    expect(
-      surfaceNames({ activated: ['python'], observed: ['python'], goals: [completed] }),
-    ).toContain('python');
-  });
 });
 
 describe('the recovery the off-surface refusal names actually works', () => {
@@ -118,7 +103,6 @@ describe('activation grants availability, never new authority', () => {
     const resolve = (observed: string[]) =>
       resolveTurnToolSurface({
         allTools: [...allTools, pureMutator],
-        goals: [],
         pendingAsyncMonitorToolNames: new Set(),
         observedToolNames: observed,
         recentContinuationToolNames: new Set(),

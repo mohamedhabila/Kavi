@@ -52,36 +52,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     ]);
   });
 
-  it('surfaces memory resource tools from graph-owned memory goals', async () => {
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: tools,
-      observedToolNames: new Set<string>(),
-      goals: [
-        {
-          id: 'memory-state',
-          title: 'track-memory-facts',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write', 'read'],
-          requiredResourceKinds: ['memory'],
-        },
-      ],
-      workingMessages: [userMessage('Subject `longmem-entity` has access_code `LONGMEM-E2E-42`.')],
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has('memory_remember')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
-    expect(names.has('tool_catalog')).toBe(false);
-  });
-
   it('exposes discovery tools as a stable graph bootstrap surface', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -101,7 +74,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps unrequested mobile domains behind the compact catalog surface', () => {
     const selected = resolveTurnToolSurface({
       allTools: [...tools, ...resourceFlowTools],
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -121,7 +93,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('admits the canonical read-only device query after exact catalog activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: [DEVICE_QUERY_TOOL],
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -135,7 +106,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps explicitly pinned mobile discovery ahead of dynamically activated consumers', () => {
     const selected = resolveTurnToolSurface({
       allTools: [CALENDAR_EVENTS_TOOL, CALENDAR_LIST_TOOL],
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       explicitToolSurfaceToolNames: ['calendar_list'],
       observedToolNames: [],
@@ -161,7 +131,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = resolveTurnToolSurface({
       allTools: [...tools, ...resourceFlowTools],
       conversationMode: 'chitchat',
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -189,7 +158,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
       conversationMode: 'chitchat',
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -208,7 +176,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
       conversationMode: 'chitchat',
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -238,7 +205,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
       conversationMode: 'chitchat',
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       explicitToolSurfaceToolNames: ['write_file'],
       observedToolNames: [],

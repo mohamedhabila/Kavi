@@ -3,10 +3,9 @@ import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
 import { tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
-  it('requires resource-scoped graph capability before code tools enter the hot surface', () => {
+  it('keeps code execution behind discovery', () => {
     const unscoped = resolveTurnToolSurface({
       allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -16,23 +15,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const scoped = resolveTurnToolSurface({
       allTools: tools,
-      goals: [
-        {
-          id: 'compute-workspace',
-          title: 'Compute workspace result',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['compute'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['python']),
       includeToolCatalog: false,
     });
 
@@ -40,15 +26,14 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const scopedToolNames = new Set(scoped.map((tool) => tool.name));
     expect(unscopedToolNames.has('python')).toBe(false);
     // web_search is default everyday surface now; code execution still requires a
-    // resource-scoped graph capability, which is what this test guards.
+    // discovery activation, which is what this test guards.
     expect(unscopedToolNames.has('web_search')).toBe(true);
     expect(scopedToolNames.has('python')).toBe(true);
   });
 
-  it('requires resource-scoped graph capability before side-effect tools enter the hot surface', () => {
+  it('keeps side-effect tools outside the core behind discovery', () => {
     const unscoped = resolveTurnToolSurface({
       allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -58,23 +43,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const scoped = resolveTurnToolSurface({
       allTools: tools,
-      goals: [
-        {
-          id: 'workspace-artifact',
-          title: 'Persist workspace artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write', 'read'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['browser_navigate']),
       includeToolCatalog: false,
     });
 
@@ -84,70 +56,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(unscopedToolNames.has('read_file')).toBe(true);
     expect(unscopedToolNames.has('browser_navigate')).toBe(false);
     expect(scopedToolNames.has('write_file')).toBe(true);
-  });
-
-  it('does not broaden an unscoped write goal into unrelated resource domains', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      goals: [
-        {
-          id: 'unscoped-artifact',
-          title: 'Create a local artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write'],
-          successCriteria: ['evidence.tool:write_file'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('browser_navigate')).toBe(false);
-    expect(names.has('workspace_note_write')).toBe(false);
-  });
-
-  it('does not add latest-user selected side-effect tools without matching graph scope', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      goals: [
-        {
-          id: 'memory-state',
-          title: 'Track durable memory',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read', 'write'],
-          requiredResourceKinds: ['memory'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('write_file')).toBe(true);
-    expect(selectedToolNames.has('python')).toBe(false);
-    expect(selectedToolNames.has('memory_recall')).toBe(true);
+    expect(scopedToolNames.has('browser_navigate')).toBe(true);
   });
 
   it('keeps read-only same-turn continuation without adding unrelated side-effect tools', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['list_files'],
       recentContinuationToolNames: new Set<string>(['list_files']),
@@ -164,7 +78,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('does not keep direct latest-user side-effect tools after successful completion', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['write_file'],
       recentContinuationToolNames: new Set<string>(['write_file']),
@@ -176,64 +89,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('write_file')).toBe(true);
   });
 
-  it('treats artifact success criteria as live workspace writer scope', () => {
+  it('keeps core workbench tools on the surface after they ran', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      goals: [
-        {
-          id: 'artifact-goal',
-          title: 'Persist artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          successCriteria: ['evidence.artifact:artifacts/e2e-goal.txt'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('write_file')).toBe(true);
-    expect(selectedToolNames.has('file_edit')).toBe(true);
-    expect(selectedToolNames.has('browser_navigate')).toBe(false);
-  });
-
-  it('does not keep completed artifact writers selected from continuation alone', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      goals: [
-        {
-          id: 'done-artifact',
-          title: 'Persisted artifact',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['write_file:{"status":"written","path":"artifacts/e2e-goal.txt"}'],
-          createdAt: 1,
-          updatedAt: 2,
-          completedAt: 2,
-          successCriteria: ['evidence.artifact:artifacts/e2e-goal.txt'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['write_file'],
-      recentContinuationToolNames: new Set(['write_file']),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    expect(selected.some((tool) => tool.name === 'write_file')).toBe(true);
-  });
-
-  it('does not repin observed side-effect tools without live graph scope', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['write_file', 'read_file'],
       recentContinuationToolNames: new Set<string>(),
@@ -295,24 +153,11 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selected.some((tool) => tool.name === 'tool_catalog')).toBe(false);
   });
 
-  it('suppresses side-effectful session activations without live graph scope', async () => {
+  it('keeps core tools a session also activated', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
       observedToolNames: new Set<string>(),
       sessionActivatedToolNames: ['write_file', 'memory_remember'],
-      goals: [
-        {
-          id: 'done-file',
-          title: 'Done file task',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['write_file:done'],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
       workingMessages: [userMessage('Verify the saved state.')],
     });
 

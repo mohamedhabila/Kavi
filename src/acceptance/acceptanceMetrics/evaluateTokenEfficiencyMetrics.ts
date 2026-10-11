@@ -48,19 +48,6 @@ function estimateLegacyPromptFacingToolTokens(tools: ReadonlyArray<ToolDefinitio
 export function evaluateToolDefinitionTokenReductionBenchmark(): AcceptanceFixtureOutcome {
   const surface = resolveTurnToolSurface({
     allTools: TOOL_DEFINITIONS,
-    goals: [
-      {
-        id: 'benchmark-goal',
-        title: 'benchmark-task',
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-        requiredCapabilities: ['read', 'write', 'discover'],
-        successCriteria: ['evidence.min:1'],
-      },
-    ],
     pendingAsyncMonitorToolNames: new Set<string>(),
     observedToolNames: ['mcp__docs__search_docs', 'skill__weather__forecast'],
     recentContinuationToolNames: new Set(['browser_navigate']),

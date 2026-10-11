@@ -239,7 +239,6 @@ export async function executeAgentControlGraphToolBatch(params: {
 
   const executeBatchInParallel = shouldExecuteToolBatchInParallel(
     params.executableToolCalls,
-    params.controlGraphGoals,
     params.groundedRequestScopedTools,
   );
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);

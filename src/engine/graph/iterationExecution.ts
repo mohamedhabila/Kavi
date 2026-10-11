@@ -53,7 +53,6 @@ export async function executeAgentControlGraphIteration(
   }
 
   const graphSnapshot = params.graph.getGraphSnapshot();
-  const currentGoals = graphSnapshot.goals ?? [];
   const requestUnderstanding = projectRequestUnderstanding({ requestFrame: params.requestFrame });
   const requestUnderstandingSnapshot = summarizeRequestUnderstanding(requestUnderstanding);
   if (
@@ -83,7 +82,6 @@ export async function executeAgentControlGraphIteration(
     allTools: params.allTools,
     disableTooling: params.disableTooling,
     completedWorkflowToolNames: params.graph.completedWorkflowToolNames,
-    goals: currentGoals,
     explicitToolSurfaceToolNames: params.toolRuntime.explicitToolSurfaceToolNames,
     // Downstream this flag only decides the turn's starting conversation mode
     // ('agentic' vs 'chitchat'); mode is a conversation property, not a persona flag,

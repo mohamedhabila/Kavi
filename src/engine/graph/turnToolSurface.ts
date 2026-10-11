@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 import type { ConversationMode } from '../../types/conversation';
@@ -8,11 +7,7 @@ import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
 } from '../tools/toolWorkflowContracts';
-import {
-  DEFAULT_CORE_TOOL_NAMES,
-  resolveGoalCapabilityToolNames,
-  resolveTurnToolSurface,
-} from '../goals/toolSurface';
+import { DEFAULT_CORE_TOOL_NAMES, resolveTurnToolSurface } from '../goals/toolSurface';
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
   extractDiscoveryActivatedToolNames,
@@ -189,7 +184,6 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   allTools: ReadonlyArray<ToolDefinition>;
   conversationMode?: ConversationMode;
   observedToolNames: Iterable<string>;
-  goals?: ReadonlyArray<AgentGoal>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   workingMessages: ReadonlyArray<Message>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
@@ -212,7 +206,6 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
     unresolvedDiscoveryToolCallInTurn,
     activatedCatalogToolNames,
   };
-  const goals = params.goals ?? [];
   const pendingAsyncMonitorToolNames = params.pendingAsyncMonitorToolNames ?? new Set<string>();
   const recentContinuation = extractRecentContinuationToolNames(messagesSinceLatestUserMessage);
   const recentContinuationToolNames = recentContinuation.signals;
@@ -235,16 +228,9 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   ]);
   const hasObservedToolNames = observedToolNames.length > 0;
   const explicitToolSurfaceToolNames = params.explicitToolSurfaceToolNames ?? [];
-  const hasGoalScopedCallableTools = resolveGoalCapabilityToolNames(goals, params.allTools).some(
-    (toolName) => {
-      const normalizedName = normalizeToolName(toolName);
-      return normalizedName && !DISCOVERY_ACTIVATION_TOOL_NAMES.has(normalizedName);
-    },
-  );
   const hasSurfaceContinuationSignals =
     pendingAsyncMonitorToolNames.size > 0 ||
     explicitToolSurfaceToolNames.length > 0 ||
-    hasGoalScopedCallableTools ||
     turnContinuationToolNames.size > 0 ||
     hasObservedToolNames ||
     activatedCatalogToolNames.size > 0 ||
@@ -253,7 +239,6 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
   return resolveTurnToolSurface({
     allTools: params.allTools,
     conversationMode: params.conversationMode,
-    goals,
     pendingAsyncMonitorToolNames,
     explicitToolSurfaceToolNames,
     observedToolNames,
@@ -264,7 +249,6 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
       !hasSurfaceContinuationSignals ||
       (activatedCatalogToolNames.size === 0 &&
         pendingAsyncMonitorToolNames.size === 0 &&
-        explicitToolSurfaceToolNames.length === 0 &&
-        !hasGoalScopedCallableTools),
+        explicitToolSurfaceToolNames.length === 0),
   });
 }

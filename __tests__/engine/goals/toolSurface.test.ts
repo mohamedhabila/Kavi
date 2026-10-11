@@ -1,7 +1,4 @@
-import {
-  resolveOrderedGoalCapabilities,
-  resolveTurnToolSurface,
-} from '../../../src/engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../../src/engine/goals/toolSurface';
 import type { ToolDefinition } from '../../../src/types/tool';
 
 const discoveryTools: ToolDefinition[] = [
@@ -129,40 +126,10 @@ function selectedNames(surface: ToolDefinition[]): Set<string> {
   return new Set(surface.map((tool) => tool.name));
 }
 
-describe('resolveOrderedGoalCapabilities', () => {
-  it('preserves goal declaration order and deduplicates', () => {
-    expect(resolveOrderedGoalCapabilities(['write', 'read', 'discover', 'read'])).toEqual([
-      'write',
-      'read',
-      'discover',
-    ]);
-  });
-
-  it('keeps calendar workflow discover-before-read ordering', () => {
-    expect(resolveOrderedGoalCapabilities(['discover', 'read', 'verify'])).toEqual([
-      'discover',
-      'read',
-      'verify',
-    ]);
-  });
-});
-
 describe('resolveTurnToolSurface discovery decay', () => {
-  it('combines pending async monitors, default core tools, and goal capabilities', () => {
+  it('combines pending async monitors and default core tools', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [
-        {
-          id: 'memory-goal',
-          title: 'Recall memory',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set(['read_file']),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -175,48 +142,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(selectedNames(surface).has('tool_catalog')).toBe(false);
   });
 
-  it('keeps code execution off read/write surfaces unless compute is explicitly required', () => {
-    const python: ToolDefinition = {
-      name: 'python',
-      description: 'Execute Python.',
-      input_schema: { type: 'object', properties: {} },
-      contract: {
-        category: 'code',
-        capabilities: ['compute', 'read', 'write'],
-        resourceKinds: ['conversation_workspace', 'unknown'],
-        sideEffects: ['local_artifact', 'remote_mutation'],
-      },
-    };
-    const resolve = (requiredCapabilities: string[]) =>
-      resolveTurnToolSurface({
-        allTools: [...discoveryTools, python],
-        goals: [
-          {
-            id: 'code-surface',
-            title: 'Process workspace data',
-            status: 'active',
-            dependencies: [],
-            evidence: [],
-            createdAt: 1,
-            updatedAt: 1,
-            requiredCapabilities,
-          },
-        ],
-        pendingAsyncMonitorToolNames: new Set<string>(),
-        observedToolNames: [],
-        recentContinuationToolNames: new Set<string>(),
-        activatedCatalogToolNames: new Set<string>(),
-        includeToolCatalog: false,
-      });
-
-    expect(selectedNames(resolve(['read', 'write'])).has('python')).toBe(false);
-    expect(selectedNames(resolve(['compute'])).has('python')).toBe(true);
-  });
-
   it('keeps discovery tools available after session activation', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -235,7 +163,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps discovery tools after the same user turn activated catalog results', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -251,22 +178,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('tool_describe')).toBe(true);
   });
 
-  it('keeps the plan tool available after completed work', () => {
+  it('keeps the plan tool on the core surface', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [
-        {
-          id: 'done',
-          title: 'done',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['write_file:{"status":"written"}'],
-          createdAt: 1,
-          updatedAt: 2,
-          completedAt: 2,
-          completionPolicy: 'blocking',
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -277,37 +191,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(selectedNames(surface).has('update_plan')).toBe(true);
   });
 
-  it('keeps the plan tool available during live work', () => {
+  it('exposes the stable core workbench', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [
-        {
-          id: 'active',
-          title: 'active',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          completionPolicy: 'blocking',
-          requiredCapabilities: ['write'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    expect(selectedNames(surface).has('update_plan')).toBe(true);
-  });
-
-  it('exposes the stable core workbench when no live graph scope exists', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -329,7 +215,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
       conversationMode: 'chitchat',
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -342,10 +227,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('cron')).toBe(false);
   });
 
-  it('exposes the discovery entrypoint when the graph has no narrower surface', () => {
+  it('exposes the discovery entrypoint when asked', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -361,7 +245,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps discovery tools while a catalog call is unresolved in the current user turn', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -375,152 +258,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('tool_describe')).toBe(true);
   });
 
-  it('narrows goal capability tools by required resource kind', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'memory-goal',
-          title: 'Track facts',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read', 'write'],
-          requiredResourceKinds: ['memory'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('memory_recall')).toBe(true);
-    expect(names.has('memory_remember')).toBe(true);
-    expect(names.has('read_file')).toBe(true);
-    expect(names.has('workspace_note_write')).toBe(false);
-    expect(names.has('tool_catalog')).toBe(false);
-  });
-
-  it('keeps structured memory tools as core for unscoped goals', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'scope-a',
-          title: 'scope-a-planning',
-          status: 'active',
-          completionPolicy: 'persistent',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('update_plan')).toBe(true);
-    expect(names.has('memory_remember')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
-  });
-
-  it('surfaces workspace writers from active artifact success criteria', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'artifact-goal',
-          title: 'Persist artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          successCriteria: ['evidence.artifact:artifacts/e2e-goal.txt'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('workspace_note_write')).toBe(true);
-    expect(names.has('browser_navigate')).toBe(false);
-  });
-
-  it('surfaces workspace writers from active file-hash success criteria', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'hash-goal',
-          title: 'Persist hashed artifact',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          successCriteria: ['evidence.file_hash:artifacts/e2e-goal.txt:sha256'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('workspace_note_write')).toBe(true);
-    expect(names.has('browser_navigate')).toBe(false);
-  });
-
-  it('surfaces exact tools from active structural evidence-tool criteria', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'exact-tool-goal',
-          title: 'Use explicit evidence source',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          successCriteria: ['evidence.tool:write_file'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('workspace_note_write')).toBe(false);
-  });
-
   it('keeps discovery tools when catalog activation has already exposed callable tools', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -535,66 +275,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('tool_describe')).toBe(true);
   });
 
-  it('does not resurrect side-effectful catalog activations without live graph scope', () => {
+  it('keeps a side-effectful catalog activation until the tool runs', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [
-        {
-          id: 'done-workspace',
-          title: 'Done workspace task',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['workspace_note_write:done'],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['workspace_note_write', 'memory_remember']),
-      unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('workspace_note_write')).toBe(false);
-    expect(names.has('memory_remember')).toBe(true);
-  });
-
-  it('allows side-effectful catalog activations required by live graph scope', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'active-workspace',
-          title: 'Active workspace task',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write'],
-          requiredResourceKinds: ['conversation_workspace'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['workspace_note_write']),
-      unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
-    });
-
-    expect(selectedNames(surface).has('workspace_note_write')).toBe(true);
-  });
-
-  it('allows side-effectful catalog activations without a completed graph resource owner', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -609,7 +292,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('does not reactivate an already completed side-effectful workflow tool from catalog', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['workspace_note_write'],
       recentContinuationToolNames: new Set<string>(),
@@ -621,10 +303,9 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(selectedNames(surface).has('workspace_note_write')).toBe(false);
   });
 
-  it('does not self-repin completed non-memory read tools without live graph scope', () => {
+  it('keeps a core reader after it ran', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['read_file'],
       recentContinuationToolNames: new Set(['read_file']),
@@ -634,60 +315,5 @@ describe('resolveTurnToolSurface discovery decay', () => {
     });
 
     expect(selectedNames(surface).has('read_file')).toBe(true);
-  });
-
-  it('does not reactivate side-effectful catalog tools already evidenced by completed goals', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'done-weak',
-          title: 'Done weak goal',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['workspace_note_write:{"status":"written"}'],
-          createdAt: 1,
-          updatedAt: 2,
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.min:1'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['workspace_note_write']),
-      unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
-    });
-
-    expect(selectedNames(surface).has('workspace_note_write')).toBe(false);
-  });
-
-  it('does not keep completed artifact-criterion writers hot without live graph scope', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      goals: [
-        {
-          id: 'done-artifact',
-          title: 'Done artifact task',
-          status: 'completed',
-          dependencies: [],
-          evidence: ['write_file:{"status":"written","path":"artifacts/out.txt"}'],
-          createdAt: 1,
-          updatedAt: 2,
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.artifact:artifacts/out.txt'],
-        },
-      ],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['write_file']),
-      unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
-    });
-
-    expect(selectedNames(surface).has('write_file')).toBe(true);
-    expect(selectedNames(surface).has('workspace_note_write')).toBe(false);
   });
 });

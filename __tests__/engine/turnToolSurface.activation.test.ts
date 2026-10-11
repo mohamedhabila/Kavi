@@ -85,18 +85,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('surfaces delegated session wait after a session producer has run', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      goals: [
-        {
-          id: 'delegated-work',
-          title: 'Coordinate delegated worker',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['coordinate'],
-        },
-      ],
       observedToolNames: ['sessions_spawn'],
       workingMessages: [
         { id: 'u1', role: 'user', content: 'Delegate this and use the result.', timestamp: 1 },
@@ -129,22 +117,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('sessions_wait')).toBe(true);
   });
 
-  it('surfaces session delegation from worker evidence criteria without required capabilities', async () => {
+  it('surfaces session delegation on the agentic core', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      goals: [
-        {
-          id: 'worker-chain',
-          title: 'Coordinate delegated worker',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          completionPolicy: 'blocking',
-          successCriteria: ['evidence.prefix:worker', 'evidence.min:1'],
-        },
-      ],
       observedToolNames: [],
       workingMessages: [
         {

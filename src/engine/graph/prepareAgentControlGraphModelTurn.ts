@@ -38,7 +38,6 @@ export async function prepareAgentControlGraphModelTurn(
     // iterations; the persisted conversation mode carries it into later turns.
     conversationMode: params.startsAgentic || params.escalatedToAgentic ? 'agentic' : 'chitchat',
     completedWorkflowToolNames: params.completedWorkflowToolNames,
-    goals: params.goals,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
     trackedAsyncOperations: params.trackedAsyncOperations,
     sessionActivatedToolNames: params.sessionActivatedToolNames,

@@ -148,7 +148,6 @@ function createBaseParams() {
     },
     allTools: [writeTool],
     completedWorkflowToolNames: new Set<string>(),
-    goals: [],
     startsAgentic: true,
     iteration: 3,
     maxTokens: 4096,
@@ -343,7 +342,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
           input_schema: { type: 'object', properties: {} },
         } as any,
       ],
-      goals: [],
     });
 
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
@@ -500,52 +498,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       { name: 'write_file', placement: 'stable_prefix' },
       { name: 'sessions_spawn', placement: 'stable_prefix' },
       { name: 'tool_catalog', placement: 'stable_prefix' },
-    ]);
-  });
-
-  it('allows session coordination when graph goals scope session tools', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
-    mockPreparedTurn();
-
-    await prepareAgentControlGraphModelTurn({
-      ...createBaseParams(),
-      allTools: [sessionsSpawnTool, sessionsWaitTool, toolCatalogTool],
-      goals: [
-        {
-          id: 'delegate-work',
-          title: 'Delegate work',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['coordinate', 'wait'],
-          requiredResourceKinds: ['unknown'],
-        },
-      ],
-      workingMessages: [
-        {
-          id: 'msg-1',
-          role: 'user',
-          content: 'Use a delegated worker for this task.',
-          timestamp: 1,
-        },
-      ],
-    });
-
-    expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        allowSessionCoordinationTools: true,
-      }),
-    );
-    expectPreparedGroundedTools([
-      { name: 'sessions_spawn', placement: 'stable_prefix' },
-      { name: 'sessions_wait', placement: 'dynamic_suffix' },
     ]);
   });
 

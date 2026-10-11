@@ -3,7 +3,6 @@ import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepar
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
-import { createGoal } from '../../src/engine/goals/types';
 import {
   projectRequestUnderstanding,
   summarizeRequestUnderstanding,
@@ -20,19 +19,7 @@ jest.mock('../../src/engine/graph/iterationReadyTurnExecution', () => ({
 const mockedPrepareModelTurn = jest.mocked(prepareAgentControlGraphModelTurn);
 const mockedExecutePreparedTurn = jest.mocked(executePreparedAgentControlGraphTurn);
 
-function params(
-  iteration: number,
-  goals = [
-    createGoal({
-      id: 'current-goal',
-      title: 'Keep the verified constraint',
-      status: 'active',
-      completionPolicy: 'blocking',
-      successCriteria: ['evidence.tool:write_file'],
-      now: 1,
-    }),
-  ],
-) {
+function params(iteration: number) {
   const runtime = {
     activeModel: 'test-model',
     activeProvider: { id: 'provider', name: 'Provider', enabled: true },
@@ -58,7 +45,7 @@ function params(
       requireWorkflowTool: false,
       incompleteFinalTextRecoveryCount: 0,
     }),
-    getGraphSnapshot: jest.fn().mockReturnValue({ goals }),
+    getGraphSnapshot: jest.fn().mockReturnValue({}),
     publishWorkflowToolResultProgressToAgentControlGraph: jest.fn(),
     recordPerformanceMetrics: jest.fn(),
     recordObservability: jest.fn(),
@@ -136,7 +123,6 @@ describe('iteration request understanding continuity', () => {
     ]);
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        goals: input.graph.getGraphSnapshot().goals,
         promptContextSupport: expect.objectContaining({
           runtimeContext: expect.stringContaining('## Request Understanding Projection (v3)'),
         }),
@@ -156,7 +142,7 @@ describe('iteration request understanding continuity', () => {
   });
 
   it('records a typed summary without adding prompt noise to a simple first turn', async () => {
-    const input = params(1, []);
+    const input = params(1);
     await executeAgentControlGraphIteration(input);
 
     expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
@@ -175,12 +161,12 @@ describe('iteration request understanding continuity', () => {
   });
 
   it("reads the run's plan from the graph on every iteration", async () => {
-    const input = params(2, []);
+    const input = params(2);
     const plan = [
       { step: 'Find flights', status: 'completed' },
       { step: 'Book the hotel', status: 'in_progress' },
     ];
-    input.graph.getGraphSnapshot.mockReturnValue({ goals: [], plan });
+    input.graph.getGraphSnapshot.mockReturnValue({ plan });
 
     await executeAgentControlGraphIteration(input);
 
@@ -189,17 +175,15 @@ describe('iteration request understanding continuity', () => {
 
   it('does not write an unchanged projection again', async () => {
     const input = params(3);
-    const goals = input.graph.getGraphSnapshot().goals;
     input.graph.getGraphSnapshot.mockReturnValue({
-      goals,
       requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame: input.requestFrame, goals }),
+        projectRequestUnderstanding({ requestFrame: input.requestFrame }),
       ),
     });
 
     await executeAgentControlGraphIteration(input);
 
     expect(input.graph.applyAgentControlGraphEvents).not.toHaveBeenCalled();
-    expect(mockedPrepareModelTurn).toHaveBeenCalledWith(expect.objectContaining({ goals }));
+    expect(mockedPrepareModelTurn).toHaveBeenCalledTimes(1);
   });
 });

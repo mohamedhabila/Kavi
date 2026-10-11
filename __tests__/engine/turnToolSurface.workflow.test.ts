@@ -33,23 +33,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('defers required workflow consumers when an upstream producer is available but unobserved', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'Prepare mobile action',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['discover', 'read', 'write'],
-          requiredResourceKinds: ['device'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['contacts_search', 'contacts_get', 'sms_compose']),
       includeToolCatalog: false,
     });
 
@@ -88,23 +75,14 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const selected = resolveTurnToolSurface({
       allTools: multiInputTools,
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'Prepare mobile action',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['discover', 'read', 'write'],
-          requiredResourceKinds: ['device'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['contacts_search'],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set([
+        'contacts_get',
+        'location_current',
+        'nearby_contact_message',
+      ]),
       includeToolCatalog: false,
     });
 
@@ -116,23 +94,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('surfaces required workflow consumers after the upstream producer has run', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'Prepare mobile action',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read', 'write'],
-          requiredResourceKinds: ['device'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['contacts_search'],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['contacts_get', 'sms_compose']),
       includeToolCatalog: false,
     });
 
@@ -144,23 +109,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('surfaces required workflow consumers after a same-turn continuation producer', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'Prepare mobile action',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read', 'write'],
-          requiredResourceKinds: ['device'],
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(['contacts_search']),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['contacts_get']),
       includeToolCatalog: false,
     });
 
@@ -168,7 +120,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('contacts_get')).toBe(true);
   });
 
-  it('lets blocked resource-scoped goals continue to downstream side-effect tools', () => {
+  it('keeps an activated side-effect tool once its upstream producer has run', () => {
     const sideEffectResourceFlowTools = resourceFlowTools.map((tool) =>
       tool.name === 'sms_compose'
         ? {
@@ -182,25 +134,10 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     );
     const selected = resolveTurnToolSurface({
       allTools: sideEffectResourceFlowTools,
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'Prepare mobile action',
-          status: 'blocked',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['read', 'write'],
-          requiredResourceKinds: ['device'],
-          successCriteria: ['evidence.json_field:status:sms_composer_opened'],
-          blockedReason: 'waiting for user message content',
-        },
-      ],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: ['contacts_search'],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set(['contacts_get', 'sms_compose']),
       includeToolCatalog: false,
     });
 
@@ -209,10 +146,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('sms_compose')).toBe(true);
   });
 
-  it('does not expose workflow consumers without graph or discovery scope', () => {
+  it('does not expose workflow consumers without discovery scope', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      goals: [],
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -393,24 +329,11 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('calendar_update_event')).toBe(false);
   });
 
-  it('keeps memory discovery activation additive with active mobile goals', async () => {
+  it('keeps memory discovery activation additive with other activated tools', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: resourceFlowTools,
       observedToolNames: new Set<string>(),
-      sessionActivatedToolNames: ['memory_recall'],
-      goals: [
-        {
-          id: 'mobile-action',
-          title: 'mobile action',
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write', 'verify'],
-          requiredResourceKinds: ['device'],
-        },
-      ],
+      sessionActivatedToolNames: ['memory_recall', 'sms_compose'],
       workingMessages: [userMessage('Use what you remember, then text Avery.')],
     });
 

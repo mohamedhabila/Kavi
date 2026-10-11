@@ -239,20 +239,9 @@ describe('Orchestrator', () => {
       await runOrchestrator(
         {
           ...options,
+          // The run already activated the workspace search tools from the catalog.
           initialAgentControlGraphState: createInitialAgentControlGraphSnapshot({
-            goals: [
-              {
-                id: 'goal-investigate',
-                title: 'Investigate the repo issue',
-                status: 'active',
-                dependencies: [],
-                evidence: [],
-                createdAt: 1,
-                updatedAt: 1,
-                requiredCapabilities: ['discover', 'read', 'verify'],
-                requiredResourceKinds: ['conversation_workspace', 'unknown'],
-              },
-            ],
+            sessionActivatedToolNames: ['glob_search', 'text_search'],
           }),
         },
         callbacks,
@@ -265,7 +254,7 @@ describe('Orchestrator', () => {
       expect(selectedToolNames.has('web_search')).toBe(true);
       expect(selectedToolNames.has('web_fetch')).toBe(true);
       expect(selectedToolNames.has('python')).toBe(false);
-      expect(selectedToolNames.has('tool_catalog')).toBe(false);
+      expect(selectedToolNames.has('tool_catalog')).toBe(true);
       expect(selectedToolNames.has('browser_navigate')).toBe(false);
       expect(selectedToolNames.has('read_memory')).toBe(false);
 

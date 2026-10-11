@@ -59,29 +59,15 @@ describe('full-registry turn tool surface', () => {
 
     expect(names.has('web_search')).toBe(true);
     expect(names.has('calendar_events')).toBe(true);
-    expect(names.has('update_goals')).toBe(false);
+    expect(names.has('update_plan')).toBe(false);
     expect(names.has('sessions_spawn')).toBe(false);
   });
 
-  it('keeps an unscoped artifact goal out of unrelated mobile mutation domains', async () => {
+  it('keeps the agentic core out of unrelated mobile mutation domains', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
       conversationMode: 'agentic',
       observedToolNames: new Set<string>(),
-      goals: [
-        {
-          id: 'release-artifact',
-          title: 'Create release artifact',
-          status: 'active',
-          completionPolicy: 'blocking',
-          dependencies: [],
-          evidence: [],
-          createdAt: 1,
-          updatedAt: 1,
-          requiredCapabilities: ['write'],
-          successCriteria: ['evidence.file_hash:release-readiness-decision.md:sha256'],
-        },
-      ],
       workingMessages: [userMessage],
     });
     const names = new Set(selected.map((tool) => tool.name));

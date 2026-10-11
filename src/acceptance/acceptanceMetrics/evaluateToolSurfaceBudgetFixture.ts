@@ -7,10 +7,7 @@ import {
   MAX_TOOL_DEFINITION_TOKENS,
 } from '../../services/context/budgetManager';
 import { ALL_BUILTIN_TOOL_DEFINITIONS } from '../../engine/tools/builtin-definitions';
-import {
-  resolveGoalCapabilityToolNames,
-  resolveTurnToolSurface,
-} from '../../engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../engine/goals/toolSurface';
 import {
   compressToolDefinitions,
   enforceToolTokenBudget,
@@ -26,17 +23,14 @@ export function evaluateToolSurfaceBudgetFixture(
 ): AcceptanceFixtureOutcome {
   const selectedTools = resolveTurnToolSurface({
     allTools: ALL_BUILTIN_TOOL_DEFINITIONS,
-    goals: fixture.goals,
     pendingAsyncMonitorToolNames: new Set<string>(),
     observedToolNames: [],
     recentContinuationToolNames: new Set<string>(),
-    activatedCatalogToolNames: new Set<string>(),
+    activatedCatalogToolNames: new Set(fixture.activatedCatalogToolNames ?? []),
     includeToolCatalog: fixture.includeToolCatalog ?? false,
   });
 
-  const pinnedToolNames = new Set(
-    resolveGoalCapabilityToolNames(fixture.goals, ALL_BUILTIN_TOOL_DEFINITIONS),
-  );
+  const pinnedToolNames = new Set<string>();
   const compactionOptions = { pinnedToolNames };
   const compressedTools = compressToolDefinitions(selectedTools, compactionOptions);
   const tokenEstimate = estimateAllToolTokens(compressedTools, compactionOptions);

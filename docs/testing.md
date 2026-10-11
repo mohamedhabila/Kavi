@@ -645,7 +645,6 @@ Structural tests:
 
 - `__tests__/engine/toolCatalogContractConsistency.test.ts` — `tool_catalog` category browse matches registry capability summaries
 - `__tests__/acceptance/toolCatalogDiscoveryMetrics.test.ts` — catalog search/describe activates expected tools on turn surface (included in `verify:strict` via `eval:agent`)
-- `__tests__/acceptance/goalCapabilityDiscoveryMetrics.test.ts` — goal `requiredCapabilities` resolve expected tools on fixture catalog (included in `verify:strict` via `eval:agent`)
 
 ## Native accessibility coverage
 

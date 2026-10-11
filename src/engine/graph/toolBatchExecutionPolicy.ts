@@ -1,6 +1,4 @@
 import type { ToolDefinition } from '../../types/tool';
-import type { AgentGoal } from '../goals/types';
-import { resolveOrderedGoalCapabilities } from '../goals/toolSurface';
 import {
   inferToolCapabilityDescriptor,
   type ToolCapabilityDescriptor,
@@ -148,18 +146,9 @@ function hasWorkflowDependencyBetweenToolCalls(
 
 export function shouldExecuteToolBatchInParallel(
   toolCalls: ReadonlyArray<{ name: string }>,
-  goals?: ReadonlyArray<AgentGoal>,
   tools?: ReadonlyArray<Pick<ToolDefinition, 'name' | 'description' | 'contract'>>,
 ): boolean {
   if (toolCalls.length <= 1) {
-    return false;
-  }
-
-  const activeGoals = (goals ?? []).filter((goal) => goal.status === 'active');
-  const orderedCapabilities = resolveOrderedGoalCapabilities(
-    activeGoals.flatMap((goal) => goal.requiredCapabilities ?? []),
-  );
-  if (orderedCapabilities.length >= 2) {
     return false;
   }
 

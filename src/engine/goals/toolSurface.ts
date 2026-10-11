@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Kavi — Goal-Aware Tool Surface
+// Kavi — Turn Tool Surface
 // ---------------------------------------------------------------------------
-// Resolves which tools are exposed for a model turn using structural graph
-// signals only: async monitors, goal capabilities, discovery activation, and
-// workflow continuation.
+// Resolves which tools are exposed for a model turn using structural signals
+// only: the core workbench, async monitors, explicit pins, discovery
+// activation, and workflow continuation.
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
@@ -14,14 +14,7 @@ import {
 } from '../tools/toolWorkflowContracts';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
-import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
-import type { AgentGoal } from './types';
-import {
-  collectCompletedGoalEvidenceToolNames,
-  isCodeExecutionTool,
-  isRepeatableActivatedTool,
-  shouldAcceptContinuationTool,
-} from './toolSurfaceRetention';
+import { isRepeatableActivatedTool, shouldAcceptContinuationTool } from './toolSurfaceRetention';
 import { isChitchatAuthorizedTool } from './toolSurfaceAuthority';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
@@ -135,31 +128,10 @@ const STABLE_TOOL_SURFACE_ORDER = new Map(
   ]),
 );
 
-const GOAL_CAPABILITY_EXCLUDED_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 type PromptCachePlacement = Exclude<
   NonNullable<ToolDefinition['promptCache']>['placement'],
   undefined
 >;
-
-function normalizeTagList(values: ReadonlyArray<string> | undefined): string[] {
-  return Array.from(new Set((values ?? []).map((value) => value.trim()).filter(Boolean)));
-}
-
-function hasAnySuccessCriterionSurfaceHints(goal: AgentGoal): boolean {
-  return (goal.successCriteria ?? []).some((criterion) => {
-    const hints = resolveSuccessCriterionSurfaceHints(criterion);
-    return (
-      hints.toolNames.length > 0 ||
-      hints.capabilities.length > 0 ||
-      hints.resourceKinds.length > 0 ||
-      hints.categories.length > 0
-    );
-  });
-}
-
-function hasRequiredResourceKinds(goal: AgentGoal): boolean {
-  return normalizeTagList(goal.requiredResourceKinds).length > 0;
-}
 
 function withPromptCachePlacement(
   tool: ToolDefinition,
@@ -221,206 +193,9 @@ function prunePrematureWorkflowConsumers(params: {
   }
 }
 
-export function resolveOrderedGoalCapabilities(capabilities: ReadonlyArray<string>): string[] {
-  const ordered: string[] = [];
-  const seen = new Set<string>();
-  for (const capability of capabilities) {
-    const normalized = capability.trim();
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    ordered.push(normalized);
-  }
-  return ordered;
-}
-
-export function resolveGoalCapabilityToolNames(
-  goals: ReadonlyArray<AgentGoal>,
-  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>,
-): string[] {
-  return resolveGoalCapabilityToolNamesForGoals(goals, tools);
-}
-
-function resolveResourceScopedGoalCapabilityToolNames(
-  goals: ReadonlyArray<AgentGoal>,
-  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>,
-): string[] {
-  return Array.from(
-    new Set([
-      ...resolveGoalCapabilityToolNamesForGoals(goals.filter(hasRequiredResourceKinds), tools),
-      ...resolveSuccessCriterionToolNamesForGoals(
-        goals.filter(hasAnySuccessCriterionSurfaceHints),
-        tools,
-      ),
-    ]),
-  );
-}
-
-function resolveCompletedResourceScopedGoalCapabilityToolNames(
-  goals: ReadonlyArray<AgentGoal>,
-  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>,
-): string[] {
-  return Array.from(
-    new Set([
-      ...resolveGoalCapabilityToolNamesForGoals(
-        goals.filter((goal) => goal.status === 'completed' && hasRequiredResourceKinds(goal)),
-        tools,
-        new Set<AgentGoal['status']>(['completed']),
-      ),
-      ...resolveSuccessCriterionToolNamesForGoals(
-        goals.filter(
-          (goal) => goal.status === 'completed' && hasAnySuccessCriterionSurfaceHints(goal),
-        ),
-        tools,
-        new Set<AgentGoal['status']>(['completed']),
-      ),
-    ]),
-  );
-}
-
-function matchesSuccessCriterionSurfaceHints(
-  tool: Pick<ToolDefinition, 'name' | 'contract'>,
-  criterion: string,
-): boolean {
-  const normalizedName = normalizeToolName(tool.name);
-  if (!normalizedName || GOAL_CAPABILITY_EXCLUDED_TOOL_NAMES.has(normalizedName)) {
-    return false;
-  }
-
-  const hints = resolveSuccessCriterionSurfaceHints(criterion);
-  const normalizedHintToolNames = hints.toolNames.map((toolName) => normalizeToolName(toolName));
-  if (normalizedHintToolNames.includes(normalizedName)) {
-    return true;
-  }
-
-  if (
-    hints.capabilities.length === 0 &&
-    hints.resourceKinds.length === 0 &&
-    hints.categories.length === 0
-  ) {
-    return false;
-  }
-
-  if (isCodeExecutionTool(tool)) {
-    return false;
-  }
-
-  const category = tool.contract?.category?.trim();
-  if (hints.categories.length > 0 && (!category || !hints.categories.includes(category))) {
-    return false;
-  }
-
-  const capabilities = normalizeTagList(tool.contract?.capabilities);
-  if (
-    hints.capabilities.length > 0 &&
-    !capabilities.some((capability) => hints.capabilities.includes(capability))
-  ) {
-    return false;
-  }
-
-  const resourceKinds = normalizeTagList(tool.contract?.resourceKinds);
-  if (
-    hints.resourceKinds.length > 0 &&
-    !resourceKinds.some((resourceKind) => hints.resourceKinds.includes(resourceKind))
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
-function resolveSuccessCriterionToolNamesForGoals(
-  goals: ReadonlyArray<AgentGoal>,
-  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>,
-  eligibleStatuses: ReadonlySet<AgentGoal['status']> = new Set<AgentGoal['status']>([
-    'active',
-    'pending',
-    'blocked',
-  ]),
-): string[] {
-  const liveGoals = goals.filter((goal) => eligibleStatuses.has(goal.status));
-  if (liveGoals.length === 0) {
-    return [];
-  }
-
-  return tools
-    .filter((tool) =>
-      liveGoals.some((goal) =>
-        (goal.successCriteria ?? []).some((criterion) =>
-          matchesSuccessCriterionSurfaceHints(tool, criterion),
-        ),
-      ),
-    )
-    .map((tool) => normalizeToolName(tool.name))
-    .filter(Boolean);
-}
-
-function resolveGoalCapabilityToolNamesForGoals(
-  goals: ReadonlyArray<AgentGoal>,
-  tools: ReadonlyArray<Pick<ToolDefinition, 'name' | 'contract'>>,
-  eligibleStatuses: ReadonlySet<AgentGoal['status']> = new Set<AgentGoal['status']>([
-    'active',
-    'pending',
-    'blocked',
-  ]),
-): string[] {
-  const liveGoals = goals.filter((goal) => eligibleStatuses.has(goal.status));
-  if (liveGoals.length === 0) {
-    return [];
-  }
-
-  const capabilityToolNames = tools
-    .filter((tool) => {
-      const normalizedName = normalizeToolName(tool.name);
-      if (!normalizedName || GOAL_CAPABILITY_EXCLUDED_TOOL_NAMES.has(normalizedName)) {
-        return false;
-      }
-      const capabilities = tool.contract?.capabilities ?? [];
-      const resourceKinds = tool.contract?.resourceKinds ?? [];
-
-      return liveGoals.some((goal) => {
-        const requiredCapabilities = normalizeTagList(goal.requiredCapabilities);
-        if (requiredCapabilities.length === 0) {
-          return false;
-        }
-        if (isCodeExecutionTool(tool) && !requiredCapabilities.includes('compute')) {
-          return false;
-        }
-        const capabilityMatch = capabilities.some((capability) =>
-          requiredCapabilities.includes(capability),
-        );
-        if (!capabilityMatch) {
-          return false;
-        }
-
-        const requiredResourceKinds = normalizeTagList(goal.requiredResourceKinds);
-        if (requiredResourceKinds.length === 0) {
-          // Broad verbs such as "read" and "write" do not identify a resource
-          // domain. Keep those goals on the core workbench and catalog instead
-          // of activating every matching device or integration tool. Compute is
-          // the narrow exception because code execution is already isolated as
-          // its own category and explicitly gated above.
-          return isCodeExecutionTool(tool) && requiredCapabilities.includes('compute');
-        }
-        return resourceKinds.some((resourceKind) => requiredResourceKinds.includes(resourceKind));
-      });
-    })
-    .map((tool) => normalizeToolName(tool.name))
-    .filter(Boolean);
-
-  return Array.from(
-    new Set([
-      ...capabilityToolNames,
-      ...resolveSuccessCriterionToolNamesForGoals(liveGoals, tools, eligibleStatuses),
-    ]),
-  );
-}
-
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
   conversationMode?: ConversationMode;
-  goals: ReadonlyArray<AgentGoal>;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   observedToolNames: Iterable<string>;
@@ -464,25 +239,11 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
     }
   }
 
-  const goalCapabilityToolNames = resolveGoalCapabilityToolNames(params.goals, params.allTools);
-  const resourceScopedGoalCapabilityToolNames = new Set(
-    resolveResourceScopedGoalCapabilityToolNames(params.goals, params.allTools),
-  );
-  const completedResourceScopedGoalCapabilityToolNames = new Set(
-    resolveCompletedResourceScopedGoalCapabilityToolNames(params.goals, params.allTools),
-  );
-  const completedGoalEvidenceToolNames = new Set(
-    collectCompletedGoalEvidenceToolNames(params.goals, toolByName),
-  );
   const completedWorkflowToolNames = new Set(
     Array.from(params.observedToolNames)
       .map((toolName) => normalizeToolName(toolName))
       .filter(Boolean),
   );
-
-  for (const toolName of goalCapabilityToolNames) {
-    selectedNames.add(toolName);
-  }
 
   for (const normalized of completedWorkflowToolNames) {
     if (
@@ -490,9 +251,6 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
       shouldAcceptContinuationTool({
         toolName: normalized,
         toolByName,
-        resourceScopedGoalCapabilityToolNames,
-        completedResourceScopedGoalCapabilityToolNames,
-        completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
       })
     ) {
@@ -505,9 +263,6 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
       shouldAcceptContinuationTool({
         toolName,
         toolByName,
-        resourceScopedGoalCapabilityToolNames,
-        completedResourceScopedGoalCapabilityToolNames,
-        completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
         allowUnownedSideEffectfulTool: params.workflowContinuationToolNames?.has(toolName) === true,
       })
@@ -551,9 +306,6 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
       shouldAcceptContinuationTool({
         toolName,
         toolByName,
-        resourceScopedGoalCapabilityToolNames,
-        completedResourceScopedGoalCapabilityToolNames,
-        completedGoalEvidenceToolNames,
         completedWorkflowToolNames,
         allowUnownedSideEffectfulTool: true,
         allowCompletedTool: isRepeatableActivatedTool(toolName, tool),

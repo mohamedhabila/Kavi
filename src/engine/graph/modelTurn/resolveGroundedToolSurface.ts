@@ -1,9 +1,7 @@
-import type { AgentGoal } from '../../../types/agentRun';
 import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
 import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
-import { resolveGoalCapabilityToolNames } from '../../goals/toolSurface';
 import { resolveAuthorizedToolNames } from '../../goals/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
@@ -21,7 +19,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
   conversationMode: ConversationMode;
   completedWorkflowToolNames: ReadonlySet<string>;
-  goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
@@ -47,7 +44,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   const pendingAsyncMonitorToolNames = new Set(
     getPendingTrackedAsyncOperationToolNames(params.trackedAsyncOperations),
   );
-  const goals = params.goals ?? [];
   // The turn opens at its request; a message that steered the run does not reset the
   // tools the run already activated.
   const messagesSinceLatestUserMessage = params.workingMessages.slice(
@@ -67,7 +63,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     allTools: policyAuthorizedTools,
     conversationMode: params.conversationMode,
     observedToolNames: params.completedWorkflowToolNames,
-    goals,
     pendingAsyncMonitorToolNames,
     workingMessages: params.workingMessages,
     explicitToolSurfaceToolNames,
@@ -93,12 +88,9 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   const invokedToolNames = Array.from(params.completedWorkflowToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);
-  const pinnedToolNames = Array.from(
-    new Set([
-      ...resolveGoalCapabilityToolNames(goals, currentPolicyAuthorizedTools),
-      ...invokedToolNames,
-    ]),
-  ).filter((name) => groundedToolNames.has(name));
+  const pinnedToolNames = Array.from(new Set(invokedToolNames)).filter((name) =>
+    groundedToolNames.has(name),
+  );
   const turnContract = resolveAgentExecutionTurnContract({
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
   });

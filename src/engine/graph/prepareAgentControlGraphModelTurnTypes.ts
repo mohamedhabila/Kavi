@@ -1,5 +1,5 @@
 import type { RequestFrame } from '../../services/agents/requestFrame';
-import type { AgentGoal, AgentPlanStep } from '../../types/agentRun';
+import type { AgentPlanStep } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
@@ -56,7 +56,6 @@ export interface PrepareAgentControlGraphModelTurnParams {
   allTools: ReadonlyArray<ToolDefinition>;
   disableTooling?: boolean;
   completedWorkflowToolNames: ReadonlySet<string>;
-  goals?: ReadonlyArray<AgentGoal>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   /** Whether the conversation this turn belongs to starts in agentic mode. */
   startsAgentic: boolean;

@@ -2,7 +2,6 @@ import {
   isParallelizableToolName,
   shouldExecuteToolBatchInParallel,
 } from '../../src/engine/graph/toolBatchExecutionPolicy';
-import { createGoal } from '../../src/engine/goals/types';
 import type { ToolDefinition } from '../../src/types/tool';
 
 describe('tool batch execution policy', () => {
@@ -39,23 +38,6 @@ describe('tool batch execution policy', () => {
 
   it('treats unknown tools as non-parallelizable', () => {
     expect(isParallelizableToolName('unknown_custom_tool')).toBe(false);
-  });
-
-  it('forces sequential batches when active goals declare multiple capabilities', () => {
-    const goals = [
-      createGoal({
-        id: 'calendar-workflow',
-        title: 'calendar-chain',
-        status: 'active',
-        requiredCapabilities: ['discover', 'read', 'verify'],
-      }),
-    ];
-    expect(
-      shouldExecuteToolBatchInParallel(
-        [{ name: 'calendar_list' }, { name: 'calendar_events' }],
-        goals,
-      ),
-    ).toBe(false);
   });
 
   it('does not parallelize canonical native tools with permission evidence dependencies', () => {
@@ -98,11 +80,7 @@ describe('tool batch execution policy', () => {
     ];
 
     expect(
-      shouldExecuteToolBatchInParallel(
-        [{ name: 'source_read' }, { name: 'consumer_read' }],
-        undefined,
-        tools,
-      ),
+      shouldExecuteToolBatchInParallel([{ name: 'source_read' }, { name: 'consumer_read' }], tools),
     ).toBe(false);
   });
 });
