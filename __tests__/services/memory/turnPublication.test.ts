@@ -125,12 +125,13 @@ describe('publishConversationTurnMemory', () => {
       sourceEndMessageId: 'assistant-new',
     });
 
-    expect(searchMemoryTurns({ query: 'beta', limit: 3 })).toEqual([
+    expect(searchMemoryTurns({ query: 'beta', limit: 3, includeSensitive: false })).toEqual([
       {
         userMessageId: 'user-new',
         conversationId: 'conversation-publication',
         at: 4,
         text: 'User: Remember beta.\nAssistant: I will remember beta.',
+        sensitive: false,
       },
     ]);
   });
@@ -254,7 +255,7 @@ describe('publishConversationTurnMemory', () => {
       }),
     ).resolves.toEqual({ disposition: 'ephemeral_thread', jobId: null });
     expect(countPendingIngestionJobs()).toBe(0);
-    expect(searchMemoryTurns({ query: 'beta', limit: 3 })).toEqual([]);
+    expect(searchMemoryTurns({ query: 'beta', limit: 3, includeSensitive: false })).toEqual([]);
   });
 
   it('settles a withdrawn exact source without mutating working memory or queue state', async () => {

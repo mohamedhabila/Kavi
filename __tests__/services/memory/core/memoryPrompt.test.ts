@@ -79,8 +79,15 @@ describe('memory prompt section', () => {
     expect(section?.text).not.toContain('Lisbon again?');
   });
 
-  it('leaves sensitive memories out even when they match', () => {
+  it('leaves sensitive memories and past rounds out even when they match', () => {
     remember('Sara’s phone is +31 6 12345678');
+    indexMemoryTurn({
+      conversationId: 'conv-old',
+      userMessageId: 'u-old',
+      userText: 'Save Sara’s phone +31 6 12345678',
+      replyText: 'Saved.',
+      at: DAY,
+    });
 
     expect(
       buildMemoryPromptSection({ visibility: HOME, latestUserMessage: 'Call Sara’s phone' }),

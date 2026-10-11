@@ -46,12 +46,15 @@ describe('past turns', () => {
     );
     turn('conv-2', 'u2', 'What should I cook tonight?', 'Try a mushroom risotto.', 20);
 
-    expect(searchMemoryTurns({ query: 'that Lisbon weekend plan', limit: 3 })).toEqual([
+    expect(
+      searchMemoryTurns({ query: 'that Lisbon weekend plan', limit: 3, includeSensitive: false }),
+    ).toEqual([
       {
         userMessageId: 'u1',
         conversationId: 'conv-1',
         at: 10,
         text: 'User: Plan a weekend in Lisbon with my partner\nAssistant: Here is a two-day plan...',
+        sensitive: false,
       },
     ]);
   });
@@ -60,7 +63,12 @@ describe('past turns', () => {
     turn('conv-1', 'u1', 'Lisbon trip ideas', 'Sintra and Belém.');
 
     expect(
-      searchMemoryTurns({ query: 'Lisbon trip', limit: 3, excludeConversationId: 'conv-1' }),
+      searchMemoryTurns({
+        query: 'Lisbon trip',
+        limit: 3,
+        includeSensitive: false,
+        excludeConversationId: 'conv-1',
+      }),
     ).toEqual([]);
   });
 
@@ -68,10 +76,12 @@ describe('past turns', () => {
     turn('conv-1', 'u1', 'Lisbon trip ideas', 'Draft reply.');
     turn('conv-1', 'u1', 'Lisbon trip ideas', 'Final reply about Sintra.');
 
-    expect(searchMemoryTurns({ query: 'Sintra', limit: 3 }).map((found) => found.text)).toEqual([
-      'User: Lisbon trip ideas\nAssistant: Final reply about Sintra.',
-    ]);
-    expect(searchMemoryTurns({ query: 'Draft', limit: 3 })).toEqual([]);
+    expect(
+      searchMemoryTurns({ query: 'Sintra', limit: 3, includeSensitive: false }).map(
+        (found) => found.text,
+      ),
+    ).toEqual(['User: Lisbon trip ideas\nAssistant: Final reply about Sintra.']);
+    expect(searchMemoryTurns({ query: 'Draft', limit: 3, includeSensitive: false })).toEqual([]);
   });
 
   it('skips an empty round and deletes with its conversation', () => {
@@ -79,7 +89,29 @@ describe('past turns', () => {
     turn('conv-1', 'u1', 'Lisbon trip ideas', 'Sintra.');
 
     expect(deleteMemoryTurnsFromConversation('conv-1')).toBe(1);
-    expect(searchMemoryTurns({ query: 'Lisbon', limit: 3 })).toEqual([]);
+    expect(searchMemoryTurns({ query: 'Lisbon', limit: 3, includeSensitive: false })).toEqual([]);
+  });
+});
+
+describe('past turn privacy', () => {
+  it('never indexes a round that carries a credential, even on re-index', () => {
+    turn('conv-1', 'u1', 'Deploy notes for Lisbon', 'Done.');
+    expect(turn('conv-1', 'u1', 'Deploy notes for Lisbon', `Use sk-proj-${'c'.repeat(24)}`)).toBe(
+      false,
+    );
+
+    expect(searchMemoryTurns({ query: 'Lisbon', limit: 3, includeSensitive: true })).toEqual([]);
+  });
+
+  it('returns a round with personal data only to an explicit search', () => {
+    turn('conv-1', 'u1', 'Email Sara at sara@example.com about Lisbon', 'Drafted.');
+
+    expect(searchMemoryTurns({ query: 'Lisbon', limit: 3, includeSensitive: false })).toEqual([]);
+    expect(
+      searchMemoryTurns({ query: 'Lisbon', limit: 3, includeSensitive: true }).map(
+        (found) => found.sensitive,
+      ),
+    ).toEqual([true]);
   });
 });
 
@@ -105,12 +137,13 @@ describe('closed turn indexing', () => {
       indexClosedTurn({ conversationId: 'conv-1', messages: steeredTurn, replyMessageId: 'a3' }),
     ).toBe(true);
 
-    expect(searchMemoryTurns({ query: 'Sintra', limit: 3 })).toEqual([
+    expect(searchMemoryTurns({ query: 'Sintra', limit: 3, includeSensitive: false })).toEqual([
       {
         userMessageId: 'u2',
         conversationId: 'conv-1',
         at: 7,
         text: 'User: Plan a weekend in Lisbon\nInclude a day in Sintra\nAssistant: Day one Alfama, day two Sintra.',
+        sensitive: false,
       },
     ]);
   });

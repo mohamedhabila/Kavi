@@ -8,7 +8,8 @@
 //   delete it (memory_forget). Sensitive memories are left out; the model reaches them with
 //   memory_search when the user asks.
 // - Earlier conversations: the past rounds from other conversations that best match the
-//   request, dated, so "what did we plan last week" works without any extraction.
+//   request, dated, so "what did we plan last week" works without any extraction. Sensitive
+//   past turns are left out the same way.
 // ---------------------------------------------------------------------------
 
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
@@ -84,6 +85,7 @@ export function buildMemoryPromptSection(params: {
   for (const turn of searchMemoryTurns({
     query: params.latestUserMessage,
     limit: MEMORY_PROMPT_TURN_LIMIT,
+    includeSensitive: false,
     excludeConversationId: params.visibility.conversationId,
   })) {
     const line = renderTurn(turn);

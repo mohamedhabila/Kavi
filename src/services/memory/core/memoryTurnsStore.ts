@@ -5,6 +5,9 @@
 // call, so an earlier conversation can be recalled even when background extraction has not
 // run, is disabled, or skipped it. Round-level values are what LongMemEval found best for
 // recalling past conversations; summaries or extracted facts as values did worse.
+// Turns follow the memory item rules: one carrying a credential is never indexed, and one
+// carrying personal data (an email, phone number, card…) is returned only by an explicit
+// search, never placed in the prompt automatically.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -12,6 +15,7 @@ import type { Message } from '../../../types/message';
 import { getMemoryDb } from '../database';
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 import { findTurnOpeningUserIndex, isSteeringUserMessage } from '../../../utils/steeringMessages';
+import { classifyStructuredMemoryText } from '../memorySensitivityValidators';
 import { buildMemoryMatchExpression } from './memoryItemsQuery';
 import { ensureMemoryCoreSchema, MEMORY_TURN_TEXT_MAX_CHARS } from './memorySchema';
 
@@ -20,6 +24,7 @@ export interface MemoryTurn {
   conversationId: string;
   at: number;
   text: string;
+  sensitive: boolean;
 }
 
 interface MemoryTurnRow {
@@ -27,6 +32,7 @@ interface MemoryTurnRow {
   conversation_id: string;
   at: number;
   text: string;
+  sensitive: number;
 }
 
 function readyDb(): SQLite.SQLiteDatabase {
@@ -41,10 +47,14 @@ function rowToTurn(row: MemoryTurnRow): MemoryTurn {
     conversationId: row.conversation_id,
     at: row.at,
     text: row.text,
+    sensitive: row.sensitive === 1,
   };
 }
 
-/** Indexes (or re-indexes) the round opened by `userMessageId`. Returns false when empty. */
+/**
+ * Indexes (or re-indexes) the round opened by `userMessageId`. Returns false when the round
+ * is empty or carries a credential; a re-indexed round that now carries one is removed.
+ */
 export function indexMemoryTurn(params: {
   conversationId: string;
   userMessageId: string;
@@ -60,13 +70,22 @@ export function indexMemoryTurn(params: {
     MEMORY_TURN_TEXT_MAX_CHARS,
     '…',
   );
-  readyDb().runSync(
-    `INSERT INTO memory_turns (user_message_id, conversation_id, at, text) VALUES (?, ?, ?, ?)
-       ON CONFLICT(user_message_id) DO UPDATE SET text = excluded.text, at = excluded.at`,
+  const sensitivity = classifyStructuredMemoryText(text);
+  const db = readyDb();
+  if (sensitivity === 'restricted') {
+    db.runSync('DELETE FROM memory_turns WHERE user_message_id = ?', params.userMessageId);
+    return false;
+  }
+  db.runSync(
+    `INSERT INTO memory_turns (user_message_id, conversation_id, at, text, sensitive)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_message_id) DO UPDATE SET
+         text = excluded.text, at = excluded.at, sensitive = excluded.sensitive`,
     params.userMessageId,
     params.conversationId,
     params.at,
     text,
+    sensitivity === 'sensitive' ? 1 : 0,
   );
   return true;
 }
@@ -100,26 +119,32 @@ export function indexClosedTurn(params: {
   });
 }
 
-/** Past turns matching `query`, best first; `excludeConversationId` skips one conversation. */
+/**
+ * Past turns matching `query`, best first. `excludeConversationId` skips one conversation;
+ * sensitive turns are returned only with `includeSensitive`.
+ */
 export function searchMemoryTurns(params: {
   query: string;
   limit: number;
+  includeSensitive: boolean;
   excludeConversationId?: string;
 }): MemoryTurn[] {
   const match = buildMemoryMatchExpression(params.query);
   if (!match || params.limit <= 0) return [];
   return readyDb()
     .getAllSync<MemoryTurnRow>(
-      `SELECT t.user_message_id, t.conversation_id, t.at, t.text
+      `SELECT t.user_message_id, t.conversation_id, t.at, t.text, t.sensitive
          FROM memory_turns_fts f
          JOIN memory_turns t ON t.rowid = f.rowid
         WHERE memory_turns_fts MATCH ?
           AND (? IS NULL OR t.conversation_id <> ?)
+          AND (? = 1 OR t.sensitive = 0)
         ORDER BY bm25(memory_turns_fts), t.at DESC
         LIMIT ?`,
       match,
       params.excludeConversationId ?? null,
       params.excludeConversationId ?? null,
+      params.includeSensitive ? 1 : 0,
       params.limit,
     )
     .map(rowToTurn);

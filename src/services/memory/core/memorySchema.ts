@@ -70,7 +70,8 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
       user_message_id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
       at INTEGER NOT NULL,
-      text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND ${MEMORY_TURN_TEXT_MAX_CHARS})
+      text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND ${MEMORY_TURN_TEXT_MAX_CHARS}),
+      sensitive INTEGER NOT NULL DEFAULT 0 CHECK(sensitive IN (0, 1))
     );
     CREATE INDEX IF NOT EXISTS idx_memory_turns_conversation
       ON memory_turns(conversation_id, at);
