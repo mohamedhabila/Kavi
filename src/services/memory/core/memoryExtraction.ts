@@ -15,7 +15,7 @@
 // thread's later turns.
 // ---------------------------------------------------------------------------
 
-import type { Message } from '../../../types/message';
+import type { Message, ToolCall } from '../../../types/message';
 import { getMemoryDb } from '../database';
 import {
   readCaptureCursor,
@@ -41,7 +41,16 @@ const EXTRACTION_WINDOW_MAX_ROUNDS = 4;
 const RELATED_MEMORY_LIMIT = 10;
 const ROUND_TEXT_MAX_CHARS = 4_000;
 
-export type ExtractionMessage = Pick<Message, 'id' | 'role' | 'content' | 'timestamp'>;
+export type ExtractionMessage = Pick<Message, 'id' | 'role' | 'content' | 'timestamp'> & {
+  toolCalls?: ReadonlyArray<Pick<ToolCall, 'name'>>;
+};
+
+/**
+ * Tools through which the assistant itself decided what a round leaves in memory. Extraction
+ * leaves such a round alone: one writer per round, so it cannot rewrite or duplicate what the
+ * assistant just saved or forgot.
+ */
+const MEMORY_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(['memory_remember', 'memory_forget']);
 
 export type MemoryExtractionOutcome =
   | { kind: 'idle' }
@@ -51,10 +60,26 @@ export type MemoryExtractionOutcome =
   | { kind: 'skipped' };
 
 interface ExtractionWindow {
+  /** Rounds for the model to read; empty when every round in the window managed its own memory. */
   rounds: string[];
   userText: string;
   lastMessage: ExtractionMessage;
   lastUserMessageId: string | null;
+}
+
+interface ExtractionRound {
+  lines: string[];
+  userText: string;
+  userMessageId: string;
+  managesMemory: boolean;
+  lastMessage: ExtractionMessage;
+}
+
+function writesMemory(message: ExtractionMessage): boolean {
+  return (
+    message.role === 'assistant' &&
+    (message.toolCalls ?? []).some((call) => MEMORY_WRITE_TOOL_NAMES.has(call.name))
+  );
 }
 
 /** Index of the first message after the cursor: after its message, or after its time. */
@@ -69,7 +94,11 @@ function firstUnreadIndex(
   return after < 0 ? messages.length : after;
 }
 
-/** Closed rounds after the cursor, through `closedThroughMessageId`. */
+/**
+ * Up to EXTRACTION_WINDOW_MAX_ROUNDS closed rounds after the cursor, through
+ * `closedThroughMessageId`. A round in which the assistant saved or forgot a memory itself is
+ * passed over: the window still moves past it, but its text is not shown to the model.
+ */
 export function selectExtractionWindow(
   messages: ReadonlyArray<ExtractionMessage>,
   cursor: Pick<MemoryCaptureCursor, 'extractedThroughId' | 'extractedThroughAt'> | null,
@@ -77,34 +106,43 @@ export function selectExtractionWindow(
 ): ExtractionWindow | null {
   const end = messages.findIndex((message) => message.id === closedThroughMessageId);
   if (end < 0) return null;
-  const rounds: string[] = [];
-  const userParts: string[] = [];
-  let current: string[] = [];
-  let lastMessage: ExtractionMessage | null = null;
-  let lastUserMessageId: string | null = null;
+  const rounds: ExtractionRound[] = [];
+  let current: ExtractionRound | null = null;
   for (let index = firstUnreadIndex(messages, cursor); index <= end; index += 1) {
     const message = messages[index]!;
+    if (current && writesMemory(message)) current.managesMemory = true;
     const text = message.content.trim();
     if ((message.role !== 'user' && message.role !== 'assistant') || !text) continue;
     if (message.role === 'user') {
-      if (current.length > 0) {
-        if (rounds.length === EXTRACTION_WINDOW_MAX_ROUNDS) break;
-        rounds.push(boundMemoryText(current.join('\n'), ROUND_TEXT_MAX_CHARS));
+      if (current) {
+        rounds.push(current);
+        if (rounds.length === EXTRACTION_WINDOW_MAX_ROUNDS) {
+          current = null;
+          break;
+        }
       }
-      current = [`User: ${text}`];
-      userParts.push(text);
-      lastUserMessageId = message.id;
-    } else {
-      if (current.length === 0) continue;
-      current.push(`Assistant: ${text}`);
+      current = {
+        lines: [`User: ${text}`],
+        userText: text,
+        userMessageId: message.id,
+        managesMemory: false,
+        lastMessage: message,
+      };
+    } else if (current) {
+      current.lines.push(`Assistant: ${text}`);
+      current.lastMessage = message;
     }
-    lastMessage = message;
   }
-  if (current.length > 0 && rounds.length < EXTRACTION_WINDOW_MAX_ROUNDS) {
-    rounds.push(boundMemoryText(current.join('\n'), ROUND_TEXT_MAX_CHARS));
-  }
-  if (rounds.length === 0 || !lastMessage) return null;
-  return { rounds, userText: userParts.join('\n'), lastMessage, lastUserMessageId };
+  if (current) rounds.push(current);
+  const last = rounds[rounds.length - 1];
+  if (!last) return null;
+  const shown = rounds.filter((round) => !round.managesMemory);
+  return {
+    rounds: shown.map((round) => boundMemoryText(round.lines.join('\n'), ROUND_TEXT_MAX_CHARS)),
+    userText: shown.map((round) => round.userText).join('\n'),
+    lastMessage: last.lastMessage,
+    lastUserMessageId: shown[shown.length - 1]?.userMessageId ?? null,
+  };
 }
 
 export function buildExtractionPrompt(
@@ -172,6 +210,11 @@ export async function extractConversationMemory(params: {
   const cursor = readCaptureCursor(params.conversationId, db);
   const window = selectExtractionWindow(params.messages, cursor, params.closedThroughMessageId);
   if (!window) return { kind: 'idle' };
+  if (window.rounds.length === 0) {
+    // The assistant managed these rounds' memory itself: move past them without a call.
+    recordExtractedThrough(db, params.conversationId, window.lastMessage, params.now());
+    return { kind: 'extracted', added: 0, updated: 0, deleted: 0 };
+  }
 
   const visibility: MemoryItemVisibility = { conversationId: params.conversationId };
   const related = searchMemoryItems({

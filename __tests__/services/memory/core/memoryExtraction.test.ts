@@ -99,6 +99,62 @@ describe('extraction window', () => {
   });
 });
 
+describe('rounds the assistant managed itself', () => {
+  const managed: ExtractionMessage[] = [
+    { id: 'u1', role: 'user', content: 'Remember that reviews last 30 minutes.', timestamp: 1 },
+    {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      timestamp: 2,
+      toolCalls: [{ name: 'memory_remember' }],
+    },
+    { id: 't1', role: 'tool', content: '{"ok":true,"status":"saved"}', timestamp: 3 },
+    { id: 'a1b', role: 'assistant', content: 'Saved.', timestamp: 4 },
+    { id: 'u2', role: 'user', content: 'My sister Sara moved to Porto.', timestamp: 5 },
+    { id: 'a2', role: 'assistant', content: 'Porto is lovely.', timestamp: 6 },
+  ];
+
+  it('are passed over but read past', () => {
+    expect(selectExtractionWindow(managed, null, 'a2')).toEqual({
+      rounds: ['User: My sister Sara moved to Porto.\nAssistant: Porto is lovely.'],
+      userText: 'My sister Sara moved to Porto.',
+      lastMessage: managed[5],
+      lastUserMessageId: 'u2',
+    });
+    expect(selectExtractionWindow(managed, null, 'a1b')).toMatchObject({
+      rounds: [],
+      lastMessage: managed[3],
+      lastUserMessageId: null,
+    });
+  });
+
+  it('never reach the model, so what the assistant saved stays as it saved it', async () => {
+    const saved = addMemoryItem({
+      text: 'Design reviews last 45 minutes',
+      conversationId: 'conv-1',
+      now: 1,
+    });
+    const id = saved.status === 'created' ? saved.item.id : '';
+    const call = jest.fn(async () => reply([{ op: 'update', id, text: 'update' }]));
+
+    await expect(
+      extractConversationMemory({
+        conversationId: 'conv-1',
+        messages: managed,
+        closedThroughMessageId: 'a1b',
+        call,
+        signal: new AbortController().signal,
+        now: () => 1_000,
+      }),
+    ).resolves.toEqual({ kind: 'extracted', added: 0, updated: 0, deleted: 0 });
+
+    expect(call).not.toHaveBeenCalled();
+    expect(memories('design reviews')).toEqual(['Design reviews last 45 minutes']);
+    expect(readCaptureCursor('conv-1')?.extractedThroughId).toBe('a1b');
+  });
+});
+
 describe('extraction reply', () => {
   it('keeps well-formed operations and drops malformed ones', () => {
     expect(
