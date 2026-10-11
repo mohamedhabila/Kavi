@@ -11,14 +11,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import {
-  activateTask,
-  completeTask,
-  pauseTask,
-  popTask,
-  pushTask,
-  readTaskStack,
-} from '../../../src/services/memory/taskStack';
+import { completeTask, pushTask, readTaskStack } from '../../../src/services/memory/taskStack';
 import { getMemoryTask, upsertMemoryTask } from '../../../src/services/memory/tasks';
 import {
   clearWorkingBlock,
@@ -73,10 +66,7 @@ describe('durable memory privacy mutation guards', () => {
 
     const taskStackMutations = [
       () => pushTask(THREAD_ID, 'Private new task'),
-      () => popTask(THREAD_ID),
-      () => activateTask(THREAD_ID, existing.id),
       () => completeTask(THREAD_ID, existing.id),
-      () => pauseTask(THREAD_ID, existing.id, 200),
     ];
     for (const mutate of taskStackMutations) {
       expect(mutate).toThrow('memory_disabled');

@@ -42,7 +42,7 @@ import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
 } from '../../../src/services/memory/schema';
-import { readTaskStack, getActiveTaskId } from '../../../src/services/memory/taskStack';
+import { readTaskStack, getActiveTaskTitle } from '../../../src/services/memory/taskStack';
 import { runPreparedSubAgentSession } from '../../../src/services/agents/lifecycle/runPhase';
 import type { PendingVerifiedProcedureObservation } from '../../../src/services/memory/verifiedProcedure/executionSession';
 
@@ -367,7 +367,7 @@ describe('runPreparedSubAgentSession — task stack', () => {
     const stack = readTaskStack('conv-1');
     expect(stack).toHaveLength(1);
     expect(stack[0].state).toBe('completed');
-    expect(getActiveTaskId('conv-1')).toBeNull();
+    expect(getActiveTaskTitle('conv-1')).toBeNull();
   });
 
   it('completes the task even when the sub-agent fails', async () => {

@@ -86,39 +86,6 @@ export function pushTask(threadId: string, title: string): TaskStackEntry {
   return entry;
 }
 
-/** Pop the top task from the stack. Returns the removed entry or null if empty. */
-export function popTask(threadId: string): TaskStackEntry | null {
-  assertTaskStackWritable();
-  const entries = readBlock(threadId);
-  if (entries.length === 0) return null;
-  const removed = entries.pop()!;
-  // Activate the next top task if it exists and is paused
-  if (entries.length > 0 && entries[entries.length - 1].state === 'paused') {
-    entries[entries.length - 1] = {
-      ...entries[entries.length - 1],
-      state: 'active',
-      lastActiveAt: Date.now(),
-    };
-  }
-  writeBlock(threadId, entries);
-  return removed;
-}
-
-/** Mark a specific task as active, pausing all others. */
-export function activateTask(threadId: string, taskId: string): void {
-  assertTaskStackWritable();
-  const entries = readBlock(threadId);
-  const hasTarget = entries.some((e) => e.id === taskId);
-  if (!hasTarget) return;
-  const now = Date.now();
-  const updated = entries.map((e) => {
-    if (e.id === taskId) return { ...e, state: 'active' as const, lastActiveAt: now };
-    if (e.state === 'active') return { ...e, state: 'paused' as const, lastActiveAt: now };
-    return e;
-  });
-  writeBlock(threadId, updated);
-}
-
 /** Mark a specific task as completed. */
 export function completeTask(threadId: string, taskId: string): void {
   assertTaskStackWritable();
@@ -126,26 +93,6 @@ export function completeTask(threadId: string, taskId: string): void {
     e.id === taskId ? { ...e, state: 'completed' as const, lastActiveAt: Date.now() } : e,
   );
   writeBlock(threadId, entries);
-}
-
-/** Mark a specific task as paused without changing other entries. */
-export function pauseTask(threadId: string, taskId: string, now: number = Date.now()): void {
-  assertTaskStackWritable();
-  const trimmedId = taskId.trim();
-  if (!threadId.trim() || !trimmedId) return;
-  const entries = readBlock(threadId).map((entry) =>
-    entry.id === trimmedId ? { ...entry, state: 'paused' as const, lastActiveAt: now } : entry,
-  );
-  writeBlock(threadId, entries);
-}
-
-/** Get the ID of the currently active task, or null if none. */
-export function getActiveTaskId(threadId: string): string | null {
-  const entries = readBlock(threadId);
-  for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i].state === 'active') return entries[i].id;
-  }
-  return null;
 }
 
 /** Get the title of the currently active task, or null if none. */
