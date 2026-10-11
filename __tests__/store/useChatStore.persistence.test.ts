@@ -100,51 +100,41 @@ describe('useChatStore persistence checkpoints', () => {
     expect(persisted.state.conversations[0].title).toBe('Hello world');
   });
 
-  it('persists agent run plan updates on the checkpoint schedule', async () => {
-    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
-    await advancePastCheckpoint();
-
-    useChatStore.getState().addMessage(id, {
-      id: 'msg-user-plan',
-      role: 'user',
-      content: 'Plan the work',
-    });
-    const runId = useChatStore.getState().startAgentRun(id, {
-      userMessageId: 'msg-user-plan',
+  it('loads a run persisted with the retired run plan without it', () => {
+    const run = normalizePersistedAgentRun({
+      id: 'run-legacy-plan',
+      userMessageId: 'msg-legacy-plan',
       goal: 'Plan the work',
-      timestamp: 1_700_000_000_000,
-    });
-    await advancePastCheckpoint();
-
-    useChatStore.getState().updateAgentRunPlan(
-      id,
-      {
-        objective: 'Ship a production-ready workflow plan',
-        successCriteria: ['Persist plan state', 'Keep checkpoints durable'],
-        stopConditions: ['Stop after the plan is durable'],
-        workstreams: [{ id: 'ws-1', title: 'Durability' }],
-        updatedAt: 1_700_000_000_100,
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 2,
+      currentPhase: 'deliver',
+      phases: [],
+      checkpoints: [],
+      summary: {
+        assistantTurns: 1,
+        startedTools: 0,
+        completedTools: 0,
+        failedTools: 0,
+        spawnedSubAgents: 0,
       },
-      runId,
-    );
+      ...({
+        plan: {
+          objective: 'Ship a production-ready workflow plan',
+          successCriteria: ['Persist plan state'],
+          stopConditions: ['Stop after the plan is durable'],
+          workstreams: [{ id: 'ws-1', title: 'Durability' }],
+          updatedAt: 1,
+        },
+      } as object),
+    } as Parameters<typeof normalizePersistedAgentRun>[0]);
 
-    await advanceBeforeCheckpoint();
-    let persisted = readPersistedChatState();
-    expect(persisted.state.conversations[0].agentRuns[0].plan.objective).not.toBe(
-      'Ship a production-ready workflow plan',
-    );
-
-    await advanceAndSettle(100);
-    persisted = readPersistedChatState();
-    expect(persisted.state.conversations[0].agentRuns[0].plan).toEqual(
-      expect.objectContaining({
-        objective: 'Ship a production-ready workflow plan',
-        successCriteria: ['Persist plan state', 'Keep checkpoints durable'],
-        stopConditions: ['Stop after the plan is durable'],
-        workstreams: [{ id: 'ws-1', title: 'Durability' }],
-        updatedAt: 1_700_000_000_100,
-      }),
-    );
+    expect(run).not.toHaveProperty('plan');
+    expect(run).toMatchObject({
+      id: 'run-legacy-plan',
+      goal: 'Plan the work',
+      status: 'completed',
+    });
   });
 
   it('persists bounded workflow evidence on the checkpoint schedule', async () => {

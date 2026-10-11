@@ -14,7 +14,6 @@ import { generateId } from '../../utils/id';
 import {
   areAgentRunPhasesEqual,
   areAgentRunSummariesEqual,
-  createDefaultAgentRunPlan,
   createInitialAgentRunPhases,
   getAgentRunPhaseIndex,
   mergeAgentRunSummary,
@@ -128,7 +127,6 @@ export function startAgentRunInConversation(
         detail: params.goal,
       },
     ],
-    plan: createDefaultAgentRunPlan(params.goal, params.timestamp),
     evidence: [],
     summary: mergeAgentRunSummary(undefined, params.summary),
   };

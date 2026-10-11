@@ -27,7 +27,6 @@ export interface DelegatedWorkGroup {
   activityKind: DelegatedWorkActivityKind;
   sourceConversationId: string;
   sourceConversationTitle?: string;
-  workTitle?: string;
   canCancel: boolean;
   canOpenSourceConversation: boolean;
   canPrepareRetry: boolean;
@@ -37,10 +36,6 @@ export interface DelegatedWorkGroup {
 interface DelegatedWorkConversation {
   id: string;
   title: string;
-  agentRuns?: ReadonlyArray<{
-    id: string;
-    plan?: { workstreams: ReadonlyArray<{ id: string; title: string }> };
-  }>;
 }
 
 export interface DelegatedWorkQueuePresentation {
@@ -148,21 +143,6 @@ function sortGroups(left: DelegatedWorkGroup, right: DelegatedWorkGroup): number
   return left.id.localeCompare(right.id);
 }
 
-function resolveWorkTitle(
-  conversation: DelegatedWorkConversation | undefined,
-  snapshot: SubAgentSnapshot,
-): string | undefined {
-  const runId = snapshot.agentRunId?.trim();
-  const workstreamId = snapshot.workstreamId?.trim();
-  if (!conversation || !runId || !workstreamId) return undefined;
-
-  const run = conversation.agentRuns?.find((candidate) => candidate.id === runId);
-  return (
-    run?.plan?.workstreams.find((workstream) => workstream.id === workstreamId)?.title.trim() ||
-    undefined
-  );
-}
-
 /** Builds the advanced Queue directly from canonical worker snapshots. */
 export function buildDelegatedWorkQueuePresentation(params: {
   snapshots: ReadonlyArray<SubAgentSnapshot>;
@@ -193,7 +173,6 @@ export function buildDelegatedWorkQueuePresentation(params: {
       const sourceConversationId = rootSnapshot.parentConversationId.trim();
       const sourceConversation = conversationsById.get(sourceConversationId);
       const sourceConversationTitle = sourceConversation?.title;
-      const workTitle = resolveWorkTitle(sourceConversation, rootSnapshot);
       const section = resolveSection(rollup);
       return {
         id: rootId,
@@ -204,7 +183,6 @@ export function buildDelegatedWorkQueuePresentation(params: {
         activityKind: resolveActivityKind(nodes, rollup),
         sourceConversationId,
         ...(sourceConversation ? { sourceConversationTitle } : {}),
-        ...(workTitle ? { workTitle } : {}),
         canCancel: rollup.runningCount > 0,
         canOpenSourceConversation: Boolean(sourceConversation),
         canPrepareRetry: section === 'attention' && Boolean(sourceConversation),

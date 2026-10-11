@@ -4,35 +4,14 @@ import type { ToolEffectDigest } from './toolEffectReceipt';
 
 export type AgentRunTaskOwner = 'supervisor' | 'worker' | 'either';
 
-export interface AgentRunTaskDefinition {
-  id: string;
-  title: string;
-  goal?: string;
-  expectedOutput?: string;
-  successCriteria?: string[];
-  dependencies?: string[];
-  owner?: AgentRunTaskOwner;
-  requirements?: string[];
-  requiredCapabilities?: string[];
-}
-
 export type AgentRunTaskStatus = 'done' | 'active' | 'pending';
 
-export interface AgentRunWorkstream extends AgentRunTaskDefinition {}
-
-export interface AgentRunTaskLedgerItem extends AgentRunTaskDefinition {
+/** One step of a worker's progress, as the plan it keeps with update_plan states it. */
+export interface AgentRunTaskLedgerItem {
+  id: string;
+  title: string;
   status: AgentRunTaskStatus;
   owner: AgentRunTaskOwner;
-  completedEvidence?: string[];
-}
-
-export interface AgentRunPlan {
-  objective: string;
-  successCriteria: string[];
-  stopConditions: string[];
-  workstreams: AgentRunWorkstream[];
-  rawPlan?: string;
-  updatedAt: number;
 }
 
 export type AgentRunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
@@ -379,7 +358,6 @@ export interface AgentRun {
   currentPhase: AgentRunPhaseKey;
   phases: AgentRunPhase[];
   checkpoints: AgentRunCheckpoint[];
-  plan?: AgentRunPlan;
   evidence?: AgentRunEvidenceEntry[];
   controlGraph?: AgentRunControlGraphState;
   terminalReason?: AgentRunTerminalReason;

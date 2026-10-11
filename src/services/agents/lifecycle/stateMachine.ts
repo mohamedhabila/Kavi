@@ -87,16 +87,7 @@ export function cloneSubAgentSnapshot<T extends SubAgentSnapshot>(snapshot: T): 
       : {}),
     ...(snapshot.taskLedger
       ? {
-          taskLedger: snapshot.taskLedger.map((item) => ({
-            ...item,
-            ...(item.successCriteria ? { successCriteria: [...item.successCriteria] } : {}),
-            ...(item.dependencies ? { dependencies: [...item.dependencies] } : {}),
-            ...(item.requirements ? { requirements: [...item.requirements] } : {}),
-            ...(item.requiredCapabilities
-              ? { requiredCapabilities: [...item.requiredCapabilities] }
-              : {}),
-            ...(item.completedEvidence ? { completedEvidence: [...item.completedEvidence] } : {}),
-          })),
+          taskLedger: snapshot.taskLedger.map((item) => ({ ...item })),
         }
       : {}),
   } as T;

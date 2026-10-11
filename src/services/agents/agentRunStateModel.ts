@@ -2,21 +2,8 @@ import type {
   AgentRunPhase,
   AgentRunPhaseKey,
   AgentRunPhaseStatus,
-  AgentRunPlan,
   AgentRunSummary,
-  AgentRunWorkstream,
 } from '../../types/agentRun';
-import { normalizeWorkflowWorkstreams } from './workflowSchedulingReferences';
-
-export const DEFAULT_AGENT_RUN_SUCCESS_CRITERIA = [
-  'Produce the requested deliverable.',
-  'Verify the result before finalizing.',
-];
-
-export const DEFAULT_AGENT_RUN_STOP_CONDITIONS = [
-  'Stop when the deliverable is complete and the success criteria are satisfied.',
-  'Stop early if a concrete blocker, missing permission, or dependency prevents further progress.',
-];
 
 const DEFAULT_AGENT_RUN_SUMMARY: AgentRunSummary = {
   assistantTurns: 0,
@@ -37,16 +24,6 @@ export const AGENT_RUN_PHASE_DEFINITIONS: Array<{
   { key: 'pilot', title: 'Pilot' },
   { key: 'deliver', title: 'Deliver' },
 ];
-
-function normalizeTextList(items: string[] | undefined, fallback: string[]): string[] {
-  const normalized = (items ?? []).map((item) => item.trim()).filter(Boolean);
-
-  return normalized.length ? normalized : [...fallback];
-}
-
-function normalizeAgentRunWorkstreams(workstreams?: AgentRunWorkstream[]): AgentRunWorkstream[] {
-  return normalizeWorkflowWorkstreams(workstreams);
-}
 
 export function createInitialAgentRunPhases(timestamp: number): AgentRunPhase[] {
   return AGENT_RUN_PHASE_DEFINITIONS.map((phase, index) => ({
@@ -91,39 +68,6 @@ export function areAgentRunSummariesEqual(
     normalizedLeft.spawnedSubAgents === normalizedRight.spawnedSubAgents &&
     normalizedLeft.durationMs === normalizedRight.durationMs
   );
-}
-
-export function createDefaultAgentRunPlan(
-  goal: string,
-  timestamp: number,
-  rawPlan?: string,
-): AgentRunPlan {
-  return {
-    objective: goal.trim() || 'Complete the current task.',
-    successCriteria: [...DEFAULT_AGENT_RUN_SUCCESS_CRITERIA],
-    stopConditions: [...DEFAULT_AGENT_RUN_STOP_CONDITIONS],
-    workstreams: [],
-    rawPlan: rawPlan?.trim() || undefined,
-    updatedAt: timestamp,
-  };
-}
-
-export function mergeAgentRunPlan(
-  existing: AgentRunPlan | undefined,
-  patch: Partial<AgentRunPlan> | undefined,
-  fallbackGoal: string,
-  timestamp: number,
-): AgentRunPlan {
-  const base = existing ?? createDefaultAgentRunPlan(fallbackGoal, timestamp);
-
-  return {
-    objective: patch?.objective?.trim() || base.objective || fallbackGoal,
-    successCriteria: normalizeTextList(patch?.successCriteria, base.successCriteria),
-    stopConditions: normalizeTextList(patch?.stopConditions, base.stopConditions),
-    workstreams: normalizeAgentRunWorkstreams(patch?.workstreams ?? base.workstreams),
-    rawPlan: patch?.rawPlan?.trim() || base.rawPlan,
-    updatedAt: patch?.updatedAt ?? timestamp,
-  };
 }
 
 export function transitionAgentRunPhases(

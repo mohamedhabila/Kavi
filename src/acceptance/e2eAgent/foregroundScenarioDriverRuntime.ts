@@ -443,7 +443,6 @@ export function createForegroundScenarioRuntime(
       transitionMessageMemoryPublication: store.transitionMessageMemoryPublication,
       updateAgentRunAsyncWork: store.updateAgentRunAsyncWork,
       updateAgentRunControlGraph: store.updateAgentRunControlGraph,
-      updateAgentRunPlan: store.updateAgentRunPlan,
       updateAgentRunSummary: store.updateAgentRunSummary,
       updateMessage: store.updateMessage,
       updateMessageAssistantMetadata: store.updateMessageAssistantMetadata,

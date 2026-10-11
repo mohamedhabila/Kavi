@@ -95,7 +95,6 @@ export const mockAppendAgentRunCheckpoint = jest.fn();
 export const mockUpdateAgentRunSummary = jest.fn();
 export const mockUpdateAgentRunAsyncWork = jest.fn();
 export const mockUpdateAgentRunControlGraph = jest.fn();
-export const mockUpdateAgentRunPlan = jest.fn();
 export const mockCompleteAgentRun = jest.fn();
 export const mockRecordAgentRunEvidence = jest.fn();
 
@@ -127,7 +126,6 @@ jest.mock('../../src/store/useChatStore', () => {
     updateAgentRunSummary: mockUpdateAgentRunSummary,
     updateAgentRunAsyncWork: mockUpdateAgentRunAsyncWork,
     updateAgentRunControlGraph: mockUpdateAgentRunControlGraph,
-    updateAgentRunPlan: mockUpdateAgentRunPlan,
     completeAgentRun: mockCompleteAgentRun,
     recordAgentRunEvidence: mockRecordAgentRunEvidence,
     updateModelInConversation: mockUpdateModelInConversation,

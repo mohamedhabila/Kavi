@@ -110,30 +110,6 @@ describe('ChatScreen rendering and layout', () => {
             updatedAt: 1_700_000_000_500,
             currentPhase: 'review',
             latestSummary: 'Still verifying the worker output.',
-            plan: {
-              objective: 'Audit the repository and apply the fix.',
-              successCriteria: [
-                'The workflow state is persisted.',
-                'The workflow card shows the latest timeline.',
-              ],
-              stopConditions: [
-                'Stop when the fix is verified.',
-                'Stop if a concrete blocker remains unresolved.',
-              ],
-              workstreams: [
-                {
-                  id: 'ws-1',
-                  title: 'Repository audit',
-                  goal: 'Inspect the current agentic workflow implementation',
-                },
-                {
-                  id: 'ws-2',
-                  title: 'UI update',
-                  goal: 'Render the workflow card timeline',
-                },
-              ],
-              updatedAt: 1_700_000_000_150,
-            },
             summary: {
               assistantTurns: 2,
               startedTools: 2,

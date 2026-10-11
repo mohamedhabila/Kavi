@@ -16,7 +16,6 @@ import {
   recordAgentRunEvidenceInConversation,
   updateAgentRunAsyncWorkInConversation,
   updateAgentRunControlGraphInConversation,
-  updateAgentRunPlanInConversation,
 } from './graph';
 import { recoverInterruptedAgentRunsInConversation } from './recovery';
 import {
@@ -37,7 +36,6 @@ export function createAgentRunStoreActions(
   | 'updateAgentRunAsyncWork'
   | 'updateAgentRunControlGraph'
   | 'applyMobileControllerOutcome'
-  | 'updateAgentRunPlan'
   | 'recordAgentRunEvidence'
   | 'completeAgentRun'
   | 'recoverInterruptedAgentRuns'
@@ -143,18 +141,6 @@ export function createAgentRunStoreActions(
         requestChatStorePersistenceCheckpoint();
       }
       return outcome;
-    },
-
-    updateAgentRunPlan: (conversationId, patch, runId) => {
-      set((state) => {
-        const conversations = updateConversationById(
-          state.conversations,
-          conversationId,
-          (conversation) => updateAgentRunPlanInConversation(conversation, patch, runId),
-        );
-        return conversations ? { conversations } : state;
-      });
-      requestChatStorePersistenceCheckpoint();
     },
 
     recordAgentRunEvidence: (conversationId, entries, params, runId) => {

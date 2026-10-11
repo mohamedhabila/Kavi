@@ -114,17 +114,6 @@ describe('Builtin Tool Executor', () => {
             {
               id: 'run-42',
               status: 'running',
-              plan: {
-                objective: 'Compare providers',
-                successCriteria: ['Finish the research'],
-                stopConditions: ['Blocked'],
-                workstreams: [
-                  { id: 'workstream-1', title: '**Anthropic Research**' },
-                  { id: 'workstream-2', title: '**OpenAI Research**' },
-                  { id: 'workstream-3', title: '**Google Gemini Research**' },
-                ],
-                updatedAt: 1,
-              },
             },
           ],
           messages: [],

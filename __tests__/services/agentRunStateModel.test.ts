@@ -1,5 +1,4 @@
 import {
-  createDefaultAgentRunPlan,
   createInitialAgentRunPhases,
   mergeAgentRunSummary,
   skipRemainingAgentRunPhases,
@@ -7,23 +6,6 @@ import {
 } from '../../src/services/agents/agentRunStateModel';
 
 describe('agentRunStateModel', () => {
-  it('creates default plans with stable success criteria and stop conditions', () => {
-    expect(createDefaultAgentRunPlan('  Ship the feature  ', 10, '  raw plan  ')).toEqual({
-      objective: 'Ship the feature',
-      successCriteria: [
-        'Produce the requested deliverable.',
-        'Verify the result before finalizing.',
-      ],
-      stopConditions: [
-        'Stop when the deliverable is complete and the success criteria are satisfied.',
-        'Stop early if a concrete blocker, missing permission, or dependency prevents further progress.',
-      ],
-      workstreams: [],
-      rawPlan: 'raw plan',
-      updatedAt: 10,
-    });
-  });
-
   it('merges run summary patches onto stable defaults', () => {
     expect(mergeAgentRunSummary(undefined, { startedTools: 2, failedTools: 1 })).toEqual({
       assistantTurns: 0,

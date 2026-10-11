@@ -34,7 +34,6 @@ import {
   mockStartAgentRun,
   mockUpdateAgentRunAsyncWork,
   mockUpdateAgentRunControlGraph,
-  mockUpdateAgentRunPlan,
   mockUpdateAgentRunSummary,
   mockUpdateMessage,
   mockUpdateMessageAssistantMetadata,
@@ -117,7 +116,6 @@ export function resetChatScreenTestEnvironment() {
     mockUpdateAgentRunSummary,
     mockUpdateAgentRunAsyncWork,
     mockUpdateAgentRunControlGraph,
-    mockUpdateAgentRunPlan,
     mockCompleteAgentRun,
     mockRecordAgentRunEvidence,
     mockGetProviderApiKey,
@@ -547,18 +545,6 @@ export function resetChatScreenTestEnvironment() {
         ...run,
         updatedAt: controlGraph?.updatedAt ?? run.updatedAt,
         controlGraph,
-      }));
-    },
-  );
-  mockUpdateAgentRunPlan.mockImplementation(
-    (conversationId: string, patch: any, runId?: string) => {
-      updateMockAgentRun(conversationId, runId, (run: any) => ({
-        ...run,
-        updatedAt: patch?.timestamp ?? run.updatedAt,
-        plan: {
-          ...(run.plan ?? {}),
-          ...patch,
-        },
       }));
     },
   );

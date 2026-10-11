@@ -140,7 +140,7 @@ const DelegatedWorkCard: React.FC<
   const tone = getTone(group.section, group.activityKind, colors);
   const preview = getGroupPreview(group);
   const sourceTitle = group.sourceConversationTitle?.trim();
-  const title = group.workTitle?.trim() || sourceTitle || t('agentRoster.queueSourceFallback');
+  const title = sourceTitle || t('agentRoster.queueSourceFallback');
   const updatedAt = formatUpdatedAt(group.latestUpdatedAt, locale);
 
   return (
@@ -173,12 +173,6 @@ const DelegatedWorkCard: React.FC<
         <Text style={styles.metaText}>{getStepCountLabel(group.rollup.totalAgents, t)}</Text>
         {updatedAt ? <Text style={styles.metaText}>{updatedAt}</Text> : null}
       </View>
-
-      {group.workTitle && sourceTitle ? (
-        <Text numberOfLines={1} style={styles.sourceText}>
-          {t('activity.fromConversation', { title: sourceTitle })}
-        </Text>
-      ) : null}
 
       {group.section === 'attention' ? (
         <Text style={styles.previewText}>{t('agentRoster.queueAttentionDescription')}</Text>
@@ -330,7 +324,6 @@ const createStyles = (colors: AppPalette) =>
     },
     metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
     metaText: { flexShrink: 1, fontSize: 12, color: colors.textTertiary },
-    sourceText: { fontSize: 12, color: colors.textSecondary },
     previewText: { fontSize: 13, lineHeight: 19, color: colors.textSecondary },
     actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     action: {

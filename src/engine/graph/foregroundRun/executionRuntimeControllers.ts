@@ -62,7 +62,6 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
       setAgentRunPhase: shared.store.setAgentRunPhase,
       updateAgentRunAsyncWork: shared.store.updateAgentRunAsyncWork,
       updateAgentRunControlGraph: shared.store.updateAgentRunControlGraph,
-      updateAgentRunPlan: shared.store.updateAgentRunPlan,
       updateAgentRunSummary: shared.store.updateAgentRunSummary,
     },
     conversationId,

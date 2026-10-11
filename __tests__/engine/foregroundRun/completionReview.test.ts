@@ -24,13 +24,6 @@ function buildRun(): AgentRun {
     currentPhase: 'review',
     phases: [],
     checkpoints: [],
-    plan: {
-      objective: 'Compare official docs and return a short markdown table.',
-      successCriteria: ['Deliver the requested comparison table.'],
-      stopConditions: ['Stop once the table is complete.'],
-      workstreams: [],
-      updatedAt: 10,
-    },
     summary: {
       assistantTurns: 2,
       startedTools: 1,

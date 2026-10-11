@@ -5,7 +5,6 @@ import type {
   AgentRunControlGraphPerformance,
   AgentRunControlGraphState,
   AgentRunEvidenceEntry,
-  AgentRunPlan,
   AgentRunSummary,
 } from '../types/agentRun';
 import {
@@ -27,7 +26,6 @@ import {
   MAX_PERSISTED_PENDING_ASYNC_OPERATIONS,
   MAX_PERSISTED_PLAN_RAW_CHARS,
   MAX_PERSISTED_PLAN_TEXT_CHARS,
-  MAX_PERSISTED_WORKSTREAMS,
 } from './chatPersistenceLimits';
 import {
   keepAnchoredTail,
@@ -251,77 +249,18 @@ function sanitizeRunSummary(summary: AgentRunSummary): AgentRunSummary {
   };
 }
 
-function sanitizeAgentRunPlan(plan: AgentRunPlan | undefined): AgentRunPlan | undefined {
-  if (!plan) {
-    return undefined;
-  }
-
-  return {
-    objective: truncateText(plan.objective, MAX_PERSISTED_PLAN_TEXT_CHARS) || plan.objective,
-    successCriteria: plan.successCriteria
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-    stopConditions: plan.stopConditions
-      .slice(0, MAX_PERSISTED_LIST_ITEMS)
-      .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-    workstreams: plan.workstreams.slice(0, MAX_PERSISTED_WORKSTREAMS).map((workstream) => ({
-      id: workstream.id,
-      title: truncateText(workstream.title, MAX_PERSISTED_PLAN_TEXT_CHARS) || workstream.title,
-      ...(workstream.goal
-        ? { goal: truncateText(workstream.goal, MAX_PERSISTED_PLAN_TEXT_CHARS) }
-        : {}),
-      ...(workstream.expectedOutput
-        ? {
-            expectedOutput:
-              truncateText(workstream.expectedOutput, MAX_PERSISTED_PLAN_TEXT_CHARS) ||
-              workstream.expectedOutput,
-          }
-        : {}),
-      ...(workstream.successCriteria
-        ? {
-            successCriteria: workstream.successCriteria
-              .slice(0, MAX_PERSISTED_LIST_ITEMS)
-              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-          }
-        : {}),
-      ...(workstream.dependencies
-        ? {
-            dependencies: workstream.dependencies
-              .slice(0, MAX_PERSISTED_LIST_ITEMS)
-              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-          }
-        : {}),
-      ...(workstream.owner ? { owner: workstream.owner } : {}),
-      ...(workstream.requirements
-        ? {
-            requirements: workstream.requirements
-              .slice(0, MAX_PERSISTED_LIST_ITEMS)
-              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-          }
-        : {}),
-      ...(workstream.requiredCapabilities
-        ? {
-            requiredCapabilities: workstream.requiredCapabilities
-              .slice(0, MAX_PERSISTED_LIST_ITEMS)
-              .map((item) => truncateText(item, MAX_PERSISTED_PLAN_TEXT_CHARS) || item),
-          }
-        : {}),
-    })),
-    ...(plan.rawPlan ? { rawPlan: truncateText(plan.rawPlan, MAX_PERSISTED_PLAN_RAW_CHARS) } : {}),
-    updatedAt: plan.updatedAt,
-  };
-}
-
 export function sanitizeAgentRun(run: AgentRun): AgentRun {
   const {
     routeState: _legacyRouteState,
     awaitingBackgroundWorkers: _legacyAwaitingBackgroundWorkers,
     pendingAsyncOperations: _legacyPendingAsyncOperations,
+    plan: _legacyPlan,
     ...runWithoutLegacyState
   } = run as AgentRun & {
     routeState?: unknown;
     awaitingBackgroundWorkers?: unknown;
     pendingAsyncOperations?: unknown;
+    plan?: unknown;
   };
 
   return {
@@ -343,7 +282,6 @@ export function sanitizeAgentRun(run: AgentRun): AgentRun {
             .map((entry) => sanitizeEvidenceEntry(entry)),
         }
       : {}),
-    ...(run.plan ? { plan: sanitizeAgentRunPlan(run.plan) } : {}),
     ...(run.controlGraph ? { controlGraph: sanitizeAgentRunControlGraph(run.controlGraph) } : {}),
     ...(run.latestSummary
       ? { latestSummary: truncateText(run.latestSummary, MAX_PERSISTED_PLAN_RAW_CHARS) }

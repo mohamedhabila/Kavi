@@ -23,14 +23,6 @@ function buildRun(): AgentRun {
     currentPhase: 'deliver',
     phases: [],
     checkpoints: [],
-    plan: {
-      objective:
-        'Create c996a.txt and c996b.txt, verify them, run python, start a worker, and answer exactly.',
-      successCriteria: ['Deliver the exact verified final response.'],
-      stopConditions: ['Stop once the exact final response is visible.'],
-      workstreams: [],
-      updatedAt: 10,
-    },
     summary: {
       assistantTurns: 5,
       startedTools: 5,

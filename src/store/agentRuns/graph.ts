@@ -4,12 +4,10 @@ import type {
   AgentRunCheckpointKind,
   AgentRunControlGraphState,
   AgentRunEvidenceEntry,
-  AgentRunPlan,
 } from '../../types/agentRun';
 import type { Conversation } from '../../types/conversation';
 import { upsertAgentRunEvidenceEntries } from '../../services/agents/lifecycle/evidence';
 import type { AgentRunEvidenceDraft } from '../../services/agents/lifecycle/evidenceTypes';
-import { mergeAgentRunPlan } from '../../services/agents/agentRunStateModel';
 import {
   areAgentRunControlGraphStatesEqual,
   normalizeAgentRunControlGraphState,
@@ -123,40 +121,6 @@ export function updateAgentRunControlGraphInConversation(
       ...run,
       updatedAt: Math.max(run.updatedAt, timestamp),
       controlGraph: normalizedControlGraph,
-    };
-  });
-
-  return didUpdate
-    ? {
-        ...conversation,
-        updatedAt: Math.max(conversation.updatedAt, timestamp),
-        agentRuns: nextRuns,
-      }
-    : conversation;
-}
-
-export function updateAgentRunPlanInConversation(
-  conversation: Conversation,
-  patch: Partial<AgentRunPlan> & { timestamp?: number },
-  runId?: string,
-): Conversation {
-  const targetRunId = resolveTargetAgentRunId(conversation, runId);
-  if (!targetRunId) {
-    return conversation;
-  }
-
-  const timestamp = patch.timestamp ?? Date.now();
-  let didUpdate = false;
-  const nextRuns = (conversation.agentRuns ?? []).map((run) => {
-    if (!isTargetAgentRun(run, targetRunId)) {
-      return run;
-    }
-
-    didUpdate = true;
-    return {
-      ...run,
-      updatedAt: Math.max(run.updatedAt, timestamp),
-      plan: mergeAgentRunPlan(run.plan, patch, run.goal, timestamp),
     };
   });
 

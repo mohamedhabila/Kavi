@@ -36,7 +36,6 @@ export function selectChatScreenChatSlice(state: ChatState) {
     updateAgentRunSummary: state.updateAgentRunSummary,
     updateAgentRunAsyncWork: state.updateAgentRunAsyncWork,
     updateAgentRunControlGraph: state.updateAgentRunControlGraph,
-    updateAgentRunPlan: state.updateAgentRunPlan,
     completeAgentRun: state.completeAgentRun,
     updateModelInConversation: state.updateModelInConversation,
     updatePersonaInConversation: state.updatePersonaInConversation,

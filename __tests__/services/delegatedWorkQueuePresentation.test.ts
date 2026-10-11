@@ -33,20 +33,7 @@ describe('delegated work queue presentation', () => {
 
     const result = buildDelegatedWorkQueuePresentation({
       snapshots: [root, child],
-      conversations: [
-        {
-          id: 'conversation-1',
-          title: 'Trip research',
-          agentRuns: [
-            {
-              id: 'run-1',
-              plan: {
-                workstreams: [{ id: 'compare-options', title: 'Compare the strongest options' }],
-              },
-            },
-          ],
-        },
-      ],
+      conversations: [{ id: 'conversation-1', title: 'Trip research' }],
     });
 
     expect(result.counts).toEqual({
@@ -62,7 +49,6 @@ describe('delegated work queue presentation', () => {
       activityKind: 'researching',
       sourceConversationId: 'conversation-1',
       sourceConversationTitle: 'Trip research',
-      workTitle: 'Compare the strongest options',
       canCancel: true,
       canOpenSourceConversation: true,
       canPrepareRetry: false,

@@ -26,13 +26,6 @@ describe('useChatStore', () => {
           goal: 'Audit the repository and apply the fix.',
           status: 'running',
           currentPhase: 'assess',
-          plan: expect.objectContaining({
-            objective: 'Audit the repository and apply the fix.',
-            successCriteria: expect.arrayContaining(['Produce the requested deliverable.']),
-            stopConditions: expect.arrayContaining([
-              'Stop when the deliverable is complete and the success criteria are satisfied.',
-            ]),
-          }),
           summary: expect.objectContaining({
             assistantTurns: 1,
             startedTools: 0,
@@ -75,19 +68,6 @@ describe('useChatStore', () => {
         detail: 'Inspect, patch, and verify.',
         checkpointTitle: 'Plan captured',
       });
-      useChatStore.getState().updateAgentRunPlan(convId, {
-        objective: 'Ship the patch with verified workflow state.',
-        successCriteria: ['Persist the plan', 'Render the timeline'],
-        stopConditions: ['Stop when verified'],
-        workstreams: [
-          {
-            id: 'ws-1',
-            title: 'Store model',
-            goal: 'Persist semantic planning data',
-          },
-        ],
-        rawPlan: 'Objective: Ship the patch with verified workflow state.',
-      });
       useChatStore.getState().updateAgentRunSummary(convId, {
         assistantTurns: 2,
         startedTools: 1,
@@ -111,21 +91,6 @@ describe('useChatStore', () => {
         expect.objectContaining({
           status: 'completed',
           detail: 'Inspect, patch, and verify.',
-        }),
-      );
-      expect(run.plan).toEqual(
-        expect.objectContaining({
-          objective: 'Ship the patch with verified workflow state.',
-          successCriteria: ['Persist the plan', 'Render the timeline'],
-          stopConditions: ['Stop when verified'],
-          workstreams: [
-            expect.objectContaining({
-              id: 'ws-1',
-              title: 'Store model',
-              goal: 'Persist semantic planning data',
-            }),
-          ],
-          rawPlan: 'Objective: Ship the patch with verified workflow state.',
         }),
       );
       expect(run.summary).toEqual(

@@ -5,7 +5,6 @@ import type {
   AgentRunEvidenceEntry,
   AgentRunPhaseKey,
   AgentRunPhaseStatus,
-  AgentRunPlan,
   AgentRunStatus,
   AgentRunSummary,
   AgentRunTerminalReason,
@@ -259,11 +258,6 @@ export interface ChatState {
     conversationId: string,
     input: ApplyMobileControllerOutcomeInput,
   ) => ApplyMobileControllerOutcomeResult;
-  updateAgentRunPlan: (
-    conversationId: string,
-    patch: Partial<AgentRunPlan> & { timestamp?: number },
-    runId?: string,
-  ) => void;
   recordAgentRunEvidence: (
     conversationId: string,
     entries: AgentRunEvidenceDraft | AgentRunEvidenceDraft[],

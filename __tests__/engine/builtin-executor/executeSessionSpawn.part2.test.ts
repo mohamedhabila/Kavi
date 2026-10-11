@@ -76,16 +76,6 @@ describe('Builtin Tool Executor', () => {
             {
               id: 'run-42',
               status: 'running',
-              plan: {
-                objective: 'Build the feature',
-                successCriteria: ['Ship it'],
-                stopConditions: ['Blocked'],
-                workstreams: [
-                  { id: 'workstream-1', title: 'Architecture' },
-                  { id: 'workstream-2', title: 'Implementation', dependencies: ['workstream-1'] },
-                ],
-                updatedAt: 1,
-              },
             },
           ],
           messages: [],

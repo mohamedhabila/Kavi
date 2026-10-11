@@ -5,7 +5,6 @@ import { normalizeAgentRunEvidenceEntries } from '../../services/agents/lifecycl
 import type { AgentRunEvidenceDraft } from '../../services/agents/lifecycle/evidenceTypes';
 import {
   createInitialAgentRunPhases,
-  mergeAgentRunPlan,
   mergeAgentRunSummary,
 } from '../../services/agents/agentRunStateModel';
 import {
@@ -103,16 +102,17 @@ export function isTargetAgentRun(
 export function normalizePersistedAgentRun(run: AgentRun): AgentRun {
   const timestamp = run.updatedAt ?? run.createdAt ?? Date.now();
   const goal = run.goal?.trim() || 'Complete the current task.';
-  const plan = mergeAgentRunPlan(run.plan, undefined, goal, timestamp);
   const {
     routeState: _legacyRouteState,
     awaitingBackgroundWorkers: _legacyAwaitingBackgroundWorkers,
     pendingAsyncOperations: _legacyPendingAsyncOperations,
+    plan: _legacyPlan,
     ...runWithoutLegacyControlState
   } = run as AgentRun & {
     routeState?: unknown;
     awaitingBackgroundWorkers?: unknown;
     pendingAsyncOperations?: unknown;
+    plan?: unknown;
   };
   const checkpoints =
     run.checkpoints?.length > MAX_AGENT_RUN_CHECKPOINTS
@@ -143,7 +143,6 @@ export function normalizePersistedAgentRun(run: AgentRun): AgentRun {
     phases: run.phases?.length ? run.phases : createInitialAgentRunPhases(timestamp),
     checkpoints,
     summary: mergeAgentRunSummary(run.summary),
-    plan,
     evidence: normalizeAgentRunEvidence(run.evidence),
     controlGraph,
     terminalReason: run.terminalReason,

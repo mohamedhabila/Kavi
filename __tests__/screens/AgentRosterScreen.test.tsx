@@ -196,14 +196,6 @@ describe('AgentRosterScreen', () => {
       {
         id: 'conv-1',
         title: 'Trip research',
-        agentRuns: [
-          {
-            id: 'run-1',
-            plan: {
-              workstreams: [{ id: 'compare-options', title: 'Compare destinations' }],
-            },
-          },
-        ],
       },
     ];
     mockSubAgents = [
@@ -231,8 +223,7 @@ describe('AgentRosterScreen', () => {
     fireEvent.press(getByTestId('delegated-work-tab'));
 
     expect(getByText('Delegated work (1)')).toBeTruthy();
-    expect(getByText('Compare destinations')).toBeTruthy();
-    expect(getByText('From Trip research')).toBeTruthy();
+    expect(getByText('Trip research')).toBeTruthy();
     expect(getByText('2 delegated steps')).toBeTruthy();
     expect(getByText('Comparing the strongest options.')).toBeTruthy();
     expect(getByTestId('delegated-work-sub-root')).toBeTruthy();

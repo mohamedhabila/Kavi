@@ -14,7 +14,6 @@ import {
   mockUpdateMessage,
   mockAddToolCall,
   mockSetAgentRunPhase,
-  mockUpdateAgentRunPlan,
 } from '../../../testSupport/chatScreen/storeMocks';
 import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
@@ -278,8 +277,6 @@ describe('ChatScreen streaming presentation', () => {
       jest.advanceTimersByTime(24);
     });
 
-    expect(mockUpdateAgentRunPlan).not.toHaveBeenCalled();
-
     act(() => {
       callbacks.onAgentControlGraphStateChange?.(
         createAgentRunControlGraphState({
@@ -288,7 +285,6 @@ describe('ChatScreen streaming presentation', () => {
       );
     });
 
-    expect(mockUpdateAgentRunPlan).not.toHaveBeenCalled();
     expect(mockSetAgentRunPhase).not.toHaveBeenCalledWith(
       'conv1',
       'plan',

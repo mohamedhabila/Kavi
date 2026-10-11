@@ -36,14 +36,7 @@ type ProgressOptions = {
 function cloneTaskLedgerItems<TAgent extends SubAgentSnapshot>(
   taskLedger: TAgent['taskLedger'],
 ): TAgent['taskLedger'] {
-  return taskLedger?.map((item) => ({
-    ...item,
-    ...(item.successCriteria ? { successCriteria: [...item.successCriteria] } : {}),
-    ...(item.dependencies ? { dependencies: [...item.dependencies] } : {}),
-    ...(item.requirements ? { requirements: [...item.requirements] } : {}),
-    ...(item.requiredCapabilities ? { requiredCapabilities: [...item.requiredCapabilities] } : {}),
-    ...(item.completedEvidence ? { completedEvidence: [...item.completedEvidence] } : {}),
-  })) as TAgent['taskLedger'];
+  return taskLedger?.map((item) => ({ ...item })) as TAgent['taskLedger'];
 }
 
 export function createSubAgentStateRuntime<TAgent extends SubAgentSnapshot>(params: {

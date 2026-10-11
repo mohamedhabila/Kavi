@@ -13,7 +13,6 @@ import {
 import {
   updateAgentRunAsyncWorkInConversation,
   updateAgentRunControlGraphInConversation,
-  updateAgentRunPlanInConversation,
 } from '../../src/store/agentRuns/graph';
 import { useChatStore } from '../../src/store/useChatStore';
 import {
@@ -159,10 +158,6 @@ export function createExecutionContext(params: {
     commitConversation(
       updateAgentRunControlGraphInConversation(currentConversation, controlGraph, runId),
     );
-  });
-  const updateAgentRunPlan = jest.fn((conversationId, patch, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(updateAgentRunPlanInConversation(currentConversation, patch, runId));
   });
   const updateAgentRunSummary = jest.fn((conversationId, patch, runId) => {
     if (conversationId !== currentConversation.id) return;
@@ -412,7 +407,6 @@ export function createExecutionContext(params: {
       transitionMessageMemoryPublication,
       updateAgentRunAsyncWork,
       updateAgentRunControlGraph,
-      updateAgentRunPlan,
       updateAgentRunSummary,
       updateMessage,
       updateMessageAssistantMetadata,

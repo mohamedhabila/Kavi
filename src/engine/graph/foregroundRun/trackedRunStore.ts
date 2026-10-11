@@ -56,11 +56,6 @@ export type ForegroundTrackedRunStoreActions = ConversationRunCompletionActions 
     patch: Record<string, unknown>,
     runId?: string,
   ) => void;
-  updateAgentRunPlan: (
-    conversationId: string,
-    patch: Record<string, unknown>,
-    runId?: string,
-  ) => void;
   updateAgentRunSummary: (
     conversationId: string,
     summary: Partial<AgentRun['summary']> & { latestSummary?: string },

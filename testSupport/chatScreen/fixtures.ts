@@ -117,25 +117,6 @@ export function createAgentRunAsyncWorkControlGraph(
   });
 }
 
-export const createStructuredPlan = (overrides: Partial<any> = {}): any => ({
-  objective: 'Complete the current task.',
-  successCriteria: ['Deliver the result', 'Verify the result'],
-  stopConditions: ['Blocked'],
-  workstreams: [
-    {
-      id: 'workstream-1',
-      title: 'Implement the fix',
-    },
-    {
-      id: 'workstream-2',
-      title: 'Verify the fix',
-      dependencies: ['workstream-1'],
-    },
-  ],
-  updatedAt: 1_700_000_000_100,
-  ...overrides,
-});
-
 let mockTimestamp = 1_700_100_000_000;
 
 export function nextMockTimestamp() {
