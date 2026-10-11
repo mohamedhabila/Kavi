@@ -16,7 +16,6 @@ import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
 import { getEntityById } from './entities';
-import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import {
   captureMemoryAuthoritySnapshot,
@@ -105,9 +104,7 @@ export interface BuildLivingMemorySectionsOptions {
   readWorkingBlock?: (label: 'active_focus' | 'open_threads') => WorkingMemoryBlock | null;
   /** Override reflection reader (test seam). */
   readLatestReflection?: (threadId: string) => string | null;
-  /** Graph-owned goals for multi-signal retrieval. */
-  goals?: ReadonlyArray<AgentGoal>;
-  /** Graph active task id (typically active goal id). */
+  /** Graph active task id: the workstream a worker run serves. */
   activeTaskId?: string;
   /** Graph async work state for retrieval signals. */
   asyncWork?: AgentRunControlGraphAsyncWorkState;
@@ -321,7 +318,6 @@ export async function buildLivingMemorySections(
     personaId,
     readWorkingBlock,
     readLatestReflection: readLatestReflectionOverride,
-    goals,
     activeTaskId,
     asyncWork,
     retrievalLlm,
@@ -415,7 +411,6 @@ export async function buildLivingMemorySections(
   const eligibility = await resolveLivingMemoryEligibility({
     query,
     focusBlockText,
-    goals,
     activeTaskId,
     resolvedTaskId,
     asyncWork,

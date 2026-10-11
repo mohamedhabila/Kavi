@@ -18,7 +18,6 @@ import {
   type MemoryContextStrategy,
   type MemoryRetrievalStrategy,
 } from '../services/memory/memoryAccessPolicy';
-import { getActiveGoal } from './goals/types';
 import { buildScopedFallbackMemoryAccessContext } from './orchestratorContext';
 import { prepareAgentControlGraphRequestContext } from './graph/requestContext';
 import {
@@ -97,7 +96,6 @@ export type OrchestratorMemoryAccessInput = Readonly<{
   activeModel: string;
   activeProvider: LlmProviderConfig;
   asyncWork?: AgentRunControlGraphState['asyncWork'];
-  goals?: AgentRunControlGraphState['goals'];
   internalUserMessageCount: number;
   /** Whether this conversation starts in agentic mode; see resolveConversationStartsAgentic. */
   startsAgentic: boolean;
@@ -228,7 +226,6 @@ export async function loadOrchestratorMemoryAccessContext(
       mode: params.startsAgentic ? 'agentic' : 'chat',
       internalUserMessageCount: params.internalUserMessageCount,
       ...(params.taskId ? { activeTaskId: params.taskId } : {}),
-      ...(params.goals?.length ? { goals: params.goals } : {}),
       ...(params.asyncWork ? { asyncWork: params.asyncWork } : {}),
       retrievalLlm: {
         provider: params.activeProvider,
@@ -297,9 +294,7 @@ export async function prepareOrchestratorRequestBundle(params: {
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
 }> {
-  const graphGoals = params.graphSnapshot?.goals;
-  const graphActiveTaskId =
-    params.graphSnapshot?.activeTaskId ?? getActiveGoal(graphGoals ?? [])?.id ?? params.taskId;
+  const graphActiveTaskId = params.graphSnapshot?.activeTaskId ?? params.taskId;
   const enrichedRequest = await enrichLatestUserMessageForRequest({
     activeModel: params.activeModel,
     activeProvider: params.activeProvider,
@@ -317,7 +312,6 @@ export async function prepareOrchestratorRequestBundle(params: {
     activeModel: params.activeModel,
     activeProvider: params.activeProvider,
     ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
-    ...(graphGoals?.length ? { goals: graphGoals } : {}),
     internalUserMessageCount: params.internalUserMessageCount,
     // `graphOwnedRun` already carries "does this conversation start agentic"
     // (resolved once in bootstrap.ts); memory access follows the same signal

@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../engine/goals/types';
 import type {
   SubAgentMemoryBundle,
   SubAgentMemoryBundleEpisode,
@@ -334,7 +333,6 @@ export async function buildLeastPrivilegeWorkerMemoryBundle(input: {
   sourceThreadId: string;
   personaId: string;
   taskId: string | null;
-  goals?: ReadonlyArray<AgentGoal>;
   now?: number;
 }): Promise<SubAgentMemoryBundle | undefined> {
   if (!input.enabled) return undefined;
@@ -351,7 +349,6 @@ export async function buildLeastPrivilegeWorkerMemoryBundle(input: {
     });
     const retrieval = await orchestrateMemoryRetrieval({
       userMessage: query,
-      goals: input.goals,
       activeTaskId: input.taskId ?? undefined,
       memoryScope: scope,
       memoryUseIntent: 'automatic_prompt',

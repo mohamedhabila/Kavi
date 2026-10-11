@@ -25,7 +25,6 @@ import { listFacts } from '../../src/services/memory/facts/queries';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../../src/store/useChatStore';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
-import { createGoal } from '../../src/engine/goals/types';
 import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
 import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
@@ -53,7 +52,7 @@ async function executeGroundedRemember(input: {
   const execution = memoryRememberExecution({
     memoryConversationId,
     sourceThreadId: input.threadId,
-    taskId: input.context?.controlGraphGoals?.find((goal) => goal.status === 'active')?.id ?? null,
+    taskId: input.context?.activeTaskId ?? null,
     userMessageId: input.userMessageId,
     userMessageText: input.userMessageText,
   });
@@ -338,14 +337,7 @@ describe('structured memory tool executor — opt-out gate', () => {
       memoryConversationId: 'parent-runtime-memory',
       workspaceConversationId: 'parent-runtime-files',
       agentRunId: 'runtime-run',
-      controlGraphGoals: [
-        createGoal({
-          id: 'task-active',
-          title: 'Ship the release',
-          status: 'active',
-          now: 1_000,
-        }),
-      ],
+      activeTaskId: 'task-active',
     };
     const outcome = await executeGroundedRemember({
       args: memoryRememberArgs({

@@ -70,6 +70,7 @@ export type ToolExecutionLifecycleParams = {
   onRecordPerformanceMetrics?: ToolExecutionLifecycleMetricsRecorder;
   onBlockedBeforeExecution?: (detail: string, toolName: string) => void;
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
+  activeTaskId?: string;
   agentRunId?: string;
   executionRunId: string;
   modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;

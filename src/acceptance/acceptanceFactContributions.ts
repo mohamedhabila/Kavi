@@ -7,7 +7,6 @@ import { requireExactMemoryProvenanceId } from '../services/memory/memoryProvena
 import { codeOwnedMemorySensitivityDeclaration } from '../services/memory/memorySensitivityPolicy';
 
 export const ACCEPTANCE_FACT_PRODUCER_IDS = {
-  goalTaskUnification: 'acceptance_goal_task_v1',
   memoryCorrection: 'acceptance_memory_correction_v1',
   memoryHybridAblation: 'acceptance_memory_hybrid_v1',
 } as const;

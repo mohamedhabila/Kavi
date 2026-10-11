@@ -8,7 +8,6 @@
 // module and turns its eligible output into prompt sections.
 // ---------------------------------------------------------------------------
 
-import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import { createLogger } from '../../utils/logger';
@@ -50,7 +49,6 @@ const logger = createLogger('memory.livingMemoryBridge');
 export interface LivingMemoryEligibilityInput {
   query: string;
   focusBlockText: string;
-  goals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   resolvedTaskId: string | null;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
@@ -102,7 +100,6 @@ export async function resolveLivingMemoryEligibility(
   const {
     query,
     focusBlockText,
-    goals,
     activeTaskId,
     resolvedTaskId,
     asyncWork,
@@ -146,7 +143,6 @@ export async function resolveLivingMemoryEligibility(
       const retrieval = await orchestrateMemoryRetrieval({
         userMessage: query,
         focusText: focusBlockText,
-        goals,
         activeTaskId: activeTaskId ?? resolvedTaskId ?? undefined,
         asyncWork,
         ...(factSelector ? { factSelector } : {}),

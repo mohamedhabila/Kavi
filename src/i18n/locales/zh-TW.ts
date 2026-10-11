@@ -1022,8 +1022,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     overviewFocusTitle: '目前焦點',
     overviewFocusEmpty: '還沒有焦點。告訴 Kavi 現在最重要的事，讓對話保持方向。',
     overviewFocusAction: '詢問 Kavi',
-    overviewTaskTitle: '目前任務',
-    overviewTaskEmpty: '目前沒有進行中的任務。',
     overviewRecentFactsTitle: '最近記憶',
     overviewRecentEmpty: '還沒有最近記憶。請 Kavi 記住某個偏好或細節。',
     overviewSearchLabel: '搜尋記憶',

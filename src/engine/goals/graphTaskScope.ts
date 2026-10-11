@@ -5,42 +5,19 @@
 
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { WorkingBlockScope } from '../../services/memory/workingBlocks';
-import { CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER, getActiveGoal, type AgentGoal } from './types';
 
-export type GraphTaskScopeInput = {
-  goals?: ReadonlyArray<AgentGoal>;
-  activeTaskId?: string | null;
-};
-
-export function resolveGraphTaskId(input: GraphTaskScopeInput): string | undefined {
-  const scopeEligibleGoals = (input.goals ?? []).filter(
-    (goal) => goal.owner !== CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER,
-  );
-  const trimmedTaskId = typeof input.activeTaskId === 'string' ? input.activeTaskId.trim() : '';
-  if (trimmedTaskId) {
-    if (!input.goals) {
-      return trimmedTaskId;
-    }
-    const matchingGoal = scopeEligibleGoals.find(
-      (goal) =>
-        goal.id === trimmedTaskId && (goal.status === 'active' || goal.status === 'pending'),
-    );
-    if (matchingGoal) {
-      return trimmedTaskId;
-    }
-  }
-  return getActiveGoal(scopeEligibleGoals)?.id;
+/** The task a run's memory work is scoped to: the workstream a worker run serves. */
+export function resolveGraphTaskId(activeTaskId: string | null | undefined): string | undefined {
+  const trimmed = typeof activeTaskId === 'string' ? activeTaskId.trim() : '';
+  return trimmed || undefined;
 }
 
 export function resolveGraphWorkingBlockScope(params: {
   conversationId: string;
-  graphState?: Pick<AgentRunControlGraphState, 'goals' | 'activeTaskId'> | null;
+  graphState?: Pick<AgentRunControlGraphState, 'activeTaskId'> | null;
 }): WorkingBlockScope {
   const conversationId = params.conversationId;
-  const taskId = resolveGraphTaskId({
-    goals: params.graphState?.goals,
-    activeTaskId: params.graphState?.activeTaskId,
-  });
+  const taskId = resolveGraphTaskId(params.graphState?.activeTaskId);
   return {
     conversationId,
     threadId: conversationId,

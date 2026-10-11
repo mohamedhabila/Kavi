@@ -8,7 +8,6 @@
 import { listFacts } from './facts/queries';
 import type { MemoryFact } from './facts/types';
 import { countPendingIngestionJobs } from './ingestionQueue';
-import { getLatestActiveMemoryTask, type MemoryTask } from './tasks';
 import { listRecentWorkingBlocks, type WorkingMemoryBlock } from './workingBlocks';
 import {
   getConsolidationStatusSnapshot,
@@ -17,7 +16,6 @@ import {
 
 export interface MemoryOverviewSnapshot {
   focus: WorkingMemoryBlock | null;
-  activeTask: MemoryTask | null;
   recentFacts: MemoryFact[];
   consolidation: ConsolidationStatusSnapshot;
   pendingIngestionJobs: number;
@@ -32,7 +30,6 @@ export function loadMemoryOverviewSnapshot(
 
   return {
     focus: listRecentWorkingBlocks('active_focus', 1)[0] ?? null,
-    activeTask: getLatestActiveMemoryTask(),
     recentFacts: listFacts({ limit }),
     consolidation: getConsolidationStatusSnapshot(),
     pendingIngestionJobs: countPendingIngestionJobs(),

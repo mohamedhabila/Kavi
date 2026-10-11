@@ -1132,8 +1132,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     overviewFocusTitle: 'التركيز الحالي',
     overviewFocusEmpty: 'لا يوجد تركيز بعد. أخبر Kavi بما يهم الآن ليبقي المحادثة على المسار.',
     overviewFocusAction: 'اسأل Kavi',
-    overviewTaskTitle: 'المهمة الحالية',
-    overviewTaskEmpty: 'لا توجد مهمة نشطة الآن.',
     overviewRecentFactsTitle: 'الذكريات الحديثة',
     overviewRecentEmpty: 'لا توجد ذكريات حديثة. اطلب من Kavi تذكّر تفضيل أو تفصيل.',
     overviewSearchLabel: 'البحث في الذاكرة',

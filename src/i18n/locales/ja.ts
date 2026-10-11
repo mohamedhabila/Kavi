@@ -1053,8 +1053,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     overviewFocusTitle: '現在のフォーカス',
     overviewFocusEmpty: 'フォーカスはまだありません。今大切なことを Kavi に伝えてください。',
     overviewFocusAction: 'Kavi に相談',
-    overviewTaskTitle: '現在のタスク',
-    overviewTaskEmpty: '現在アクティブなタスクはありません。',
     overviewRecentFactsTitle: '最近のメモリー',
     overviewRecentEmpty:
       '最近のメモリーはまだありません。Kavi に詳細を覚えるよう依頼してください。',

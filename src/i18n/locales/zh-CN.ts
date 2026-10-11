@@ -1023,8 +1023,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     overviewFocusTitle: '当前焦点',
     overviewFocusEmpty: '还没有焦点。告诉 Kavi 现在最重要的事，让对话保持方向。',
     overviewFocusAction: '询问 Kavi',
-    overviewTaskTitle: '当前任务',
-    overviewTaskEmpty: '目前没有进行中的任务。',
     overviewRecentFactsTitle: '最近记忆',
     overviewRecentEmpty: '还没有最近记忆。让 Kavi 记住某个偏好或细节。',
     overviewSearchLabel: '搜索记忆',

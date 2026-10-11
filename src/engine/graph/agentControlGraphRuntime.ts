@@ -1,7 +1,6 @@
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
-import { syncActiveGoalFocusFromGraphTransition } from '../../services/memory/tasks';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import {
   createInitialAgentControlGraphSnapshot,
@@ -49,20 +48,7 @@ export function createAgentControlGraphRuntime(params: {
   const applyEvents = (
     events: ReadonlyArray<AgentControlGraphEvent>,
   ): AgentControlGraphSnapshot => {
-    const shouldProjectGoalsToMemory = events.some(
-      (event) => event.type === 'GOALS_UPDATED' && event.projectToMemoryTasks !== false,
-    );
     snapshot = reduceAgentControlGraph(snapshot, events);
-    if (shouldProjectGoalsToMemory) {
-      try {
-        syncActiveGoalFocusFromGraphTransition({
-          threadId: params.conversationId,
-          goals: snapshot.goals ?? [],
-        });
-      } catch {
-        // Goal focus sync is best-effort; graph events must not fail.
-      }
-    }
     params.callbacks.onAgentControlGraphStateChange?.(snapshot);
     return snapshot;
   };

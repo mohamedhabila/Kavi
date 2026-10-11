@@ -7,7 +7,6 @@
 // vector can cross this seam; vector creation and provider calls cannot.
 // ---------------------------------------------------------------------------
 
-import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import {
   recallFactSelectionForQuery,
@@ -27,7 +26,6 @@ import type {
   RecallLocalSimilarityInput,
 } from './factRecallCandidateContract';
 import type { MemoryFact } from './facts/types';
-import { getMemoryTask } from './tasks';
 import { planRetrievalSignals } from './retrievalQueryPlan';
 import {
   requireMemoryAccessScopeIdentity,
@@ -40,7 +38,6 @@ import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from './policy';
 export interface RetrievalOrchestratorInput {
   userMessage: string;
   focusText?: string;
-  goals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
   memoryScope: MemoryAccessScopeIdentity;
@@ -78,23 +75,6 @@ const MAX_LIMIT = 50;
 const DEFAULT_CANDIDATE_POOL_LIMIT = 128;
 const DEFAULT_THRESHOLD = 0.01;
 
-function collectGoalSignals(goals: ReadonlyArray<AgentGoal> | undefined): string[] {
-  if (!goals?.length) return [];
-  const signals: string[] = [];
-  for (const goal of goals) {
-    if (goal.status !== 'active' && goal.status !== 'pending') continue;
-    if (goal.title.trim()) signals.push(goal.title.trim());
-    if (goal.description?.trim()) signals.push(goal.description.trim());
-    for (const capability of goal.requiredCapabilities ?? []) {
-      if (capability.trim()) signals.push(capability.trim());
-    }
-    for (const resourceKind of goal.requiredResourceKinds ?? []) {
-      if (resourceKind.trim()) signals.push(resourceKind.trim());
-    }
-  }
-  return signals;
-}
-
 function collectAsyncWorkSignals(
   asyncWork: AgentRunControlGraphAsyncWorkState | undefined,
 ): string[] {
@@ -107,23 +87,13 @@ function collectAsyncWorkSignals(
   return signals;
 }
 
-function buildQuerySignals(
-  input: RetrievalOrchestratorInput,
-  resolvedTaskId: string | undefined,
-): string[] {
+function buildQuerySignals(input: RetrievalOrchestratorInput): string[] {
   const primarySignals: string[] = [];
   const userMessage = input.userMessage.trim();
   if (userMessage) primarySignals.push(userMessage);
 
-  primarySignals.push(...collectGoalSignals(input.goals));
   primarySignals.push(...collectAsyncWorkSignals(input.asyncWork));
   if (input.focusText?.trim()) primarySignals.push(input.focusText.trim());
-
-  if (resolvedTaskId) {
-    const task = getMemoryTask(resolvedTaskId);
-    if (task?.title.trim()) primarySignals.push(task.title.trim());
-    if (task?.summary?.trim()) primarySignals.push(task.summary.trim());
-  }
 
   const planned = planRetrievalSignals(primarySignals);
   const signals =
@@ -209,7 +179,7 @@ export async function orchestrateMemoryRetrieval(
   const limit = normalizeRetrievalLimit(readInput.limit);
   const totalStarted = Date.now();
   const planStarted = Date.now();
-  const querySignals = buildQuerySignals(readInput, scope.taskId);
+  const querySignals = buildQuerySignals(readInput);
   const query = querySignals.join('\n');
   const planMs = Date.now() - planStarted;
   const recallTimings: RecallFactsTiming[] = [];

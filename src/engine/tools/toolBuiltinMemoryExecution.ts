@@ -71,7 +71,7 @@ function resolveExecutionMemoryContext(
     memoryConversationId,
     sourceThreadId: conversationId,
     personaId: resolveCodeOwnedMemoryPersonaId(conversation?.personaId),
-    taskId: resolveGraphTaskId({ goals: context?.controlGraphGoals }) ?? null,
+    taskId: resolveGraphTaskId(context?.activeTaskId) ?? null,
   };
 }
 

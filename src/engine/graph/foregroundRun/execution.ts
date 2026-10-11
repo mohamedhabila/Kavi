@@ -460,11 +460,7 @@ async function executeReservedForegroundConversationRun(
           sourceMessageId: requestMessageId,
           sourceRunId: bootstrapResult.trackedAgentRunId ?? null,
           sourceTurnId: terminalMemorySourceId,
-          taskId:
-            resolveGraphTaskId({
-              goals: finalAgentRun?.controlGraph?.goals,
-              activeTaskId: finalAgentRun?.controlGraph?.activeTaskId,
-            }) ?? null,
+          taskId: resolveGraphTaskId(finalAgentRun?.controlGraph?.activeTaskId) ?? null,
         },
         pending,
         surface: 'foreground',

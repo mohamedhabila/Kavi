@@ -11,10 +11,6 @@ import {
   evaluateMemoryChitchatIngestionMetricOutcomes,
   isMemoryChitchatIngestionMetricsPassing,
 } from '../../src/acceptance/acceptanceMetrics/evaluateMemoryChitchatIngestionMetrics';
-import {
-  evaluateGoalTaskUnificationMetricOutcomes,
-  isGoalTaskUnificationMetricsPassing,
-} from '../../src/acceptance/acceptanceMetrics/evaluateGoalTaskUnificationMetrics';
 import { formatAcceptanceMetricEvaluation } from '../../src/acceptance/acceptanceMetrics/formatReport';
 import { MEMORY_RECALL_FIXTURES } from '../../src/acceptance/acceptanceMetrics/memoryRecallFixtures';
 import { runMemoryRecallScenario } from '../../src/acceptance/acceptanceMetrics/runMemoryRecallScenario';
@@ -68,14 +64,6 @@ describe('quality memory metrics harness', () => {
   it('persists episode and scoped focus after chitchat ingestion without memory_remember', async () => {
     const evaluation = await evaluateMemoryChitchatIngestionMetricOutcomes();
     if (!isMemoryChitchatIngestionMetricsPassing(evaluation)) {
-      console.error(formatAcceptanceMetricEvaluation(evaluation));
-    }
-    expect(evaluation.passed).toBe(true);
-  });
-
-  it('scopes task_stack titles and session recall to the active graph goal', async () => {
-    const evaluation = await evaluateGoalTaskUnificationMetricOutcomes();
-    if (!isGoalTaskUnificationMetricsPassing(evaluation)) {
       console.error(formatAcceptanceMetricEvaluation(evaluation));
     }
     expect(evaluation.passed).toBe(true);

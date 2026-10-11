@@ -33,10 +33,7 @@ function resolveSourceTaskId(
   if (!sourceRun) {
     throw new Error('memory_turn_publication_source_run_unavailable');
   }
-  return resolveGraphTaskId({
-    goals: sourceRun.controlGraph?.goals,
-    activeTaskId: sourceRun.controlGraph?.activeTaskId,
-  });
+  return resolveGraphTaskId(sourceRun.controlGraph?.activeTaskId);
 }
 
 function resolvePublicationResult(

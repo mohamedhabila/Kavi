@@ -168,7 +168,6 @@ describe('MemoryScreen overview tab', () => {
     });
     mockLoadOverview.mockReturnValue({
       focus: { content: 'Release hardening' },
-      activeTask: { title: 'Ship Android build' },
       recentFacts: [],
       consolidation: {
         memoryDisabled: false,
@@ -219,7 +218,7 @@ describe('MemoryScreen overview tab', () => {
 
     expect(getByDisplayValue('atlas')).toBeTruthy();
     expect(getByTestId('memory-overview-focus').props.children).toContain('Release hardening');
-    expect(getByTestId('memory-overview-task').props.children).toContain('Ship Android build');
+    expect(queryByTestId('memory-overview-task')).toBeNull();
     expect(getByTestId('memory-overview-fact-correct-fact-1')).toBeTruthy();
     expect(queryByTestId('memory-diagnostics-panel')).toBeNull();
     expect(queryByTestId('memory-overview-ingestion-pending')).toBeNull();
@@ -229,7 +228,6 @@ describe('MemoryScreen overview tab', () => {
   it('guides an empty focus back to the assistant', async () => {
     mockLoadOverview.mockReturnValue({
       focus: null,
-      activeTask: null,
       recentFacts: [],
       consolidation: {
         memoryDisabled: false,
@@ -250,7 +248,6 @@ describe('MemoryScreen overview tab', () => {
         ),
       ).toBeTruthy();
     });
-    expect(getByText('No active task right now.')).toBeTruthy();
 
     const askKavi = getByTestId('memory-overview-ask-kavi');
     expect(askKavi.props.accessibilityLabel).toBe('Ask Kavi');

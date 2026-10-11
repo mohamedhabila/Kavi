@@ -27,7 +27,6 @@ import {
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import type { AssistantMessageMetadata } from '../../types/message';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
-import { getActiveGoal } from '../goals/types';
 import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
@@ -292,13 +291,11 @@ export async function runOrchestratorGraphSession(params: {
       requestFrame,
       refreshSessionMemoryContext: async (refreshInput) => {
         const graphSnapshot = refreshInput.graphSnapshot;
-        const activeTaskId =
-          graphSnapshot.activeTaskId ?? getActiveGoal(graphSnapshot.goals ?? [])?.id ?? taskId;
+        const activeTaskId = graphSnapshot.activeTaskId ?? taskId;
         const refreshedMemory = await loadOrchestratorMemoryAccessContext({
           activeModel: refreshInput.activeModel,
           activeProvider: refreshInput.activeProvider,
           asyncWork: graphSnapshot.asyncWork,
-          goals: graphSnapshot.goals,
           internalUserMessageCount: memoryRefreshInternalUserMessages.length,
           startsAgentic,
           logger,

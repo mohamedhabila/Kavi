@@ -20,7 +20,6 @@ import {
   getActiveTaskId,
   getActiveTaskTitle,
   pauseTask,
-  upsertGoalTaskEntry,
 } from '../../../src/services/memory/taskStack';
 import { closeMemoryDb } from '../../../src/services/memory/database';
 
@@ -171,34 +170,13 @@ describe('getActiveTaskId', () => {
 
 describe('pauseTask', () => {
   it('marks the specified task paused without reactivating siblings', () => {
-    upsertGoalTaskEntry('conv-1', 'goal-a', 'First', 'active', 100);
-    upsertGoalTaskEntry('conv-1', 'goal-b', 'Second', 'active', 200);
-    pauseTask('conv-1', 'goal-b', 300);
+    const first = pushTask('conv-1', 'First');
+    const second = pushTask('conv-1', 'Second');
+    pauseTask('conv-1', second.id, 300);
     const stack = readTaskStack('conv-1');
-    expect(stack.find((entry) => entry.id === 'goal-a')?.state).toBe('paused');
-    expect(stack.find((entry) => entry.id === 'goal-b')?.state).toBe('paused');
+    expect(stack.find((entry) => entry.id === first.id)?.state).toBe('paused');
+    expect(stack.find((entry) => entry.id === second.id)?.state).toBe('paused');
     expect(getActiveTaskId('conv-1')).toBeNull();
-  });
-});
-
-describe('upsertGoalTaskEntry', () => {
-  it('creates a goal-id task and pauses the previous active task', () => {
-    pushTask('conv-1', 'Legacy');
-    const goalTask = upsertGoalTaskEntry('conv-1', 'goal-a', 'trip-planning', 'active');
-    const stack = readTaskStack('conv-1');
-    expect(goalTask.id).toBe('goal-a');
-    expect(stack[0].state).toBe('paused');
-    expect(stack[1]).toMatchObject({ id: 'goal-a', title: 'trip-planning', state: 'active' });
-  });
-
-  it('reactivates an existing goal task and pauses the current active task', () => {
-    upsertGoalTaskEntry('conv-1', 'goal-a', 'trip-planning', 'active', 100);
-    upsertGoalTaskEntry('conv-1', 'goal-b', 'meal-planning', 'active', 200);
-    upsertGoalTaskEntry('conv-1', 'goal-a', 'trip-planning', 'active', 300);
-    expect(getActiveTaskTitle('conv-1')).toBe('trip-planning');
-    const stack = readTaskStack('conv-1');
-    expect(stack.find((entry) => entry.id === 'goal-b')?.state).toBe('paused');
-    expect(stack.find((entry) => entry.id === 'goal-a')?.state).toBe('active');
   });
 });
 

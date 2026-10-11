@@ -243,18 +243,6 @@ async function main(): Promise<void> {
       taskId: null,
       mode: 'agentic',
       recallLimit: args.limit,
-      goals: [
-        {
-          id: `diagnostic-question-${now}`,
-          title: args.query,
-          status: 'active',
-          dependencies: [],
-          evidence: [],
-          createdAt: now,
-          updatedAt: now,
-          completionPolicy: 'persistent',
-        },
-      ],
       now,
     });
   const appBridge = await buildBridgeDiagnostic();
@@ -263,18 +251,6 @@ async function main(): Promise<void> {
     memoryScope,
     memoryUseIntent: 'explicit_user_request',
     limit: args.limit,
-    goals: [
-      {
-        id: `diagnostic-question-${now}`,
-        title: args.query,
-        status: 'active',
-        dependencies: [],
-        evidence: [],
-        createdAt: now,
-        updatedAt: now,
-        completionPolicy: 'persistent',
-      },
-    ],
     now,
   });
   const appSignalRecalls = await Promise.all(

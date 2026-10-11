@@ -1088,8 +1088,6 @@ export const en: TranslationMap = {
     overviewFocusEmpty:
       'No focus yet. Tell Kavi what matters now and it can keep the conversation oriented.',
     overviewFocusAction: 'Ask Kavi',
-    overviewTaskTitle: 'Current task',
-    overviewTaskEmpty: 'No active task right now.',
     overviewRecentFactsTitle: 'Recent memories',
     overviewRecentEmpty: 'No recent memories yet. Ask Kavi to remember a preference or detail.',
     overviewSearchLabel: 'Search memory',

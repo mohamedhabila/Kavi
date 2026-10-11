@@ -1,4 +1,3 @@
-import type { AgentGoal } from '../../engine/goals/types';
 import type { AgentRunControlGraphAsyncWorkState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
@@ -44,7 +43,6 @@ export interface UnifiedMemoryAccessRequest {
   internalUserMessageCount?: number;
   now?: number;
   recallLimit?: number;
-  goals?: ReadonlyArray<AgentGoal>;
   activeTaskId?: string;
   asyncWork?: AgentRunControlGraphAsyncWorkState;
   retrievalLlm?: {
@@ -162,7 +160,6 @@ export async function buildUnifiedMemoryAccessContext(
     candidateStrategy: retrievalStrategy === 'lexical_only' ? 'lexical' : 'hybrid',
     ...(localSimilarity ? { localSimilarity } : {}),
     consistencyBarrier,
-    ...(request.goals ? { goals: request.goals } : {}),
     ...(request.activeTaskId ? { activeTaskId: request.activeTaskId } : {}),
     ...(request.asyncWork ? { asyncWork: request.asyncWork } : {}),
     ...(retrievalStrategy === 'production' && request.retrievalLlm

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ListTodo, MessageCircle, RefreshCw, Target } from 'lucide-react-native';
+import { MessageCircle, RefreshCw, Target } from 'lucide-react-native';
 
 import { MemoryFactCard } from './MemoryFactCard';
 
@@ -70,7 +70,6 @@ export function OverviewSection({
   }
 
   const focus = overview.focus?.content?.trim() ?? '';
-  const activeTask = overview.activeTask?.title?.trim() ?? '';
   const hasSearch = overviewSearch.trim().length > 0;
 
   return (
@@ -116,23 +115,6 @@ export function OverviewSection({
               </Text>
             </TouchableOpacity>
           ) : null}
-        </View>
-
-        <View style={styles.overviewSummaryCard}>
-          <View style={styles.overviewSummaryHeader}>
-            <View style={styles.overviewSummaryIcon}>
-              <ListTodo size={18} color={colors.primary} />
-            </View>
-            <Text accessibilityRole="header" style={styles.overviewSummaryTitle}>
-              {t('memory.overviewTaskTitle')}
-            </Text>
-          </View>
-          <Text
-            style={activeTask ? styles.overviewSummaryValue : styles.overviewSummaryEmpty}
-            testID="memory-overview-task"
-          >
-            {activeTask || t('memory.overviewTaskEmpty')}
-          </Text>
         </View>
 
         <Text style={styles.overviewSearchLabel}>{t('memory.overviewSearchLabel')}</Text>

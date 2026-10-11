@@ -1109,8 +1109,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     overviewFocusEmpty:
       'Aún no hay enfoque. Dile a Kavi qué importa ahora para mantener orientada la conversación.',
     overviewFocusAction: 'Preguntar a Kavi',
-    overviewTaskTitle: 'Tarea actual',
-    overviewTaskEmpty: 'No hay ninguna tarea activa ahora.',
     overviewRecentFactsTitle: 'Recuerdos recientes',
     overviewRecentEmpty: 'Aún no hay recuerdos recientes. Pide a Kavi que recuerde algún detalle.',
     overviewSearchLabel: 'Buscar en la memoria',

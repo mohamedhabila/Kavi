@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import process from 'node:process';
 
-import type { AgentGoal } from '../../src/engine/goals/types';
 import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import { countEpisodes } from '../../src/services/memory/episodes/queries';
@@ -425,21 +424,6 @@ async function buildQueryMessages(
   };
 }
 
-function buildQueryGoals(query: string, questionId: string | null, now: number): AgentGoal[] {
-  return [
-    {
-      id: questionId ? `question-${questionId}` : `question-${now}`,
-      title: query,
-      status: 'active',
-      dependencies: [],
-      evidence: [],
-      createdAt: now,
-      updatedAt: now,
-      completionPolicy: 'persistent',
-    },
-  ];
-}
-
 function selectedSections(sections: Array<{ text: string }>, maxItemChars: number): JsonObject[] {
   return sections.map((section, index) => {
     const content =
@@ -479,7 +463,6 @@ async function queryMemory(request: RuntimeRequest): Promise<JsonObject> {
     taskId: null,
     mode: 'agentic',
     recallLimit: resolved.maxItems,
-    goals: buildQueryGoals(query, request.questionId ?? null, now),
     ...(retrievalLlm ? { retrievalLlm } : {}),
     now,
   });

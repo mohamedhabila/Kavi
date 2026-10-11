@@ -346,6 +346,7 @@ export async function executeAgentControlGraphToolTurn(
     emitPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
     recordPerformanceMetrics: params.recordPerformanceMetrics,
     controlGraphGoals: projectedControlGraphGoals,
+    activeTaskId: params.getGraphSnapshot().activeTaskId,
     ...(toolCallBlockers.size > 0 ? { toolCallBlockers } : {}),
     agentRunId: params.agentRunId,
     executionRunId: params.executionRunId,

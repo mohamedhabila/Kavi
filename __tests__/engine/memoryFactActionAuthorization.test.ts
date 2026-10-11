@@ -11,7 +11,6 @@ jest.mock('../../src/services/remote/approvalStore', () => {
   };
 });
 
-import { createGoal } from '../../src/engine/goals/types';
 import { executeToolInner as executeTool } from '../../src/engine/tools/toolDispatchRouter';
 import { upsertEntity } from '../../src/services/memory/entities';
 import { getFactById } from '../../src/services/memory/facts/queries';
@@ -96,13 +95,7 @@ async function manage(input: {
     threadId,
     {
       memoryConversationId: input.rootId ?? 'root-a',
-      ...(input.taskId
-        ? {
-            controlGraphGoals: [
-              createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
-            ],
-          }
-        : {}),
+      ...(input.taskId ? { activeTaskId: input.taskId } : {}),
     },
   );
 }
@@ -120,13 +113,7 @@ async function forget(input: {
   } as never);
   return executeTool('memory_forget', JSON.stringify({ factId: input.factId }), threadId, {
     memoryConversationId: input.rootId ?? 'root-a',
-    ...(input.taskId
-      ? {
-          controlGraphGoals: [
-            createGoal({ id: input.taskId, title: 'Scoped task', status: 'active', now: 1 }),
-          ],
-        }
-      : {}),
+    ...(input.taskId ? { activeTaskId: input.taskId } : {}),
   });
 }
 

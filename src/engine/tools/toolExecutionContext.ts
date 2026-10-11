@@ -28,6 +28,8 @@ export interface ToolExecutionContext {
   /** Code-owned catalog visibility after persona and explicit tool authorization. */
   catalogVisibleToolNames?: string[];
   controlGraphGoals?: ReadonlyArray<AgentGoal>;
+  /** The task the run's memory work is scoped to: the workstream a worker run serves. */
+  activeTaskId?: string;
   agentRunId?: string;
   /** Required code-owned identity for one orchestrated execution boundary. */
   executionRunId?: string;

@@ -280,6 +280,7 @@ export async function executeToolCallLifecycle(
           ? Array.from(params.catalogVisibleToolNames)
           : undefined,
         controlGraphGoals: params.controlGraphGoals,
+        ...(params.activeTaskId ? { activeTaskId: params.activeTaskId } : {}),
         agentRunId: params.agentRunId,
         executionRunId: params.executionRunId,
         modelTurnMemoryPolicyBinding: params.modelTurnMemoryPolicyBinding,

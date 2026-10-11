@@ -199,7 +199,6 @@ export async function executeSessionSpawn(
       enabled: !settings.disableLongTermMemory,
       query: prompt,
       ...memorySelectionScope,
-      goals,
     });
 
     const workerTools = effectiveConfiguredWorkerTools

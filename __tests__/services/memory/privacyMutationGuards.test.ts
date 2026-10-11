@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import type { AgentGoal } from '../../../src/engine/goals/types';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
 import { subscribeToMemoryChanges } from '../../../src/services/memory/changeNotifications';
@@ -19,15 +18,8 @@ import {
   popTask,
   pushTask,
   readTaskStack,
-  upsertGoalTaskEntry,
 } from '../../../src/services/memory/taskStack';
-import {
-  getMemoryTask,
-  syncActiveGoalFocusFromGraphTransition,
-  syncActiveTaskFromGoal,
-  syncGoalTasksFromMutation,
-  upsertMemoryTask,
-} from '../../../src/services/memory/tasks';
+import { getMemoryTask, upsertMemoryTask } from '../../../src/services/memory/tasks';
 import {
   clearWorkingBlock,
   editWorkingBlock,
@@ -53,22 +45,9 @@ afterEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
 });
 
-function activeGoal(): AgentGoal {
-  return {
-    id: 'goal-existing',
-    title: 'Existing goal',
-    status: 'active',
-    dependencies: [],
-    evidence: [],
-    createdAt: 100,
-    updatedAt: 100,
-    completionPolicy: 'persistent',
-  };
-}
-
 describe('durable memory privacy mutation guards', () => {
   it('rejects direct writes while keeping reads and explicit block cleanup available', () => {
-    upsertGoalTaskEntry(THREAD_ID, 'goal-existing', 'Existing goal', 'active', 100);
+    const existing = pushTask(THREAD_ID, 'Existing goal');
     upsertMemoryTask({
       id: 'goal-existing',
       threadId: THREAD_ID,
@@ -95,10 +74,9 @@ describe('durable memory privacy mutation guards', () => {
     const taskStackMutations = [
       () => pushTask(THREAD_ID, 'Private new task'),
       () => popTask(THREAD_ID),
-      () => activateTask(THREAD_ID, 'goal-existing'),
-      () => completeTask(THREAD_ID, 'goal-existing'),
-      () => pauseTask(THREAD_ID, 'goal-existing', 200),
-      () => upsertGoalTaskEntry(THREAD_ID, 'goal-new', 'Private new goal', 'active', 200),
+      () => activateTask(THREAD_ID, existing.id),
+      () => completeTask(THREAD_ID, existing.id),
+      () => pauseTask(THREAD_ID, existing.id, 200),
     ];
     for (const mutate of taskStackMutations) {
       expect(mutate).toThrow('memory_disabled');
@@ -111,46 +89,12 @@ describe('durable memory privacy mutation guards', () => {
       updatedAt: 100,
     });
     expect(readTaskStack(THREAD_ID)).toEqual([
-      expect.objectContaining({ id: 'goal-existing', title: 'Existing goal', state: 'active' }),
+      expect.objectContaining({ id: existing.id, title: 'Existing goal', state: 'active' }),
     ]);
 
     expect(clearWorkingBlock('active_focus', FOCUS_SCOPE, 300)).toBe(true);
     expect(getWorkingBlock('active_focus', FOCUS_SCOPE)?.content).toBe('');
     expect(clearWorkingBlock('task_stack', FOCUS_SCOPE, 300)).toBe(true);
-    expect(readTaskStack(THREAD_ID)).toEqual([]);
-  });
-
-  it('makes ancillary graph synchronization an explicit no-op while memory is disabled', () => {
-    const goal = activeGoal();
-    useSettingsStore.setState({ disableLongTermMemory: true });
-
-    expect(() =>
-      syncGoalTasksFromMutation({
-        threadId: THREAD_ID,
-        mutation: { action: 'add', goals: [{ id: goal.id, title: goal.title }] },
-        goals: [goal],
-        now: 100,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      syncActiveGoalFocusFromGraphTransition({ threadId: THREAD_ID, goals: [goal], now: 100 }),
-    ).not.toThrow();
-    expect(
-      syncActiveTaskFromGoal({
-        threadId: THREAD_ID,
-        goalId: goal.id,
-        goalTitle: goal.title,
-        now: 100,
-      }),
-    ).toBeNull();
-
-    expect(getMemoryTask(goal.id)).toBeNull();
-    expect(
-      getWorkingBlock('active_focus', {
-        ...FOCUS_SCOPE,
-        taskId: goal.id,
-      }),
-    ).toBeNull();
     expect(readTaskStack(THREAD_ID)).toEqual([]);
   });
 

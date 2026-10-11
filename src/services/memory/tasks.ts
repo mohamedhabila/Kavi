@@ -2,18 +2,13 @@
 // Kavi — Memory task segmentation
 // ---------------------------------------------------------------------------
 // Durable task/topic rows for one canonical conversation. Tasks are explicit
-// structural segments (graph goal ids, tool-driven updates) — never inferred
-// from natural-language patterns.
+// structural segments — never inferred from natural-language patterns.
 // ---------------------------------------------------------------------------
 
-import type { AgentGoal, AgentGoalMutation } from '../../engine/goals/types';
-import { getActiveGoal, getGoalById } from '../../engine/goals/types';
 import { getMany, getOne } from './access/crud';
 import { getSchemaReadyMemoryDb } from './access/schemaGuard';
 import { notifyStructuredMemoryChanged } from './changeNotifications';
 import { canWriteLongTermMemory } from './policy';
-import { upsertGoalTaskEntry } from './taskStack';
-import { editPromptEligibleWorkingBlock } from './workingBlocks';
 import { runAfterMemoryTransactionCommit, runMemoryTransaction } from './access/transaction';
 import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import {
@@ -290,152 +285,4 @@ export function listMemoryTasks(
         limit,
       );
   return rows.map(rowToTask);
-}
-
-function mapGoalStatusToTaskState(status: AgentGoal['status']): MemoryTaskState {
-  if (status === 'active') return 'active';
-  if (status === 'completed') return 'completed';
-  return 'paused';
-}
-
-function resolveMutationGoal(
-  patch: AgentGoalMutation['goals'][number],
-  goals: ReadonlyArray<AgentGoal>,
-): AgentGoal | null {
-  const id = patch.id?.trim();
-  if (id) return getGoalById(goals, id);
-  const title = patch.title?.trim();
-  if (title) return goals.find((goal) => goal.title === title) ?? null;
-  return null;
-}
-
-function syncGoalTaskEntry(threadId: string, goal: AgentGoal, now: number): void {
-  const state = mapGoalStatusToTaskState(goal.status);
-  upsertGoalTaskEntry(threadId, goal.id, goal.title, state, now);
-  upsertMemoryTask({
-    id: goal.id,
-    threadId,
-    title: goal.title,
-    state,
-    now,
-  });
-}
-
-/**
- * Mirror graph goal mutations into memory_tasks and the task_stack working block.
- * Structural only — goal ids/titles come from update_goals, never from NL parsing.
- */
-export function syncGoalTasksFromMutation(params: {
-  threadId: string;
-  mutation: AgentGoalMutation;
-  goals: ReadonlyArray<AgentGoal>;
-  now?: number;
-}): void {
-  if (!canWriteLongTermMemory()) return;
-  const threadId = params.threadId.trim();
-  if (!threadId) return;
-  const now = params.now ?? Date.now();
-
-  for (const patch of params.mutation.goals) {
-    const goal = resolveMutationGoal(patch, params.goals);
-    if (!goal) continue;
-    syncGoalTaskEntry(threadId, goal, now);
-  }
-
-  const activeGoal = getActiveGoal(params.goals);
-  if (!activeGoal) return;
-
-  upsertGoalTaskEntry(threadId, activeGoal.id, activeGoal.title, 'active', now);
-  syncActiveTaskFromGoal({
-    threadId,
-    goalId: activeGoal.id,
-    goalTitle: activeGoal.title,
-    now,
-  });
-}
-
-export function syncActiveGoalFocusFromGraphTransition(params: {
-  threadId: string;
-  goals: ReadonlyArray<AgentGoal>;
-  now?: number;
-}): void {
-  if (!canWriteLongTermMemory()) return;
-  const activeGoal = getActiveGoal(params.goals);
-  if (!activeGoal) {
-    return;
-  }
-
-  syncActiveTaskFromGoal({
-    threadId: params.threadId,
-    goalId: activeGoal.id,
-    goalTitle: activeGoal.title,
-    now: params.now,
-  });
-}
-
-export function syncActiveTaskFromGoal(params: {
-  threadId: string;
-  goalId: string;
-  goalTitle: string;
-  threadTitle?: string;
-  now?: number;
-}): MemoryTask | null {
-  if (!canWriteLongTermMemory()) return null;
-  return runMemoryTransaction(() => {
-    const pausedTasks = listMemoryTasks(params.threadId, { includeCompleted: false });
-    const now = params.now ?? Date.now();
-    const db = getSchemaReadyMemoryDb();
-    let pausedCount = 0;
-
-    for (const task of pausedTasks) {
-      if (task.id === params.goalId || task.state !== 'active') continue;
-      pausedCount +=
-        db.runSync(
-          `UPDATE memory_tasks
-              SET state = 'paused', last_active_at = ?, updated_at = ?
-            WHERE id = ? AND state = 'active' AND deleted_at IS NULL`,
-          now,
-          now,
-          task.id,
-        ).changes ?? 0;
-    }
-    if (pausedCount > 0) {
-      advanceRestrictiveMemoryAuthorityInTransaction(db, getLocalMemoryVaultOwnerId(db));
-      runAfterMemoryTransactionCommit(() => notifyStructuredMemoryChanged(params.threadId));
-    }
-
-    const task = upsertMemoryTask({
-      id: params.goalId,
-      threadId: params.threadId,
-      title: params.goalTitle,
-      state: 'active',
-      now,
-    });
-
-    const focusContent = buildActiveGoalFocusContent(params.goalTitle, params.threadTitle);
-    if (focusContent) {
-      editPromptEligibleWorkingBlock(
-        'active_focus',
-        focusContent,
-        {
-          conversationId: params.threadId,
-          threadId: params.threadId,
-          taskId: params.goalId,
-        },
-        { now },
-      );
-    }
-
-    return task;
-  });
-}
-
-function buildActiveGoalFocusContent(goalTitle: string, threadTitle?: string): string {
-  const normalizedGoalTitle = goalTitle.trim();
-  const normalizedThreadTitle = threadTitle?.trim() ?? '';
-  if (!normalizedGoalTitle) return normalizedThreadTitle;
-  if (!normalizedThreadTitle || normalizedThreadTitle === normalizedGoalTitle) {
-    return normalizedGoalTitle;
-  }
-  return `${normalizedGoalTitle}\n${normalizedThreadTitle}`;
 }
