@@ -9,16 +9,15 @@ describe('agent persona prompts', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'Never narrate your internal tools, goals, workers, sessions, or other mechanics',
     );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'do not emit a formal workstream plan before the first tool call',
-    );
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Skip the plan for a request one step answers');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'start acting and keep any short pre-tool explanation concise',
     );
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'tools field is a strict security allowlist, not a task plan',
     );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('use update_goals before effectful work');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('keep a short plan with update_plan');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('update_goals');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('inspect user-designated files or attachments');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_wait');
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('one focused sessions_send continuation');

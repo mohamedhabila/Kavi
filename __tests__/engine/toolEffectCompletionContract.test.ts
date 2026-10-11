@@ -1,5 +1,5 @@
 import {
-  buildEffectCompletionContractBlock,
+  buildUnsupportedEffectContractBlock,
   findGoalForEffectCompletionRequirement,
   resolveToolEffectCompletionRequirement,
 } from '../../src/engine/toolExecution/toolEffectCompletionContract';
@@ -179,45 +179,24 @@ describe('tool effect completion contracts', () => {
     );
   });
 
-  it('returns a structured repair contract instead of weakening the requirement', async () => {
+  it('refuses an effect its contract cannot prove, without asking for a goal', async () => {
     const requirement = await resolveToolEffectCompletionRequirement({
       toolName: 'write_file',
-      argumentsText: JSON.stringify({ path: 'artifacts/out.txt', content: 'EXPECTED' }),
+      argumentsText: 'not-json',
     });
-    if (requirement.kind !== 'effectful') {
-      throw new Error('write_file must have an effect completion contract');
+    if (requirement.kind !== 'unsupported') {
+      throw new Error('unstructured write_file arguments must be unsupported');
     }
 
-    expect(JSON.parse(buildEffectCompletionContractBlock(requirement))).toEqual({
+    const block = JSON.parse(buildUnsupportedEffectContractBlock(requirement));
+    expect(block).toEqual({
       status: 'error',
-      code: 'completion_contract_required',
+      code: 'effect_arguments_invalid',
       tool: 'write_file',
-      requiredCriterion: requirement.serializedCriterion,
-      repair: {
-        retryable: true,
-        code: 'completion_contract_required',
-        tool: 'update_goals',
-        expectedShape: {
-          action: 'add',
-          id: expect.stringMatching(/^effect-write-file-[a-f0-9]{24}$/u),
-          name: 'Verify write_file effect',
-          completionPolicy: 'blocking',
-          status: 'active',
-          successCriteria: [requirement.serializedCriterion],
-        },
-        retryArguments: {
-          action: 'add',
-          id: expect.stringMatching(/^effect-write-file-[a-f0-9]{24}$/u),
-          name: 'Verify write_file effect',
-          completionPolicy: 'blocking',
-          status: 'active',
-          successCriteria: [requirement.serializedCriterion],
-        },
-        sideEffectApplied: false,
-      },
       message:
-        'Call update_goals with repair.retryArguments. After that graph mutation commits, retry the original effect on the following iteration.',
+        'The code-owned effect contract cannot prove this mutation. Do not execute or claim completion.',
     });
+    expect(block).not.toHaveProperty('repair');
   });
 
   it('derives a request-bound verified memory fact contract', async () => {

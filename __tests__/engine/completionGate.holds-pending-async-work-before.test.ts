@@ -1,25 +1,11 @@
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { evaluateCompletionGate } from '../../src/engine/graph/completionGate';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
-import type { AgentGoal } from '../../src/types/agentRun';
 import type { TrackedAsyncOperation } from '../../src/engine/pendingAsyncOperations';
 const baseTurnDirectives: AgentControlTurnDirectives = {
   forceFinalText: false,
   requireWorkflowTool: false,
   incompleteFinalTextRecoveryCount: 0,
 };
-function createGoal(overrides: Partial<AgentGoal> = {}): AgentGoal {
-  return {
-    id: 'g1',
-    title: 'Build feature',
-    status: 'pending',
-    dependencies: [],
-    evidence: [],
-    createdAt: 1000,
-    updatedAt: 1000,
-    ...overrides,
-  };
-}
 function createPendingOperation(
   overrides: Partial<TrackedAsyncOperation> = {},
 ): TrackedAsyncOperation {
@@ -43,7 +29,6 @@ function buildBaseParams() {
     pendingOperations: [] as TrackedAsyncOperation[],
     consecutivePendingAsyncNoToolTurns: 0,
     hasDraftContent: true,
-    goals: [] as AgentGoal[],
     toolingEnabledForProvider: true,
     selectedToolCount: 2,
     forceTextThisTurn: false,
@@ -58,11 +43,10 @@ function buildBaseParams() {
 }
 
 describe('completionGate', () => {
-  it('holds for pending async work before goals or delivery checks', () => {
+  it('holds for pending async work before delivery checks', () => {
     const pendingOperation = createPendingOperation();
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
-      goals: [createGoal({ status: 'active' })],
       trackedOperations: new Map([[pendingOperation.key, pendingOperation]]),
       pendingOperations: [pendingOperation],
     });
@@ -172,52 +156,9 @@ describe('completionGate', () => {
       expect(decision.systemPrompts.join('\n')).toContain('omitted the chunk body');
     }
   });
-  it('does not hold for default persistent active goals that lack success criteria', () => {
+  it('continues incomplete final text', () => {
     const decision = evaluateCompletionGate({
       ...buildBaseParams(),
-      selectedToolNames: new Set([GOAL_BOOTSTRAP_TOOL_NAME]),
-      goals: [createGoal({ status: 'active' })],
-    });
-
-    expect(decision).toEqual({ type: 'ready' });
-  });
-  it('ignores persistent goals with unmet criteria in completion gating', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [
-        createGoal({
-          status: 'active',
-          completionPolicy: 'persistent',
-          successCriteria: ['evidence.min:2'],
-          evidence: ['read_file:content'],
-        }),
-      ],
-    });
-
-    expect(decision).toEqual({ type: 'ready' });
-  });
-  it('skips goal holds when tool recovery cannot run this turn', () => {
-    const goals = [createGoal({ status: 'active' })];
-
-    expect(
-      evaluateCompletionGate({
-        ...buildBaseParams(),
-        goals,
-        toolingEnabledForProvider: false,
-      }),
-    ).toEqual({ type: 'ready' });
-    expect(
-      evaluateCompletionGate({
-        ...buildBaseParams(),
-        goals,
-        forceTextThisTurn: true,
-      }),
-    ).toEqual({ type: 'ready' });
-  });
-  it('continues incomplete final text when goals are complete', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [createGoal({ status: 'completed' })],
       fullContent: 'partial final answer',
       completion: {
         completionStatus: 'incomplete',
@@ -238,31 +179,5 @@ describe('completionGate', () => {
         incompleteFinalTextRecoveryCount: 1,
       }),
     );
-  });
-  it('does not hold for graph mutation errors after a later successful graph mutation', () => {
-    const decision = evaluateCompletionGate({
-      ...buildBaseParams(),
-      goals: [],
-      toolCallHistory: [
-        {
-          id: 'tc-failed-goals',
-          name: GOAL_BOOTSTRAP_TOOL_NAME,
-          arguments: '{"action":"complete","id":"missing"}',
-          timestamp: 1,
-          status: 'failed',
-          result: JSON.stringify({ status: 'error' }),
-        },
-        {
-          id: 'tc-ok-goals',
-          name: GOAL_BOOTSTRAP_TOOL_NAME,
-          arguments: '{"action":"add","id":"scope","name":"Scope"}',
-          timestamp: 2,
-          status: 'completed',
-          result: JSON.stringify({ status: 'ok' }),
-        },
-      ],
-    });
-
-    expect(decision).toEqual({ type: 'ready' });
   });
 });

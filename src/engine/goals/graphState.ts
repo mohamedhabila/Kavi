@@ -21,7 +21,6 @@ import {
   normalizeGoals,
   resolveGoalCompletionPolicy,
 } from './types';
-import { formatGoalValidationErrorMessage } from './mutationErrors';
 import { backfillGoalEvidenceFromExistingGoals } from './evidenceRouting';
 import { validateGoalMutation } from './validation';
 import type { GoalMutationValidationContext } from './validation';
@@ -196,7 +195,7 @@ function isActivationOnlyUpdate(
   );
 }
 
-export function normalizeGoalMutationForApplication(
+function normalizeGoalMutationForApplication(
   currentGoals: ReadonlyArray<AgentGoal>,
   inputMutation: AgentGoalMutation,
 ): AgentGoalMutation {
@@ -340,7 +339,9 @@ export function applyGoalMutation(
   if (!validation.valid) {
     return {
       goals: currentGoals.map((g) => ({ ...g })),
-      errors: validation.errors.map(formatGoalValidationErrorMessage),
+      errors: validation.errors.map((error) =>
+        error.goalId ? `[${error.goalId}] ${error.message}` : error.message,
+      ),
     };
   }
 

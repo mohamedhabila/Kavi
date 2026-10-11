@@ -110,7 +110,7 @@ describe('chitchat authority is decided by contract, not a maintained tool-name 
     const authorized = chitchat();
 
     expect(authorized.has('sessions_spawn')).toBe(false);
-    expect(authorized.has('update_goals')).toBe(false);
+    expect(authorized.has('update_plan')).toBe(false);
     expect(authorized.has('ssh_exec')).toBe(false);
     expect(authorized.has('python')).toBe(false);
   });

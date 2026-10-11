@@ -3,7 +3,6 @@ import type { SubAgentSnapshot } from '../../../src/types/subAgent';
 import { reduceAgentControlGraph } from '../../../src/engine/graph/agentControlGraph';
 import { createInitialAgentRunControlGraphState } from '../../../src/services/agents/agentControlGraphState';
 import { applySubAgentTerminalControlGraphEffects } from '../../../src/services/agents/subAgentGoalGraphEffects';
-import { resolveSpawnGoalScope } from '../../../src/services/agents/mobileSpawnPolicy';
 import {
   DEVANAGARI_COMBINING_TEXT,
   SURROGATE_PAIR_EMOJI,
@@ -29,31 +28,6 @@ function buildWorker(overrides: Partial<SubAgentSnapshot> = {}): SubAgentSnapsho
 }
 
 describe('subAgent goal scope integration', () => {
-  it('binds spawn goalScope to parent graph goals', () => {
-    const goals = [
-      {
-        id: 'goal-a',
-        title: 'Collect sources',
-        status: 'active' as const,
-        dependencies: [],
-        evidence: [],
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ];
-
-    expect(
-      resolveSpawnGoalScope({
-        goalIds: ['goal-a'],
-        goals,
-      }),
-    ).toEqual({
-      status: 'ready',
-      workstreamId: 'goal-a',
-      scopedGoals: goals,
-    });
-  });
-
   it('records GOAL_EVIDENCE_ADDED on the active goal when workstreamId is missing', () => {
     const baseGraph = reduceAgentControlGraph(
       createInitialAgentRunControlGraphState({ updatedAt: 100 }),

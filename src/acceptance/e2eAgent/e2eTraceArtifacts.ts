@@ -30,7 +30,6 @@ export type {
   E2ERedactedToolCallTrace,
   E2ERedactedToolCatalogResultTrace,
   E2ERedactedToolResultTrace,
-  E2ERedactedUpdateGoalsResultTrace,
 } from './e2eTraceToolResults';
 export type {
   E2ERedactedPromptCacheEvent,

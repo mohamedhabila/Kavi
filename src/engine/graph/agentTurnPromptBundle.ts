@@ -24,11 +24,12 @@ export interface AgentTurnPromptBundleParams {
   allTools?: ReadonlyArray<ToolDefinition>;
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
-  goalsPromptSection?: string | null;
   groundedRequestScopedTools: ReadonlyArray<ToolDefinition>;
   iteration: number;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;
   maxToolIterations: number;
+  /** The run's plan as the model last set it; see `renderPlanPromptSection`. */
+  planPromptSection?: string | null;
   resolvedPrompt: string;
   runtimeContext?: string | null;
   runtimePolicyPrompt?: string | null;
@@ -90,8 +91,8 @@ export function buildAgentTurnPromptBundle(
       : null,
     { purpose: 'workflow_task_anchor' },
   );
-  appendSystemPromptSection(baseSystemPromptSections, params.goalsPromptSection, {
-    purpose: 'goals',
+  appendSystemPromptSection(baseSystemPromptSections, params.planPromptSection, {
+    purpose: 'plan',
   });
   const orderedBaseSystemPromptSections =
     orderSystemPromptSectionsForCaching(baseSystemPromptSections);

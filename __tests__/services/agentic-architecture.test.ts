@@ -169,7 +169,7 @@ describe('SuperAgent prompt — sub-agent tool guidance', () => {
     expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
       'tools field is a strict security allowlist, not a task plan',
     );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('incomplete blocking goal exists');
+    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain('blocking goal');
   });
 
   it('keeps workstream binding optional without forcing a formal plan', () => {

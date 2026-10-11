@@ -4,7 +4,7 @@ import { hashString, uniqueSorted, type E2ERedactedHash } from './e2eTraceRedact
 const SAFE_PUBLIC_TOOL_NAME_SET = new Set<string>([
   'tool_catalog',
   'tool_describe',
-  'update_goals',
+  'update_plan',
   ...Object.values(TOOL_CATALOG_CATEGORIES).flatMap((category) => category.tools),
 ]);
 

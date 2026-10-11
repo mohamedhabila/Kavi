@@ -1,28 +1,21 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
 import { buildAgentControlGraphPostToolFinalTextDirectiveEvent } from '../../src/engine/graph/turnDirectives';
-import type { AgentGoal } from '../../src/engine/goals/types';
+import type { AgentPlanStep } from '../../src/types/agentRun';
 import { buildBaseParams, createToolMessage } from '../helpers/toolExecutionOutcomeHarness';
 
 // Traced on the GLM 5.3 Flash suite (organic-mobile-assistant-continuity). Asked to create a
-// calendar event, the model looked up the calendar tools and declared its goal in one
-// batch. The goal was held as persistent focus, and a rule read "an active persistent goal
-// and no open blocking one" as the request being done: the next turn was offered no tools
-// and the run finalized with no event created. The rule is gone; the model ends a request
-// by answering, as in any agent loop.
+// calendar event, the model looked up the calendar tools and stated its plan in one batch.
+// A rule read the plan-keeping call as the request being settled: the next turn was offered
+// no tools and the run finalized with no event created. Keeping a plan decides nothing; the
+// model ends a request by answering, as in any agent loop.
 
-const TRACED_GOAL_ADD = JSON.stringify({
-  action: 'add',
-  goals: [
+const TRACED_PLAN = JSON.stringify({
+  plan: [
     {
-      id: 'design-review-event',
-      name: 'Create Organic design review event',
-      status: 'active',
-      completionPolicy: 'blocking',
-      successCriteria: [
-        "exactly one event titled 'Organic design review' on 2026-07-16 starting 14:00Z, 45-minute duration",
-        'verified via calendar_events read',
-      ],
+      step: 'Create the Organic design review event on 2026-07-16 at 14:00Z',
+      status: 'in_progress',
     },
+    { step: 'Read the calendar back to confirm it', status: 'pending' },
   ],
 });
 
@@ -30,11 +23,11 @@ async function resolveBatch(
   calls: ReadonlyArray<{ name: string; arguments: string; content: string }>,
 ) {
   const params = buildBaseParams();
-  let goals: AgentGoal[] = [];
-  params.getGraphSnapshot = jest.fn(() => ({ goals }));
+  let plan: AgentPlanStep[] | undefined;
+  params.getGraphSnapshot = jest.fn(() => ({ ...(plan ? { plan } : {}) }));
   params.applyGraphEvents = jest.fn((events) => {
     for (const event of events) {
-      if (event.type === 'GOALS_UPDATED') goals = event.goals;
+      if (event.type === 'PLAN_UPDATED') plan = event.plan;
     }
   });
   const forcedText: string[] = [];
@@ -58,23 +51,21 @@ async function resolveBatch(
     }),
   }));
   await resolveAgentControlGraphToolExecutionOutcomes(params);
-  return { forcedText, goals };
+  return { forcedText, plan };
 }
 
-describe('a persistent goal after a tool batch', () => {
+describe('a plan stated alongside a tool lookup', () => {
   it('leaves the model its tools to do the work it just looked up', async () => {
-    const { forcedText, goals } = await resolveBatch([
+    const { forcedText, plan } = await resolveBatch([
       {
         name: 'tool_catalog',
         arguments: '{"category":"calendar"}',
         content: '{"mode":"category","category":"calendar","tools":[]}',
       },
-      { name: 'update_goals', arguments: TRACED_GOAL_ADD, content: '{"status":"ok"}' },
+      { name: 'update_plan', arguments: TRACED_PLAN, content: 'Plan updated' },
     ]);
 
-    expect(goals.find((goal) => goal.id === 'design-review-event')?.completionPolicy).toBe(
-      'persistent',
-    );
+    expect(plan?.[0]?.status).toBe('in_progress');
     expect(forcedText).toEqual([]);
   });
 });

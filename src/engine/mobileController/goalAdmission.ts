@@ -1,10 +1,5 @@
 import type { AgentGoal } from '../goals/types';
 import { isBlockingGoal } from '../goals/types';
-import { arePersistedAgentGoalUserConstraintsCanonical } from '../goals/userConstraints';
-import {
-  isCountOnlySuccessCriterion,
-  isRecognizedSuccessCriterionForm,
-} from '../goals/completionEvidence';
 import { applyGoalMutation } from '../goals/graphState';
 import { MOBILE_UI_ACTION_TOOL_NAME } from './contracts';
 
@@ -12,81 +7,23 @@ import { MOBILE_UI_ACTION_TOOL_NAME } from './contracts';
  * Owner stamp for the goal `materializeMobileControllerGoal` opens from the call
  * itself. Mirrors `CODE_OWNED_EFFECT_COMPLETION_GOAL_OWNER`
  * (`src/engine/goals/types.ts`): a `system:`-prefixed owner marks bookkeeping the
- * graph created, not something the model authored, so it is exempt from the
- * model-authored path's user-constraint requirement below — there is no user
- * intent to drift from, only one already-issued action to anchor.
+ * graph created, not something the model authored.
  */
 export const MOBILE_CONTROLLER_GOAL_OWNER = 'system:mobile-controller';
 const MOBILE_CONTROLLER_GOAL_ID_BASE = 'mobile-ui-action';
 const MOBILE_CONTROLLER_EVIDENCE_CRITERION = `evidence.tool:${MOBILE_UI_ACTION_TOOL_NAME}`;
 
-function hasSpecificStructuralSuccessCondition(goal: AgentGoal): boolean {
-  const criteria = goal.successCriteria ?? [];
-  return (
-    criteria.length > 0 &&
-    criteria.every(isRecognizedSuccessCriterionForm) &&
-    criteria.some((criterion) => !isCountOnlySuccessCriterion(criterion))
-  );
-}
-
-/** A model-authored goal shaped exactly as the admission gate requires. */
-function isAdmissibleModelAuthoredGoal(goal: AgentGoal): boolean {
-  return (
-    goal.status === 'active' &&
-    isBlockingGoal(goal) &&
-    hasSpecificStructuralSuccessCondition(goal) &&
-    goal.userConstraintIntegrity !== 'conflict' &&
-    arePersistedAgentGoalUserConstraintsCanonical(goal.userConstraints)
-  );
-}
-
 /**
- * A goal `materializeMobileControllerGoal` opened from the `mobile_ui_action` call
- * itself. It carries the one evidence criterion the call's own effect satisfies, so
- * completion is anchored the moment the action runs — no model-authored user
- * constraint applies to code-owned bookkeeping.
+ * A goal `materializeMobileControllerGoal` opened from a `mobile_ui_action` call. It
+ * carries the one evidence criterion the call's own effect satisfies.
  */
-function isAdmissibleCodeOwnedMobileControllerGoal(goal: AgentGoal): boolean {
+function isCodeOwnedMobileControllerGoal(goal: AgentGoal): boolean {
   return (
     goal.status === 'active' &&
     isBlockingGoal(goal) &&
     goal.owner === MOBILE_CONTROLLER_GOAL_OWNER &&
     (goal.successCriteria ?? []).includes(MOBILE_CONTROLLER_EVIDENCE_CRITERION)
   );
-}
-
-export function hasGraphAnchoredMobileControllerGoal(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): boolean {
-  return (goals ?? []).some(
-    (goal) => isAdmissibleCodeOwnedMobileControllerGoal(goal) || isAdmissibleModelAuthoredGoal(goal),
-  );
-}
-
-export function buildMobileControllerGoalAdmissionBlock(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): string | undefined {
-  if (hasGraphAnchoredMobileControllerGoal(goals)) return undefined;
-
-  return JSON.stringify({
-    status: 'error',
-    code: 'mobile_controller_goal_required',
-    tool: MOBILE_UI_ACTION_TOOL_NAME,
-    repair: {
-      retryable: true,
-      code: 'mobile_controller_goal_required',
-      tool: 'update_goals',
-      requiredGoal: {
-        status: 'active',
-        completionPolicy: 'blocking',
-        retainCurrentUserConstraint: true,
-        minimumSuccessCriteria: 1,
-        specificStructuralCriterionRequired: true,
-      },
-    },
-    message:
-      'Before using mobile_ui_action, call update_goals in a separate turn to create or update an active blocking goal with at least one recognized, non-count-only structural success criterion and retainCurrentUserConstraint:true.',
-  });
 }
 
 function buildUnusedGoalId(goals: ReadonlyArray<AgentGoal>): string {
@@ -148,17 +85,9 @@ export type MobileControllerGoalMaterialization =
   | { status: 'materialized'; goals: AgentGoal[]; reason: string };
 
 /**
- * Materializes the bookkeeping goal `mobile_ui_action` requires, instead of
- * refusing the call until the model builds one by hand.
- *
- * The admission gate only ever needed one thing: an active blocking goal anchored
- * to this exact call, carrying `evidence.tool:mobile_ui_action`. A gate that can
- * state that shape precisely enough to serialize it does not need the model to
- * supply it — reconciling it here lets the very first `mobile_ui_action` call in a
- * conversation succeed instead of being rejected and asked to type back the goal
- * the graph already knows how to build. It deliberately never touches a goal the
- * model owns; when one already admits the call (model-authored or a previous
- * code-owned goal from this same tool), this is a no-op.
+ * Records a `mobile_ui_action` call as a code-owned goal, the run's record that a device
+ * action is under way. It never touches a goal the model owns, and one goal covers every
+ * later call in the same run.
  */
 export function materializeMobileControllerGoal(params: {
   toolCalls: ReadonlyArray<{ name: string; arguments?: string }>;
@@ -172,7 +101,7 @@ export function materializeMobileControllerGoal(params: {
     return { status: 'unchanged', goals };
   }
 
-  if (hasGraphAnchoredMobileControllerGoal(goals)) {
+  if (goals.some(isCodeOwnedMobileControllerGoal)) {
     return { status: 'unchanged', goals };
   }
 

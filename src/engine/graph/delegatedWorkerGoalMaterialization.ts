@@ -10,31 +10,12 @@ import { isBlockingGoal } from '../goals/types';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 
 /**
- * Materializes the delegated-worker goal `sessions_spawn` requires, instead of refusing
- * the call until the model builds it by hand.
+ * Opens the workstream a joined `sessions_spawn` runs under: a code-owned delegated-worker
+ * goal whose criteria say a worker report is the deliverable. The worker's deliverable
+ * kind and the supervisor's record of its launch and result are read from it.
  *
- * `resolveDelegatedWorkerSpawnPlan` gates a spawn behind a goal of one exact shape:
- * blocking, owned by `delegated-worker`, carrying the `coordinate` capability and both
- * worker evidence criteria. When the run does not already have one it returned
- * `dedicated_worker_goal_required` and spelled the whole object out in
- * `repair.expectedShape` — a rejection whose payload is the answer, asking the model to
- * type back what the graph had already computed.
- *
- * Traced on-device, that cost a fixed round-trip every time and frequently more than
- * one: the first spawn was refused, the `update_goals` that followed landed a goal whose
- * criteria did not match, the second gate refused that too, and only the third attempt
- * spawned. It reads to a user as "spawn always fails" with duplicated, failing goal
- * updates in between, because that is exactly what it is.
- *
- * A gate that can state the required object precisely enough to serialize it does not
- * need the model to supply it. This reconciles the goal graph toward the shape the gate
- * demands and lets the spawn proceed. It is code-owned, so the model never invents the
- * delegation contract and the gate's invariants are strengthened rather than relaxed:
- * every goal it creates satisfies them by construction.
- *
- * It deliberately does not touch a goal the model owns. Repair is confined to goals
- * already owned by `delegated-worker`, and creation only ever adds a new goal alongside
- * the parent deliverable — never repurposes it, which is the case the gate exists for.
+ * It does not touch a goal the model owns. Repair is confined to goals already owned by
+ * `delegated-worker`, and creation only ever adds a new goal alongside the others.
  */
 
 export type DelegatedWorkerGoalMaterialization =
@@ -55,7 +36,7 @@ function hasBothWorkerCriteria(goal: AgentGoal): boolean {
   );
 }
 
-/** A goal the spawn gate would accept as-is. */
+/** A complete delegated-worker workstream, which a spawn runs under as-is. */
 function isEligibleDedicatedWorkerGoal(goal: AgentGoal): boolean {
   return (
     goal.status !== 'completed' &&
@@ -66,7 +47,7 @@ function isEligibleDedicatedWorkerGoal(goal: AgentGoal): boolean {
   );
 }
 
-/** Owned by delegation and still open, but shaped so the gate would refuse it. */
+/** Owned by delegation and still open, but missing part of the workstream contract. */
 function isRepairableDedicatedWorkerGoal(goal: AgentGoal): boolean {
   return (
     goal.status !== 'completed' &&
@@ -148,16 +129,6 @@ export function materializeDelegatedWorkerGoal(params: {
       !isDetachedLaunch(toolCall.arguments),
   );
   if (!spawnsAJoinedWorker) {
-    return { status: 'unchanged', goals };
-  }
-
-  /**
-   * The gate only judges a run that already has a structured goal graph
-   * (`hasStructuredGoalGraph` in `resolveDelegatedWorkerSpawnPlan`). A run with no goals
-   * at all is not refused for lacking a delegation goal, so opening one here would add a
-   * blocking obligation to a launch that was already going to succeed.
-   */
-  if (goals.length === 0) {
     return { status: 'unchanged', goals };
   }
 

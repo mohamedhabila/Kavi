@@ -1,8 +1,5 @@
 import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from '../../engine/tools/builtin-tool-catalogConfig';
 import type { ToolCapability } from '../../engine/tools/capabilityRegistry';
-import type { GoalValidationErrorCode } from '../../engine/goals/validation';
-import type { AgentGoalMutation } from '../../engine/goals/types';
-import type { AgentGoal } from '../../types/agentRun';
 import type { E2EToolCallRecord, E2EToolResultRecord } from './types';
 import {
   buildValueFingerprint,
@@ -50,7 +47,6 @@ const SAFE_TOOL_STATUSES = [
 ] as const;
 
 type E2ESafeToolStatus = (typeof SAFE_TOOL_STATUSES)[number];
-type E2ESafeGoalAction = AgentGoalMutation['action'];
 type E2ESafeToolCatalogMode = 'describe' | 'search';
 
 export type E2ERedactedToolCallTrace = {
@@ -64,18 +60,6 @@ export type E2ERedactedToolCallTrace = {
 
 export type E2ERedactedStatusFieldTrace = E2ERedactedValueFingerprint & {
   enumValue?: E2ESafeToolStatus;
-};
-
-export type E2ERedactedUpdateGoalsResultTrace = {
-  status?: E2ESafeToolStatus;
-  statusHash?: E2ERedactedHash;
-  action?: E2ESafeGoalAction;
-  actionHash?: E2ERedactedHash;
-  errorCount: number;
-  structuredErrorCodeCount: number;
-  structuredErrorCodes: GoalValidationErrorCode[];
-  structuredErrorCodeHashes: E2ERedactedHash[];
-  goalIdHashesByStatus: Record<AgentGoal['status'], E2ERedactedHash[]>;
 };
 
 export type E2ERedactedToolCatalogResultTrace = {
@@ -101,38 +85,11 @@ export type E2ERedactedToolResultTrace = {
   contentHash: E2ERedactedHash;
   jsonSchemaDigest: string;
   statusFields: E2ERedactedStatusFieldTrace[];
-  updateGoalsResult?: E2ERedactedUpdateGoalsResultTrace;
   toolCatalogResult?: E2ERedactedToolCatalogResultTrace;
 };
 
 const STATUS_FIELD_PATHS = ['ok', 'status', 'code', 'errorClass', 'error'] as const;
-const GOAL_STATUSES = new Set<AgentGoal['status']>(['pending', 'active', 'completed', 'blocked']);
 const SAFE_TOOL_STATUS_SET = new Set<string>(SAFE_TOOL_STATUSES);
-const SAFE_GOAL_ACTION_SET = new Set<string>([
-  'add',
-  'complete',
-  'activate',
-  'block',
-  'remove',
-  'update',
-]);
-const SAFE_GOAL_VALIDATION_ERROR_CODE_SET = new Set<string>([
-  'missing_title',
-  'missing_completion_policy',
-  'missing_success_criteria',
-  'weak_success_criteria',
-  'invalid_success_criteria',
-  'goal_not_found',
-  'duplicate_id',
-  'dependency_missing',
-  'cycle_detected',
-  'invalid_lifecycle',
-  'evidence_required',
-  'evidence_satisfied',
-  'invalid_block',
-  'invalid_update_action',
-  'invalid_add_status',
-]);
 const SAFE_TOOL_CAPABILITY_SET = new Set<string>([
   'discover',
   'read',
@@ -197,88 +154,14 @@ export function buildToolResultTrace(result: E2EToolResultRecord): E2ERedactedTo
     contentHash: hashString(result.content),
     jsonSchemaDigest: schemaDigest(parsed),
     statusFields,
-    ...(result.name === 'update_goals'
-      ? { updateGoalsResult: buildUpdateGoalsResultTrace(parsed) }
-      : {}),
     ...(result.name === 'tool_catalog'
       ? { toolCatalogResult: buildToolCatalogResultTrace(parsed) }
       : {}),
   };
 }
 
-function isGoalStatus(value: unknown): value is AgentGoal['status'] {
-  return typeof value === 'string' && GOAL_STATUSES.has(value as AgentGoal['status']);
-}
-
-function buildGoalIdHashesByStatusFromJson(
-  goals: unknown,
-): Record<AgentGoal['status'], E2ERedactedHash[]> {
-  const byStatus: Record<AgentGoal['status'], string[]> = {
-    pending: [],
-    active: [],
-    completed: [],
-    blocked: [],
-  };
-  if (Array.isArray(goals)) {
-    for (const goal of goals) {
-      if (!goal || typeof goal !== 'object' || Array.isArray(goal)) {
-        continue;
-      }
-      const record = goal as Record<string, unknown>;
-      if (typeof record.id === 'string' && isGoalStatus(record.status)) {
-        byStatus[record.status].push(record.id);
-      }
-    }
-  }
-
-  const hashIds = (ids: string[]) =>
-    uniqueSorted(ids)
-      .map(hashString)
-      .sort((left, right) => left.hash.localeCompare(right.hash));
-  return {
-    pending: hashIds(byStatus.pending),
-    active: hashIds(byStatus.active),
-    completed: hashIds(byStatus.completed),
-    blocked: hashIds(byStatus.blocked),
-  };
-}
-
 function hashOptionalString(value: unknown): E2ERedactedHash | undefined {
   return typeof value === 'string' && value.length > 0 ? hashString(value) : undefined;
-}
-
-function buildUpdateGoalsResultTrace(parsed: unknown): E2ERedactedUpdateGoalsResultTrace {
-  const record =
-    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  const structuredErrors = Array.isArray(record.structuredErrors) ? record.structuredErrors : [];
-  const allStructuredErrorCodes = uniqueSorted(
-    structuredErrors
-      .map((entry) =>
-        entry && typeof entry === 'object' && !Array.isArray(entry)
-          ? (entry as Record<string, unknown>).code
-          : undefined,
-      )
-      .filter((code): code is string => typeof code === 'string'),
-  );
-  const status = safeAllowedString<E2ESafeToolStatus>(record.status, SAFE_TOOL_STATUS_SET);
-  const action = safeAllowedString<E2ESafeGoalAction>(record.action, SAFE_GOAL_ACTION_SET);
-  const statusHash = hashOptionalString(record.status);
-  const actionHash = hashOptionalString(record.action);
-  return {
-    ...(status ? { status } : {}),
-    ...(statusHash ? { statusHash } : {}),
-    ...(action ? { action } : {}),
-    ...(actionHash ? { actionHash } : {}),
-    errorCount: Array.isArray(record.errors) ? record.errors.length : 0,
-    structuredErrorCodeCount: allStructuredErrorCodes.length,
-    structuredErrorCodes: allStructuredErrorCodes.filter((code) =>
-      SAFE_GOAL_VALIDATION_ERROR_CODE_SET.has(code),
-    ) as GoalValidationErrorCode[],
-    structuredErrorCodeHashes: allStructuredErrorCodes.map(hashString),
-    goalIdHashesByStatus: buildGoalIdHashesByStatusFromJson(record.goals),
-  };
 }
 
 function buildToolCatalogResultTrace(parsed: unknown): E2ERedactedToolCatalogResultTrace {

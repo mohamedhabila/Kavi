@@ -73,7 +73,7 @@ describe('error recovery benchmark', () => {
             title: 'unsafe-deliverable',
             status: 'active',
             completionPolicy: 'blocking',
-            successCriteria: ['evidence.tool:update_goals'],
+            successCriteria: ['evidence.tool:update_plan'],
           },
         ],
       },

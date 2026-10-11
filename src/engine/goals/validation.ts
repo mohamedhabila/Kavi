@@ -31,7 +31,7 @@ import {
 
 export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
 
-export type GoalValidationErrorCode =
+type GoalValidationErrorCode =
   | 'missing_title'
   | 'missing_completion_policy'
   | 'missing_success_criteria'
@@ -52,7 +52,7 @@ export type GoalValidationErrorCode =
   | 'ungrounded_user_constraints'
   | 'unsupported_user_constraints';
 
-export interface GoalValidationError {
+interface GoalValidationError {
   goalId?: string;
   code: GoalValidationErrorCode;
   message: string;
@@ -567,31 +567,4 @@ function detectDependencyCycle(
   }
 
   return null;
-}
-
-export function validateGoalReferences(goals: ReadonlyArray<AgentGoal>): GoalValidationResult {
-  const errors: GoalValidationError[] = [];
-  const ids = new Set(goals.map((g) => g.id));
-
-  for (const g of goals) {
-    for (const depId of g.dependencies) {
-      if (!ids.has(depId)) {
-        errors.push({
-          goalId: g.id,
-          code: 'dependency_missing',
-          message: `Dependency "${depId}" refers to a non-existent goal.`,
-        });
-      }
-    }
-  }
-
-  const cycle = detectDependencyCycle([], goals);
-  if (cycle) {
-    errors.push({
-      code: 'cycle_detected',
-      message: `Circular dependency detected: ${cycle.join(' → ')}.`,
-    });
-  }
-
-  return { valid: errors.length === 0, errors };
 }

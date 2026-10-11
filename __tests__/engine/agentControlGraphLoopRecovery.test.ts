@@ -1,5 +1,4 @@
 import { buildAgentControlGraphLoopRecoveryDecision } from '../../src/engine/graph/loopRecovery';
-import { createGoal } from '../../src/engine/goals/types';
 import type { LoopDetectionResult } from '../../src/engine/loopDetection';
 
 function warningLoop(overrides: Partial<LoopDetectionResult> = {}): LoopDetectionResult {
@@ -71,35 +70,7 @@ describe('agent control graph loop recovery', () => {
     });
   });
 
-  it('includes machine-readable goal mutation validation codes in recovery hints', () => {
-    const decision = buildAgentControlGraphLoopRecoveryDecision({
-      loopCheck: warningLoop({ type: 'goal_mutation_stall' }),
-      warningAlreadyInjected: false,
-      iteration: 3,
-      maxIterations: 25,
-      toolCallHistory: [
-        {
-          name: 'update_goals',
-          arguments: '{}',
-          timestamp: Date.now(),
-          result: JSON.stringify({
-            status: 'error',
-            action: 'activate',
-            structuredErrors: [{ code: 'goal_not_found', message: 'missing goal' }],
-          }),
-        },
-      ],
-    });
-
-    expect(decision.type).toBe('warning');
-    if (decision.type === 'warning') {
-      expect(decision.warningMessage).toContain('goal_not_found');
-      expect(decision.warningMessage).toContain('"id":"stable-id"');
-      expect(decision.warningMessage).toContain('"name":"visible name"');
-    }
-  });
-
-  it('uses stagnant-progress recovery wording when goal state does not advance', () => {
+  it('uses stagnant-progress recovery wording when the work does not advance', () => {
     const decision = buildAgentControlGraphLoopRecoveryDecision({
       loopCheck: warningLoop({ type: 'stagnant_progress' }),
       warningAlreadyInjected: false,
@@ -109,21 +80,7 @@ describe('agent control graph loop recovery', () => {
 
     expect(decision.type).toBe('warning');
     expect(decision.type === 'warning' ? decision.warningMessage : '').toContain(
-      'Goal state did not advance',
-    );
-  });
-
-  it('uses bootstrap-specific recovery wording when goals never materialize', () => {
-    const decision = buildAgentControlGraphLoopRecoveryDecision({
-      loopCheck: warningLoop({ type: 'bootstrap_stall' }),
-      warningAlreadyInjected: false,
-      iteration: 3,
-      maxIterations: 25,
-    });
-
-    expect(decision.type).toBe('warning');
-    expect(decision.type === 'warning' ? decision.warningMessage : '').toContain(
-      'Goal bootstrap did not advance',
+      'The last steps did not advance the work',
     );
   });
 
@@ -152,17 +109,6 @@ describe('agent control graph loop recovery', () => {
       warningAlreadyInjected: true,
       iteration: 9,
       maxIterations: 25,
-      goals: [
-        createGoal({
-          id: 'calendar-goal',
-          title: 'Calendar mutation',
-          description: 'Create a calendar event titled E2E Native Review, then update it.',
-          status: 'active',
-          successCriteria: ['evidence.tool:calendar_create_event'],
-          completionPolicy: 'blocking',
-          now: 1,
-        }),
-      ],
       toolCallHistory: [
         {
           name: 'calendar_create_event',
@@ -193,13 +139,10 @@ describe('agent control graph loop recovery', () => {
       'calendar_create_event: missing_required_argument fields title',
     );
     expect(decision.type === 'warning' ? decision.warningMessage : '').toContain(
-      'Active task focus: [calendar-goal] Calendar mutation: Create a calendar event titled E2E Native Review, then update it.',
-    );
-    expect(decision.type === 'warning' ? decision.warningMessage : '').toContain(
       'retry the failed tool with corrected top-level arguments',
     );
     expect(decision.type === 'warning' ? decision.warningMessage : '').toContain(
-      'user request, graph goals, or prior tool outputs',
+      'user request or prior tool outputs',
     );
   });
 });

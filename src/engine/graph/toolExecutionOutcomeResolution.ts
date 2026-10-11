@@ -13,6 +13,7 @@ import type { AgentControlGraphEvent, AgentControlTurnDirectives } from './agent
 import { finalizeAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomePostProcessing';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
+import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
 import { buildToolGoalEvidenceStrings } from '../goals/toolEvidence';
 import { routeToolEvidenceToActiveGoals } from '../goals/evidenceRouting';
 import { buildToolEffectReceiptEvidence } from '../goals/effectCompletionEvidence';
@@ -216,21 +217,11 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     const rawToolName = resolveRegisteredToolName(
       rawGraphToolCall?.name || executableToolCall?.name || outcome.toolCallId,
     );
-    // Goal mutations are code-owned and effect-free. Resolve them in model order
-    // against the latest graph snapshot so a turn can establish multiple
-    // independent workstreams without silently dropping every mutation after
-    // the first one. Effectful tools remain separated from goal mutations by
-    // the execution boundary enforced before dispatch.
     const canonicalOutcome = canonicalizeToolExecutionOutcome({
       outcome,
       toolName: rawToolName,
       executableToolCalls: params.executableToolCalls,
-      toolCallHistory: params.toolCallHistory,
-      getGraphSnapshot: params.getGraphSnapshot,
       applyGraphEvents: params.applyGraphEvents,
-      conversationId: params.conversationId,
-      currentUserMessage: params.currentUserMessage,
-      warn: params.warn,
     });
     const toolName = resolveRegisteredToolName(
       canonicalOutcome.toolMessage.toolCalls?.[0]?.name ||
@@ -258,7 +249,7 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
       clarificationRequest ??= parsedClarification;
     }
     const toolResultCanAdvanceWorkflow =
-      toolName !== 'update_goals' && toolName !== REQUEST_CLARIFICATION_TOOL_NAME;
+      toolName !== UPDATE_PLAN_TOOL_NAME && toolName !== REQUEST_CLARIFICATION_TOOL_NAME;
     updateToolCallHistoryResult({
       history: params.toolCallHistory,
       toolCallId: canonicalOutcome.toolCallId,

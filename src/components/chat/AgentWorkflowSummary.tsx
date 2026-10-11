@@ -5,7 +5,10 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { useAppTheme } from '../../theme/useAppTheme';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import type { AgentRun } from '../../types/agentRun';
-import { buildAgentWorkflowPresentation, formatGoalStatusLabel } from './agentWorkflowPresentation';
+import {
+  buildAgentWorkflowPresentation,
+  formatPlanStepStatusLabel,
+} from './agentWorkflowPresentation';
 import { createAgentWorkflowSummaryStyles } from './AgentWorkflowSummary.styles';
 import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
@@ -21,22 +24,21 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createAgentWorkflowSummaryStyles(colors), [colors]);
-  const [goalsExpanded, setGoalsExpanded] = useState(false);
+  const [planExpanded, setPlanExpanded] = useState(false);
   const [traceExpanded, setTraceExpanded] = useState(false);
   const presentation = useMemo(
     () => buildAgentWorkflowPresentation(run, t, executionPresentation),
     [executionPresentation, run, t],
   );
-  // Run traces, bookkeeping goals, and evidence counts describe the engine, not the task:
-  // they are shown only to someone who turned developer mode on.
+  // The run trace describes the engine, not the task: it is shown only to someone who
+  // turned developer mode on.
   const developerModeEnabled = useSettingsStore((state) => state.developerModeEnabled);
-  const shownGoals = developerModeEnabled ? presentation.allGoals : presentation.goals;
-  const hasGoals = shownGoals.length > 0;
+  const { plan } = presentation;
+  const completedStepCount = plan.filter((entry) => entry.status === 'completed').length;
   const isPresentedRunning =
     run.status === 'running' &&
     executionPresentation !== 'needs_attention' &&
     executionPresentation !== 'waiting_for_user';
-  const showBootstrapGoals = developerModeEnabled && !hasGoals && isPresentedRunning;
 
   return (
     <View style={styles.container} testID="agent-workflow-summary">
@@ -58,49 +60,38 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
         </View>
       </View>
 
-      {hasGoals ? (
-        <View style={styles.section} testID="agent-goals-widget">
+      {plan.length > 0 ? (
+        <View style={styles.section} testID="agent-plan-widget">
           <TouchableOpacity
-            accessibilityLabel={t('chat.agentGoals.header', { count: shownGoals.length })}
+            accessibilityLabel={t('chat.agentPlan.header', { count: plan.length })}
             accessibilityRole="button"
-            accessibilityState={{ expanded: goalsExpanded }}
-            onPress={() => setGoalsExpanded((value) => !value)}
+            accessibilityState={{ expanded: planExpanded }}
+            onPress={() => setPlanExpanded((value) => !value)}
             style={styles.sectionToggle}
-            testID="agent-goals-toggle"
+            testID="agent-plan-toggle"
           >
             <Text style={styles.sectionTitle} numberOfLines={1}>
-              {t('chat.agentGoals.header', { count: shownGoals.length })}
+              {t('chat.agentPlan.header', { count: plan.length })}
             </Text>
             <Text style={styles.sectionMeta} numberOfLines={1}>
-              {presentation.activeGoal
-                ? formatGoalStatusLabel(presentation.activeGoal.status, t)
-                : presentation.statusLabel}
+              {`${completedStepCount}/${plan.length}`}
             </Text>
-            <ExpandCollapseChevronIcon expanded={goalsExpanded} size={16} color={colors.textSecondary} />
+            <ExpandCollapseChevronIcon expanded={planExpanded} size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-          {goalsExpanded ? (
-            <View style={styles.details} testID="agent-goals-details">
-              {shownGoals.map((goal) => (
-                <View key={goal.id} style={styles.goalRow} testID={`agent-goals-item-${goal.id}`}>
-                  <Text style={styles.goalTitle}>{goal.title}</Text>
-                  <Text style={styles.goalMeta}>
-                    {formatGoalStatusLabel(goal.status, t)}
-                    {developerModeEnabled && goal.evidence.length > 0
-                      ? ` · ${t('chat.agentGoals.evidenceCount', {
-                          count: goal.evidence.length,
-                        })}`
-                      : ''}
-                  </Text>
+          {planExpanded ? (
+            <View style={styles.details} testID="agent-plan-details">
+              {plan.map((entry, index) => (
+                <View
+                  key={`plan-step-${index}`}
+                  style={styles.stepRow}
+                  testID={`agent-plan-step-${index}`}
+                >
+                  <Text style={styles.stepTitle}>{entry.step}</Text>
+                  <Text style={styles.stepMeta}>{formatPlanStepStatusLabel(entry.status, t)}</Text>
                 </View>
               ))}
             </View>
           ) : null}
-        </View>
-      ) : showBootstrapGoals ? (
-        <View style={styles.section} testID="agent-goals-widget">
-          <View style={styles.sectionToggle}>
-            <Text style={styles.sectionTitle}>{t('chat.agentGoals.bootstrapPending')}</Text>
-          </View>
         </View>
       ) : null}
 

@@ -617,7 +617,7 @@ Never commit `.env.local` or paste keys into issues or PRs.
 `npm run verify:strict` includes structural token-efficiency acceptance via `__tests__/acceptance/tokenEfficiencyMetrics.test.ts`:
 
 - Turn surface token estimate ≤ model tool budget with full builtin catalog registered
-- Goals + pinned profile blocks survive aggressive compaction reinject
+- The plan and pinned profile blocks survive aggressive compaction reinject
 - ≥20% tool-definition token reduction vs legacy two-sentence compression on benchmark fixture
 
 Graph observability records `TOOL_SURFACE_TOKEN_AUDIT` after pre-flight budget enforcement (selected count, estimated tokens, eviction list).

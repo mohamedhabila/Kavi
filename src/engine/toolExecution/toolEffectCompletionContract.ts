@@ -186,57 +186,14 @@ export function findGoalForEffectCompletionRequirement(
   );
 }
 
-export function buildEffectCompletionContractBlock(
-  requirement: Extract<ToolEffectCompletionRequirement, { kind: 'effectful' | 'unsupported' }>,
+export function buildUnsupportedEffectContractBlock(
+  requirement: Extract<ToolEffectCompletionRequirement, { kind: 'unsupported' }>,
 ): string {
-  if (requirement.kind === 'unsupported') {
-    return JSON.stringify({
-      status: 'error',
-      code: requirement.code,
-      tool: requirement.toolName,
-      message:
-        'The code-owned effect contract cannot prove this mutation. Do not execute or claim completion.',
-    });
-  }
-  const toolToken =
-    requirement.toolName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gu, '-')
-      .replace(/^-+|-+$/gu, '')
-      .slice(0, 32) || 'tool';
-  const requestToken = requirement.criterion.requestDigest.slice('sha256:'.length, 31);
-  const retryArguments = {
-    action: 'add',
-    id: `effect-${toolToken}-${requestToken}`,
-    name: `Verify ${requirement.toolName} effect`,
-    completionPolicy: 'blocking',
-    status: 'active',
-    successCriteria: [requirement.serializedCriterion],
-  };
   return JSON.stringify({
     status: 'error',
-    code: 'completion_contract_required',
+    code: requirement.code,
     tool: requirement.toolName,
-    requiredCriterion: requirement.serializedCriterion,
-    repair: {
-      retryable: true,
-      code: 'completion_contract_required',
-      tool: 'update_goals',
-      expectedShape: retryArguments,
-      retryArguments,
-      sideEffectApplied: false,
-    },
     message:
-      'Call update_goals with repair.retryArguments. After that graph mutation commits, retry the original effect on the following iteration.',
-  });
-}
-
-export function buildGoalMutationBoundaryBlock(toolName: string): string {
-  return JSON.stringify({
-    status: 'error',
-    code: 'goal_mutation_boundary',
-    tool: normalizeToolName(toolName),
-    message:
-      'The goal mutation must commit before this effect can execute. Retry the effect on the next graph iteration.',
+      'The code-owned effect contract cannot prove this mutation. Do not execute or claim completion.',
   });
 }

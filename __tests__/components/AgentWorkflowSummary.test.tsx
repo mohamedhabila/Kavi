@@ -12,19 +12,16 @@ jest.mock('../../src/i18n/useTranslation', () => ({
     t: (key: string, params?: Record<string, string | number>) => {
       const translations: Record<string, string> = {
         'chat.agentWorkflow.currentWork': 'Current work',
-        'chat.agentGoals.header': 'Goals ({count})',
-        'chat.agentGoals.bootstrapPending': 'Goals pending bootstrap',
-        'chat.agentGoals.evidenceCount': '{count} evidence',
-        'chat.agentGoals.status.running': 'Running',
-        'chat.agentGoals.status.waitingForYou': 'Waiting for you',
-        'chat.agentGoals.status.needsAttention': 'Needs attention',
-        'chat.agentGoals.status.completed': 'Completed',
-        'chat.agentGoals.status.failed': 'Failed',
-        'chat.agentGoals.status.cancelled': 'Cancelled',
-        'chat.agentGoals.goalStatus.pending': 'Pending',
-        'chat.agentGoals.goalStatus.active': 'Active',
-        'chat.agentGoals.goalStatus.completed': 'Completed',
-        'chat.agentGoals.goalStatus.blocked': 'Blocked',
+        'chat.agentPlan.header': 'Plan ({count} steps)',
+        'chat.agentPlan.status.running': 'Running',
+        'chat.agentPlan.status.waitingForYou': 'Waiting for you',
+        'chat.agentPlan.status.needsAttention': 'Needs attention',
+        'chat.agentPlan.status.completed': 'Completed',
+        'chat.agentPlan.status.failed': 'Failed',
+        'chat.agentPlan.status.cancelled': 'Cancelled',
+        'chat.agentPlan.stepStatus.pending': 'Pending',
+        'chat.agentPlan.stepStatus.inProgress': 'In progress',
+        'chat.agentPlan.stepStatus.completed': 'Done',
         'chat.agentRunTrace.header': 'Run trace',
         'chat.agentRunTrace.preview': 'Iteration {iteration} · {count} events',
         'chat.agentRunTrace.iteration': 'Iteration {iteration}',
@@ -64,25 +61,9 @@ const makeControlGraph = (
   observedToolResults: [],
   pendingAsyncCount: 0,
   lastModelToolNames: [],
-  goals: [
-    {
-      id: 'goal-audit',
-      title: 'Audit the repository',
-      status: 'active',
-      dependencies: [],
-      evidence: ['read_file'],
-      createdAt: 1,
-      updatedAt: 2,
-    },
-    {
-      id: 'goal-fix',
-      title: 'Apply the fix',
-      status: 'pending',
-      dependencies: ['goal-audit'],
-      evidence: [],
-      createdAt: 1,
-      updatedAt: 2,
-    },
+  plan: [
+    { step: 'Audit the repository', status: 'in_progress' },
+    { step: 'Apply the fix', status: 'pending' },
   ],
   asyncWork: {
     awaitingBackgroundWorkers: false,
@@ -159,23 +140,35 @@ describe('AgentWorkflowSummary for everyday use', () => {
     useSettingsStore.setState({ developerModeEnabled: false });
   });
 
-  it('hides the run trace and the empty-goal placeholder outside developer mode', () => {
+  it('hides the run trace outside developer mode', () => {
     // Regression: the trace listed raw graph event names such as MODEL_TURN_STARTED in
-    // every agentic chat, and an empty run showed "Goals pending bootstrap".
-    const withTrace = render(<AgentWorkflowSummary run={makeRun()} />);
-    expect(withTrace.queryByTestId('agent-run-trace-widget')).toBeNull();
-
-    const withoutGoals = render(
-      <AgentWorkflowSummary run={makeRun({ controlGraph: makeControlGraph({ goals: [] }) })} />,
-    );
-    expect(withoutGoals.queryByText('Goals pending bootstrap')).toBeNull();
+    // every agentic chat.
+    const screen = render(<AgentWorkflowSummary run={makeRun()} />);
+    expect(screen.queryByTestId('agent-run-trace-widget')).toBeNull();
   });
 
-  it("lists only the task's own goals and never titles the card with engine bookkeeping", () => {
+  it("shows the plan in the model's words and titles the card with the current step", () => {
+    const screen = render(<AgentWorkflowSummary run={makeRun()} />);
+
+    expect(screen.getByText('Audit the repository')).toBeTruthy();
+    expect(screen.getByTestId('agent-plan-toggle').props.accessibilityLabel).toBe('Plan (2 steps)');
+    expect(screen.getByText('0/2')).toBeTruthy();
+    expect(screen.queryByText('Apply the fix')).toBeNull();
+    expectMobileToggle(screen.getByTestId('agent-plan-toggle'));
+
+    fireEvent.press(screen.getByTestId('agent-plan-toggle'));
+    expect(screen.getByTestId('agent-plan-step-1')).toBeTruthy();
+    expect(screen.getByText('Apply the fix')).toBeTruthy();
+    expect(screen.getByText('In progress')).toBeTruthy();
+    expect(screen.getByText('Pending')).toBeTruthy();
+  });
+
+  it("never shows the engine's bookkeeping goals", () => {
     const screen = render(
       <AgentWorkflowSummary
         run={makeRun({
           controlGraph: makeControlGraph({
+            plan: undefined,
             goals: [
               {
                 id: 'effect-write-file',
@@ -187,15 +180,6 @@ describe('AgentWorkflowSummary for everyday use', () => {
                 createdAt: 1,
                 updatedAt: 1,
               },
-              {
-                id: 'goal-trip',
-                title: 'Plan the Lisbon trip',
-                status: 'pending',
-                dependencies: [],
-                evidence: [],
-                createdAt: 1,
-                updatedAt: 1,
-              },
             ],
           }),
         })}
@@ -203,8 +187,18 @@ describe('AgentWorkflowSummary for everyday use', () => {
     );
 
     expect(screen.queryByText('Verify write_file effect')).toBeNull();
-    expect(screen.getByText('Plan the Lisbon trip')).toBeTruthy();
-    expect(screen.getByTestId('agent-goals-toggle').props.accessibilityLabel).toBe('Goals (1)');
+    expect(screen.queryByTestId('agent-plan-widget')).toBeNull();
+    expect(screen.getByText('Work')).toBeTruthy();
+  });
+
+  it('shows no plan card for work that kept no plan', () => {
+    const screen = render(
+      <AgentWorkflowSummary
+        run={makeRun({ controlGraph: makeControlGraph({ plan: undefined }) })}
+      />,
+    );
+
+    expect(screen.queryByTestId('agent-plan-widget')).toBeNull();
   });
 });
 
@@ -217,24 +211,17 @@ describe('AgentWorkflowSummary in developer mode', () => {
     useSettingsStore.setState({ developerModeEnabled: false });
   });
 
-  it('keeps current work primary while goals and trace details stay collapsed by default', () => {
+  it('keeps current work primary while plan and trace details stay collapsed by default', () => {
     const screen = render(<AgentWorkflowSummary run={makeRun()} />);
 
     expect(screen.getByTestId('agent-workflow-summary')).toBeTruthy();
     expect(screen.getByText('Current work')).toBeTruthy();
     expect(screen.getByText('Audit the repository')).toBeTruthy();
     expect(screen.getByText('Running')).toBeTruthy();
-    expect(screen.queryByText('Apply the fix')).toBeNull();
-    expect(screen.queryByTestId('agent-goals-details')).toBeNull();
+    expect(screen.queryByTestId('agent-plan-details')).toBeNull();
     expect(screen.queryByTestId('agent-run-trace-details')).toBeNull();
-    expectMobileToggle(screen.getByTestId('agent-goals-toggle'));
     expectMobileToggle(screen.getByTestId('agent-run-trace-toggle'));
-    expect(screen.getByTestId('agent-goals-toggle').props.accessibilityLabel).toBe('Goals (2)');
     expect(screen.getByTestId('agent-run-trace-toggle').props.accessibilityLabel).toBe('Run trace');
-
-    fireEvent.press(screen.getByTestId('agent-goals-toggle'));
-    expect(screen.getByTestId('agent-goals-item-goal-audit')).toBeTruthy();
-    expect(screen.getByText('Apply the fix')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('agent-run-trace-toggle'));
     expect(screen.getByTestId('agent-run-trace-iteration-1')).toBeTruthy();
@@ -243,7 +230,7 @@ describe('AgentWorkflowSummary in developer mode', () => {
     expect(screen.getByText(GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE)).toBeTruthy();
   });
 
-  it('keeps completed work compact while preserving expandable evidence', () => {
+  it('keeps a finished plan compact and counts its completed steps', () => {
     const screen = render(
       <AgentWorkflowSummary
         run={makeRun({
@@ -254,16 +241,9 @@ describe('AgentWorkflowSummary in developer mode', () => {
             { key: 'deliver', title: 'Deliver', status: 'completed', updatedAt: 3 },
           ],
           controlGraph: makeControlGraph({
-            goals: [
-              {
-                id: 'goal-done',
-                title: 'Verified the answer',
-                status: 'completed',
-                dependencies: [],
-                evidence: ['review'],
-                createdAt: 1,
-                updatedAt: 2,
-              },
+            plan: [
+              { step: 'Check the answer', status: 'completed' },
+              { step: 'Send it', status: 'completed' },
             ],
           }),
         })}
@@ -271,22 +251,11 @@ describe('AgentWorkflowSummary in developer mode', () => {
     );
 
     expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
-    expect(screen.getByText('Verified the answer')).toBeTruthy();
-    expect(screen.queryByTestId('agent-goals-details')).toBeNull();
+    expect(screen.getByText('2/2')).toBeTruthy();
+    expect(screen.queryByTestId('agent-plan-details')).toBeNull();
 
-    fireEvent.press(screen.getByTestId('agent-goals-toggle'));
-    expect(screen.getByText(/1 evidence/)).toBeTruthy();
-  });
-
-  it('renders bootstrap state without opening an empty details surface', () => {
-    const screen = render(
-      <AgentWorkflowSummary run={makeRun({ controlGraph: makeControlGraph({ goals: [] }) })} />,
-    );
-
-    expect(screen.getByTestId('agent-goals-widget')).toBeTruthy();
-    expect(screen.getAllByText('Goals pending bootstrap')).toHaveLength(1);
-    expect(screen.queryByTestId('agent-goals-toggle')).toBeNull();
-    expect(screen.queryByTestId('agent-goals-details')).toBeNull();
+    fireEvent.press(screen.getByTestId('agent-plan-toggle'));
+    expect(screen.getAllByText('Done')).toHaveLength(2);
   });
 
   it.each([
@@ -294,14 +263,10 @@ describe('AgentWorkflowSummary in developer mode', () => {
     ['needs_attention', 'Needs attention'],
   ] as const)('does not present %s workflow state as Running', (executionPresentation, label) => {
     const screen = render(
-      <AgentWorkflowSummary
-        run={makeRun({ controlGraph: makeControlGraph({ goals: [] }) })}
-        executionPresentation={executionPresentation}
-      />,
+      <AgentWorkflowSummary run={makeRun()} executionPresentation={executionPresentation} />,
     );
 
     expect(screen.getByText(label)).toBeTruthy();
     expect(screen.queryByText('Running')).toBeNull();
-    expect(screen.queryByText('Goals pending bootstrap')).toBeNull();
   });
 });

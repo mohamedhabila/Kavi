@@ -62,7 +62,7 @@ export async function executeAgentControlGraphSession(
         type: 'FINALIZED',
         reason: 'max_iterations',
       },
-      content: buildRunStoppedMessage('step_limit', params.graph.getGraphSnapshot()?.goals ?? []),
+      content: buildRunStoppedMessage('step_limit', params.graph.getGraphSnapshot()?.plan),
       assistantMetadata: attachModelTurnMemoryAttribution(
         buildAssistantMessageMetadata('final', {
           completionStatus: 'complete',

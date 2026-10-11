@@ -1,7 +1,6 @@
 import {
   createGoal,
   getActiveGoal,
-  getActiveGoalId,
   getGoalById,
   isBlockingGoal,
   normalizeGoal,
@@ -251,22 +250,6 @@ describe('goal types', () => {
     it('returns undefined for invalid policies', () => {
       expect(normalizeGoalCompletionPolicy('unknown')).toBeUndefined();
       expect(normalizeGoalCompletionPolicy(null)).toBeUndefined();
-    });
-  });
-
-  describe('getActiveGoalId', () => {
-    it('returns the last active goal ID', () => {
-      const goals = [
-        createGoal({ title: 'A', status: 'completed' }),
-        createGoal({ title: 'B', status: 'active' }),
-        createGoal({ title: 'C', status: 'pending' }),
-      ];
-      expect(getActiveGoalId(goals)).toBe(goals[1].id);
-    });
-
-    it('returns null when no active goal', () => {
-      expect(getActiveGoalId([createGoal({ title: 'A', status: 'pending' })])).toBeNull();
-      expect(getActiveGoalId([])).toBeNull();
     });
   });
 

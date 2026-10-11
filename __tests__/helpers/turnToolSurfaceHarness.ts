@@ -3,11 +3,11 @@ import type { ToolDefinition } from '../../src/types/tool';
 
 export const tools: ToolDefinition[] = [
   {
-    name: 'update_goals',
-    description: 'Update graph goals.',
+    name: 'update_plan',
+    description: 'Update the task plan.',
     input_schema: { type: 'object', properties: {}, required: [] },
     contract: {
-      category: 'goal',
+      category: 'plan',
       capabilities: ['coordinate'],
       resourceKinds: ['conversation_workspace'],
     },

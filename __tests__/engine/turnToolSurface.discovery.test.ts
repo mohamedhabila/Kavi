@@ -8,7 +8,7 @@ import { DEVICE_QUERY_TOOL } from '../../src/engine/tools/native/device/definiti
 import { resourceFlowTools, tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {
-  it('exposes stable graph-control and discovery tools when no graph surface is available', async () => {
+  it('exposes the stable plan and discovery tools when no graph surface is available', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
       observedToolNames: new Set<string>(),
@@ -16,7 +16,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     expect(selected.map((tool) => tool.name)).toEqual([
-      'update_goals',
+      'update_plan',
       'memory_recall',
       'memory_remember',
       'read_file',
@@ -38,7 +38,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     expect(selected.map((tool) => tool.name)).toEqual([
-      'update_goals',
+      'update_plan',
       'memory_recall',
       'memory_remember',
       'read_file',

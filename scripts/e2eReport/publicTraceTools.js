@@ -1,4 +1,3 @@
-const { projectGoalHashesByStatus } = require('./publicTraceGoals');
 const {
   MAX_TRACE_ITEMS,
   SHA256_PATTERN,
@@ -45,24 +44,6 @@ const SAFE_TOOL_STATUSES = new Set([
   'yielded',
 ]);
 
-const SAFE_GOAL_ACTIONS = new Set(['add', 'complete', 'activate', 'block', 'remove', 'update']);
-const SAFE_GOAL_ERROR_CODES = new Set([
-  'missing_title',
-  'missing_completion_policy',
-  'missing_success_criteria',
-  'weak_success_criteria',
-  'invalid_success_criteria',
-  'goal_not_found',
-  'duplicate_id',
-  'dependency_missing',
-  'cycle_detected',
-  'invalid_lifecycle',
-  'evidence_required',
-  'evidence_satisfied',
-  'invalid_block',
-  'invalid_update_action',
-  'invalid_add_status',
-]);
 const SAFE_TOOL_CAPABILITIES = new Set([
   'discover',
   'read',
@@ -136,50 +117,6 @@ function projectStatusField(value) {
   }
   const enumValue = safeEnum(source.enumValue, SAFE_TOOL_STATUSES);
   return { ...projected, ...(enumValue ? { enumValue } : {}) };
-}
-
-function projectUpdateGoalsResult(value) {
-  const source = asRecord(value);
-  if (!source) {
-    return null;
-  }
-  const errorCount = nonNegativeInteger(source.errorCount);
-  const structuredErrorCodeCount = nonNegativeInteger(source.structuredErrorCodeCount);
-  const structuredErrorCodes = Array.isArray(source.structuredErrorCodes)
-    ? source.structuredErrorCodes.filter((code) => SAFE_GOAL_ERROR_CODES.has(code)).slice(0, 64)
-    : null;
-  const structuredErrorCodeHashes = projectHashArray(source.structuredErrorCodeHashes, 64);
-  const goalIdHashesByStatus = projectGoalHashesByStatus(source.goalIdHashesByStatus);
-  if (
-    errorCount === null ||
-    structuredErrorCodeCount === null ||
-    !structuredErrorCodes ||
-    !structuredErrorCodeHashes ||
-    !goalIdHashesByStatus
-  ) {
-    return null;
-  }
-  const status = safeEnum(source.status, SAFE_TOOL_STATUSES);
-  const action = safeEnum(source.action, SAFE_GOAL_ACTIONS);
-  const statusHash = source.statusHash === undefined ? undefined : projectHash(source.statusHash);
-  const actionHash = source.actionHash === undefined ? undefined : projectHash(source.actionHash);
-  if (
-    (source.statusHash !== undefined && !statusHash) ||
-    (source.actionHash !== undefined && !actionHash)
-  ) {
-    return null;
-  }
-  return {
-    ...(status ? { status } : {}),
-    ...(statusHash ? { statusHash } : {}),
-    ...(action ? { action } : {}),
-    ...(actionHash ? { actionHash } : {}),
-    errorCount,
-    structuredErrorCodeCount,
-    structuredErrorCodes,
-    structuredErrorCodeHashes,
-    goalIdHashesByStatus,
-  };
 }
 
 function projectToolCatalogResult(value) {
@@ -268,13 +205,6 @@ function projectToolResult(value) {
     jsonSchemaDigest: source.jsonSchemaDigest,
     statusFields,
   };
-  if (source.updateGoalsResult !== undefined) {
-    const updateGoalsResult = projectUpdateGoalsResult(source.updateGoalsResult);
-    if (!updateGoalsResult) {
-      return null;
-    }
-    projected.updateGoalsResult = updateGoalsResult;
-  }
   if (source.toolCatalogResult !== undefined) {
     const toolCatalogResult = projectToolCatalogResult(source.toolCatalogResult);
     if (!toolCatalogResult) {

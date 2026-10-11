@@ -3,28 +3,17 @@ import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import {
   evaluateMobileSpawnPreflight,
-  resolveSpawnGoalScope,
+  resolveSpawnWorkstream,
 } from '../../services/agents/mobileSpawnPolicy';
-import { getActiveGoal, isBlockingGoal } from '../goals/types';
+import { isBlockingGoal } from '../goals/types';
 import { arePersistedAgentGoalUserConstraintsCanonical } from '../goals/userConstraints';
-import {
-  DELEGATED_WORKER_EVIDENCE_CRITERION,
-  DELEGATED_WORKER_GOAL_OWNER,
-  isDelegationOwnedGoal,
-  DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-  readDelegatedWorkerLaunchSessionId,
-} from '../goals/delegation';
-
-export interface DelegatedWorkerSpawnGoalScope {
-  goalIds?: string[];
-}
+import { isDelegationOwnedGoal, readDelegatedWorkerLaunchSessionId } from '../goals/delegation';
 
 export interface DelegatedWorkerSpawnRequest {
   prompt: string;
   name?: string;
   workstreamId?: string;
   dependsOnWorkstreams?: string[];
-  goalScope?: DelegatedWorkerSpawnGoalScope;
   depth?: number;
 }
 
@@ -44,16 +33,6 @@ export interface DelegatedWorkerSpawnPlan {
 
 function hasCoordinateCapability(goal: AgentGoal): boolean {
   return (goal.requiredCapabilities ?? []).some((capability) => capability.trim() === 'coordinate');
-}
-
-function requiresWorkerCompletionEvidence(goal: AgentGoal): boolean {
-  return isBlockingGoal(goal) && hasCoordinateCapability(goal);
-}
-
-function hasWorkerCompletionEvidenceCriterion(goal: AgentGoal): boolean {
-  return (goal.successCriteria ?? []).some(
-    (criterion) => criterion.trim() === DELEGATED_WORKER_EVIDENCE_CRITERION,
-  );
 }
 
 function isIncompleteDedicatedWorkerGoal(goal: AgentGoal): boolean {
@@ -108,17 +87,16 @@ function normalizeDependencyRefs(value: unknown): {
   }
 
   if (!Array.isArray(value)) {
-    return { values: [], error: 'dependsOnWorkstreams must be an array of completed goal ids.' };
+    return {
+      values: [],
+      error: 'dependsOnWorkstreams must be an array of completed workstream ids.',
+    };
   }
 
   const values = value
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter(Boolean);
   return { values };
-}
-
-function normalizeOptionalWorkstreamId(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function hasUserConstraintStateConflict(goal: AgentGoal): boolean {
@@ -158,41 +136,30 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
 
   const goals = [...(params.parentGoals ?? activeRun?.controlGraph?.goals ?? [])];
   const currentRunId = activeRun?.id ?? params.agentRunId?.trim();
-  const hasStructuredGoalGraph =
-    params.parentGoals !== undefined || activeRun?.controlGraph !== undefined;
-  const goalScopeResolution = resolveSpawnGoalScope({
-    goalIds: params.request.goalScope?.goalIds,
+  const workstreamResolution = resolveSpawnWorkstream({
     workstreamId: params.request.workstreamId,
     goals,
   });
-  if (goalScopeResolution.status === 'error') {
-    const error = goalScopeResolution.error ?? 'Invalid goal scope.';
+  if (workstreamResolution.status === 'error') {
+    const error = workstreamResolution.error;
     return {
       status: 'error',
       goals,
       spawnGate: { status: 'blocked', error },
       response: buildRepairableSpawnArgumentError({
-        code: 'invalid_goal_scope',
+        code: 'invalid_workstream',
         error,
-        invalidFields: ['goalScope', 'workstreamId'],
-        expectedArguments: {
-          workstreamId: { type: 'string' },
-          goalScope: {
-            type: 'object',
-            properties: { goalIds: { type: 'array', items: { type: 'string' } } },
-          },
-        },
+        invalidFields: ['workstreamId'],
+        expectedArguments: { workstreamId: { type: 'string' } },
       }),
     };
   }
 
-  const activeGoal = getActiveGoal(goals);
-  const explicitWorkstreamId =
-    goalScopeResolution.workstreamId || normalizeOptionalWorkstreamId(params.request.workstreamId);
+  const explicitWorkstreamId = workstreamResolution.workstreamId;
   const eligibleDedicatedGoals = goals.filter(isIncompleteDedicatedWorkerGoal);
   if (!explicitWorkstreamId && eligibleDedicatedGoals.length > 1) {
     const eligibleGoalIds = eligibleDedicatedGoals.map((goal) => goal.id);
-    const error = 'Multiple delegated-worker goals are eligible; select one exact workstreamId.';
+    const error = 'Several workstreams are open; select one exact workstreamId.';
     return {
       status: 'error',
       goals,
@@ -205,35 +172,24 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
           expectedArguments: { workstreamId: { type: 'string', enum: eligibleGoalIds } },
         }),
         eligibleGoalIds,
-        guidance:
-          'Retry sessions_spawn with one existing eligible goal id. Do not add or replace a delegated goal.',
       },
     };
   }
   const workstreamId =
     explicitWorkstreamId ||
-    (eligibleDedicatedGoals.length === 1 ? eligibleDedicatedGoals[0].id : undefined) ||
-    activeGoal?.id ||
-    goals.find((goal) => goal.status === 'pending')?.id;
-  const scopedGoals = Array.from(
-    new Map(
-      [
-        ...(goalScopeResolution.scopedGoals ?? []),
-        ...(workstreamId ? goals.filter((goal) => goal.id === workstreamId) : []),
-      ].map((goal) => [goal.id, goal]),
-    ).values(),
-  );
+    (eligibleDedicatedGoals.length === 1 ? eligibleDedicatedGoals[0].id : undefined);
+  const scopedGoals = workstreamId ? goals.filter((goal) => goal.id === workstreamId) : [];
   const completedScopedGoal = scopedGoals.find((goal) => goal.status === 'completed');
   if (completedScopedGoal) {
-    const error = `Completed goal "${completedScopedGoal.id}" cannot be selected for delegated work.`;
+    const error = `Workstream "${completedScopedGoal.id}" is already complete; omit workstreamId to start new work.`;
     return {
       status: 'error',
       goals,
       spawnGate: { status: 'blocked', workstreamId, error },
       response: buildRepairableSpawnArgumentError({
-        code: 'invalid_goal_scope',
+        code: 'invalid_workstream',
         error,
-        invalidFields: ['goalScope', 'workstreamId'],
+        invalidFields: ['workstreamId'],
       }),
     };
   }
@@ -252,86 +208,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     };
   }
 
-  const nonDedicatedDelegationGoal = scopedGoals.find(
-    (goal) =>
-      isBlockingGoal(goal) && (!isDelegationOwnedGoal(goal) || !hasCoordinateCapability(goal)),
-  );
-  if (hasStructuredGoalGraph && nonDedicatedDelegationGoal) {
-    const error = `Goal "${nonDedicatedDelegationGoal.id}" is not a dedicated delegated-worker goal.`;
-    const eligibleGoalIds = eligibleDedicatedGoals.map((goal) => goal.id);
-    const hasExistingEligibleGoal = eligibleGoalIds.length > 0;
-    return {
-      status: 'blocked',
-      goals,
-      spawnGate: { status: 'blocked', workstreamId, error },
-      response: {
-        status: 'blocked',
-        code: 'dedicated_worker_goal_required',
-        error,
-        guidance: hasExistingEligibleGoal
-          ? `Retry sessions_spawn with the existing delegated-worker goal id ${JSON.stringify(eligibleGoalIds[0])}. Do not add or replace a delegated goal.`
-          : 'Add a separate blocking goal for this worker; do not repurpose the parent deliverable goal. Set owner:"delegated-worker", include requiredCapabilities:"coordinate", and use evidence.prefix:worker plus evidence.min:1. Then retry sessions_spawn with that new goal id as workstreamId.',
-        repair: {
-          retryable: true,
-          requiredAction: hasExistingEligibleGoal ? 'sessions_spawn' : 'update_goals',
-          invalidGoalId: nonDedicatedDelegationGoal.id,
-          expectedShape: hasExistingEligibleGoal
-            ? { arguments: { workstreamId: eligibleGoalIds[0] } }
-            : {
-                arguments: {
-                  action: 'add',
-                  id: 'delegated-workstream',
-                  name: 'Delegated workstream',
-                  description: 'One self-contained worker deliverable.',
-                  status: 'pending',
-                  completionPolicy: 'blocking',
-                  owner: DELEGATED_WORKER_GOAL_OWNER,
-                  requiredCapabilities: ['coordinate'],
-                  successCriteria: [
-                    DELEGATED_WORKER_EVIDENCE_CRITERION,
-                    DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-                  ],
-                },
-              },
-        },
-      },
-    };
-  }
-
-  const invalidDelegationGoal = scopedGoals.find(
-    (goal) => requiresWorkerCompletionEvidence(goal) && !hasWorkerCompletionEvidenceCriterion(goal),
-  );
-  if (hasStructuredGoalGraph && invalidDelegationGoal) {
-    const error = `Goal "${invalidDelegationGoal.id}" cannot verify a terminal worker result.`;
-    return {
-      status: 'blocked',
-      goals,
-      spawnGate: { status: 'blocked', workstreamId, error },
-      response: {
-        status: 'blocked',
-        code: 'worker_evidence_contract_required',
-        error,
-        guidance:
-          'Update the delegated goal before spawning. Use evidence.prefix:worker for the terminal worker result and evidence.min:1 for one worker. evidence.min counts graph evidence records, not items inside the worker report. Keep separate parent deliverable criteria on separate goals.',
-        repair: {
-          retryable: true,
-          requiredAction: 'update_goals',
-          expectedShape: {
-            arguments: {
-              action: 'update',
-              id: invalidDelegationGoal.id,
-              name: invalidDelegationGoal.title,
-              successCriteria: [
-                DELEGATED_WORKER_EVIDENCE_CRITERION,
-                DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
-              ],
-            },
-          },
-        },
-      },
-    };
-  }
-
   const durableLaunchOwner = scopedGoals
     .flatMap((goal) =>
       goal.evidence.map((evidence) => ({
@@ -340,7 +216,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
       })),
     )
     .find((entry) => entry.sessionId);
-  if (hasStructuredGoalGraph && durableLaunchOwner?.sessionId) {
+  if (durableLaunchOwner?.sessionId) {
     return {
       status: 'blocked',
       goals,
@@ -352,7 +228,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
         sessionId: durableLaunchOwner.sessionId,
         goalId: durableLaunchOwner.goal.id,
         guidance:
-          'Inspect the existing terminal result. Continue that exact session for one recoverable gap, or report its blocker; do not launch a replacement worker for the same goal.',
+          'Inspect the existing terminal result. Continue that exact session for one recoverable gap, or report its blocker; do not launch a replacement worker for the same work.',
       },
     };
   }
@@ -361,7 +237,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     (dependencyId) => !goals.some((candidate) => candidate.id === dependencyId),
   );
   if (missingDependencies.length > 0) {
-    const error = `Unknown dependency goal id(s): ${missingDependencies.join(', ')}`;
+    const error = `Unknown dependency workstream id(s): ${missingDependencies.join(', ')}`;
     return {
       status: 'error',
       goals,
@@ -401,29 +277,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
     };
   }
 
-  const hasIncompleteGoal = goals.some(
-    (goal) => goal.status === 'active' || goal.status === 'pending' || goal.status === 'blocked',
-  );
-  if (hasStructuredGoalGraph && !hasIncompleteGoal) {
-    const error = 'Delegated work requires an incomplete structured goal in the current run.';
-    return {
-      status: 'blocked',
-      goals,
-      spawnGate: { status: 'blocked', error },
-      response: {
-        status: 'blocked',
-        code: 'goal_scope_required',
-        error,
-        guidance:
-          'Call update_goals in a separate turn to create an incomplete blocking goal that retains the current user constraint, then retry this worker spawn against that goal.',
-        repair: {
-          retryable: true,
-          requiredAction: 'update_goals',
-        },
-      },
-    };
-  }
-
   const duplicateRunning = params.liveWorkers.find(
     (worker) =>
       worker.status === 'running' &&
@@ -440,7 +293,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
       response: {
         status: 'blocked',
         code: 'caller_owns_workstream',
-        error: 'You are the worker running this goal, so it cannot be delegated again.',
+        error: 'You are the worker running this workstream, so it cannot be delegated again.',
         sessionId: duplicateRunning.sessionId,
         guidance:
           'Do the assigned task yourself and give its result as your final answer. Do not ' +
@@ -455,7 +308,7 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
       spawnGate: { status: 'blocked', workstreamId },
       response: {
         status: 'blocked',
-        error: 'A worker for this goal is already running.',
+        error: 'A worker for this workstream is already running.',
         sessionId: duplicateRunning.sessionId,
       },
     };

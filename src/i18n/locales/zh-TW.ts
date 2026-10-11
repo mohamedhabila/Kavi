@@ -383,13 +383,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     subAgentRollupIssues: plural({
       other: '{count} 個問題',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        other: '目標 ({count})',
-      }),
-      bootstrapPending: '目標待初始化',
-      evidenceCount: plural({
-        other: '{count} 條證據',
+        other: '計畫（{count} 步）',
       }),
       status: {
         running: '執行中',
@@ -399,11 +395,10 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
         failed: '失敗',
         cancelled: '已取消',
       },
-      goalStatus: {
+      stepStatus: {
         pending: '待處理',
-        active: '進行中',
+        inProgress: '進行中',
         completed: '已完成',
-        blocked: '受阻',
       },
     },
     agentRunTrace: {
@@ -1946,7 +1941,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       ssh_fs: 'SSH 檔案',
       text_search: '在檔案中搜尋',
       tool_describe: '工具詳細資料',
-      update_goals: '更新計畫',
+      update_plan: '更新計畫',
       web_search: '網頁搜尋',
       workspace_delegate_task: '委派給 IDE',
       workspace_launch_browser: '在瀏覽器中開啟 IDE',

@@ -1,41 +1,6 @@
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../goals/bootstrap';
-import { parseGoalMutationToolResultCodes } from '../goals/mutationErrors';
 import type { LoopDetectionResult, ToolCallRecord } from '../loopDetection';
 import type { AgentControlGraphEvent } from './agentControlGraph';
-import type { AgentGoal } from '../../types/agentRun';
-import { isBlockingGoal } from '../goals/types';
-import { buildCriterionSatisfactionActions } from '../goals/completionEvidence';
-import { renderGoalFocusInline } from './goalFocusPrompt';
 import { extractRecentToolRepairHints } from './toolRepairHints';
-
-function normalizeToolNameKey(toolName: string): string {
-  return toolName.trim().toLowerCase();
-}
-
-function extractRecentGoalMutationValidationCodes(
-  history: ReadonlyArray<ToolCallRecord>,
-  limit: number = 3,
-): string[] {
-  const codes: string[] = [];
-
-  for (let index = history.length - 1; index >= 0 && codes.length < limit; index -= 1) {
-    const entry = history[index];
-    if (normalizeToolNameKey(entry.name) !== GOAL_BOOTSTRAP_TOOL_NAME) {
-      continue;
-    }
-
-    for (const code of parseGoalMutationToolResultCodes(entry.result)) {
-      if (!codes.includes(code)) {
-        codes.push(code);
-      }
-      if (codes.length >= limit) {
-        break;
-      }
-    }
-  }
-
-  return codes;
-}
 
 export type AgentControlGraphLoopRecoveryDecision =
   | {
@@ -78,81 +43,31 @@ function resolveStalledToolName(
 
 function buildLoopRecoveryHint(
   loopType: LoopDetectionResult['type'],
-  validationCodes: ReadonlyArray<string>,
   repairHints: ReadonlyArray<string>,
-  goals: ReadonlyArray<AgentGoal>,
   stalledToolName: string | undefined,
 ): string {
-  const activeGoalFocus = renderGoalFocusInline(
-    goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
-  );
-  const goalFocusHint = activeGoalFocus ? ` Active task focus: ${activeGoalFocus}.` : '';
-
   if (loopType === 'repeated_error') {
     if (repairHints.length > 0) {
-      return `Do not repeat the same failing tool arguments. Last tool repair hints: ${repairHints.join('; ')}.${goalFocusHint} The failed call did not complete its side effect. Follow repair.expectedShape and retry the failed tool with corrected top-level arguments, using values already present in the user request, graph goals, or prior tool outputs.`;
+      return `Do not repeat the same failing tool arguments. Last tool repair hints: ${repairHints.join('; ')}. The failed call did not complete its side effect. Follow repair.expectedShape and retry the failed tool with corrected top-level arguments, using values already present in the user request or prior tool outputs.`;
     }
-    return `Do not repeat the same failing tool call.${goalFocusHint} Reuse the failure you already observed and take a different next step.`;
+    return 'Do not repeat the same failing tool call. Reuse the failure you already observed and take a different next step.';
   }
 
   if (loopType === 'stagnant_progress') {
-    // The stalled tool must be prohibited by name. Advising "complete or update
-    // goals" here previously invited more update_goals calls, which is the exact
-    // pattern that trips this detector, so the recovery hint reinforced the loop.
+    // The stalled tool is prohibited by name: a generic "make progress" lets the model
+    // answer with one more call to the same tool, which is the pattern this detects.
     const stalledToolHint = stalledToolName
       ? ` Do not call ${stalledToolName} again this turn.`
       : '';
-    const evidenceActions = buildCriterionSatisfactionActions(
-      goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
-    );
-    const evidenceHint =
-      evidenceActions.length > 0
-        ? ` Record the missing goal evidence instead: ${evidenceActions.join('; ')}.`
-        : ' Take a concrete step toward the deliverable instead of restating goal state.';
-    return `Goal state did not advance.${goalFocusHint}${stalledToolHint}${evidenceHint} Goal bookkeeping does not record evidence.`;
+    return `The last steps did not advance the work.${stalledToolHint} Take a different concrete step toward the deliverable, or answer with what you have.`;
   }
 
   if (loopType === 'discovery_stall') {
-    return `Discovery has not advanced execution.${goalFocusHint} Reuse the catalog or description results already visible, then choose a concrete non-discovery tool from the current surface. If the current surface still lacks the required capability, state the concrete missing capability on the next pass.`;
+    return 'Discovery has not advanced execution. Reuse the catalog or description results already visible, then choose a concrete non-discovery tool from the current surface. If the current surface still lacks the required capability, state the concrete missing capability on the next pass.';
   }
 
   if (loopType === 'tool_filter_loop') {
     return 'Blocked tool calls repeated without progress. Do not retry filtered or unknown tools on this turn surface.';
-  }
-
-  if (loopType === 'bootstrap_stall') {
-    return 'Goal bootstrap did not advance. Use a different tool from the active surface or fix update_goals arguments before retrying.';
-  }
-
-  if (loopType === 'goal_mutation_stall') {
-    // The schema guidance below teaches the model how to call update_goals, which is
-    // the wrong response when update_goals is the tool being repeated: it steers
-    // straight back into the loop. Schemas are only useful when a call was actually
-    // malformed, so they are gated on validation codes. Otherwise the mutation was
-    // well-formed and rejected on substance, and the model needs the missing
-    // evidence recorded instead.
-    const malformedCall = validationCodes.length > 0;
-    if (!malformedCall) {
-      const stalledToolHint = stalledToolName
-        ? ` Do not call ${stalledToolName} again this turn.`
-        : '';
-      const evidenceActions = buildCriterionSatisfactionActions(
-        goals.filter((goal) => isBlockingGoal(goal) && goal.status === 'active'),
-      );
-      const evidenceHint =
-        evidenceActions.length > 0
-          ? ` Record the missing goal evidence instead: ${evidenceActions.join('; ')}.`
-          : ' Produce the deliverable with a non-goal tool instead of restating goal state.';
-      return `Goal mutations did not advance and the arguments were accepted, so the goal state is not the blocker.${stalledToolHint}${evidenceHint} Goal bookkeeping does not record evidence.`;
-    }
-
-    return [
-      `Goal mutations did not advance. Last validation codes: ${validationCodes.join(', ')}.`,
-      'For new goals, call update_goals with {"action":"add","id":"stable-id","name":"visible name","completionPolicy":"blocking|persistent","status":"active|pending"}.',
-      'For existing goals, call update_goals with {"action":"activate|complete|block|remove|update","id":"existing-id"}; name is optional.',
-      'For workspace-file deliverables use evidence.artifact:<exact-workspace-relative-path>, never evidence.prefix:artifact. evidence.min and evidence.count cannot be the only blocking criteria.',
-      'Correct the arguments once, then switch to non-goal tools.',
-    ].join(' ');
   }
 
   return 'Do not repeat the same tool call with the same input. Reuse the result you already have or take a different next step.';
@@ -164,7 +79,6 @@ export function buildAgentControlGraphLoopRecoveryDecision(params: {
   iteration: number;
   maxIterations: number;
   toolCallHistory?: ReadonlyArray<ToolCallRecord>;
-  goals?: ReadonlyArray<AgentGoal>;
 }): AgentControlGraphLoopRecoveryDecision {
   if (!params.loopCheck.loopDetected) {
     return {
@@ -184,10 +98,6 @@ export function buildAgentControlGraphLoopRecoveryDecision(params: {
     };
   }
 
-  const validationCodes =
-    params.loopCheck.type === 'goal_mutation_stall'
-      ? extractRecentGoalMutationValidationCodes(params.toolCallHistory ?? [])
-      : [];
   const repairHints =
     params.loopCheck.type === 'repeated_error'
       ? extractRecentToolRepairHints(params.toolCallHistory ?? [])
@@ -199,9 +109,7 @@ export function buildAgentControlGraphLoopRecoveryDecision(params: {
     type: 'warning',
     warningMessage: `${warningPrefix} ${params.loopCheck.details ?? 'Loop detected.'}\n\n${buildLoopRecoveryHint(
       params.loopCheck.type,
-      validationCodes,
       repairHints,
-      params.goals ?? [],
       resolveStalledToolName(params.toolCallHistory),
     )}`,
     shouldResetWarningState: false,

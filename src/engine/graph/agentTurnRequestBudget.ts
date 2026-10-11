@@ -84,14 +84,10 @@ export interface CompactAgentTurnWorkingMessagesParams {
   warn: (message: string, error: unknown) => void;
 }
 
-function extractGoalsPromptSection(
+function extractPlanPromptSection(
   sections: ReadonlyArray<SystemPromptSection> | undefined,
-): string | null {
-  if (!sections?.length) {
-    return null;
-  }
-  const goalsSection = sections.find((section) => section.purpose === 'goals');
-  return goalsSection?.text ?? null;
+): string | undefined {
+  return sections?.find((section) => section.purpose === 'plan')?.text;
 }
 
 function extractWorkflowTaskAnchorPromptSection(
@@ -221,12 +217,12 @@ function buildMessageTokenBuckets(
 function buildUsageTokenBuckets(params: {
   budgetResult: ReturnType<typeof enforceContextBudget>;
   family: string | undefined;
-  goalsTokens: number;
   memoryCacheableTokens: number;
   memoryDynamicTokens: number;
+  planTokens: number;
 }): UsageTokenBuckets {
   const rawMemoryContextTokens = Math.round(
-    params.memoryCacheableTokens + params.memoryDynamicTokens + params.goalsTokens,
+    params.memoryCacheableTokens + params.memoryDynamicTokens + params.planTokens,
   );
   const memoryContextTokens = Math.min(
     Math.max(0, rawMemoryContextTokens),
@@ -261,7 +257,7 @@ export async function prepareAgentTurnRequestBudget(
   const contextWindow = getWorkingContextWindow(params.requestModel, workingContextOptions);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = stampPromptCachePlacement(params.toolsForIteration ?? []);
-  const currentGoalsPromptSection = extractGoalsPromptSection(params.enrichedSystemPromptSections);
+  const planPromptSection = extractPlanPromptSection(params.enrichedSystemPromptSections);
   const workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
     params.enrichedSystemPromptSections,
   );
@@ -380,7 +376,7 @@ export async function prepareAgentTurnRequestBudget(
   const memoryCacheableTokens = (params.livingMemory?.sections ?? [])
     .filter((section) => section.cacheable === true)
     .reduce((sum, section) => sum + estimateTokens(section.text, params.requestFamily), 0);
-  const goalsTokens = estimateTokens(currentGoalsPromptSection ?? '', params.requestFamily);
+  const planTokens = estimateTokens(planPromptSection ?? '', params.requestFamily);
   const memoryDynamicTokens = Math.max(
     0,
     Math.round((params.livingMemory?.recalledFactCount ?? 0) * 48),
@@ -388,8 +384,8 @@ export async function prepareAgentTurnRequestBudget(
   const usageTokenBuckets = buildUsageTokenBuckets({
     budgetResult,
     family: params.requestFamily,
-    goalsTokens,
     memoryCacheableTokens,
+    planTokens,
     memoryDynamicTokens,
   });
   recordBudgetAuditEntry({
@@ -402,7 +398,7 @@ export async function prepareAgentTurnRequestBudget(
       messages: budgetPreview.pressure.messagesTokens,
       memory_cacheable: Math.round(memoryCacheableTokens),
       memory_dynamic: memoryDynamicTokens,
-      goals: Math.round(goalsTokens),
+      plan: Math.round(planTokens),
     },
     totalTokens: budgetPreview.pressure.totalTokens,
     contextWindow,

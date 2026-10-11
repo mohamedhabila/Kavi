@@ -279,7 +279,6 @@ export async function runOrchestratorGraphSession(params: {
       onConversationModeEscalated: persistConversationModeEscalation,
       personaThinkingLevel: persona?.thinkingLevel,
       promptContextSupport: {
-        graphGoals: graph.getGraphSnapshot().goals ?? [],
         maxToolIterations,
         resolvedPrompt,
         runtimeContext: runtimeContextNote,

@@ -1,5 +1,5 @@
 import type { RequestFrame } from '../../services/agents/requestFrame';
-import type { AgentGoal } from '../../types/agentRun';
+import type { AgentGoal, AgentPlanStep } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
@@ -18,8 +18,8 @@ export type LivingMemorySection = {
 };
 
 export type PromptContextSupport = {
-  graphGoals?: ReadonlyArray<AgentGoal>;
-  goalsPromptSection?: string | null;
+  /** The run's plan, read from the graph each turn. */
+  graphPlan?: ReadonlyArray<AgentPlanStep>;
   livingMemorySections?: ReadonlyArray<LivingMemorySection>;
   livingMemoryReadEpoch?: number;
   livingMemoryAuthoritySnapshot?: MemoryAuthoritySnapshot;

@@ -1,5 +1,6 @@
 import type {
   AgentGoal,
+  AgentPlanStep,
   AgentRunAsyncOperation,
   AgentRunControlGraphAuditEvent,
   AgentRunControlGraphPerformance,
@@ -94,6 +95,11 @@ export type AgentControlGraphEvent =
       reason?: string;
       /** Internal completion bookkeeping must not become user-facing task memory. */
       projectToMemoryTasks?: false;
+      timestamp?: number;
+    }
+  | {
+      type: 'PLAN_UPDATED';
+      plan: AgentPlanStep[];
       timestamp?: number;
     }
   | {

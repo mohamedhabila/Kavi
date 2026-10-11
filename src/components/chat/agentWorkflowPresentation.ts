@@ -1,16 +1,15 @@
-import type { AgentGoal, AgentRun, AgentRunStatus } from '../../types/agentRun';
+import type { AgentPlanStep, AgentRun, AgentRunStatus } from '../../types/agentRun';
 import { buildAgentRunTrace, type AgentRunTraceIteration } from '../../services/agents/runTrace';
 import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
 export interface AgentWorkflowPresentation {
-  activeGoal?: AgentGoal;
+  /** The step the run is on: the one in progress, else the next one pending. */
+  currentStep?: AgentPlanStep;
   detail?: string;
-  /** The task's own goals; the engine's bookkeeping goals are left out. */
-  goals: AgentGoal[];
-  /** Every goal, bookkeeping included, for developer mode. */
-  allGoals: AgentGoal[];
+  /** The plan the model keeps with update_plan, in its own words. */
+  plan: AgentPlanStep[];
   statusLabel: string;
   title: string;
   trace: AgentRunTraceIteration[];
@@ -23,55 +22,40 @@ export function formatRunStatusLabel(
   executionPresentation?: AgentRunExecutionPresentation,
 ): string {
   if (status === 'running' && executionPresentation === 'waiting_for_user') {
-    return t('chat.agentGoals.status.waitingForYou');
+    return t('chat.agentPlan.status.waitingForYou');
   }
   if (status === 'running' && executionPresentation === 'needs_attention') {
-    return t('chat.agentGoals.status.needsAttention');
+    return t('chat.agentPlan.status.needsAttention');
   }
 
   switch (status) {
     case 'completed':
-      return t('chat.agentGoals.status.completed');
+      return t('chat.agentPlan.status.completed');
     case 'failed':
-      return t('chat.agentGoals.status.failed');
+      return t('chat.agentPlan.status.failed');
     case 'cancelled':
-      return t('chat.agentGoals.status.cancelled');
+      return t('chat.agentPlan.status.cancelled');
     default:
-      return t('chat.agentGoals.status.running');
+      return t('chat.agentPlan.status.running');
   }
 }
 
-export function formatGoalStatusLabel(status: AgentGoal['status'], t: TranslateFn): string {
+export function formatPlanStepStatusLabel(status: AgentPlanStep['status'], t: TranslateFn): string {
   switch (status) {
     case 'pending':
-      return t('chat.agentGoals.goalStatus.pending');
-    case 'active':
-      return t('chat.agentGoals.goalStatus.active');
+      return t('chat.agentPlan.stepStatus.pending');
+    case 'in_progress':
+      return t('chat.agentPlan.stepStatus.inProgress');
     case 'completed':
-      return t('chat.agentGoals.goalStatus.completed');
-    case 'blocked':
-      return t('chat.agentGoals.goalStatus.blocked');
+      return t('chat.agentPlan.stepStatus.completed');
   }
 }
 
-function resolvePrimaryGoal(goals: AgentGoal[]): AgentGoal | undefined {
+function resolveCurrentStep(plan: ReadonlyArray<AgentPlanStep>): AgentPlanStep | undefined {
   return (
-    goals.find((goal) => goal.status === 'active') ??
-    goals.find((goal) => goal.status === 'blocked') ??
-    goals.find((goal) => goal.status === 'pending') ??
-    goals[0]
+    plan.find((entry) => entry.status === 'in_progress') ??
+    plan.find((entry) => entry.status === 'pending')
   );
-}
-
-/**
- * Owners in the `system:` namespace mark goals the engine creates for itself, such as
- * verifying that an action took effect. They describe the machinery, not the user's
- * task, and their titles are engine text rather than the user's language.
- */
-const SYSTEM_GOAL_OWNER_PREFIX = 'system:';
-
-function isTaskGoal(goal: AgentGoal): boolean {
-  return !goal.owner?.startsWith(SYSTEM_GOAL_OWNER_PREFIX);
 }
 
 export function buildAgentWorkflowPresentation(
@@ -79,21 +63,19 @@ export function buildAgentWorkflowPresentation(
   t: TranslateFn,
   executionPresentation?: AgentRunExecutionPresentation,
 ): AgentWorkflowPresentation {
-  const allGoals = run.controlGraph?.goals ?? [];
-  const goals = allGoals.filter(isTaskGoal);
+  const plan = run.controlGraph?.plan ?? [];
   const activePhase =
     run.phases.find((phase) => phase.key === run.currentPhase) ??
     run.phases.find((phase) => phase.status === 'active');
-  const activeGoal = resolvePrimaryGoal(goals);
+  const currentStep = resolveCurrentStep(plan);
   const trace = buildAgentRunTrace(run.controlGraph);
 
   return {
-    activeGoal,
+    currentStep,
     detail: activePhase?.detail ?? run.latestSummary,
-    goals,
-    allGoals,
+    plan,
     statusLabel: formatRunStatusLabel(run.status, t, executionPresentation),
-    title: activeGoal?.title ?? activePhase?.title ?? run.goal,
+    title: currentStep?.step ?? activePhase?.title ?? run.goal,
     trace,
     traceEventCount: trace.reduce((count, entry) => count + entry.events.length, 0),
   };

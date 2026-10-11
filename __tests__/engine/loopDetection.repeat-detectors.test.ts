@@ -1,21 +1,12 @@
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
-import { createGoal } from '../../src/engine/goals/types';
 import {
   CRITICAL_THRESHOLD,
   ERROR_WARNING_THRESHOLD,
-  GOAL_BOOTSTRAP_STALL_THRESHOLD,
-  GOAL_MUTATION_STALL_THRESHOLD,
   STAGNANT_PROGRESS_THRESHOLD,
   WARNING_THRESHOLD,
   buildGoalProgressFingerprint,
   buildToolMultisetKey,
   detectGenericRepeat,
-  detectGoalBootstrapStall,
-  detectGoalFocusThrash,
-  detectGoalMutationErrorLoop,
-  detectGoalMutationStall,
   detectLoops,
-  GOAL_FOCUS_THRASH_THRESHOLD,
   detectRepeatedErrors,
   detectStagnantProgress,
   hashResult,
@@ -115,7 +106,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'gate-followup', status: 'active', evidence: ['write_file:done'] },
       ]),
-      activeGoalId: 'gate-followup',
     };
 
     for (let i = 0; i < STAGNANT_PROGRESS_THRESHOLD; i += 1) {
@@ -137,7 +127,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'monitor', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'monitor',
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -145,19 +134,7 @@ describe('stagnant progress detection', () => {
       history.push(rec('wait', JSON.stringify({ ms: 60_000 }), 'ok'));
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'monitor',
-            title: 'Monitor',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Complete monitoring'],
-          }),
-        ],
-      }),
-    ).toEqual({
+    expect(detectLoops(history, signatures)).toEqual({
       loopDetected: false,
     });
   });
@@ -169,7 +146,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'monitor', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'monitor',
     };
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
       recordIterationProgressSignature(signatures, entry);
@@ -188,19 +164,7 @@ describe('stagnant progress detection', () => {
       rec('wait', JSON.stringify({ ms: 60_000 }), 'waited'),
     ];
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'monitor',
-            title: 'Monitor',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Complete monitoring'],
-          }),
-        ],
-      }),
-    ).toEqual({ loopDetected: false });
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
   });
 
   it('still detects stagnant wait iterations when the waits fail', () => {
@@ -211,7 +175,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'monitor', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'monitor',
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -226,19 +189,7 @@ describe('stagnant progress detection', () => {
       );
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'monitor',
-            title: 'Monitor',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Complete monitoring'],
-          }),
-        ],
-      }),
-    ).toMatchObject({
+    expect(detectLoops(history, signatures)).toMatchObject({
       loopDetected: true,
       level: 'critical',
       type: 'stagnant_progress',
@@ -253,7 +204,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'audit', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'audit',
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -267,19 +217,7 @@ describe('stagnant progress detection', () => {
       );
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'audit',
-            title: 'Audit source packets',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Produce a grounded audit'],
-          }),
-        ],
-      }),
-    ).toEqual({ loopDetected: false });
+    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
   });
 
   it('warns before stopping distinct file paths that return no new information', () => {
@@ -290,7 +228,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'audit', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'audit',
     };
 
     for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
@@ -300,19 +237,7 @@ describe('stagnant progress detection', () => {
       );
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'audit',
-            title: 'Audit source packets',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Produce a grounded audit'],
-          }),
-        ],
-      }),
-    ).toMatchObject({
+    expect(detectLoops(history, signatures)).toMatchObject({
       loopDetected: true,
       level: 'warning',
       type: 'stagnant_progress',
@@ -328,7 +253,6 @@ describe('stagnant progress detection', () => {
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'audit', status: 'active', evidence: [] },
       ]),
-      activeGoalId: 'audit',
     };
 
     for (let index = 0; index < CRITICAL_THRESHOLD; index += 1) {
@@ -338,19 +262,7 @@ describe('stagnant progress detection', () => {
       );
     }
 
-    expect(
-      detectLoops(history, signatures, {
-        goals: [
-          createGoal({
-            id: 'audit',
-            title: 'Audit source packets',
-            status: 'active',
-            completionPolicy: 'blocking',
-            successCriteria: ['Produce a grounded audit'],
-          }),
-        ],
-      }),
-    ).toMatchObject({
+    expect(detectLoops(history, signatures)).toMatchObject({
       loopDetected: true,
       level: 'critical',
       type: 'stagnant_progress',
@@ -360,28 +272,25 @@ describe('stagnant progress detection', () => {
 
   it('does not flag stagnant progress when goal evidence advances', () => {
     const signatures: IterationProgressSignature[] = [];
-    const multisetKey = buildToolMultisetKey(['write_file', 'update_goals']);
+    const multisetKey = buildToolMultisetKey(['write_file', 'update_plan']);
 
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'gate-followup', status: 'active', evidence: ['write_file:one'] },
       ]),
-      activeGoalId: 'gate-followup',
     });
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
       ]),
-      activeGoalId: 'gate-followup',
     });
     recordIterationProgressSignature(signatures, {
       toolMultisetKey: multisetKey,
       goalProgressFingerprint: buildGoalProgressFingerprint([
         { id: 'gate-followup', status: 'active', evidence: ['write_file:one', 'write_file:two'] },
       ]),
-      activeGoalId: 'gate-followup',
     });
 
     expect(detectStagnantProgress(signatures)).toEqual({ detected: false });
@@ -412,167 +321,5 @@ describe('stagnant progress detection', () => {
     expect(after).toContain('constraints:2');
     expect(after).not.toContain('Keep local');
     expect(after).not.toContain('user-1');
-  });
-});
-
-describe('detectGoalMutationStall', () => {
-  it('detects unchanged goal progress during update_goals-only iterations when goals exist', () => {
-    const signatures: IterationProgressSignature[] = [];
-    const entry = {
-      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'scope-a', status: 'active', evidence: [] },
-      ]),
-      activeGoalId: 'scope-a',
-    };
-
-    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
-      recordIterationProgressSignature(signatures, entry);
-    }
-
-    expect(detectGoalMutationStall(signatures)).toEqual({
-      detected: true,
-      count: GOAL_MUTATION_STALL_THRESHOLD,
-    });
-  });
-
-  it('does not fire when non-goal tools are in the multiset', () => {
-    const signatures: IterationProgressSignature[] = [];
-    const entry = {
-      toolMultisetKey: buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME, 'memory_recall']),
-      goalProgressFingerprint: buildGoalProgressFingerprint([
-        { id: 'scope-a', status: 'active', evidence: [] },
-      ]),
-      activeGoalId: 'scope-a',
-    };
-
-    for (let i = 0; i < GOAL_MUTATION_STALL_THRESHOLD; i += 1) {
-      recordIterationProgressSignature(signatures, entry);
-    }
-
-    expect(detectGoalMutationStall(signatures)).toEqual({ detected: false });
-  });
-});
-
-describe('detectGoalFocusThrash', () => {
-  it('detects alternating active goal focus during update_goals-only iterations', () => {
-    const signatures: IterationProgressSignature[] = [];
-    const goalMutationKey = buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]);
-    const focusSequence = ['scope-a', 'scope-b', 'scope-a', 'scope-b'] as const;
-
-    for (const activeGoalId of focusSequence) {
-      recordIterationProgressSignature(signatures, {
-        toolMultisetKey: goalMutationKey,
-        goalProgressFingerprint: buildGoalProgressFingerprint([
-          {
-            id: 'scope-a',
-            status: activeGoalId === 'scope-a' ? 'active' : 'pending',
-            evidence: [],
-          },
-          {
-            id: 'scope-b',
-            status: activeGoalId === 'scope-b' ? 'active' : 'pending',
-            evidence: [],
-          },
-        ]),
-        activeGoalId,
-      });
-    }
-
-    expect(detectGoalFocusThrash(signatures)).toEqual({
-      detected: true,
-      count: GOAL_FOCUS_THRASH_THRESHOLD,
-    });
-  });
-});
-
-describe('detectGoalMutationErrorLoop', () => {
-  it('detects consecutive update_goals validation failures', () => {
-    const history = Array.from({ length: GOAL_MUTATION_STALL_THRESHOLD }, () =>
-      rec(
-        GOAL_BOOTSTRAP_TOOL_NAME,
-        '{"action":"complete","goals":[{"id":"scope-b"}]}',
-        'opaque',
-        'failed',
-      ),
-    );
-    expect(detectGoalMutationErrorLoop(history)).toEqual({
-      detected: true,
-      count: GOAL_MUTATION_STALL_THRESHOLD,
-    });
-  });
-
-  it('detects recent update_goals validation failures even when other tools are interleaved', () => {
-    const history = [
-      rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(
-        GOAL_BOOTSTRAP_TOOL_NAME,
-        '{"action":"complete","goals":[{"id":"scope-b"}]}',
-        'opaque',
-        'failed',
-      ),
-      rec('write_file', '{"path":"status.txt"}', '{"ok":true}'),
-      rec(
-        GOAL_BOOTSTRAP_TOOL_NAME,
-        '{"action":"complete","goals":[{"id":"scope-b"}]}',
-        'opaque',
-        'failed',
-      ),
-      rec('device_status', '{}', '{"ok":true}'),
-      rec(
-        GOAL_BOOTSTRAP_TOOL_NAME,
-        '{"action":"complete","goals":[{"id":"scope-b"}]}',
-        'opaque',
-        'failed',
-      ),
-    ];
-
-    expect(detectGoalMutationErrorLoop(history)).toEqual({
-      detected: true,
-      count: GOAL_MUTATION_STALL_THRESHOLD,
-    });
-  });
-});
-
-describe('detectGoalBootstrapStall', () => {
-  it('does not fire when goals already exist', () => {
-    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
-    );
-    expect(
-      detectGoalBootstrapStall({
-        goals: [createGoal({ id: 'g-1', title: 'seeded', status: 'active' })],
-        history,
-      }),
-    ).toEqual({ detected: false });
-  });
-
-  it('detects identical bootstrap calls without goal creation', () => {
-    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[]}', '{"updated":0}'),
-    );
-    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({
-      detected: true,
-      count: GOAL_BOOTSTRAP_STALL_THRESHOLD,
-    });
-  });
-
-  it('detects repeated bootstrap errors without goal creation', () => {
-    const history = Array.from({ length: GOAL_BOOTSTRAP_STALL_THRESHOLD }, () =>
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add"}', 'opaque', 'failed'),
-    );
-    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({
-      detected: true,
-      count: GOAL_BOOTSTRAP_STALL_THRESHOLD,
-    });
-  });
-
-  it('allows bootstrap retries when arguments change', () => {
-    const history = [
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"a"}]}', '{"updated":0}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"b"}]}', '{"updated":0}'),
-      rec(GOAL_BOOTSTRAP_TOOL_NAME, '{"action":"add","goals":[{"id":"c"}]}', '{"updated":0}'),
-    ];
-    expect(detectGoalBootstrapStall({ goals: [], history })).toEqual({ detected: false });
   });
 });

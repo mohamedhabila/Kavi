@@ -5,7 +5,7 @@
 
 import { ToolDefinition } from '../../../types/tool';
 import { SESSION_SPAWN_TOOL } from '../builtin-definitions-sessions';
-import { UPDATE_GOALS_TOOL } from '../goal-definitions';
+import { UPDATE_PLAN_TOOL } from '../plan-definitions';
 import { REQUEST_CLARIFICATION_TOOL } from '../requestClarificationDefinition';
 import {
   PYTHON_EXTENSION_EXAMPLES,
@@ -246,5 +246,5 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
     },
     strict: false,
   },
-  UPDATE_GOALS_TOOL,
+  UPDATE_PLAN_TOOL,
 ];

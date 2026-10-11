@@ -1,6 +1,4 @@
-import { GOAL_BOOTSTRAP_TOOL_NAME } from './goals/bootstrap';
-import { areGoalSuccessCriteriaSatisfied } from './goals/completionEvidence';
-import { isBlockingGoal, type AgentGoal } from './goals/types';
+import type { AgentGoal } from './goals/types';
 import type { ToolMessageOutcomeStatus } from './toolExecution/toolMessageOutcome';
 import {
   buildRawToolArgsKey,
@@ -44,22 +42,13 @@ export type LoopDetectorKind =
   | 'repeated_error'
   | 'discovery_stall'
   | 'stagnant_progress'
-  | 'tool_filter_loop'
-  | 'bootstrap_stall'
-  | 'goal_mutation_stall';
-
-export const GOAL_BOOTSTRAP_STALL_THRESHOLD = 3;
-export const GOAL_MUTATION_STALL_THRESHOLD = 3;
-export const GOAL_MUTATION_ERROR_WINDOW_SIZE = 8;
+  | 'tool_filter_loop';
 
 export type IterationProgressSignature = {
   toolMultisetKey: string;
   goalProgressFingerprint: string;
-  activeGoalId: string | null;
   semanticProgressFingerprint?: string;
 };
-
-export const GOAL_FOCUS_THRASH_THRESHOLD = 4;
 
 export const STAGNANT_PROGRESS_SIGNATURE_HISTORY_SIZE = 10;
 export const STAGNANT_PROGRESS_THRESHOLD = 3;
@@ -82,30 +71,6 @@ const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 // intentionally unchanged. Failed-repeat detection and the global iteration
 // cap still protect against broken or unbounded wait loops.
 const ELAPSED_PROGRESS_TOOL_NAMES = new Set(['wait', 'sessions_wait']);
-
-function hasIncompleteBlockingGoal(goals: ReadonlyArray<AgentGoal> | undefined): boolean {
-  return (goals ?? []).some(
-    (goal) =>
-      isBlockingGoal(goal) &&
-      (goal.status === 'active' || goal.status === 'pending' || goal.status === 'blocked') &&
-      !areGoalSuccessCriteriaSatisfied(goal),
-  );
-}
-
-function resolveBlockingWorkLoopSeverity(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): LoopSeverity {
-  if (goals === undefined || goals.length === 0) {
-    return 'critical';
-  }
-  return hasIncompleteBlockingGoal(goals) ? 'critical' : 'warning';
-}
-
-function resolveGoalMutationStallSeverity(
-  goals: ReadonlyArray<AgentGoal> | undefined,
-): LoopSeverity {
-  return resolveBlockingWorkLoopSeverity(goals);
-}
 
 function isDiscoveryOnlyToolMultiset(multisetKey: string | undefined): boolean {
   const toolNames = (multisetKey ?? '').split('|').filter(Boolean);
@@ -355,192 +320,21 @@ export function detectConsecutiveBlockedPreflightCalls(
   };
 }
 
-export function detectGoalFocusThrash(
-  signatures: ReadonlyArray<IterationProgressSignature>,
-  threshold: number = GOAL_FOCUS_THRASH_THRESHOLD,
-): { detected: boolean; count?: number } {
-  if (signatures.length < threshold) {
-    return { detected: false };
-  }
-
-  const goalMutationMultiset = buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]);
-  const window = signatures.slice(-threshold);
-  const first = window[0];
-  if (!first || first.toolMultisetKey !== goalMutationMultiset) {
-    return { detected: false };
-  }
-
-  const onlyGoalMutation = window.every((entry) => entry.toolMultisetKey === goalMutationMultiset);
-  if (!onlyGoalMutation) {
-    return { detected: false };
-  }
-
-  const activeIds = window.map((entry) => entry.activeGoalId ?? '');
-  if (activeIds.some((id) => !id)) {
-    return { detected: false };
-  }
-
-  if (new Set(activeIds).size < 2) {
-    return { detected: false };
-  }
-
-  let transitions = 0;
-  for (let index = 1; index < activeIds.length; index += 1) {
-    if (activeIds[index] !== activeIds[index - 1]) {
-      transitions += 1;
-    }
-  }
-
-  if (transitions < threshold - 1) {
-    return { detected: false };
-  }
-
-  return { detected: true, count: threshold };
-}
-
-export function detectGoalMutationStall(
-  signatures: ReadonlyArray<IterationProgressSignature>,
-  threshold: number = GOAL_MUTATION_STALL_THRESHOLD,
-): { detected: boolean; count?: number } {
-  if (signatures.length < threshold) {
-    return { detected: false };
-  }
-
-  const goalMutationMultiset = buildToolMultisetKey([GOAL_BOOTSTRAP_TOOL_NAME]);
-  const window = signatures.slice(-threshold);
-  const first = window[0];
-  if (!first || first.toolMultisetKey !== goalMutationMultiset) {
-    return { detected: false };
-  }
-
-  const onlyGoalMutation = window.every((entry) => entry.toolMultisetKey === goalMutationMultiset);
-  const unchangedProgress = window.every(
-    (entry) => entry.goalProgressFingerprint === first.goalProgressFingerprint,
-  );
-  if (onlyGoalMutation && unchangedProgress) {
-    return { detected: true, count: threshold };
-  }
-
-  return { detected: false };
-}
-
-export function detectGoalMutationErrorLoop(
-  history: ToolCallRecord[],
-  threshold: number = GOAL_MUTATION_STALL_THRESHOLD,
-): { detected: boolean; count?: number } {
-  if (history.length < threshold) {
-    return { detected: false };
-  }
-
-  const window = history.slice(-threshold);
-  const bootstrapTool = normalizeToolNameKey(GOAL_BOOTSTRAP_TOOL_NAME);
-  const allGoalMutation = window.every(
-    (entry) => normalizeToolNameKey(entry.name) === bootstrapTool,
-  );
-  if (!allGoalMutation) {
-    const recentWindow = history.slice(-Math.max(threshold, GOAL_MUTATION_ERROR_WINDOW_SIZE));
-    const recentGoalMutationCalls = recentWindow
-      .filter((entry) => normalizeToolNameKey(entry.name) === bootstrapTool)
-      .slice(-threshold);
-    if (
-      recentGoalMutationCalls.length >= threshold &&
-      recentGoalMutationCalls.every((entry) => entry.status === 'failed')
-    ) {
-      return { detected: true, count: recentGoalMutationCalls.length };
-    }
-
-    return { detected: false };
-  }
-
-  const allErrors = window.every((entry) => entry.status === 'failed');
-  if (allErrors) {
-    return { detected: true, count: threshold };
-  }
-
-  return { detected: false };
-}
-
-export function detectGoalBootstrapStall(params: {
-  goals: ReadonlyArray<AgentGoal>;
-  history: ToolCallRecord[];
-  threshold?: number;
-}): { detected: boolean; count?: number } {
-  if (params.goals.length > 0) {
-    return { detected: false };
-  }
-
-  const threshold = params.threshold ?? GOAL_BOOTSTRAP_STALL_THRESHOLD;
-  if (params.history.length < threshold) {
-    return { detected: false };
-  }
-
-  const window = params.history.slice(-threshold);
-  const bootstrapTool = normalizeToolNameKey(GOAL_BOOTSTRAP_TOOL_NAME);
-  const allGoalMutation = window.every(
-    (entry) => normalizeToolNameKey(entry.name) === bootstrapTool,
-  );
-  if (!allGoalMutation) {
-    return { detected: false };
-  }
-
-  const allErrors = window.every((entry) => entry.status === 'failed');
-  const firstKey = buildRawToolArgsKey(window[0]!);
-  const allIdentical = window.every((entry) => buildRawToolArgsKey(entry) === firstKey);
-  if (allErrors || allIdentical) {
-    return { detected: true, count: threshold };
-  }
-
-  return { detected: false };
-}
-
 export function detectLoops(
   history: ToolCallRecord[],
   stagnationSignatures: ReadonlyArray<IterationProgressSignature> = [],
-  options?: { goals?: ReadonlyArray<AgentGoal> },
 ): LoopDetectionResult {
-  if (options?.goals !== undefined && options.goals.length === 0) {
-    const bootstrapStall = detectGoalBootstrapStall({
-      goals: options.goals,
-      history,
-    });
-    if (bootstrapStall.detected) {
-      return {
-        loopDetected: true,
-        level: 'critical',
-        type: 'bootstrap_stall',
-        count: bootstrapStall.count,
-        details:
-          `CRITICAL: ${bootstrapStall.count} consecutive ${GOAL_BOOTSTRAP_TOOL_NAME} ` +
-          'calls without bootstrapping goals.',
-      };
-    }
-  }
-
   if (history.length > 0) {
     const blockedPreflight = detectConsecutiveBlockedPreflightCalls(history);
     if (blockedPreflight.detected) {
-      const level = resolveBlockingWorkLoopSeverity(options?.goals);
       return {
         loopDetected: true,
-        level,
+        level: 'critical',
         type: 'tool_filter_loop',
         count: blockedPreflight.count,
         details:
-          `${level.toUpperCase()}: ${blockedPreflight.count} consecutive model turns repeated ` +
+          `CRITICAL: ${blockedPreflight.count} consecutive model turns repeated ` +
           `the same ${blockedPreflight.kind} preflight-blocked tool call without graph progress.`,
-      };
-    }
-    const goalMutationErrorLoop = detectGoalMutationErrorLoop(history);
-    if (goalMutationErrorLoop.detected) {
-      const level = resolveGoalMutationStallSeverity(options?.goals);
-      return {
-        loopDetected: true,
-        level,
-        type: 'goal_mutation_stall',
-        count: goalMutationErrorLoop.count,
-        details:
-          `${level.toUpperCase()}: ${goalMutationErrorLoop.count} recent ${GOAL_BOOTSTRAP_TOOL_NAME} ` +
-          'calls failed without graph progress.',
       };
     }
     const repeatCritical = detectGenericRepeat(history, CRITICAL_THRESHOLD);
@@ -575,34 +369,6 @@ export function detectLoops(
         details: `WARNING: ${repeatWarning.tool} repeated ${repeatWarning.count} times with identical input.`,
       };
     }
-  }
-
-  const goalFocusThrash = detectGoalFocusThrash(stagnationSignatures);
-  if (goalFocusThrash.detected) {
-    const level = resolveGoalMutationStallSeverity(options?.goals);
-    return {
-      loopDetected: true,
-      level,
-      type: 'goal_mutation_stall',
-      count: goalFocusThrash.count,
-      details:
-        `${level.toUpperCase()}: ${goalFocusThrash.count} consecutive ${GOAL_BOOTSTRAP_TOOL_NAME} ` +
-        'iterations alternated active goal focus without net progress.',
-    };
-  }
-
-  const goalMutationStall = detectGoalMutationStall(stagnationSignatures);
-  if (goalMutationStall.detected) {
-    const level = resolveGoalMutationStallSeverity(options?.goals);
-    return {
-      loopDetected: true,
-      level,
-      type: 'goal_mutation_stall',
-      count: goalMutationStall.count,
-      details:
-        `${level.toUpperCase()}: ${goalMutationStall.count} consecutive ${GOAL_BOOTSTRAP_TOOL_NAME} ` +
-        'iterations without goal progress.',
-    };
   }
 
   const stagnantProgress = detectStagnantProgress(stagnationSignatures);
@@ -641,7 +407,7 @@ export function detectLoops(
     const level: LoopSeverity =
       discoveryOnly || (distinctInformationOnly && reportedStagnantCount < CRITICAL_THRESHOLD)
         ? 'warning'
-        : resolveBlockingWorkLoopSeverity(options?.goals);
+        : 'critical';
     return {
       loopDetected: true,
       level,

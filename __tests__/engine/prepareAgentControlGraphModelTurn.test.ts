@@ -324,7 +324,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps graph mutation available as the core empty-goal affordance', async () => {
+  it('keeps the plan tool on the core surface', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -338,8 +338,8 @@ describe('prepareAgentControlGraphModelTurn', () => {
       allTools: [
         writeTool,
         {
-          name: 'update_goals',
-          description: 'Goals',
+          name: 'update_plan',
+          description: 'Plan',
           input_schema: { type: 'object', properties: {} },
         } as any,
       ],
@@ -350,7 +350,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       expect.objectContaining({
         groundedRequestScopedTools: [
           expect.objectContaining({
-            name: 'update_goals',
+            name: 'update_plan',
           }),
           expect.objectContaining({
             name: 'write_file',

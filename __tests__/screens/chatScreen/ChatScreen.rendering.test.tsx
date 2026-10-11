@@ -159,17 +159,7 @@ describe('ChatScreen rendering and layout', () => {
               version: 1,
               status: 'ready',
               iteration: 2,
-              goals: [
-                {
-                  id: 'goal-audit',
-                  title: 'Audit the repository',
-                  status: 'active',
-                  dependencies: [],
-                  evidence: ['read_file'],
-                  createdAt: 1,
-                  updatedAt: 2,
-                },
-              ],
+              plan: [{ step: 'Audit the repository', status: 'in_progress' }],
               expectedToolCalls: [],
               observedToolResults: [],
               pendingAsyncCount: 0,
@@ -224,8 +214,8 @@ describe('ChatScreen rendering and layout', () => {
       });
 
       expect(queryByTestId('agent-run-card')).toBeNull();
-      expect(getByTestId('agent-goals-widget')).toBeTruthy();
-      expect(queryByTestId('agent-goals-details')).toBeNull();
+      expect(getByTestId('agent-plan-widget')).toBeTruthy();
+      expect(queryByTestId('agent-plan-details')).toBeNull();
     } finally {
       act(() => {
         jest.runOnlyPendingTimers();

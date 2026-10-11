@@ -4,6 +4,7 @@
 
 import { applyCompactionResultToWorkingMessages } from '../../engine/orchestratorCompaction';
 import { buildAgentTurnPromptBundle } from '../../engine/graph/agentTurnPromptBundle';
+import { renderPlanPromptSection } from '../../engine/plan/agentPlan';
 import type { CompactResult } from '../../services/context/types';
 import type { Message } from '../../types/message';
 import type { AcceptanceFixtureOutcome } from './types';
@@ -31,33 +32,33 @@ export function evaluateCompactionRecallFixture(
 ): AcceptanceFixtureOutcome {
   const currentTurnPrompt = buildAgentTurnPromptBundle({
     effectiveForceTextThisTurn: false,
-    goalsPromptSection: fixture.goalsPromptSection,
     groundedRequestScopedTools: [],
     iteration: 1,
     maxToolIterations: 8,
+    planPromptSection: renderPlanPromptSection(fixture.plan),
     resolvedPrompt: 'You are Kavi, a helpful mobile assistant.',
     selectedTools: [],
     skillPrompts: '',
     toolingEnabledForProvider: false,
   }).enrichedSystemPrompt;
 
-  const missingFromCurrentPrompt = hasMarkers(currentTurnPrompt, fixture.requiredGoalMarkers);
+  const missingFromCurrentPrompt = hasMarkers(currentTurnPrompt, fixture.requiredPlanMarkers);
   if (missingFromCurrentPrompt) {
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: `current-turn prompt missing graph marker: ${missingFromCurrentPrompt}`,
+      detail: `current-turn prompt missing plan marker: ${missingFromCurrentPrompt}`,
     };
   }
 
-  const duplicatedCurrentGoalMarker = fixture.requiredGoalMarkers.find(
+  const duplicatedCurrentPlanMarker = fixture.requiredPlanMarkers.find(
     (marker) => countOccurrences(currentTurnPrompt, marker) !== 1,
   );
-  if (duplicatedCurrentGoalMarker) {
+  if (duplicatedCurrentPlanMarker) {
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: `current-turn prompt graph marker must occur exactly once: ${duplicatedCurrentGoalMarker}`,
+      detail: `current-turn prompt plan marker must occur exactly once: ${duplicatedCurrentPlanMarker}`,
     };
   }
 
@@ -92,14 +93,14 @@ export function evaluateCompactionRecallFixture(
     };
   }
 
-  const staleGoalMarker = fixture.requiredGoalMarkers.find((marker) =>
+  const stalePlanMarker = fixture.requiredPlanMarkers.find((marker) =>
     systemContent.includes(marker),
   );
-  if (staleGoalMarker) {
+  if (stalePlanMarker) {
     return {
       fixtureId: fixture.id,
       passed: false,
-      detail: `compacted transcript retained stale graph marker: ${staleGoalMarker}`,
+      detail: `compacted transcript retained stale plan marker: ${stalePlanMarker}`,
     };
   }
 

@@ -11,11 +11,7 @@ import {
 } from './effectCompletionEvidence';
 import { sanitizeWorkspaceRelativePath } from '../../services/workspaces/paths';
 import { readDelegatedArtifactEvidencePath } from './delegation';
-import {
-  describeJsonFieldCriterionAction,
-  EVIDENCE_JSON_FIELD_PATTERN,
-  readJsonFieldCriterion,
-} from './jsonFieldCriterion';
+import { EVIDENCE_JSON_FIELD_PATTERN } from './jsonFieldCriterion';
 
 /**
  * A workspace resource identity has two independent authors. The receipt carries the
@@ -94,12 +90,6 @@ export function formatSuccessCriteriaFormsDescription(): string {
   return SUCCESS_CRITERION_FORMS.join(', ');
 }
 
-export function formatModelAuthoredSuccessCriteriaFormsDescription(): string {
-  return SUCCESS_CRITERION_FORMS.filter(
-    (form) => form !== 'evidence.effect:<closed-json-contract>',
-  ).join(', ');
-}
-
 export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
   const fileHashMatch = criterion.match(EVIDENCE_FILE_HASH_PATTERN);
   const exitCodeMatch = criterion.match(EVIDENCE_EXIT_CODE_PATTERN);
@@ -120,80 +110,6 @@ export function isRecognizedSuccessCriterionForm(criterion: string): boolean {
 
 export function isCountOnlySuccessCriterion(criterion: string): boolean {
   return EVIDENCE_MIN_PATTERN.test(criterion) || EVIDENCE_COUNT_PATTERN.test(criterion);
-}
-
-/**
- * Renders the concrete action that records evidence for an unmet criterion.
- *
- * Loop-recovery and completion-hold prompts are read by the model, so naming the
- * criterion alone leaves it guessing which action closes the gap — and guessing is
- * what produces repeated goal bookkeeping instead of progress. Only actions backed
- * by default core tools are named, so a hint never points at an unavailable tool.
- *
- * Returns null for criteria that no single action satisfies (bare counts), where a
- * specific instruction would be misleading.
- *
- * `evidence` is what the goal already holds. A json_field criterion is judged against
- * it, because only the results themselves say which fields they actually carry.
- */
-export function describeCriterionSatisfactionAction(
-  criterion: string,
-  evidence: ReadonlyArray<string> = [],
-): string | null {
-  const trimmed = criterion.trim();
-  if (!trimmed || isCountOnlySuccessCriterion(trimmed)) {
-    return null;
-  }
-
-  const toolMatch = trimmed.match(EVIDENCE_TOOL_PATTERN);
-  if (toolMatch) {
-    return `call ${toolMatch[1].trim()} and keep its result`;
-  }
-
-  const artifactMatch = trimmed.match(EVIDENCE_ARTIFACT_PATTERN);
-  if (artifactMatch) {
-    return `write ${artifactMatch[1].trim()} with write_file`;
-  }
-
-  const jsonField = readJsonFieldCriterion(trimmed);
-  if (jsonField) {
-    return describeJsonFieldCriterionAction(jsonField, evidence);
-  }
-
-  const fileHashMatch = trimmed.match(EVIDENCE_FILE_HASH_PATTERN);
-  if (fileHashMatch) {
-    return `write ${fileHashMatch[1].trim()} with write_file`;
-  }
-
-  const exitCodeMatch = trimmed.match(EVIDENCE_EXIT_CODE_PATTERN);
-  if (exitCodeMatch) {
-    return `run the command until it exits ${exitCodeMatch[1]}`;
-  }
-
-  const prefixMatch = trimmed.match(EVIDENCE_PREFIX_PATTERN);
-  if (prefixMatch) {
-    return `produce a ${prefixMatch[1].trim()} result`;
-  }
-
-  return null;
-}
-
-/** Actionable directives for the unmet criteria of the supplied goals, deduped. */
-export function buildCriterionSatisfactionActions(
-  goals: ReadonlyArray<AgentGoal>,
-): string[] {
-  const actions: string[] = [];
-  const seen = new Set<string>();
-  for (const goal of goals) {
-    for (const criterion of goal.successCriteria ?? []) {
-      if (isSuccessCriterionMet(goal, criterion)) continue;
-      const action = describeCriterionSatisfactionAction(criterion, goal.evidence);
-      if (!action || seen.has(action)) continue;
-      seen.add(action);
-      actions.push(action);
-    }
-  }
-  return actions;
 }
 
 export function resolveSuccessCriterionSurfaceHints(
@@ -469,9 +385,8 @@ export function isSuccessCriterionMet(goal: AgentGoal, criterion: string): boole
  *
  * Every other subsystem already treats a count as proving nothing *alongside* specific
  * criteria: it does not make a goal specific enough to derive `blocking` from
- * (`normalizeAddGoalPatch`), it routes no evidence (`hasRoutableSuccessCriteria`), it
- * yields no satisfying action (`describeCriterionSatisfactionAction`), and it alone may be
- * revised away from a blocking goal (`blockingGoalUpdateValidation`). Letting it gate
+ * (`normalizeAddGoalPatch`), it routes no evidence (`hasRoutableSuccessCriteria`), and it
+ * alone may be revised away from a blocking goal (`blockingGoalUpdateValidation`). Letting it gate
  * alongside them was the last place a count still spoke, and the only thing it could say
  * was "do more".
  *

@@ -1,42 +1,6 @@
 import { applyGoalMutation, buildInitialGoalState } from '../../../src/engine/goals/graphState';
-import { createGoal } from '../../../src/engine/goals/types';
-import { renderGoalPromptSection } from '../../../src/engine/goals/promptSection';
-import { buildToolDefinitions } from '../../../src/engine/tools/definitions';
 
 describe('goal system integration', () => {
-  it('update_goals tool is in the global tool definitions', () => {
-    const tools = buildToolDefinitions();
-    const updateGoals = tools.find((t) => t.name === 'update_goals');
-    expect(updateGoals).toBeDefined();
-    expect(updateGoals?.input_schema.type).toBe('object');
-    expect(updateGoals?.strict).toBe(true);
-  });
-
-  it('update_goals is not duplicated in tool definitions', () => {
-    const tools = buildToolDefinitions();
-    const matches = tools.filter((t) => t.name === 'update_goals');
-    expect(matches).toHaveLength(1);
-  });
-
-  it('renders prompt section for a realistic goal set', () => {
-    const goals = [
-      createGoal({ id: 'g1', title: 'Set up project', status: 'completed' }),
-      createGoal({ id: 'g2', title: 'Implement auth', status: 'active', dependencies: ['g1'] }),
-      createGoal({ id: 'g3', title: 'Write tests', status: 'pending', dependencies: ['g2'] }),
-      createGoal({ id: 'g4', title: 'Deploy app', status: 'blocked', dependencies: ['g3'] }),
-    ];
-    const section = renderGoalPromptSection(goals);
-    expect(section).not.toBeNull();
-    expect(section).toContain('### Active');
-    expect(section).toContain('Implement auth');
-    expect(section).toContain('### Pending');
-    expect(section).toContain('Write tests');
-    expect(section).toContain('### Blocked');
-    expect(section).toContain('Deploy app');
-    expect(section).toContain('### Completed (1)');
-    expect(section).toContain('update_goals');
-  });
-
   it('applies a full workflow: add → activate → complete', () => {
     let goals = buildInitialGoalState().goals;
 

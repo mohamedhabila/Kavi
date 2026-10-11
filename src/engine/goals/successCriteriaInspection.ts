@@ -7,13 +7,13 @@
 // lifecycle rules rather than criterion parsing.
 // ---------------------------------------------------------------------------
 
-import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
+import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
 import { isRecognizedSuccessCriterionForm } from './completionEvidence';
 import type { AgentGoal, AgentGoalMutation } from './types';
 import { isRegisteredToolName } from '../tools/toolNameNormalization';
 
 const INTERNAL_DELIVERABLE_TOOL_NAMES = new Set([
-  GOAL_BOOTSTRAP_TOOL_NAME,
+  UPDATE_PLAN_TOOL_NAME,
   'tool_catalog',
   'tool_describe',
   'sessions_spawn',

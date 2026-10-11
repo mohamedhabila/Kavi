@@ -6,8 +6,8 @@ import type { ToolDefinition } from '../../types/tool';
  * exists to control multi-step delegated work, an external development
  * environment, or arbitrary code execution — capabilities a casual conversation has
  * no use for and that "no persona swap" depends on staying behind escalation:
- * spawning or coordinating sub-agent sessions (`sessions`), mutating the goal graph
- * directly (`goal`), a remote shell (`ssh`), native build tooling (`expo`,
+ * spawning or coordinating sub-agent sessions (`sessions`), keeping the run's plan
+ * (`plan`), a remote shell (`ssh`), native build tooling (`expo`,
  * `expo_manual_actions`), source control (`github`), full browser automation
  * (`browser`), and arbitrary code execution (`code`). Everyday actions — calendar,
  * contacts, messaging, web lookup, device state — live in every other category and
@@ -17,7 +17,7 @@ import type { ToolDefinition } from '../../types/tool';
  */
 const AGENTIC_ONLY_TOOL_CATEGORIES: ReadonlySet<string> = new Set([
   'sessions',
-  'goal',
+  'plan',
   'ssh',
   'expo',
   'expo_manual_actions',

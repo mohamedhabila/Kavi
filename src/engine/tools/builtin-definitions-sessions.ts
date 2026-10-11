@@ -3,7 +3,7 @@ import { ToolDefinition } from '../../types/tool';
 export const SESSION_SPAWN_TOOL: ToolDefinition = {
   name: 'sessions_spawn',
   description:
-    'Launch a delegated worker for a self-contained task. The current run must first add a separate blocking goal owned by "delegated-worker" with requiredCapabilities including "coordinate" and successCriteria including "evidence.prefix:worker" plus "evidence.min:1"; do not repurpose a parent deliverable goal. Retry this tool with that goal id as workstreamId. By default the worker is joined to the current user request: the launch returns promptly, the supervisor should continue independent non-overlapping work, and it must obtain the terminal worker result before finalizing. Use waitForCompletion=true to also wait inside the launch call, or explicitly set false only when the worker should remain detached and control should return to the user immediately. Pass a focused prompt. The tools field is a strict security allowlist, not a task plan, and a worker given one receives exactly those tools with no discovery: name every tool its task requires. Omit it only when the default surface suffices, which it does not for code execution — the default carries no python or javascript, so a worker asked to compute can neither run nor discover them and will have no way to report why.',
+    'Launch a delegated worker for a self-contained task. By default the worker is joined to the current user request: the launch returns promptly, the supervisor should continue independent non-overlapping work, and it must obtain the terminal worker result before finalizing. Use waitForCompletion=true to also wait inside the launch call, or explicitly set false only when the worker should remain detached and control should return to the user immediately. Pass a focused prompt. The tools field is a strict security allowlist, not a task plan, and a worker given one receives exactly those tools with no discovery: name every tool its task requires. Omit it only when the default surface suffices, which it does not for code execution — the default carries no python or javascript, so a worker asked to compute can neither run nor discover them and will have no way to report why.',
   input_schema: {
     type: 'object',
     properties: {
@@ -15,26 +15,13 @@ export const SESSION_SPAWN_TOOL: ToolDefinition = {
       workstreamId: {
         type: 'string',
         description:
-          'Stable structured workstream id of the dedicated delegated-worker goal. In a current agent run, create that separate goal before spawning and pass its exact id here.',
-      },
-      goalScope: {
-        type: 'object',
-        description:
-          'Read-only subset of parent graph goals that scope this worker. Goal ids must already exist on the supervisor run.',
-        properties: {
-          goalIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Goal ids from the parent run graph that this worker should focus on. When omitted, the sole eligible delegated-worker goal is used; multiple eligible goals require an exact workstreamId.',
-          },
-        },
+          'Optional. The workstreamId an earlier sessions_spawn result reported, to address that same work again. Omit it to start new work.',
       },
       dependsOnWorkstreams: {
         type: 'array',
         items: { type: 'string' },
         description:
-          'Optional prerequisite workstream ids or titles that must already be complete before this worker can start.',
+          'Optional workstreamIds, as earlier sessions_spawn results reported them, that must be complete before this worker starts.',
       },
       name: {
         type: 'string',

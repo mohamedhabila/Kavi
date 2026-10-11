@@ -52,11 +52,11 @@ const discoveryTools: ToolDefinition[] = [
     },
   },
   {
-    name: 'update_goals',
-    description: 'Update graph goals.',
+    name: 'update_plan',
+    description: 'Update the task plan.',
     input_schema: { type: 'object', properties: {} },
     contract: {
-      category: 'tools',
+      category: 'plan',
       capabilities: ['coordinate'],
       resourceKinds: ['conversation_workspace'],
     },
@@ -226,7 +226,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
     });
 
     const names = selectedNames(surface);
-    expect(names.has('update_goals')).toBe(true);
+    expect(names.has('update_plan')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
@@ -245,13 +245,13 @@ describe('resolveTurnToolSurface discovery decay', () => {
     });
 
     const names = selectedNames(surface);
-    expect(names.has('update_goals')).toBe(true);
+    expect(names.has('update_plan')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
   });
 
-  it('keeps graph mutation available after completed work so the next task can bootstrap', () => {
+  it('keeps the plan tool available after completed work', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
       goals: [
@@ -274,10 +274,10 @@ describe('resolveTurnToolSurface discovery decay', () => {
       includeToolCatalog: false,
     });
 
-    expect(selectedNames(surface).has('update_goals')).toBe(true);
+    expect(selectedNames(surface).has('update_plan')).toBe(true);
   });
 
-  it('keeps graph mutation available for live graph work', () => {
+  it('keeps the plan tool available during live work', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
       goals: [
@@ -301,7 +301,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
       includeToolCatalog: false,
     });
 
-    expect(selectedNames(surface).has('update_goals')).toBe(true);
+    expect(selectedNames(surface).has('update_plan')).toBe(true);
   });
 
   it('exposes the stable core workbench when no live graph scope exists', () => {
@@ -316,7 +316,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
     });
 
     const names = selectedNames(surface);
-    expect(names.has('update_goals')).toBe(true);
+    expect(names.has('update_plan')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
     expect(names.has('memory_forget')).toBe(true);
@@ -429,7 +429,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
     });
 
     const names = selectedNames(surface);
-    expect(names.has('update_goals')).toBe(true);
+    expect(names.has('update_plan')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
     expect(names.has('memory_recall')).toBe(true);
   });

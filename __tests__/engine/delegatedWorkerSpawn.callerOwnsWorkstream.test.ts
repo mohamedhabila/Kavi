@@ -62,7 +62,7 @@ function plan(callerSessionId?: string) {
   });
 }
 
-describe('a spawn for a goal whose worker is already running', () => {
+describe('a spawn for a workstream whose worker is already running', () => {
   it('tells the running worker that it is the worker and should answer', () => {
     const result = plan('sub-worker');
 
@@ -79,7 +79,7 @@ describe('a spawn for a goal whose worker is already running', () => {
 
     expect(result.response).toEqual({
       status: 'blocked',
-      error: 'A worker for this goal is already running.',
+      error: 'A worker for this workstream is already running.',
       sessionId: 'sub-worker',
     });
   });

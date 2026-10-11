@@ -6,11 +6,7 @@ import { isExactDurableScopeId } from '../../utils/durableScopeIdentity';
 export const MAX_SPAWN_DEPTH = 2;
 export const MAX_CONCURRENT_SUB_AGENTS = 1;
 
-export type MobileSpawnBlockCode =
-  | 'max_depth'
-  | 'max_concurrent'
-  | 'invalid_goal_scope'
-  | 'invalid_identity';
+export type MobileSpawnBlockCode = 'max_depth' | 'max_concurrent' | 'invalid_identity';
 
 export interface MobileSpawnPreflightRequest {
   depth: number;
@@ -28,31 +24,9 @@ export interface MobileSpawnPreflightResult {
   sessionId?: string;
 }
 
-export interface SpawnGoalScopeRequest {
-  goalIds?: unknown;
-  workstreamId?: unknown;
-  goals: ReadonlyArray<AgentGoal>;
-}
-
-export interface SpawnGoalScopeResolution {
-  status: 'ready' | 'error';
-  workstreamId?: string;
-  scopedGoals?: AgentGoal[];
-  error?: string;
-}
-
-function resolveGoalIdList(goalIds: unknown): { values: string[]; error?: string } {
-  if (goalIds === undefined) {
-    return { values: [] };
-  }
-  if (!Array.isArray(goalIds) || !goalIds.every(isExactDurableScopeId)) {
-    return { values: [], error: 'goalScope.goalIds must contain exact durable goal ids.' };
-  }
-  if (new Set(goalIds).size !== goalIds.length) {
-    return { values: [], error: 'goalScope.goalIds must not contain duplicate goal ids.' };
-  }
-  return { values: goalIds };
-}
+type SpawnWorkstreamResolution =
+  | { status: 'ready'; workstreamId?: string }
+  | { status: 'error'; error: string };
 
 export function evaluateMobileSpawnPreflight(
   request: MobileSpawnPreflightRequest,
@@ -121,85 +95,28 @@ export function evaluateMobileSpawnPreflight(
   return { status: 'ready' };
 }
 
-export function resolveSpawnGoalScope(request: SpawnGoalScopeRequest): SpawnGoalScopeResolution {
-  const scopedGoalIdResolution = resolveGoalIdList(request.goalIds);
-  if (scopedGoalIdResolution.error) {
-    return { status: 'error', error: scopedGoalIdResolution.error };
+/**
+ * Reads the workstream a spawn names. A workstream is the record the run opened for one
+ * delegated piece of work; its id is reported back by `sessions_spawn`, so naming it again
+ * addresses the same work, and omitting it starts new work.
+ */
+export function resolveSpawnWorkstream(request: {
+  workstreamId?: unknown;
+  goals: ReadonlyArray<AgentGoal>;
+}): SpawnWorkstreamResolution {
+  if (request.workstreamId === undefined) return { status: 'ready' };
+  if (!isExactDurableScopeId(request.workstreamId)) {
+    return {
+      status: 'error',
+      error: 'workstreamId must be the exact id a sessions_spawn result reported.',
+    };
   }
-  if (request.workstreamId !== undefined && !isExactDurableScopeId(request.workstreamId)) {
-    return { status: 'error', error: 'workstreamId must be an exact durable goal id.' };
-  }
-  const scopedGoalIds = scopedGoalIdResolution.values;
   const workstreamId = request.workstreamId;
-
-  if (scopedGoalIds.length === 0) {
-    if (!workstreamId) {
-      return { status: 'ready', scopedGoals: [] };
-    }
-
-    if (request.goals.length === 0) {
-      return {
-        status: 'ready',
-        workstreamId,
-        scopedGoals: [],
-      };
-    }
-
-    const matchedGoal = request.goals.find((goal) => goal.id === workstreamId);
-    if (!matchedGoal) {
-      return {
-        status: 'error',
-        error: `Unknown workstreamId "${workstreamId}" for the current goal graph.`,
-      };
-    }
-
-    return {
-      status: 'ready',
-      workstreamId,
-      scopedGoals: [matchedGoal],
-    };
-  }
-
-  if (request.goals.length === 0) {
-    if (workstreamId && !scopedGoalIds.includes(workstreamId)) {
-      return {
-        status: 'error',
-        error: `workstreamId "${workstreamId}" must be included in goalScope.goalIds.`,
-      };
-    }
-
-    return {
-      status: 'ready',
-      workstreamId: workstreamId || scopedGoalIds[0],
-      scopedGoals: [],
-    };
-  }
-
-  const scopedGoals = scopedGoalIds
-    .map((goalId) => request.goals.find((goal) => goal.id === goalId))
-    .filter((goal): goal is AgentGoal => Boolean(goal));
-
-  if (scopedGoals.length !== scopedGoalIds.length) {
-    const missingGoalIds = scopedGoalIds.filter(
-      (goalId) => !scopedGoals.some((goal) => goal.id === goalId),
-    );
+  if (request.goals.length > 0 && !request.goals.some((goal) => goal.id === workstreamId)) {
     return {
       status: 'error',
-      error: `Unknown goal id(s) in goalScope: ${missingGoalIds.join(', ')}`,
+      error: `Unknown workstreamId "${workstreamId}"; omit it to start new work.`,
     };
   }
-
-  if (workstreamId && !scopedGoalIds.includes(workstreamId)) {
-    return {
-      status: 'error',
-      error: `workstreamId "${workstreamId}" must be included in goalScope.goalIds.`,
-    };
-  }
-
-  const resolvedWorkstreamId = workstreamId || scopedGoalIds[0];
-  return {
-    status: 'ready',
-    workstreamId: resolvedWorkstreamId,
-    scopedGoals,
-  };
+  return { status: 'ready', workstreamId };
 }

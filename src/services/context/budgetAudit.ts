@@ -10,7 +10,7 @@ export type BudgetAuditLayer =
   | 'messages'
   | 'memory_cacheable'
   | 'memory_dynamic'
-  | 'goals';
+  | 'plan';
 
 export interface BudgetAuditEntry {
   conversationId: string;

@@ -277,7 +277,7 @@ describe('goal graph state', () => {
               title: 'internal evidence',
               status: 'active',
               completionPolicy: 'blocking',
-              successCriteria: ['evidence.tool:update_goals'],
+              successCriteria: ['evidence.tool:update_plan'],
             },
           ],
         },

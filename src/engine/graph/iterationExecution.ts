@@ -103,7 +103,7 @@ export async function executeAgentControlGraphIteration(
     personaThinkingLevel: params.personaThinkingLevel,
     promptContextSupport: {
       ...params.promptContextSupport,
-      graphGoals: currentGoals,
+      graphPlan: graphSnapshot.plan,
       livingMemorySections: livingMemory?.sections,
       livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,
       livingMemoryAuthoritySnapshot: livingMemory?.memoryAuthoritySnapshot,

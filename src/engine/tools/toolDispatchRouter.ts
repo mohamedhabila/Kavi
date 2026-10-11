@@ -28,7 +28,7 @@ import { executeProviderAwareTool } from './providerAwareToolExecution';
 import { parseToolArgumentsJson } from '../toolExecution/toolArgumentJsonRecovery';
 import { resolveToolWorkspaceContext, type ToolExecutionContext } from './toolExecutionContext';
 import { executePythonTool } from './toolPythonExecution';
-import { executeUpdateGoals } from './toolGoalExecution';
+import { executeUpdatePlan } from './toolPlanExecution';
 import { executeRequestClarification } from './toolRequestClarificationExecution';
 import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
@@ -235,8 +235,8 @@ export async function executeToolInner(
       return executeJavascript(args, workspaceConversationId, workspaceReadFallbackConversationId);
     case 'python':
       return executePythonTool(args, conversationId, workspaceConversationId, context);
-    case 'update_goals':
-      return executeUpdateGoals(args, context?.controlGraphGoals);
+    case 'update_plan':
+      return executeUpdatePlan(args);
     case 'request_clarification':
       return executeRequestClarification(args);
 
@@ -603,7 +603,7 @@ export async function executeToolInner(
 
     default:
       return failedToolOutcome(
-        `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_goals, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, reminder, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`,
+        `Error: unknown tool "${name}". Available tools include: read_file, write_file, list_files, update_plan, javascript, python, web_search, web_fetch, file_edit, glob_search, text_search, cron, reminder, canvas_list, canvas_read, canvas_create, canvas_update, canvas_eval, canvas_snapshot, image_generate, image_edit. Tool names are case-sensitive.`,
       );
   }
 }

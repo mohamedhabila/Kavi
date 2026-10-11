@@ -18,6 +18,7 @@ import {
   normalizeGoalCompletionPolicy,
   resolveDefaultGoalCompletionPolicy,
 } from '../../engine/goals/types';
+import { normalizeAgentPlan } from '../../engine/plan/agentPlan';
 import {
   MAX_AGENT_GOAL_USER_CONSTRAINTS,
   readPersistedAgentGoalUserConstraintState,
@@ -538,6 +539,7 @@ export function createInitialAgentRunControlGraphState(
   const terminalReason = normalizeOptionalText(state.terminalReason);
   const activeTaskId = normalizeOptionalText(state.activeTaskId);
   const goals = normalizeAgentRunControlGraphGoals(state.goals);
+  const plan = normalizeAgentPlan(state.plan);
   const asyncWork = normalizeAgentRunControlGraphAsyncWorkState(state.asyncWork);
   const performance = normalizeAgentRunControlGraphPerformance(state.performance);
   const turnDirectives = normalizeAgentRunControlGraphTurnDirectives(state.turnDirectives);
@@ -562,6 +564,7 @@ export function createInitialAgentRunControlGraphState(
     ...(terminalReason ? { terminalReason } : {}),
     ...(activeTaskId ? { activeTaskId } : {}),
     ...(goals.length > 0 ? { goals } : {}),
+    ...(plan.length > 0 ? { plan } : {}),
     ...(requestUnderstanding ? { requestUnderstanding } : {}),
     ...(pendingUserInput ? { pendingUserInput } : {}),
     asyncWork,

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { LlmService, makeConfig, mockFetch } from '../../helpers/llmServiceHarness';
-import { UPDATE_GOALS_TOOL } from '../../../src/engine/tools/goal-definitions';
+import { UPDATE_PLAN_TOOL } from '../../../src/engine/tools/plan-definitions';
 
 describe('LlmService', () => {
   describe('sendMessage Gemini schemas', () => {
@@ -242,7 +242,7 @@ describe('LlmService', () => {
       expect(parameters.properties.indicators.items.enum).toEqual(['rsi', 'macd']);
     });
 
-    it('sends canonical root update_goals schema for Gemini native tool declarations', async () => {
+    it('keeps the update_plan step objects intact in Gemini native tool declarations', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -266,22 +266,21 @@ describe('LlmService', () => {
         }),
       );
 
-      await service.sendMessage([{ role: 'user', content: 'Track this goal' }], {
-        tools: [UPDATE_GOALS_TOOL],
+      await service.sendMessage([{ role: 'user', content: 'Plan this trip' }], {
+        tools: [UPDATE_PLAN_TOOL],
       });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       const parameters = body.tools[0].functionDeclarations[0].parameters;
 
-      // `id` moved off the root required list when update_goals gained batching: a batched
-      // call carries an id per goal instead. A single-goal call still needs one, enforced
-      // by the parser rather than the schema.
-      expect(parameters.required).toEqual(expect.arrayContaining(['action']));
-      expect(parameters.required).not.toContain('name');
-      expect(parameters.properties.goals).toEqual(expect.objectContaining({ type: 'array' }));
-      expect(parameters.properties.id).toEqual(expect.objectContaining({ type: 'string' }));
-      expect(parameters.properties.name).toEqual(expect.objectContaining({ type: 'string' }));
-      expect(parameters.properties.completionPolicy.enum).toEqual(['blocking', 'persistent']);
+      expect(parameters.required).toEqual(['plan']);
+      expect(parameters.properties.plan).toEqual(expect.objectContaining({ type: 'array' }));
+      expect(parameters.properties.plan.items.required).toEqual(['step', 'status']);
+      expect(parameters.properties.plan.items.properties.status.enum).toEqual([
+        'pending',
+        'in_progress',
+        'completed',
+      ]);
     });
 
     it('flattens root oneOf tool schemas for Gemini tool declarations', async () => {

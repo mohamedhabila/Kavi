@@ -11,6 +11,7 @@ import type { AgentRunControlGraphState } from '../../types/agentRun';
 /** Fields owned exclusively by the control graph (XState + graph actions). */
 export const LEAN_GRAPH_OWNED_FIELDS = [
   'goals',
+  'plan',
   'asyncWork',
   'turnDirectives',
   'performance',

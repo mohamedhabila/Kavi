@@ -422,17 +422,11 @@ export const es: TranslationMap = mergeTranslations(en, {
       many: '{count} problemas',
       other: '{count} problemas',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        one: 'Objetivo ({count})',
-        many: 'Objetivos ({count})',
-        other: 'Objetivos ({count})',
-      }),
-      bootstrapPending: 'Objetivos pendientes de inicialización',
-      evidenceCount: plural({
-        one: '{count} evidencia',
-        many: '{count} evidencias',
-        other: '{count} evidencias',
+        one: 'Plan ({count} paso)',
+        many: 'Plan ({count} pasos)',
+        other: 'Plan ({count} pasos)',
       }),
       status: {
         running: 'En curso',
@@ -442,11 +436,10 @@ export const es: TranslationMap = mergeTranslations(en, {
         failed: 'Fallido',
         cancelled: 'Cancelado',
       },
-      goalStatus: {
+      stepStatus: {
         pending: 'Pendiente',
-        active: 'Activo',
-        completed: 'Completado',
-        blocked: 'Bloqueado',
+        inProgress: 'En curso',
+        completed: 'Hecho',
       },
     },
     agentRunTrace: {
@@ -2129,7 +2122,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       ssh_fs: 'Archivos SSH',
       text_search: 'Buscar en archivos',
       tool_describe: 'Detalles de la herramienta',
-      update_goals: 'Actualizar plan',
+      update_plan: 'Actualizar plan',
       web_search: 'Buscar en la web',
       workspace_delegate_task: 'Delegar al IDE',
       workspace_launch_browser: 'Abrir IDE en el navegador',

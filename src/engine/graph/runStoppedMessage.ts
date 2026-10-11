@@ -9,8 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import { i18n } from '../../i18n/manager';
-import type { AgentGoal } from '../../types/agentRun';
-import { isBlockingGoal } from '../goals/types';
+import type { AgentPlanStep } from '../../types/agentRun';
 
 export type RunStoppedReason =
   | 'step_limit'
@@ -33,34 +32,24 @@ const MESSAGE_KEYS: Record<RunStoppedReason, string> = {
   action_not_recorded: 'chat.runStopped.actionNotRecorded',
 };
 
-/** Titles of the blocking goals the run left open, in the order they were declared. */
-function unfinishedGoalTitles(goals: ReadonlyArray<AgentGoal>): string[] {
-  return goals
-    .filter(
-      (goal) => isBlockingGoal(goal) && (goal.status === 'active' || goal.status === 'blocked'),
-    )
-    .map((goal) => goal.title.trim())
-    .filter((title) => title.length > 0);
-}
-
 /**
- * The user-facing final message for a run the engine stopped. When `goals` is given,
- * the blocking goals still open are listed one per line, so the user can see what was
- * left undone without the run claiming progress it did not make.
+ * The user-facing final message for a run the engine stopped. When the run has a plan,
+ * the steps it did not finish are listed one per line, so the user can see what was left
+ * undone without the run claiming progress it did not make.
  */
 export function buildRunStoppedMessage(
   reason: RunStoppedReason,
-  goals: ReadonlyArray<AgentGoal> = [],
+  plan: ReadonlyArray<AgentPlanStep> = [],
 ): string {
   const message = i18n.t(MESSAGE_KEYS[reason]);
-  const titles = unfinishedGoalTitles(goals);
-  if (titles.length === 0) {
+  const unfinished = plan.filter((entry) => entry.status !== 'completed');
+  if (unfinished.length === 0) {
     return message;
   }
   return [
     message,
     '',
     i18n.t('chat.runStopped.unfinished'),
-    ...titles.map((title) => `• ${title}`),
+    ...unfinished.map((entry) => `• ${entry.step}`),
   ].join('\n');
 }

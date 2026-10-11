@@ -12,6 +12,8 @@ const INTERNAL_AGENT_CONTROL_TOOL_NAMES = new Set([
   'request_clarification',
   'tool_catalog',
   'tool_describe',
+  'update_plan',
+  // Runs before update_plan kept their plan with this tool; their stored results stay internal.
   'update_goals',
 ]);
 

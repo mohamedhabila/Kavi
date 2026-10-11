@@ -468,8 +468,8 @@ describe('Orchestrator — toolFilter', () => {
 
   it.each([
     {
-      toolName: 'update_goals',
-      argumentsJson: '{"action":"add","id":"chat-loop","name":"Chat loop"}',
+      toolName: 'update_plan',
+      argumentsJson: '{"plan":[{"step":"Chat","status":"in_progress"}]}',
     },
     {
       toolName: 'sessions_spawn',
@@ -520,7 +520,7 @@ describe('Orchestrator — toolFilter', () => {
 
       const [, firstStreamOptions] = mockStreamMessage.mock.calls[0];
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
-        'update_goals',
+        'update_plan',
       );
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
         'sessions_spawn',

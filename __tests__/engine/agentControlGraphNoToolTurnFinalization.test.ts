@@ -1,4 +1,3 @@
-import { GOAL_BOOTSTRAP_TOOL_NAME } from '../../src/engine/goals/bootstrap';
 import { resolveAgentControlGraphNoToolTurn } from '../../src/engine/graph/noToolTurnResolution';
 import type { AgentGoal } from '../../src/types/agentRun';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -31,9 +30,9 @@ describe('agent control graph no-tool finalization', () => {
     expect(params.finishWithGraphFinalCandidateEvent).not.toHaveBeenCalled();
   });
 
-  it('finalizes passive no-goal turns even when goal mutation is available', async () => {
+  it('finalizes passive turns even when the plan tool is available', async () => {
     const params = buildBaseParams();
-    params.selectedToolNames = new Set(['write_file', GOAL_BOOTSTRAP_TOOL_NAME]);
+    params.selectedToolNames = new Set(['write_file', 'update_plan']);
     params.selectedToolCount = params.selectedToolNames.size;
     params.turnAssistantContent = 'No problem.';
     params.modelTurnAssistantContent = 'No problem.';
@@ -82,13 +81,9 @@ describe('agent control graph no-tool finalization', () => {
     expect(params.onContinueThinking).not.toHaveBeenCalled();
   });
 
-  it('finalizes after successful read-only evidence when no goal is required', async () => {
+  it('finalizes after successful read-only evidence', async () => {
     const params = buildBaseParams();
-    params.selectedToolNames = new Set([
-      GOAL_BOOTSTRAP_TOOL_NAME,
-      'calendar_list',
-      'memory_recall',
-    ]);
+    params.selectedToolNames = new Set(['update_plan', 'calendar_list', 'memory_recall']);
     params.selectedToolCount = params.selectedToolNames.size;
     params.toolCallHistory = [
       {

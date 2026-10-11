@@ -1,5 +1,4 @@
 import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
-import { createGoal } from '../../src/engine/goals/types';
 import { i18n } from '../../src/i18n/manager';
 
 afterEach(async () => {
@@ -15,20 +14,11 @@ describe('buildRunStoppedMessage', () => {
     expect(message).not.toContain('Still unfinished');
   });
 
-  it('lists the blocking goals left open, one per line', () => {
+  it('lists the plan steps the run did not finish, one per line', () => {
     const message = buildRunStoppedMessage('step_limit', [
-      createGoal({
-        id: 'g1',
-        title: 'Research Saturn moons',
-        status: 'active',
-        completionPolicy: 'blocking',
-      }),
-      createGoal({
-        id: 'g2',
-        title: 'Write the summary',
-        status: 'blocked',
-        completionPolicy: 'blocking',
-      }),
+      { step: 'Find the flights', status: 'completed' },
+      { step: 'Research Saturn moons', status: 'in_progress' },
+      { step: 'Write the summary', status: 'pending' },
     ]);
 
     expect(message.split('\n').slice(-3)).toEqual([
@@ -36,28 +26,14 @@ describe('buildRunStoppedMessage', () => {
       '• Research Saturn moons',
       '• Write the summary',
     ]);
+    expect(message).not.toContain('Find the flights');
   });
 
-  it('omits goals that are resolved, not blocking, or untitled', () => {
-    const message = buildRunStoppedMessage('repeating_step', [
-      createGoal({
-        id: 'g1',
-        title: 'Finished work',
-        status: 'completed',
-        completionPolicy: 'blocking',
-      }),
-      createGoal({
-        id: 'g2',
-        title: 'Background chore',
-        status: 'active',
-        completionPolicy: 'persistent',
-      }),
-      createGoal({ id: 'g3', title: '   ', status: 'active', completionPolicy: 'blocking' }),
-    ]);
-
-    expect(message).not.toContain('Still unfinished');
-    expect(message).not.toContain('Finished work');
-    expect(message).not.toContain('Background chore');
+  it('lists nothing when every step finished or there was no plan', () => {
+    expect(
+      buildRunStoppedMessage('repeating_step', [{ step: 'Finished work', status: 'completed' }]),
+    ).not.toContain('Still unfinished');
+    expect(buildRunStoppedMessage('repeating_step', [])).not.toContain('Still unfinished');
   });
 
   it('speaks the user language instead of English', async () => {
@@ -69,14 +45,7 @@ describe('buildRunStoppedMessage', () => {
       '承認が拒否されたため、その操作は行いませんでした。何も変更されていません。',
     );
     expect(
-      buildRunStoppedMessage('step_limit', [
-        createGoal({
-          id: 'g1',
-          title: '旅程を作成',
-          status: 'active',
-          completionPolicy: 'blocking',
-        }),
-      ])
+      buildRunStoppedMessage('step_limit', [{ step: '旅程を作成', status: 'in_progress' }])
         .split('\n')
         .slice(-2),
     ).toEqual(['未完了の項目：', '• 旅程を作成']);

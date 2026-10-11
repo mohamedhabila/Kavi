@@ -1,8 +1,6 @@
-import { evaluateAgentBootstrapFixture } from '../../src/acceptance/acceptanceMetrics/evaluateAgentBootstrapFixture';
 import { evaluateDelegationSpawnFixture } from '../../src/acceptance/acceptanceMetrics/evaluateDelegationSpawnFixture';
 import { evaluateFalseFinalizeFixture } from '../../src/acceptance/acceptanceMetrics/evaluateFalseFinalizeFixture';
 import { evaluateMemoryRecallResult } from '../../src/acceptance/acceptanceMetrics/evaluateMemoryRecallResult';
-import { AGENT_BOOTSTRAP_FIXTURES } from '../../src/acceptance/acceptanceMetrics/agentBootstrapFixtures';
 import { DELEGATION_SPAWN_FIXTURES } from '../../src/acceptance/acceptanceMetrics/delegationSpawnFixtures';
 import { FALSE_FINALIZE_FIXTURES } from '../../src/acceptance/acceptanceMetrics/falseFinalizeFixtures';
 
@@ -27,12 +25,6 @@ describe('acceptance metric evaluators', () => {
 
     expect(outcome.passed).toBe(false);
     expect(outcome.detail).toContain('missing-token');
-  });
-
-  it('passes all agent bootstrap fixtures structurally', () => {
-    for (const fixture of AGENT_BOOTSTRAP_FIXTURES) {
-      expect(evaluateAgentBootstrapFixture(fixture).passed).toBe(true);
-    }
   });
 
   it('passes all false-finalize fixtures against the completion gate', () => {

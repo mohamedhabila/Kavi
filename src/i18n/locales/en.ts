@@ -406,15 +406,10 @@ export const en: TranslationMap = {
       one: '1 issue',
       other: '{count} issues',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        one: 'Goal ({count})',
-        other: 'Goals ({count})',
-      }),
-      bootstrapPending: 'Goals pending bootstrap',
-      evidenceCount: plural({
-        one: '{count} evidence',
-        other: '{count} evidence',
+        one: 'Plan ({count} step)',
+        other: 'Plan ({count} steps)',
       }),
       status: {
         running: 'Running',
@@ -424,11 +419,10 @@ export const en: TranslationMap = {
         failed: 'Failed',
         cancelled: 'Cancelled',
       },
-      goalStatus: {
+      stepStatus: {
         pending: 'Pending',
-        active: 'Active',
-        completed: 'Completed',
-        blocked: 'Blocked',
+        inProgress: 'In progress',
+        completed: 'Done',
       },
     },
     agentRunTrace: {
@@ -2086,7 +2080,7 @@ export const en: TranslationMap = {
       ssh_fs: 'SSH Files',
       text_search: 'Search in Files',
       tool_describe: 'Tool Details',
-      update_goals: 'Update Plan',
+      update_plan: 'Update Plan',
       web_search: 'Search the Web',
       workspace_delegate_task: 'Delegate to IDE',
       workspace_launch_browser: 'Open IDE in Browser',

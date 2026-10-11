@@ -3,6 +3,7 @@ import {
   normalizeAgentRunControlGraphGoals,
   normalizeAgentRunControlGraphSessionActivatedToolNames,
 } from '../../services/agents/agentControlGraphState';
+import { normalizeAgentPlan } from '../plan/agentPlan';
 import {
   appendAudit,
   clearOneShotTurnDirectives,
@@ -192,6 +193,19 @@ export function createAgentControlGraphActions() {
           ...(activeGoal ? { activeTaskId: activeGoal.id } : {}),
           updatedAt: getTimestamp(event),
           audit: appendAudit(context.audit, event, event.reason),
+        };
+      },
+    ),
+    recordPlanUpdated: assignAgentControlGraph(
+      ({ context, event }: AgentControlGraphAssignArgs) => {
+        if (event.type !== 'PLAN_UPDATED') {
+          return {};
+        }
+        const plan = normalizeAgentPlan(event.plan);
+        return {
+          plan: plan.length > 0 ? plan : undefined,
+          updatedAt: getTimestamp(event),
+          audit: appendAudit(context.audit, event),
         };
       },
     ),

@@ -80,7 +80,6 @@ export async function executeSessionSpawn(
   args: {
     prompt?: string;
     workstreamId?: string;
-    goalScope?: { goalIds?: string[] };
     dependsOnWorkstreams?: string[];
     name?: string;
     tools?: string[];
@@ -161,7 +160,6 @@ export async function executeSessionSpawn(
         prompt,
         name: sanitizedName,
         workstreamId: sanitizedWorkstreamId,
-        goalScope: args.goalScope,
         dependsOnWorkstreams: args.dependsOnWorkstreams,
         depth: childDepth,
       },

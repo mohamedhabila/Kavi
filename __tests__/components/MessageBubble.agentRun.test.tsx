@@ -52,7 +52,7 @@ describe('MessageBubble agent run widgets', () => {
     expect(queryByTestId('assistant-bubble-review-indicator')).toBeNull();
   });
 
-  it('should render a compact goals widget and toggle its details', () => {
+  it('should render a compact plan widget and toggle its details', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
     const { getByTestId, getByText, queryByTestId } = render(
       <MessageBubble
@@ -62,25 +62,9 @@ describe('MessageBubble agent run widgets', () => {
             version: 1,
             status: 'ready',
             iteration: 2,
-            goals: [
-              {
-                id: 'goal-audit',
-                title: 'Audit the repository',
-                status: 'active',
-                dependencies: [],
-                evidence: ['read_file'],
-                createdAt: 1,
-                updatedAt: 2,
-              },
-              {
-                id: 'goal-fix',
-                title: 'Apply the fix',
-                status: 'pending',
-                dependencies: ['goal-audit'],
-                evidence: [],
-                createdAt: 1,
-                updatedAt: 2,
-              },
+            plan: [
+              { step: 'Audit the repository', status: 'in_progress' },
+              { step: 'Apply the fix', status: 'pending' },
             ],
             expectedToolCalls: [],
             observedToolResults: [],
@@ -104,20 +88,20 @@ describe('MessageBubble agent run widgets', () => {
       />,
     );
 
-    expect(getByTestId('agent-goals-widget')).toBeTruthy();
-    expect(getByText('Goals (2)')).toBeTruthy();
+    expect(getByTestId('agent-plan-widget')).toBeTruthy();
+    expect(getByText('Plan (2 steps)')).toBeTruthy();
     expect(getByText('Audit the repository')).toBeTruthy();
-    expect(queryByTestId('agent-goals-details')).toBeNull();
+    expect(queryByTestId('agent-plan-details')).toBeNull();
 
-    fireEvent.press(getByTestId('agent-goals-toggle'));
+    fireEvent.press(getByTestId('agent-plan-toggle'));
 
-    expect(getByTestId('agent-goals-details')).toBeTruthy();
-    expect(getByTestId('agent-goals-item-goal-audit')).toBeTruthy();
-    expect(getByTestId('agent-goals-item-goal-fix')).toBeTruthy();
+    expect(getByTestId('agent-plan-details')).toBeTruthy();
+    expect(getByTestId('agent-plan-step-0')).toBeTruthy();
+    expect(getByTestId('agent-plan-step-1')).toBeTruthy();
     expect(getByText('Apply the fix')).toBeTruthy();
 
-    fireEvent.press(getByTestId('agent-goals-toggle'));
-    expect(queryByTestId('agent-goals-details')).toBeNull();
+    fireEvent.press(getByTestId('agent-plan-toggle'));
+    expect(queryByTestId('agent-plan-details')).toBeNull();
   });
 
   it('should render a compact run trace widget and toggle its details', () => {
@@ -189,44 +173,6 @@ describe('MessageBubble agent run widgets', () => {
 
     fireEvent.press(getByTestId('agent-run-trace-toggle'));
     expect(queryByTestId('agent-run-trace-details')).toBeNull();
-  });
-
-  it('renders a bootstrap placeholder when the run has no goals yet', () => {
-    // Engine diagnostics are a developer-mode surface.
-    useSettingsStore.setState({ developerModeEnabled: true });
-    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
-    const { getByTestId, getByText } = render(
-      <MessageBubble
-        message={msg}
-        agentRun={makeAgentRun({
-          controlGraph: {
-            version: 1,
-            status: 'ready',
-            iteration: 0,
-            expectedToolCalls: [],
-            observedToolResults: [],
-            pendingAsyncCount: 0,
-            lastModelToolNames: [],
-            turnDirectives: {
-              forceFinalText: false,
-              requireDelegationTool: false,
-              requireWorkflowTool: false,
-              incompleteFinalTextRecoveryCount: 0,
-            },
-            audit: [],
-            updatedAt: 1,
-            asyncWork: {
-              awaitingBackgroundWorkers: false,
-              pendingOperations: [],
-              updatedAt: 1,
-            },
-          },
-        })}
-      />,
-    );
-
-    expect(getByTestId('agent-goals-widget')).toBeTruthy();
-    expect(getByText('Goals pending bootstrap')).toBeTruthy();
   });
 
   it('should render structured sub-agent activity cards instead of raw lifecycle text', () => {

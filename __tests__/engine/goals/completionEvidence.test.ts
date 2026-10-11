@@ -2,7 +2,6 @@ import {
   areBlockingGoalsStructurallyComplete,
   buildMissingRequiredEvidenceLabels,
   evaluateGoalEvidenceGaps,
-  formatModelAuthoredSuccessCriteriaFormsDescription,
   formatSuccessCriteriaFormsDescription,
   isRecognizedSuccessCriterionForm,
   isSuccessCriterionMet,
@@ -86,10 +85,6 @@ describe('completionEvidence', () => {
     expect(formatSuccessCriteriaFormsDescription()).toContain(
       'evidence.effect:<closed-json-contract>',
     );
-  });
-
-  it('reserves request-bound effect criteria for code-owned repair contracts', () => {
-    expect(formatModelAuthoredSuccessCriteriaFormsDescription()).not.toContain('evidence.effect:');
   });
 
   it('recognizes only formal structural success criterion forms', () => {

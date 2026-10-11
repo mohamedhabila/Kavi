@@ -1,4 +1,4 @@
-import { validateGoalMutation, validateGoalReferences } from '../../../src/engine/goals/validation';
+import { validateGoalMutation } from '../../../src/engine/goals/validation';
 import { createGoal } from '../../../src/engine/goals/types';
 
 describe('goal validation', () => {
@@ -588,50 +588,6 @@ describe('goal validation', () => {
         },
         [existing],
       );
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('Circular');
-    });
-  });
-
-  describe('validateGoalReferences', () => {
-    it('validates empty goals', () => {
-      const result = validateGoalReferences([]);
-      expect(result.valid).toBe(true);
-    });
-
-    it('validates valid goal state', () => {
-      const goals = [
-        createGoal({ id: 'a', title: 'A' }),
-        createGoal({ id: 'b', title: 'B', dependencies: ['a'] }),
-      ];
-      const result = validateGoalReferences(goals);
-      expect(result.valid).toBe(true);
-    });
-
-    it('detects missing dependency references', () => {
-      const goals = [createGoal({ id: 'g1', title: 'A', dependencies: ['missing'] })];
-      const result = validateGoalReferences(goals);
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('non-existent');
-    });
-
-    it('detects circular dependencies', () => {
-      const goals = [
-        createGoal({ id: 'a', title: 'A', dependencies: ['b'] }),
-        createGoal({ id: 'b', title: 'B', dependencies: ['a'] }),
-      ];
-      const result = validateGoalReferences(goals);
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].message).toContain('Circular');
-    });
-
-    it('handles chained circular dependencies', () => {
-      const goals = [
-        createGoal({ id: 'a', title: 'A', dependencies: ['b'] }),
-        createGoal({ id: 'b', title: 'B', dependencies: ['c'] }),
-        createGoal({ id: 'c', title: 'C', dependencies: ['a'] }),
-      ];
-      const result = validateGoalReferences(goals);
       expect(result.valid).toBe(false);
       expect(result.errors[0].message).toContain('Circular');
     });

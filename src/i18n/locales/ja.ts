@@ -389,13 +389,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     subAgentRollupIssues: plural({
       other: '{count} 問題',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        other: 'ゴール ({count})',
-      }),
-      bootstrapPending: 'ゴールの初期化待ち',
-      evidenceCount: plural({
-        other: '{count} 件の証拠',
+        other: 'プラン（{count} ステップ）',
       }),
       status: {
         running: '実行中',
@@ -405,11 +401,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
         failed: '失敗',
         cancelled: 'キャンセル',
       },
-      goalStatus: {
+      stepStatus: {
         pending: '保留',
-        active: 'アクティブ',
+        inProgress: '進行中',
         completed: '完了',
-        blocked: 'ブロック',
       },
     },
     agentRunTrace: {
@@ -2011,7 +2006,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       ssh_fs: 'SSH のファイル',
       text_search: 'ファイル内を検索',
       tool_describe: 'ツールの詳細',
-      update_goals: '計画を更新',
+      update_plan: '計画を更新',
       web_search: 'Web を検索',
       workspace_delegate_task: 'IDE に委任',
       workspace_launch_browser: 'ブラウザで IDE を開く',

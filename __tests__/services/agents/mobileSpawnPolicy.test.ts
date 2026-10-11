@@ -2,7 +2,7 @@ import {
   evaluateMobileSpawnPreflight,
   MAX_CONCURRENT_SUB_AGENTS,
   MAX_SPAWN_DEPTH,
-  resolveSpawnGoalScope,
+  resolveSpawnWorkstream,
 } from '../../../src/services/agents/mobileSpawnPolicy';
 import type { AgentGoal } from '../../../src/types/agentRun';
 
@@ -114,92 +114,39 @@ describe('evaluateMobileSpawnPreflight', () => {
   });
 });
 
-describe('resolveSpawnGoalScope', () => {
-  it('resolves a read-only goal id subset against the parent graph', () => {
-    const result = resolveSpawnGoalScope({
-      goalIds: ['goal-b'],
-      goals,
-    });
+describe('resolveSpawnWorkstream', () => {
+  it('starts new work when no workstream is named', () => {
+    expect(resolveSpawnWorkstream({ goals })).toEqual({ status: 'ready' });
+  });
 
-    expect(result).toEqual({
+  it('addresses a workstream the run already holds', () => {
+    expect(resolveSpawnWorkstream({ workstreamId: 'goal-b', goals })).toEqual({
       status: 'ready',
       workstreamId: 'goal-b',
-      scopedGoals: [goals[1]],
     });
   });
 
-  it('rejects unknown goal ids', () => {
-    const result = resolveSpawnGoalScope({
-      goalIds: ['missing-goal'],
-      goals,
-    });
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'error',
-      }),
-    );
-  });
-
-  it('allows structured workstream scope to materialize against an empty graph', () => {
-    const result = resolveSpawnGoalScope({
-      goalIds: ['worker-chain'],
-      workstreamId: 'worker-chain',
-      goals: [],
-    });
+  it('refuses a workstream the run does not hold, and says to omit it', () => {
+    const result = resolveSpawnWorkstream({ workstreamId: 'missing-goal', goals });
 
     expect(result).toEqual({
+      status: 'error',
+      error: 'Unknown workstreamId "missing-goal"; omit it to start new work.',
+    });
+  });
+
+  it('takes the named workstream as given when the run holds none yet', () => {
+    expect(resolveSpawnWorkstream({ workstreamId: 'worker-chain', goals: [] })).toEqual({
       status: 'ready',
       workstreamId: 'worker-chain',
-      scopedGoals: [],
     });
   });
 
-  it('allows workstream id scope to materialize against an empty graph', () => {
-    const result = resolveSpawnGoalScope({
-      workstreamId: 'worker-chain',
-      goals: [],
-    });
-
-    expect(result).toEqual({
-      status: 'ready',
-      workstreamId: 'worker-chain',
-      scopedGoals: [],
-    });
-  });
-
-  it('requires workstreamId to be included in goalScope.goalIds', () => {
-    const result = resolveSpawnGoalScope({
-      goalIds: ['goal-a'],
-      workstreamId: 'goal-b',
-      goals,
-    });
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'error',
-      }),
-    );
-  });
-
-  it('rejects malformed or duplicate goal identities without normalizing them', () => {
-    expect(
-      resolveSpawnGoalScope({
-        goalIds: [' goal-a'],
-        goals,
-      }),
-    ).toEqual(expect.objectContaining({ status: 'error' }));
-    expect(
-      resolveSpawnGoalScope({
-        goalIds: ['goal-a', 'goal-a'],
-        goals,
-      }),
-    ).toEqual(expect.objectContaining({ status: 'error' }));
-    expect(
-      resolveSpawnGoalScope({
-        workstreamId: '',
-        goals,
-      }),
-    ).toEqual(expect.objectContaining({ status: 'error' }));
+  it('rejects malformed workstream ids without normalizing them', () => {
+    for (const workstreamId of [' goal-a', '', 7]) {
+      expect(resolveSpawnWorkstream({ workstreamId, goals })).toEqual(
+        expect.objectContaining({ status: 'error' }),
+      );
+    }
   });
 });

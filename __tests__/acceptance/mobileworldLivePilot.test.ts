@@ -424,7 +424,7 @@ describeLivePilot('MobileWorld — exact foreground-chat device pilot', () => {
           const usageBefore = conversationBefore.usage;
           const options = {
             maxTokens: 4_096,
-            allowedToolNames: ['mobile_ui_action', 'request_clarification', 'update_goals'],
+            allowedToolNames: ['mobile_ui_action', 'request_clarification', 'update_plan'],
             enableCompaction: true,
             mobileController,
           } as const;

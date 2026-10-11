@@ -132,25 +132,10 @@ describe('e2eRunReport scenario entries', () => {
           isError: false,
         },
         {
-          toolCallId: 'tc-goals',
-          name: 'update_goals',
-          content: JSON.stringify({
-            status: 'failed',
-            action: 'complete',
-            errors: ['SECRET-GOAL-ERROR'],
-            structuredErrors: [
-              { code: 'evidence_required', detail: 'SECRET-STRUCTURED-DETAIL' },
-              { code: 'invalid_lifecycle', detail: 'SECRET-LIFECYCLE-DETAIL' },
-              { code: 'PRIVATE-ERROR-CODE-NEVER-EXPORT', detail: 'SECRET-UNKNOWN-DETAIL' },
-            ],
-            goals: [
-              {
-                id: 'PRIVATE-GOAL-ID-NEVER-EXPORT',
-                status: 'active',
-              },
-            ],
-          }),
-          isError: false,
+          toolCallId: 'tc-plan',
+          name: 'update_plan',
+          content: 'update_plan needs a plan array. SECRET-PLAN-ERROR',
+          isError: true,
         },
         {
           toolCallId: 'PRIVATE-STATUS-CALL-ID-NEVER-EXPORT',
@@ -299,15 +284,11 @@ describe('e2eRunReport scenario entries', () => {
     expect(serializedTrace).not.toContain('SECRET-RESULT-VALUE');
     expect(serializedTrace).not.toContain('SECRET-EVIDENCE-VALUE');
     expect(serializedTrace).not.toContain('SECOND-SECRET-EVIDENCE-VALUE');
-    expect(serializedTrace).not.toContain('SECRET-GOAL-ERROR');
-    expect(serializedTrace).not.toContain('SECRET-STRUCTURED-DETAIL');
-    expect(serializedTrace).not.toContain('SECRET-LIFECYCLE-DETAIL');
-    expect(serializedTrace).not.toContain('SECRET-UNKNOWN-DETAIL');
+    expect(serializedTrace).not.toContain('SECRET-PLAN-ERROR');
     expect(serializedTrace).not.toContain('private-conversation-id');
     for (const sentinel of [
       'PRIVATE-TOOL-CALL-ID-NEVER-EXPORT',
       'PRIVATE-ARGUMENT-FIELD-NEVER-EXPORT',
-      'PRIVATE-ERROR-CODE-NEVER-EXPORT',
       'PRIVATE-GOAL-ID-NEVER-EXPORT',
       'PRIVATE-STATUS-CALL-ID-NEVER-EXPORT',
       'PRIVATE-STATUS-NEVER-EXPORT',
@@ -365,25 +346,7 @@ describe('e2eRunReport scenario entries', () => {
       ],
     });
     expect(entry.trace?.toolResults[0]).not.toHaveProperty('name');
-    expect(entry.trace?.toolResults[1]).toMatchObject({
-      name: 'update_goals',
-      updateGoalsResult: {
-        status: 'failed',
-        action: 'complete',
-        errorCount: 1,
-        structuredErrorCodeCount: 3,
-        structuredErrorCodes: ['evidence_required', 'invalid_lifecycle'],
-        structuredErrorCodeHashes: expect.arrayContaining([
-          expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
-        ]),
-        goalIdHashesByStatus: {
-          pending: [],
-          active: [expect.objectContaining({ hash: expect.stringContaining('sha256:') })],
-          completed: [],
-          blocked: [],
-        },
-      },
-    });
+    expect(entry.trace?.toolResults[1]).toMatchObject({ name: 'update_plan', isError: true });
     expect(entry.trace?.toolResults[3]).toMatchObject({
       name: 'tool_catalog',
       toolCatalogResult: {

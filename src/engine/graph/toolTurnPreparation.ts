@@ -1,4 +1,4 @@
-import type { AgentGoal } from '../../types/agentRun';
+import type { AgentPlanStep } from '../../types/agentRun';
 import type {
   AssistantCompletionMetadata,
   AssistantMessageMetadata,
@@ -59,7 +59,7 @@ export interface PrepareAgentControlGraphToolTurnParams {
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
   pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
-  goals?: ReadonlyArray<AgentGoal>;
+  plan?: ReadonlyArray<AgentPlanStep>;
   workingMessages: Message[];
 }
 
@@ -71,9 +71,7 @@ export function prepareAgentControlGraphToolTurn(
     (toolCall) => normalizeToolName(toolCall.name) === REQUEST_CLARIFICATION_TOOL_NAME,
   );
   const executableToolCalls = clarificationToolCall ? [clarificationToolCall] : yieldedToolCalls;
-  const loopCheck = detectLoops(params.toolCallHistory, params.stagnationSignatures, {
-    goals: params.goals,
-  });
+  const loopCheck = detectLoops(params.toolCallHistory, params.stagnationSignatures);
   const toolCallObjects: ToolCall[] = executableToolCalls.map((toolCall) => ({
     id: toolCall.id,
     name: toolCall.name,
@@ -105,7 +103,6 @@ export function prepareAgentControlGraphToolTurn(
     iteration: params.iteration,
     maxIterations: params.maxToolIterations,
     toolCallHistory: params.toolCallHistory,
-    goals: params.goals,
   });
   const loopObservabilityDetail = buildLoopDetectedObservabilityDetail(loopCheck);
   if (loopRecoveryDecision.type === 'block') {
@@ -114,7 +111,7 @@ export function prepareAgentControlGraphToolTurn(
       warningInjectedThisRound: params.warningInjectedThisRound,
       workingMessages,
       blockDetails: loopRecoveryDecision.details,
-      blockedUserMessage: buildRunStoppedMessage('repeating_step', params.goals ?? []),
+      blockedUserMessage: buildRunStoppedMessage('repeating_step', params.plan),
       ...(loopObservabilityDetail ? { loopObservabilityDetail } : {}),
     };
   }

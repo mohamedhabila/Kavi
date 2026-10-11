@@ -27,7 +27,7 @@ describe('conversation-mode tool authority', () => {
     tool('calendar_create_event', 'calendar'),
   ];
   const orchestrationTools = [
-    tool('update_goals', 'goal'),
+    tool('update_plan', 'plan'),
     tool('sessions_spawn', 'sessions'),
     tool('sessions_history', 'sessions'),
     tool('custom_worker_control', 'sessions'),

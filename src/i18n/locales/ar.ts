@@ -452,23 +452,14 @@ export const ar: TranslationMap = mergeTranslations(en, {
       many: '{count} مشكلة',
       other: '{count} مشكلة',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        zero: 'الأهداف (0)',
-        one: 'هدف واحد (1)',
-        two: 'هدفان (2)',
-        few: '{count} أهداف',
-        many: '{count} هدفًا',
-        other: '{count} هدف',
-      }),
-      bootstrapPending: 'في انتظار تهيئة الأهداف',
-      evidenceCount: plural({
-        zero: 'لا أدلة',
-        one: 'دليل واحد',
-        two: 'دليلان',
-        few: '{count} أدلة',
-        many: '{count} دليلًا',
-        other: '{count} دليل',
+        zero: 'الخطة (بلا خطوات)',
+        one: 'الخطة (خطوة واحدة)',
+        two: 'الخطة (خطوتان)',
+        few: 'الخطة ({count} خطوات)',
+        many: 'الخطة ({count} خطوة)',
+        other: 'الخطة ({count} خطوة)',
       }),
       status: {
         running: 'قيد التشغيل',
@@ -478,11 +469,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
         failed: 'فشل',
         cancelled: 'ملغى',
       },
-      goalStatus: {
-        pending: 'معلّق',
-        active: 'نشط',
-        completed: 'مكتمل',
-        blocked: 'محظور',
+      stepStatus: {
+        pending: 'معلّقة',
+        inProgress: 'قيد التنفيذ',
+        completed: 'تمّت',
       },
     },
     agentRunTrace: {
@@ -2191,7 +2181,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       ssh_fs: 'ملفات SSH',
       text_search: 'البحث في الملفات',
       tool_describe: 'تفاصيل الأداة',
-      update_goals: 'تحديث الخطة',
+      update_plan: 'تحديث الخطة',
       web_search: 'البحث في الويب',
       workspace_delegate_task: 'تفويض إلى بيئة التطوير',
       workspace_launch_browser: 'فتح بيئة التطوير في المتصفح',

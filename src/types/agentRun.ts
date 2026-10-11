@@ -353,6 +353,14 @@ export interface AgentRunControlGraphPendingUserInput {
   updatedAt: number;
 }
 
+export type AgentPlanStepStatus = 'pending' | 'in_progress' | 'completed';
+
+/** One step of the run's plan, as the model last stated it through update_plan. */
+export interface AgentPlanStep {
+  step: string;
+  status: AgentPlanStepStatus;
+}
+
 export interface AgentRunControlGraphState {
   version: number;
   status: AgentRunControlGraphStatus;
@@ -366,6 +374,7 @@ export interface AgentRunControlGraphState {
   terminalReason?: string;
   activeTaskId?: string;
   goals?: AgentGoal[];
+  plan?: AgentPlanStep[];
   requestUnderstanding?: RequestUnderstandingSnapshot;
   pendingUserInput?: AgentRunControlGraphPendingUserInput;
   asyncWork: AgentRunControlGraphAsyncWorkState;

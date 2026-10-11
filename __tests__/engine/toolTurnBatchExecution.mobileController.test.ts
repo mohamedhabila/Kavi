@@ -153,27 +153,20 @@ describe('mobile controller tool batch execution', () => {
     ).toBe(true);
   });
 
-  it('blocks an unanchored raw action before the tool lifecycle can claim it', async () => {
+  it('runs a lone action with no goal to anchor it', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle) => {
-      const blocker = lifecycle.workflowToolCallBlocker?.(
-        lifecycle.tc.name,
-        lifecycle.tc.arguments,
-      );
-      expect(JSON.parse(blocker ?? '{}')).toMatchObject({
-        status: 'error',
-        code: 'mobile_controller_goal_required',
-        repair: { tool: 'update_goals' },
-      });
+      expect(
+        lifecycle.workflowToolCallBlocker?.(lifecycle.tc.name, lifecycle.tc.arguments),
+      ).toBeUndefined();
       return {
         toolCallId: lifecycle.tc.id,
         effectiveToolName: lifecycle.tc.name,
-        result: blocker,
+        result: '{"status":"performed"}',
         toolMessage: buildToolResultMessage({
-          idPrefix: 'blocked',
+          idPrefix: 'tool',
           toolCallId: lifecycle.tc.id,
-          content: blocker ?? 'blocked',
-          toolCall: { ...lifecycle.tc, status: 'failed', error: blocker },
-          isError: true,
+          content: '{"status":"performed"}',
+          toolCall: { ...lifecycle.tc, status: 'completed' },
         }),
       };
     });
@@ -187,6 +180,6 @@ describe('mobile controller tool batch execution', () => {
 
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
     expect(outcomes).toHaveLength(1);
-    expect('toolMessage' in outcomes[0] && outcomes[0].toolMessage.isError).toBe(true);
+    expect('toolMessage' in outcomes[0] && outcomes[0].toolMessage.isError).toBeFalsy();
   });
 });

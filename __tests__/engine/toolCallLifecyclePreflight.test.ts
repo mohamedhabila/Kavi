@@ -65,13 +65,13 @@ function buildLifecycle(
 ): ToolExecutionLifecycleParams {
   const toolCallHistory: ToolCallRecord[] = [];
   return {
-    tc: { id: 'tc-1', name: 'update_goals', arguments: '{}' },
+    tc: { id: 'tc-1', name: 'update_plan', arguments: '{}' },
     iteration: 1,
     conversationId: 'conv-1',
     provider: { id: 'p1', name: 'Test', apiKey: 'k', baseUrl: 'https://example.com', models: [] },
     model: 'test-model',
     modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-    availableToolNames: new Set(['update_goals']),
+    availableToolNames: new Set(['update_plan']),
     runtimeToolAvailability: {
       hasWorkspaceTargets: false,
       hasBrowserControllableWorkspaceTargets: false,
@@ -119,7 +119,7 @@ describe('resolveToolCallPreflight', () => {
     });
     const result = resolveToolCallPreflight(lifecycle, {
       id: 'tc-1',
-      name: 'update_goals',
+      name: 'update_plan',
       arguments: '{}',
     });
 
@@ -134,7 +134,7 @@ describe('resolveToolCallPreflight', () => {
   // the work. Refusing on it turned every unforeseen need into a hard error whose stated
   // recovery was a `tool_catalog` round-trip, and in one run that discovery call never
   // returned, stranding a capability the run held throughout and failing the whole run.
-  it.each(['update_goals', 'system:update_goals'])(
+  it.each(['update_plan', 'system:update_plan'])(
     'runs registered tool %s even when this turn did not advertise it',
     (toolName) => {
       const lifecycle = buildLifecycle({
@@ -162,7 +162,7 @@ describe('resolveToolCallPreflight', () => {
     });
     const result = resolveToolCallPreflight(lifecycle, {
       id: 'tc-unpermitted',
-      name: 'update_goals',
+      name: 'update_plan',
       arguments: '{}',
     });
 
@@ -188,16 +188,16 @@ describe('resolveToolCallPreflight', () => {
   });
 
   it('applies filters to registered provider-prefixed aliases by canonical name', () => {
-    const toolFilter = jest.fn((name: string) => name === 'update_goals');
+    const toolFilter = jest.fn((name: string) => name === 'update_plan');
     const lifecycle = buildLifecycle({ toolFilter });
     const result = resolveToolCallPreflight(lifecycle, {
       id: 'tc-1',
-      name: 'system:update_goals',
+      name: 'system:update_plan',
       arguments: '{}',
     });
 
     expect(result).toBeUndefined();
-    expect(toolFilter).toHaveBeenCalledWith('update_goals');
+    expect(toolFilter).toHaveBeenCalledWith('update_plan');
   });
 
   it('returns schema repair details for missing required top-level arguments before execution', () => {

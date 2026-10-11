@@ -383,13 +383,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     subAgentRollupIssues: plural({
       other: '{count} 个问题',
     }),
-    agentGoals: {
+    agentPlan: {
       header: plural({
-        other: '目标 ({count})',
-      }),
-      bootstrapPending: '目标待初始化',
-      evidenceCount: plural({
-        other: '{count} 条证据',
+        other: '计划（{count} 步）',
       }),
       status: {
         running: '运行中',
@@ -399,11 +395,10 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
         failed: '失败',
         cancelled: '已取消',
       },
-      goalStatus: {
+      stepStatus: {
         pending: '待处理',
-        active: '进行中',
+        inProgress: '进行中',
         completed: '已完成',
-        blocked: '受阻',
       },
     },
     agentRunTrace: {
@@ -1948,7 +1943,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       ssh_fs: 'SSH 文件',
       text_search: '在文件中搜索',
       tool_describe: '工具详情',
-      update_goals: '更新计划',
+      update_plan: '更新计划',
       web_search: '网页搜索',
       workspace_delegate_task: '委派给 IDE',
       workspace_launch_browser: '在浏览器中打开 IDE',

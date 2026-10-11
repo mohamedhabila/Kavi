@@ -13,6 +13,7 @@ import {
 import { isMemoryValidityDeadlineCurrent } from '../../../services/memory/memoryValidityDeadline';
 import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
+import { renderPlanPromptSection } from '../../plan/agentPlan';
 import {
   filterToolsForMemoryPolicy,
   isToolAllowedForMemoryPolicy,
@@ -81,19 +82,6 @@ export function buildPreparedModelTurnPrompt(params: {
   const livingMemorySections = livingMemoryReadCurrent
     ? params.promptContextSupport.livingMemorySections
     : undefined;
-  const forcedConstraintGoals = (params.promptContextSupport.graphGoals ?? []).filter((goal) => {
-    const live = goal.status === 'active' || goal.status === 'blocked' || goal.status === 'pending';
-    return (
-      (live &&
-        (goal.userConstraintIntegrity === 'conflict' || (goal.userConstraints?.length ?? 0) > 0)) ||
-      goal.userConstraintDeliveryPending === true
-    );
-  });
-  const turnGraphGoals = params.actionablePromptTurn
-    ? params.promptContextSupport.graphGoals
-    : forcedConstraintGoals.length > 0
-      ? forcedConstraintGoals
-      : undefined;
   const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
   const transcriptCarriesSoleFirstTurnAnchor =
     params.iteration === 1 &&
@@ -115,14 +103,13 @@ export function buildPreparedModelTurnPrompt(params: {
       promptBundleContext: {
         allTools: params.allTools,
         effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
-        graphGoals: turnGraphGoals,
-        goalsPromptSection: params.actionablePromptTurn
-          ? params.promptContextSupport.goalsPromptSection
-          : null,
         groundedRequestScopedTools: options.groundedTools,
         iteration: params.iteration,
         livingMemorySections: params.actionablePromptTurn ? options.sections : undefined,
         maxToolIterations: params.promptContextSupport.maxToolIterations,
+        planPromptSection: params.actionablePromptTurn
+          ? renderPlanPromptSection(params.promptContextSupport.graphPlan)
+          : null,
         resolvedPrompt: params.promptContextSupport.resolvedPrompt,
         runtimeContext: params.promptContextSupport.runtimeContext,
         runtimePolicyPrompt: buildMemoryPolicyPromptSection(options.longTermMemoryEnabled),

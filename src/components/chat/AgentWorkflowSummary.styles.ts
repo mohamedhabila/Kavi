@@ -92,15 +92,15 @@ export const createAgentWorkflowSummaryStyles = (colors: AppPalette) =>
       paddingBottom: 10,
       gap: 8,
     },
-    goalRow: {
+    stepRow: {
       gap: 2,
     },
-    goalTitle: {
+    stepTitle: {
       color: colors.text,
       fontSize: 13,
       fontWeight: '500',
     },
-    goalMeta: {
+    stepMeta: {
       color: colors.textSecondary,
       fontSize: 11,
     },

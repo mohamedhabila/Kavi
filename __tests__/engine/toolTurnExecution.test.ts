@@ -115,7 +115,7 @@ describe('toolTurnExecution', () => {
       loopDetected: true,
       level: 'critical',
       type: 'generic_repeat',
-      details: 'CRITICAL: 3 consecutive update_goals calls without goal state change',
+      details: 'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
     });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
 
@@ -144,7 +144,7 @@ describe('toolTurnExecution', () => {
         (event: { type: string; detail?: string }) =>
           event.type === 'GRAPH_OBSERVABILITY_RECORDED' &&
           event.detail ===
-            'CRITICAL: 3 consecutive update_goals calls without goal state change',
+            'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
       ),
     ).toBe(true);
   });
@@ -156,8 +156,8 @@ describe('toolTurnExecution', () => {
     mockedDetectLoops.mockReturnValue({
       loopDetected: true,
       level: 'critical',
-      type: 'goal_mutation_stall',
-      details: 'CRITICAL: 3 consecutive update_goals calls without goal state change',
+      type: 'stagnant_progress',
+      details: 'CRITICAL: tool multiset write_file repeated 3 iterations without semantic progress.',
     });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
 
@@ -167,7 +167,7 @@ describe('toolTurnExecution', () => {
     const [terminalCall] = (params.finishWithGraphTerminalEvent as jest.Mock).mock.calls;
     const content = terminalCall[0].content as string;
     expect(content).not.toContain('CRITICAL');
-    expect(content).not.toContain('update_goals');
+    expect(content).not.toContain('write_file');
     expect(content).toContain('repeating the same step without making progress');
   });
 

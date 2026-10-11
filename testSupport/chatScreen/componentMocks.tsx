@@ -154,45 +154,42 @@ jest.mock('../../src/components/chat/MessageBubble', () => {
     pushText(nodes, seen, snapshot?.activeToolName, 'snapshot-tool');
 
     if (agentRun) {
-      const goals = Array.isArray(agentRun?.controlGraph?.goals) ? agentRun.controlGraph.goals : [];
-      const activeGoals = goals.filter((goal: any) => goal?.status === 'active');
-      const compactPreview =
-        activeGoals[0]?.title ?? (goals.length > 0 ? goals[0]?.title : undefined);
+      const plan = Array.isArray(agentRun?.controlGraph?.plan) ? agentRun.controlGraph.plan : [];
+      const currentStep =
+        plan.find((entry: any) => entry?.status === 'in_progress') ??
+        plan.find((entry: any) => entry?.status === 'pending');
 
-      nodes.push(
-        React.createElement(
-          View,
-          { key: 'goals', testID: 'agent-goals-widget' },
-          goals.length === 0 && agentRun.status === 'running'
-            ? React.createElement(Text, null, 'Goals pending bootstrap')
-            : null,
-          goals.length > 0 ? React.createElement(Text, null, `Goals (${goals.length})`) : null,
-          !detailsOpen && compactPreview ? React.createElement(Text, null, compactPreview) : null,
-          goals.length > 0
-            ? React.createElement(
-                TouchableOpacity,
-                {
-                  testID: 'agent-goals-toggle',
-                  onPress: () => setDetailsOpen((open: boolean) => !open),
-                },
-                React.createElement(Text, null, 'Toggle goals'),
-              )
-            : null,
-          detailsOpen && goals.length > 0
-            ? React.createElement(
-                View,
-                { testID: 'agent-goals-details' },
-                ...goals.map((goal: any) =>
-                  React.createElement(
-                    View,
-                    { key: goal.id, testID: `agent-goals-item-${goal.id}` },
-                    React.createElement(Text, null, goal.title),
+      if (plan.length > 0) {
+        nodes.push(
+          React.createElement(
+            View,
+            { key: 'plan', testID: 'agent-plan-widget' },
+            React.createElement(Text, null, `Plan (${plan.length} steps)`),
+            !detailsOpen && currentStep ? React.createElement(Text, null, currentStep.step) : null,
+            React.createElement(
+              TouchableOpacity,
+              {
+                testID: 'agent-plan-toggle',
+                onPress: () => setDetailsOpen((open: boolean) => !open),
+              },
+              React.createElement(Text, null, 'Toggle plan'),
+            ),
+            detailsOpen
+              ? React.createElement(
+                  View,
+                  { testID: 'agent-plan-details' },
+                  ...plan.map((entry: any, index: number) =>
+                    React.createElement(
+                      View,
+                      { key: `plan-step-${index}`, testID: `agent-plan-step-${index}` },
+                      React.createElement(Text, null, entry.step),
+                    ),
                   ),
-                ),
-              )
-            : null,
-        ),
-      );
+                )
+              : null,
+          ),
+        );
+      }
     }
 
     if (message?.role === 'assistant' && isStreaming && nodes.length === 0) {

@@ -56,15 +56,14 @@ describe('SESSION_SPAWN_TOOL schema', () => {
 
   it('documents dependency-aware launch sequencing', () => {
     expect(SESSION_SPAWN_TOOL.input_schema.properties.workstreamId.description).toContain(
-      'structured workstream',
+      'an earlier sessions_spawn result reported',
     );
     expect(SESSION_SPAWN_TOOL.input_schema.properties.dependsOnWorkstreams.description).toContain(
-      'prerequisite',
+      'must be complete before this worker starts',
     );
-    expect(SESSION_SPAWN_TOOL.description).toContain('separate blocking goal');
-    expect(SESSION_SPAWN_TOOL.description).toContain('owned by "delegated-worker"');
-    expect(SESSION_SPAWN_TOOL.description).toContain('do not repurpose a parent deliverable goal');
-    expect(SESSION_SPAWN_TOOL.description).toContain('that goal id as workstreamId');
+    // A spawn needs no goal: the model never writes one, so the tool never asks for one.
+    expect(SESSION_SPAWN_TOOL.description).not.toMatch(/goal/i);
+    expect(SESSION_SPAWN_TOOL.input_schema.properties).not.toHaveProperty('goalScope');
     expect(SESSION_SPAWN_TOOL.description).toContain('continue independent non-overlapping work');
     expect(SESSION_SPAWN_TOOL.description).toContain('strict security allowlist, not a task plan');
     expect(SESSION_SPAWN_TOOL.description).not.toContain('transcript or reasoning trace');

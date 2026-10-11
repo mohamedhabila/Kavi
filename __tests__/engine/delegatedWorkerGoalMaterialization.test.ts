@@ -5,15 +5,13 @@ import {
   DELEGATED_WORKER_GOAL_OWNER,
   DELEGATED_WORKER_MIN_EVIDENCE_CRITERION,
 } from '../../src/engine/goals/delegation';
+import { resolveDelegatedDeliverableKind } from '../../src/engine/goals/delegationDeliverable';
 import { createGoal } from '../../src/engine/goals/types';
 import type { AgentGoal } from '../../src/types/agentRun';
 
-// Traced live on an Android emulator. The spawn gate refuses any run without a goal of
-// one exact shape, and states that shape in full inside `repair.expectedShape`. So the
-// first `sessions_spawn` always failed, the `update_goals` that followed often produced
-// criteria the second gate also refused, and only a third attempt launched a worker.
-// The user saw it as "the spawn calls always fail" with duplicated, failing goal updates
-// between them. The gate had already computed the answer; it just would not apply it.
+// A joined `sessions_spawn` runs under a code-owned workstream: the record its launch and
+// result are kept on, and the goal its worker's deliverable kind is read from. The graph
+// opens it from the call itself; the model never writes it.
 
 const SPAWN = [{ name: 'sessions_spawn' }];
 
@@ -26,7 +24,7 @@ const deliverable = () =>
     successCriteria: ['evidence.artifact:artifacts/verdict.md'],
   });
 
-function spawnPlanStatus(goals: ReadonlyArray<AgentGoal>) {
+function spawnPlan(goals: ReadonlyArray<AgentGoal>) {
   return resolveDelegatedWorkerSpawnPlan({
     request: { prompt: 'Run the simulation and report P10/P50/P90.' },
     conversation: undefined,
@@ -38,7 +36,7 @@ function spawnPlanStatus(goals: ReadonlyArray<AgentGoal>) {
 }
 
 describe('the graph opens the delegated workstream a spawn needs', () => {
-  it('creates the goal instead of refusing the launch', () => {
+  it('creates the workstream goal from the call itself', () => {
     const result = materializeDelegatedWorkerGoal({ toolCalls: SPAWN, goals: [deliverable()] });
 
     expect(result.status).toBe('materialized');
@@ -54,15 +52,24 @@ describe('the graph opens the delegated workstream a spawn needs', () => {
     );
   });
 
-  it('produces a goal the spawn gate accepts, so the first launch succeeds', () => {
-    // The gate is the real assertion: before, it blocked; after, it is ready.
-    expect(spawnPlanStatus([deliverable()]).status).toBe('blocked');
-
+  it('is the workstream the spawn then runs under', () => {
     const materialized = materializeDelegatedWorkerGoal({
       toolCalls: SPAWN,
       goals: [deliverable()],
     });
-    expect(spawnPlanStatus(materialized.goals).status).toBe('ready');
+    const created = materialized.goals.find((goal) => goal.owner === DELEGATED_WORKER_GOAL_OWNER);
+
+    expect(spawnPlan(materialized.goals).spawnGate).toEqual({
+      status: 'ready',
+      workstreamId: created?.id,
+    });
+  });
+
+  it('marks a worker report as the deliverable, so an answer-only worker can succeed', () => {
+    const materialized = materializeDelegatedWorkerGoal({ toolCalls: SPAWN, goals: [] });
+    const created = materialized.goals.find((goal) => goal.owner === DELEGATED_WORKER_GOAL_OWNER);
+
+    expect(resolveDelegatedDeliverableKind(created)).toBe('information');
   });
 
   it('leaves the parent deliverable untouched rather than repurposing it', () => {
@@ -105,13 +112,12 @@ describe('an existing delegation goal is repaired, not duplicated', () => {
     );
   });
 
-  it('makes the previously refused goal acceptable to the gate', () => {
-    expect(spawnPlanStatus([halfBuilt()]).status).toBe('blocked');
+  it('runs the spawn under the repaired goal', () => {
     const materialized = materializeDelegatedWorkerGoal({
       toolCalls: SPAWN,
       goals: [halfBuilt()],
     });
-    expect(spawnPlanStatus(materialized.goals).status).toBe('ready');
+    expect(spawnPlan(materialized.goals).spawnGate.workstreamId).toBe(halfBuilt().id);
   });
 
   it('keeps criteria the goal already carried', () => {
@@ -177,11 +183,11 @@ describe('it does nothing when there is nothing to reconcile', () => {
     expect(result.status).toBe('materialized');
   });
 
-  it('leaves a run with no goal graph alone, which the gate never refuses', () => {
-    // `hasStructuredGoalGraph` gates the refusal, so a goal-less run was already going to
-    // launch. Adding a blocking obligation to it would create work, not remove it.
+  it('opens a workstream in a run that holds no other goals', () => {
+    // Whether a run had recorded an unrelated effect first used to decide whether its
+    // worker got a workstream, and so which bar its report was held to.
     expect(materializeDelegatedWorkerGoal({ toolCalls: SPAWN, goals: [] }).status).toBe(
-      'unchanged',
+      'materialized',
     );
   });
 

@@ -7,7 +7,7 @@ const SAFE_PUBLIC_TOOL_NAMES = new Set([
   'memory_recall',
   'tool_catalog',
   'tool_describe',
-  'update_goals',
+  'update_plan',
   'write_file',
 ]);
 

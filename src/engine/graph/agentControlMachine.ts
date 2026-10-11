@@ -73,6 +73,9 @@ export function createAgentControlMachine(snapshot?: Partial<AgentControlGraphSn
       GOALS_UPDATED: {
         actions: 'recordGoalsUpdated',
       },
+      PLAN_UPDATED: {
+        actions: 'recordPlanUpdated',
+      },
       USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED: {
         actions: 'recordUserConstraintDeliveryAcknowledged',
       },

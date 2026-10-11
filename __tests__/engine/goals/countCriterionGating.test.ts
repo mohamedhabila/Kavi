@@ -4,16 +4,8 @@ import {
   isSuccessCriterionMet,
   resolveGatingSuccessCriteria,
 } from '../../../src/engine/goals/completionEvidence';
-import {
-  buildUnmetCompletionRequirementMessage,
-  findUnmetCompletionCriteria,
-} from '../../../src/engine/goals/completionRefusalMessage';
 import { buildToolEffectReceiptEvidence } from '../../../src/engine/goals/effectCompletionEvidence';
 import { createGoal } from '../../../src/engine/goals/types';
-import {
-  renderGoalBootstrapPromptSection,
-  renderGoalMutationContractSection,
-} from '../../../src/engine/goals/bootstrap';
 import { DELEGATED_WORKER_MIN_EVIDENCE_CRITERION } from '../../../src/engine/goals/delegation';
 import type { ToolEffectReceipt } from '../../../src/types/toolEffectReceipt';
 
@@ -146,39 +138,6 @@ describe('a goal with nothing but counts keeps its floor', () => {
   });
 });
 
-describe('the completion refusal names only what actually holds the goal', () => {
-  it('names the real criterion and its action, never the count', () => {
-    const message = buildUnmetCompletionRequirementMessage(researchBrief([]));
-
-    expect(message).toContain(`evidence.artifact:${BRIEF}`);
-    expect(message).not.toContain('evidence.min');
-    expect(message).toContain(`write ${BRIEF} with write_file`);
-  });
-
-  it('stops telling the model to record more once the real work is done', () => {
-    // A bare count yields no satisfying action, so naming it fell through to the generic
-    // "record a tool result" line — an instruction to run tools with nothing to say about
-    // which one. That sentence is what the traced run acted on.
-    const message = buildUnmetCompletionRequirementMessage(researchBrief([verifiedWrite(BRIEF, 'a')]));
-
-    expect(message).not.toContain('Record a tool result that satisfies it');
-    expect(message).not.toContain('evidence.min');
-    expect(findUnmetCompletionCriteria(researchBrief([verifiedWrite(BRIEF, 'a')]))).toEqual([]);
-  });
-
-  it('still reports a count-only goal, which has no other gate', () => {
-    const goal = createGoal({
-      id: 'count-only',
-      title: 'Count only',
-      status: 'active',
-      evidence: ['read_file:a'],
-      successCriteria: ['evidence.min:2'],
-    });
-
-    expect(findUnmetCompletionCriteria(goal)).toEqual(['evidence.min:2']);
-  });
-});
-
 describe('resolveGatingSuccessCriteria', () => {
   it('drops counts only when a real criterion remains to gate the goal', () => {
     expect(resolveGatingSuccessCriteria([`evidence.artifact:${BRIEF}`, 'evidence.min:3'])).toEqual([
@@ -196,22 +155,5 @@ describe('resolveGatingSuccessCriteria', () => {
     const goal = researchBrief([verifiedWrite(BRIEF, 'a')]);
     expect(isSuccessCriterionMet(goal, 'evidence.min:3')).toBe(false);
     expect(isSuccessCriterionMet(goal, `evidence.artifact:${BRIEF}`)).toBe(true);
-  });
-});
-
-describe('the goal guidance names the one token evidence.prefix accepts', () => {
-  // Traced on-device across runs, consistently: the model opened every goal-bearing task
-  // by declaring `evidence.prefix:memory`, was refused, and corrected on the next call.
-  // It was not guessing — the guidance offered `worker` as the sole worked example of a
-  // prefix and warned against exactly one bad token, which reads as an invitation to
-  // generalise the pattern to other domains.
-  it('reserves evidence.prefix for worker and points tools at evidence.tool', () => {
-    const text = `${renderGoalBootstrapPromptSection()}\n${renderGoalMutationContractSection()}`;
-
-    expect(text).toContain('evidence.prefix is reserved for delegated worker results');
-    expect(text).toContain('the only token it accepts is worker');
-    expect(text).toContain('evidence.tool:<registered-tool-name>');
-    // The old line invited the generalisation that produced the wasted call.
-    expect(text).not.toContain('such as a tool name or worker');
   });
 });

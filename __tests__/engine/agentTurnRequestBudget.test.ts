@@ -39,16 +39,16 @@ describe('prepareAgentTurnRequestBudget', () => {
     expect(result.budgetResult.result.adjustments).toEqual([]);
   });
 
-  it('attributes goal budget by typed purpose across languages rather than rendered headings', async () => {
-    const decoyHeading = '## Current Goals\nThis is ordinary assistant guidance.';
-    const goalSection = '## الأهداف الحالية\n- إنهاء المهمة على الهاتف.';
+  it('attributes plan budget by typed purpose across languages rather than rendered headings', async () => {
+    const decoyHeading = '## Plan\nThis is ordinary assistant guidance.';
+    const planSection = '## الخطة\n- [>] إنهاء المهمة على الهاتف.';
     const result = await prepareAgentTurnRequestBudget({
       compactionEngine: null,
       conversationId: 'conv-typed-sections',
-      enrichedSystemPrompt: `${decoyHeading}\n\n${goalSection}`,
+      enrichedSystemPrompt: `${decoyHeading}\n\n${planSection}`,
       enrichedSystemPromptSections: [
         { text: decoyHeading, cacheable: true, purpose: 'base_prompt' },
-        { text: goalSection, purpose: 'goals' },
+        { text: planSection, purpose: 'plan' },
       ],
       requestMaxTokens: 1024,
       requestModel: 'gpt-5.4-mini',
@@ -57,7 +57,7 @@ describe('prepareAgentTurnRequestBudget', () => {
       workingMessages: [{ id: 'user-1', role: 'user', content: 'ابدأ.', timestamp: 1 }],
     });
 
-    expect(result.usageTokenBuckets.memoryContextTokens).toBe(estimateTokens(goalSection));
+    expect(result.usageTokenBuckets.memoryContextTokens).toBe(estimateTokens(planSection));
   });
 
   it('never forwards recalled memory as generic compaction-engine hints', async () => {

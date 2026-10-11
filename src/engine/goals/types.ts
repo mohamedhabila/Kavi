@@ -342,13 +342,6 @@ export function normalizeGoals(value: unknown): AgentGoal[] {
   return value.map(normalizeGoal).filter((g): g is AgentGoal => g !== null);
 }
 
-export function getActiveGoalId(goals: ReadonlyArray<AgentGoal>): string | null {
-  for (let i = goals.length - 1; i >= 0; i--) {
-    if (goals[i].status === 'active') return goals[i].id;
-  }
-  return null;
-}
-
 export function getActiveGoal(goals: ReadonlyArray<AgentGoal>): AgentGoal | null {
   for (let i = goals.length - 1; i >= 0; i--) {
     if (goals[i].status === 'active') return goals[i];

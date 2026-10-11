@@ -13,7 +13,7 @@ import {
   workflowProductionSatisfiesConsumption,
 } from '../tools/toolWorkflowContracts';
 import { normalizeToolName } from '../tools/toolNameNormalization';
-import { GOAL_BOOTSTRAP_TOOL_NAME } from './bootstrap';
+import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
 import { resolveSuccessCriterionSurfaceHints } from './completionEvidence';
 import type { AgentGoal } from './types';
 import {
@@ -34,7 +34,7 @@ import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestCl
  */
 export const DEFAULT_CORE_TOOL_ORDER = [
   REQUEST_CLARIFICATION_TOOL_NAME,
-  GOAL_BOOTSTRAP_TOOL_NAME,
+  UPDATE_PLAN_TOOL_NAME,
   'memory_recall',
   'memory_remember',
   'memory_preserve_source',
@@ -56,7 +56,7 @@ export const DEFAULT_CORE_TOOL_ORDER = [
 
 const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   REQUEST_CLARIFICATION_TOOL_NAME,
-  GOAL_BOOTSTRAP_TOOL_NAME,
+  UPDATE_PLAN_TOOL_NAME,
   'memory_recall',
   'memory_remember',
   'memory_preserve_source',

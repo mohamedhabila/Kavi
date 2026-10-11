@@ -141,7 +141,6 @@ describe('iteration request understanding continuity', () => {
       expect.objectContaining({
         goals: input.graph.getGraphSnapshot().goals,
         promptContextSupport: expect.objectContaining({
-          graphGoals: input.graph.getGraphSnapshot().goals,
           runtimeContext: expect.stringContaining('## Request Understanding Projection (v2)'),
         }),
       }),
@@ -168,7 +167,6 @@ describe('iteration request understanding continuity', () => {
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptContextSupport: expect.objectContaining({
-          graphGoals: [],
           runtimeContext: 'Runtime context',
         }),
       }),
@@ -213,9 +211,19 @@ describe('iteration request understanding continuity', () => {
     expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
       'private-source-message-id',
     );
-    expect(preparation?.promptContextSupport.graphGoals?.[0]?.userConstraints).toEqual(
-      goal.userConstraints,
-    );
+  });
+
+  it("reads the run's plan from the graph on every iteration", async () => {
+    const input = params(2, []);
+    const plan = [
+      { step: 'Find flights', status: 'completed' },
+      { step: 'Book the hotel', status: 'in_progress' },
+    ];
+    input.graph.getGraphSnapshot.mockReturnValue({ goals: [], plan });
+
+    await executeAgentControlGraphIteration(input);
+
+    expect(mockedPrepareModelTurn.mock.calls[0]?.[0].promptContextSupport.graphPlan).toEqual(plan);
   });
 
   it('does not write an unchanged projection again', async () => {

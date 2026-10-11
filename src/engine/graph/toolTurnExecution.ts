@@ -20,7 +20,6 @@ import {
   type IterationProgressSignature,
   type ToolCallRecord,
 } from '../loopDetection';
-import { getActiveGoalId } from '../goals/types';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import { type TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailability';
@@ -56,10 +55,7 @@ import {
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
-import {
-  buildMobileControllerGoalAdmissionBlock,
-  materializeMobileControllerGoal,
-} from '../mobileController/goalAdmission';
+import { materializeMobileControllerGoal } from '../mobileController/goalAdmission';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
 import { buildClarificationReviewBlock } from './clarificationReviewPolicy';
@@ -211,7 +207,7 @@ export async function executeAgentControlGraphToolTurn(
     providerReplay: params.providerReplay,
     completion: params.completion,
     pendingToolCalls: params.pendingToolCalls,
-    goals: params.getGraphSnapshot().goals,
+    plan: params.getGraphSnapshot().plan,
     workingMessages: params.workingMessages,
   });
 
@@ -285,15 +281,10 @@ export async function executeAgentControlGraphToolTurn(
     effectGoalMaterialization.status === 'materialized'
       ? effectGoalMaterialization.goals
       : (params.getGraphSnapshot().goals ?? []);
-  // A spawn gate that can serialize the goal it wants does not need the model to type it
-  // back. Reconcile it here so the launch succeeds on its first attempt.
   const delegationGoalMaterialization = materializeDelegatedWorkerGoal({
     toolCalls: executableToolCalls,
     goals: goalsAfterEffectMaterialization,
   });
-  // A mobile_ui_action call that can serialize the goal it wants does not need the
-  // model to type it back either; reconcile it here the same way, chained after
-  // delegation so a turn that does both admits on the very first attempt.
   const mobileControllerGoalMaterialization = materializeMobileControllerGoal({
     toolCalls: executableToolCalls,
     goals: delegationGoalMaterialization.goals,
@@ -302,17 +293,13 @@ export async function executeAgentControlGraphToolTurn(
   const isMobileControllerTurn =
     executableToolCalls.length === 1 &&
     resolveRegisteredToolName(executableToolCalls[0]!.name) === MOBILE_UI_ACTION_TOOL_NAME;
-  const mobileControllerAdmissionBlock = isMobileControllerTurn
-    ? buildMobileControllerGoalAdmissionBlock(projectedControlGraphGoals)
-    : undefined;
-  const mobileControllerRecoveryDecision =
-    isMobileControllerTurn && !mobileControllerAdmissionBlock
-      ? resolveMobileControllerRecoveryPreflight({
-          toolCall: executableToolCalls[0]!,
-          binding: params.mobileController,
-          directives: params.getGraphSnapshot().turnDirectives,
-        })
-      : { kind: 'not_applicable' as const };
+  const mobileControllerRecoveryDecision = isMobileControllerTurn
+    ? resolveMobileControllerRecoveryPreflight({
+        toolCall: executableToolCalls[0]!,
+        binding: params.mobileController,
+        directives: params.getGraphSnapshot().turnDirectives,
+      })
+    : { kind: 'not_applicable' as const };
   const toolCallBlockers = new Map<string, string>();
   if (mobileControllerRecoveryDecision.kind === 'block') {
     toolCallBlockers.set(executableToolCalls[0]!.id, mobileControllerRecoveryDecision.blocker);
@@ -515,7 +502,6 @@ export async function executeAgentControlGraphToolTurn(
     recordIterationProgressSignature(params.stagnationSignatures, {
       toolMultisetKey: buildToolMultisetKey(executableToolCalls.map((toolCall) => toolCall.name)),
       goalProgressFingerprint: buildGoalProgressFingerprint(goals),
-      activeGoalId: getActiveGoalId(goals),
       semanticProgressFingerprint: buildIterationSemanticProgressFingerprint(
         toolExecutionOutcomes.flatMap((outcome) => {
           if ('deferredHandoff' in outcome) return [];
