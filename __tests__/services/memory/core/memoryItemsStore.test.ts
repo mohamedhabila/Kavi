@@ -162,4 +162,9 @@ describe('memory items', () => {
     expect(remember('   ')).toEqual({ status: 'invalid', reason: 'empty' });
     expect(remember('x'.repeat(2_001))).toEqual({ status: 'invalid', reason: 'too_long' });
   });
+
+  it('measures content in code points, so emoji count once', () => {
+    // 1,500 emoji are 3,000 UTF-16 units but 1,500 characters to SQLite and JSON Schema.
+    expect(remember(`Mood log ${'😀'.repeat(1_500)}`)).toMatchObject({ status: 'created' });
+  });
 });

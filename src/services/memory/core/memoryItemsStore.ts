@@ -18,6 +18,7 @@ import {
   MEMORY_ITEM_TEXT_MAX_CHARS,
   runMemoryCoreTransaction,
 } from './memorySchema';
+import { memoryTextLength } from './memoryText';
 
 export type MemoryItemScope = 'global' | 'conversation';
 
@@ -141,7 +142,9 @@ function addMemoryItemInTransaction(
 ): AddMemoryItemResult {
   const text = normalizeItemText(input.text);
   if (!text) return { status: 'invalid', reason: 'empty' };
-  if (text.length > MEMORY_ITEM_TEXT_MAX_CHARS) return { status: 'invalid', reason: 'too_long' };
+  if (memoryTextLength(text) > MEMORY_ITEM_TEXT_MAX_CHARS) {
+    return { status: 'invalid', reason: 'too_long' };
+  }
   const detected = classifyStructuredMemoryText(text);
   if (detected === 'restricted') return { status: 'restricted' };
 

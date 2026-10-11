@@ -13,11 +13,11 @@
 import type * as SQLite from 'expo-sqlite';
 import type { Message } from '../../../types/message';
 import { getMemoryDb } from '../database';
-import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 import { findTurnOpeningUserIndex, isSteeringUserMessage } from '../../../utils/steeringMessages';
 import { classifyStructuredMemoryText } from '../memorySensitivityValidators';
 import { buildMemoryMatchExpression } from './memoryItemsQuery';
 import { ensureMemoryCoreSchema, MEMORY_TURN_TEXT_MAX_CHARS } from './memorySchema';
+import { boundMemoryText } from './memoryText';
 
 export interface MemoryTurn {
   userMessageId: string;
@@ -65,10 +65,9 @@ export function indexMemoryTurn(params: {
   const user = params.userText.trim();
   const reply = params.replyText.trim();
   if (!user && !reply) return false;
-  const text = truncateGraphemesWithSuffix(
+  const text = boundMemoryText(
     [user && `User: ${user}`, reply && `Assistant: ${reply}`].filter(Boolean).join('\n'),
     MEMORY_TURN_TEXT_MAX_CHARS,
-    '…',
   );
   const sensitivity = classifyStructuredMemoryText(text);
   const db = readyDb();

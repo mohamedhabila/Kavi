@@ -4,7 +4,11 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { closeMemoryDb } from '../../../../src/services/memory/database';
-import { resetMemoryCoreSchemaCacheForTests } from '../../../../src/services/memory/core/memorySchema';
+import {
+  MEMORY_TURN_TEXT_MAX_CHARS,
+  resetMemoryCoreSchemaCacheForTests,
+} from '../../../../src/services/memory/core/memorySchema';
+import { memoryTextLength } from '../../../../src/services/memory/core/memoryText';
 import {
   deleteMemoryTurnsFromConversation,
   indexClosedTurn,
@@ -112,6 +116,18 @@ describe('past turn privacy', () => {
         (found) => found.sensitive,
       ),
     ).toEqual([true]);
+  });
+});
+
+describe('past turn size', () => {
+  it('fits a long round into the stored bound without splitting a grapheme', () => {
+    const family = '👨‍👩‍👧‍👦';
+
+    expect(turn('conv-1', 'u1', `Lisbon ${family.repeat(1_000)}`, 'Noted.')).toBe(true);
+
+    const [stored] = searchMemoryTurns({ query: 'Lisbon', limit: 1, includeSensitive: true });
+    expect(memoryTextLength(stored!.text)).toBeLessThanOrEqual(MEMORY_TURN_TEXT_MAX_CHARS);
+    expect(stored!.text.endsWith(`${family}…`)).toBe(true);
   });
 });
 
