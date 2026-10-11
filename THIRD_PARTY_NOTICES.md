@@ -300,7 +300,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | @lezer/xml | 1.0.6 | transitive | MIT |
 | @lezer/yaml | 1.0.4 | transitive | MIT |
 | @marijn/find-cluster-break | 1.0.2 | transitive | MIT |
-| @modelcontextprotocol/sdk | 1.30.0 | runtime | MIT |
+| @modelcontextprotocol/sdk | 1.31.0 | runtime | MIT |
 | @react-native-async-storage/async-storage | 2.2.0 | runtime | MIT |
 | @react-native/assets-registry | 0.83.10 | transitive | MIT |
 | @react-native/babel-plugin-codegen | 0.83.10 | transitive | MIT |
@@ -917,7 +917,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | promise | 8.3.0 | transitive | MIT |
 | prompts | 2.4.2 | transitive | MIT |
 | proper-lockfile | 4.1.2 | development | MIT |
-| proxy-addr | 2.0.7 | transitive | MIT |
+| proxy-addr | 2.0.8 | transitive | MIT |
 | psl | 1.15.0 | transitive | MIT |
 | pump | 3.0.4 | transitive | MIT |
 | punycode | 2.3.1 | transitive | MIT |
@@ -992,7 +992,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | sf-symbols-typescript | 2.2.0 | transitive | MIT |
 | shebang-command | 2.0.0 | transitive | MIT |
 | shebang-regex | 3.0.0 | transitive | MIT |
-| shell-quote | 1.10.0 | runtime | MIT |
+| shell-quote | 1.11.0 | runtime | MIT |
 | side-channel | 1.1.1 | transitive | MIT |
 | side-channel-list | 1.0.1 | transitive | MIT |
 | side-channel-map | 1.0.1 | transitive | MIT |
