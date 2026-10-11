@@ -20,12 +20,12 @@ describe('toolNameNormalization', () => {
 
   it('resolveRegisteredToolName keeps registered builtins', () => {
     expect(resolveRegisteredToolName('calendar_list')).toBe('calendar_list');
-    expect(isRegisteredToolName('memory_recall')).toBe(true);
+    expect(isRegisteredToolName('memory_search')).toBe(true);
   });
 
   it('resolveRegisteredToolName maps colon-delimited aliases to registry builtins', () => {
     expect(resolveRegisteredToolName('google_calendar:calendar_list')).toBe('calendar_list');
-    expect(resolveRegisteredToolName('provider:memory_recall')).toBe('memory_recall');
+    expect(resolveRegisteredToolName('provider:memory_search')).toBe('memory_search');
   });
 
   it('resolveRegisteredToolName returns trimmed unknown names unchanged', () => {

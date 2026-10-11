@@ -15,7 +15,7 @@ const discoveryTools: ToolDefinition[] = [
     contract: { category: 'tools', capabilities: ['discover'], resourceKinds: ['unknown'] },
   },
   {
-    name: 'memory_recall',
+    name: 'memory_search',
     description: 'Recall memory facts.',
     input_schema: { type: 'object', properties: {} },
     contract: { category: 'memory', capabilities: ['read'], resourceKinds: ['memory'] },
@@ -137,7 +137,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
       includeToolCatalog: false,
     });
 
-    expect(selectedNames(surface).has('memory_recall')).toBe(true);
+    expect(selectedNames(surface).has('memory_search')).toBe(true);
     expect(selectedNames(surface).has('read_file')).toBe(true);
     expect(selectedNames(surface).has('tool_catalog')).toBe(false);
   });
@@ -148,14 +148,14 @@ describe('resolveTurnToolSurface discovery decay', () => {
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_recall']),
+      activatedCatalogToolNames: new Set(['memory_search']),
       unresolvedDiscoveryToolCallInTurn: false,
       includeToolCatalog: false,
     });
 
     const names = selectedNames(surface);
     expect(names.has('update_plan')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
+    expect(names.has('memory_search')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
   });
@@ -166,14 +166,14 @@ describe('resolveTurnToolSurface discovery decay', () => {
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_recall']),
+      activatedCatalogToolNames: new Set(['memory_search']),
       unresolvedDiscoveryToolCallInTurn: false,
       includeToolCatalog: false,
     });
 
     const names = selectedNames(surface);
     expect(names.has('update_plan')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
+    expect(names.has('memory_search')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
   });
@@ -203,7 +203,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
 
     const names = selectedNames(surface);
     expect(names.has('update_plan')).toBe(true);
-    expect(names.has('memory_recall')).toBe(true);
+    expect(names.has('memory_search')).toBe(true);
     expect(names.has('memory_remember')).toBe(true);
     expect(names.has('memory_forget')).toBe(true);
     expect(names.has('write_file')).toBe(true);
@@ -264,13 +264,13 @@ describe('resolveTurnToolSurface discovery decay', () => {
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_recall']),
+      activatedCatalogToolNames: new Set(['memory_search']),
       unresolvedDiscoveryToolCallInTurn: false,
       includeToolCatalog: true,
     });
 
     const names = selectedNames(surface);
-    expect(names.has('memory_recall')).toBe(true);
+    expect(names.has('memory_search')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
     expect(names.has('tool_describe')).toBe(true);
   });

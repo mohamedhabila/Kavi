@@ -4,10 +4,6 @@ import {
   type E2EPairedInvariantConfig,
 } from './e2ePairedInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
-import {
-  MEMORY_FACT_SENSITIVITY_LEVELS,
-  type MemoryFactSensitivity,
-} from '../../services/memory/facts/applicabilityProvenance';
 
 export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v4' as const;
 export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v4' as const;
@@ -17,60 +13,15 @@ export const E2E_PAIRED_CONDITIONS = [
   'memory_off',
   'lexical_baseline',
   'diagnostic_full_context',
-  'oracle_evidence',
 ] as const;
-
-export const E2E_MAX_ORACLE_FACTS = 32;
-const MEMORY_ENTITY_TYPES = [
-  'person',
-  'place',
-  'org',
-  'project',
-  'thing',
-  'concept',
-  'event',
-  'self',
-] as const;
-const MEMORY_FACT_SCOPES = ['global', 'project', 'conversation', 'session', 'persona'] as const;
-const MEMORY_REMEMBER_KEYS = new Set([
-  'subject',
-  'subjectType',
-  'predicate',
-  'value',
-  'confidence',
-  'pinned',
-  'scope',
-  'importance',
-  'sensitivity',
-]);
 
 export type E2EPairedCondition = (typeof E2E_PAIRED_CONDITIONS)[number];
-
-export interface E2EOracleFactDeclaration {
-  subject: string;
-  subjectType?: (typeof MEMORY_ENTITY_TYPES)[number];
-  predicate: string;
-  value: string;
-  confidence?: number;
-  pinned?: boolean;
-  scope?: (typeof MEMORY_FACT_SCOPES)[number];
-  importance?: number;
-  sensitivity: MemoryFactSensitivity;
-}
-
-export type E2EOracleEvidenceDeclaration = Readonly<{
-  interface: 'memory_remember';
-  allowSeeding: true;
-  facts: ReadonlyArray<Readonly<E2EOracleFactDeclaration>>;
-}>;
 
 export type E2EPairedConditionBehavior = Readonly<{
   routeOverride: 'production_auto' | 'forced_chitchat' | 'forced_agentic' | null;
   memoryMode: 'production' | 'off';
   retrievalMode: 'production' | 'lexical_only';
   contextMode: 'production' | 'full_context';
-  oracleEvidenceHash: string | null;
-  oracleEvidenceCount: number;
 }>;
 
 export type E2EPairedConditionPlan = Readonly<{
@@ -80,7 +31,6 @@ export type E2EPairedConditionPlan = Readonly<{
   invariantConfigHash: string;
   conditionConfig: E2EPairedConditionBehavior;
   conditionConfigHash: string;
-  oracleEvidence?: E2EOracleEvidenceDeclaration;
 }>;
 
 export type E2EPairedExecutionPlan = Readonly<{
@@ -122,101 +72,7 @@ function requireExactKeys(value: object, expectedKeys: ReadonlyArray<string>, la
   }
 }
 
-function requireUnitInterval(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
-    throw new Error(`${label} must be a finite number between 0 and 1.`);
-  }
-  return value;
-}
-
-function requireMemoryFactSensitivity(value: unknown, label: string): MemoryFactSensitivity {
-  if (!MEMORY_FACT_SENSITIVITY_LEVELS.includes(value as MemoryFactSensitivity)) {
-    throw new Error(`${label} is unsupported.`);
-  }
-  return value as MemoryFactSensitivity;
-}
-
-export function validateE2EOracleEvidenceDeclaration(
-  evidence: E2EOracleEvidenceDeclaration | undefined,
-): E2EOracleEvidenceDeclaration {
-  if (!evidence || evidence.interface !== 'memory_remember' || evidence.allowSeeding !== true) {
-    throw new Error('oracle_evidence requires an explicitly allowed memory_remember declaration.');
-  }
-  if (!Array.isArray(evidence.facts) || evidence.facts.length === 0) {
-    throw new Error('oracle_evidence requires at least one declared fact.');
-  }
-  if (evidence.facts.length > E2E_MAX_ORACLE_FACTS) {
-    throw new Error(`oracle_evidence accepts at most ${E2E_MAX_ORACLE_FACTS} declared facts.`);
-  }
-
-  const canonicalFacts = new Map<string, Readonly<E2EOracleFactDeclaration>>();
-  for (const [index, fact] of evidence.facts.entries()) {
-    if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
-      throw new Error(`oracleEvidence.facts[${index}] must be an object.`);
-    }
-    if (Object.keys(fact).some((key) => !MEMORY_REMEMBER_KEYS.has(key))) {
-      throw new Error(`oracleEvidence.facts[${index}] contains unsupported fields.`);
-    }
-    const canonicalFact: E2EOracleFactDeclaration = {
-      subject: requireTrimmed(fact.subject, `oracleEvidence.facts[${index}].subject`, 80),
-      predicate: requireTrimmed(fact.predicate, `oracleEvidence.facts[${index}].predicate`, 80),
-      value: requireTrimmed(fact.value, `oracleEvidence.facts[${index}].value`, 200),
-      scope: 'global',
-      sensitivity: requireMemoryFactSensitivity(
-        fact.sensitivity,
-        `oracleEvidence.facts[${index}].sensitivity`,
-      ),
-    };
-    if (fact.subjectType !== undefined) {
-      if (!MEMORY_ENTITY_TYPES.includes(fact.subjectType)) {
-        throw new Error(`oracleEvidence.facts[${index}].subjectType is unsupported.`);
-      }
-      canonicalFact.subjectType = fact.subjectType;
-    }
-    if (fact.confidence !== undefined) {
-      canonicalFact.confidence = requireUnitInterval(
-        fact.confidence,
-        `oracleEvidence.facts[${index}].confidence`,
-      );
-    }
-    if (fact.pinned !== undefined) {
-      if (typeof fact.pinned !== 'boolean') {
-        throw new Error(`oracleEvidence.facts[${index}].pinned must be a boolean.`);
-      }
-      canonicalFact.pinned = fact.pinned;
-    }
-    if (fact.scope !== undefined) {
-      if (!MEMORY_FACT_SCOPES.includes(fact.scope)) {
-        throw new Error(`oracleEvidence.facts[${index}].scope is unsupported.`);
-      }
-      canonicalFact.scope = fact.scope;
-    }
-    if (fact.importance !== undefined) {
-      canonicalFact.importance = requireUnitInterval(
-        fact.importance,
-        `oracleEvidence.facts[${index}].importance`,
-      );
-    }
-    canonicalFacts.set(stableStringify(canonicalFact), canonicalFact);
-  }
-
-  const facts = Array.from(canonicalFacts.entries())
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([, fact]) => fact);
-  return deepFreeze({ interface: 'memory_remember', allowSeeding: true, facts });
-}
-
-function buildConditionBehavior(
-  condition: E2EPairedCondition,
-  oracleEvidence: E2EOracleEvidenceDeclaration | undefined,
-): E2EPairedConditionBehavior {
-  const oracle =
-    condition === 'oracle_evidence'
-      ? validateE2EOracleEvidenceDeclaration(oracleEvidence)
-      : undefined;
-  if (condition !== 'oracle_evidence' && oracleEvidence !== undefined) {
-    throw new Error('Oracle evidence may only be supplied to the oracle_evidence condition.');
-  }
+function buildConditionBehavior(condition: E2EPairedCondition): E2EPairedConditionBehavior {
   return {
     routeOverride: E2E_PAIRED_ROUTE_CONDITIONS.includes(
       condition as (typeof E2E_PAIRED_ROUTE_CONDITIONS)[number],
@@ -226,26 +82,19 @@ function buildConditionBehavior(
     memoryMode: condition === 'memory_off' ? 'off' : 'production',
     retrievalMode: condition === 'lexical_baseline' ? 'lexical_only' : 'production',
     contextMode: condition === 'diagnostic_full_context' ? 'full_context' : 'production',
-    oracleEvidenceHash: oracle ? canonicalHash(oracle) : null,
-    oracleEvidenceCount: oracle?.facts.length ?? 0,
   };
 }
 
 export function buildE2EPairedConditionPlan(input: {
   condition: E2EPairedCondition;
   invariantConfig: E2EPairedInvariantConfig;
-  oracleEvidence?: E2EOracleEvidenceDeclaration;
 }): E2EPairedConditionPlan {
   if (!E2E_PAIRED_CONDITIONS.includes(input.condition)) {
     throw new Error(`Unsupported paired condition: ${String(input.condition)}`);
   }
   validateE2EPairedInvariantConfig(input.invariantConfig);
   const invariantConfig = deepFreeze(cloneJson(input.invariantConfig)) as E2EPairedInvariantConfig;
-  const conditionConfig = buildConditionBehavior(input.condition, input.oracleEvidence);
-  const oracleEvidence =
-    input.condition === 'oracle_evidence'
-      ? validateE2EOracleEvidenceDeclaration(input.oracleEvidence)
-      : undefined;
+  const conditionConfig = buildConditionBehavior(input.condition);
   return deepFreeze({
     schemaVersion: E2E_PAIRED_CONDITION_SCHEMA_VERSION,
     condition: input.condition,
@@ -253,7 +102,6 @@ export function buildE2EPairedConditionPlan(input: {
     invariantConfigHash: canonicalHash(invariantConfig),
     conditionConfig,
     conditionConfigHash: canonicalHash(conditionConfig),
-    ...(oracleEvidence ? { oracleEvidence } : {}),
   }) as E2EPairedConditionPlan;
 }
 
@@ -270,7 +118,6 @@ function validateConditionPlan(plan: E2EPairedConditionPlan): void {
       'invariantConfigHash',
       'conditionConfig',
       'conditionConfigHash',
-      ...(plan.condition === 'oracle_evidence' ? ['oracleEvidence'] : []),
     ],
     'Paired condition plan',
   );
@@ -281,13 +128,7 @@ function validateConditionPlan(plan: E2EPairedConditionPlan): void {
     throw new Error(`Unsupported paired condition: ${String(plan.condition)}`);
   }
   validateE2EPairedInvariantConfig(plan.invariantConfig);
-  if (plan.condition === 'oracle_evidence') {
-    const canonicalOracle = validateE2EOracleEvidenceDeclaration(plan.oracleEvidence);
-    if (stableStringify(plan.oracleEvidence) !== stableStringify(canonicalOracle)) {
-      throw new Error('oracle_evidence has a non-canonical declaration.');
-    }
-  }
-  const expectedBehavior = buildConditionBehavior(plan.condition, plan.oracleEvidence);
+  const expectedBehavior = buildConditionBehavior(plan.condition);
   if (stableStringify(plan.conditionConfig) !== stableStringify(expectedBehavior)) {
     throw new Error(`Condition ${plan.condition} has a non-canonical condition config.`);
   }

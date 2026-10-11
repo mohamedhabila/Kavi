@@ -61,6 +61,7 @@ export function buildFixtureTurnTrace(
     },
     native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
     retrieval: { sourceThreadIdHash: null, instrumentationStatus: 'missing', events: [] },
+    memoryPrompt: { status: 'missing', builds: [] },
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],
@@ -96,6 +97,7 @@ export function buildFixtureResult(overrides?: Partial<E2EScenarioResult>): E2ES
       workingBlocks: [],
       ingestionJobs: [],
     },
+    memoryItems: { capturedAt: 1, items: [] },
     usage: {
       inputTokens: 100,
       outputTokens: 20,

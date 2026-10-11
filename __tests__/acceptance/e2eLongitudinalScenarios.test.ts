@@ -91,13 +91,7 @@ describe('E2E longitudinal product scenarios', () => {
     const scenario = requireScenario('preference-to-calendar-action');
     expect(scenario.rubrics).toEqual(
       expect.arrayContaining([
-        {
-          kind: 'memory_fact',
-          subject: 'profile-owner',
-          predicate: 'default_meeting_duration_minutes',
-          value: '45',
-          scope: 'global',
-        },
+        { kind: 'memory_item', contains: ['profile-owner', '45'], scope: 'global' },
         {
           kind: 'native_fixture_state',
           path: 'calendar.createdEventCount',
@@ -120,19 +114,11 @@ describe('E2E longitudinal product scenarios', () => {
   it('scores corrected memory, verified outcomes, and the reusable failure constraint', () => {
     expect(requireScenario('profile-correction-chitchat').rubrics).toEqual(
       expect.arrayContaining([
+        { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'], scope: 'global' },
         {
-          kind: 'memory_fact',
-          subject: 'profile-owner',
-          predicate: 'home_city',
-          value: 'Utrecht',
-          scope: 'global',
-        },
-        {
-          kind: 'memory_fact_absent',
-          subject: 'profile-owner',
-          predicate: 'home_city',
-          value: 'Rotterdam',
-          scope: 'global',
+          kind: 'memory_item_absent',
+          contains: ['profile-owner', 'Rotterdam'],
+          excludes: ['Utrecht'],
         },
       ]),
     );
@@ -154,13 +140,7 @@ describe('E2E longitudinal product scenarios', () => {
     );
     expect(requireScenario('failure-gotcha-reuse').rubrics).toEqual(
       expect.arrayContaining([
-        {
-          kind: 'memory_fact',
-          subject: 'mobile-release-workflow',
-          predicate: 'required_artifact_suffix',
-          value: '.approved.txt',
-          scope: 'project',
-        },
+        { kind: 'memory_item', contains: ['mobile-release-workflow', '.approved.txt'] },
         {
           kind: 'workspace_file',
           path: 'artifacts/release-candidate.approved.txt',
@@ -202,10 +182,8 @@ describe('E2E longitudinal product scenarios', () => {
       boundary: 'app_relaunch',
     });
     expect(scenario.rubrics).toContainEqual({
-      kind: 'memory_fact',
-      subject: 'profile-owner',
-      predicate: 'commute_mode',
-      value: 'bicycle',
+      kind: 'memory_item',
+      contains: ['profile-owner', 'bicycle'],
       scope: 'global',
     });
   });

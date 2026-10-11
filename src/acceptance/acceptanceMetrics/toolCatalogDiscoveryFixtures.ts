@@ -25,8 +25,8 @@ const DISCOVERY_CATALOG: ReadonlyArray<ToolDefinition> = [
     },
   },
   {
-    name: 'memory_recall',
-    description: 'Recall memory facts.',
+    name: 'memory_search',
+    description: 'Search memory.',
     input_schema: { type: 'object', properties: {} },
     contract: {
       category: 'memory',
@@ -81,7 +81,7 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
           {
             id: 'tc-search',
             name: 'tool_catalog',
-            arguments: '{"query":"memory_recall","capabilities":["read"]}',
+            arguments: '{"query":"memory_search","capabilities":["read"]}',
             status: 'completed',
           },
         ],
@@ -91,16 +91,16 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
         role: 'tool',
         content: JSON.stringify({
           mode: 'search',
-          query: 'memory_recall',
+          query: 'memory_search',
           capabilities: ['read'],
-          tools: [{ name: 'memory_recall' }],
+          tools: [{ name: 'memory_search' }],
           totalMatches: 1,
         }),
         toolCallId: 'tc-search',
         timestamp: 3,
       },
     ],
-    expectedActivatedTools: ['memory_recall'],
+    expectedActivatedTools: ['memory_search'],
   },
   {
     id: 'tool-describe-activates-target',
@@ -116,7 +116,7 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
           {
             id: 'tc-describe',
             name: 'tool_describe',
-            arguments: '{"name":"memory_recall"}',
+            arguments: '{"name":"memory_search"}',
             status: 'completed',
           },
         ],
@@ -127,8 +127,8 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
         content: JSON.stringify({
           mode: 'describe',
           tool: {
-            name: 'memory_recall',
-            description: 'Recall memory facts.',
+            name: 'memory_search',
+            description: 'Search memory.',
             contract: { capabilities: ['read', 'verify'] },
           },
         }),
@@ -136,6 +136,6 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
         timestamp: 3,
       },
     ],
-    expectedActivatedTools: ['memory_recall'],
+    expectedActivatedTools: ['memory_search'],
   },
 ];

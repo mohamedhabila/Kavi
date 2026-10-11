@@ -97,7 +97,7 @@ describe('Orchestrator — toolFilter', () => {
     );
 
     const callbacks = makeCallbacks();
-    const memoryTools = ['memory_recall', 'memory_remember', 'memory_forget'];
+    const memoryTools = ['memory_remember', 'memory_search', 'memory_forget'];
     const options: OrchestratorOptions = {
       provider,
       model: 'gpt-test',
@@ -131,7 +131,7 @@ describe('Orchestrator — toolFilter', () => {
     );
 
     const callbacks = makeCallbacks();
-    const memoryTools = ['memory_recall', 'memory_remember', 'memory_forget'];
+    const memoryTools = ['memory_remember', 'memory_search', 'memory_forget'];
     await runOrchestrator(
       {
         provider,
@@ -186,7 +186,7 @@ describe('Orchestrator — toolFilter', () => {
       );
 
     const callbacks = makeCallbacks();
-    const explicitTools = ['memory_recall', 'memory_remember', 'memory_forget', 'web_search'];
+    const explicitTools = ['memory_remember', 'memory_search', 'memory_forget', 'web_search'];
     await runOrchestrator(
       {
         provider,
@@ -206,8 +206,8 @@ describe('Orchestrator — toolFilter', () => {
     const secondTools = mockStreamMessage.mock.calls[1][1].tools.map(
       (tool: { name: string }) => tool.name,
     );
-    expect(firstTools).toEqual(expect.arrayContaining(['memory_recall', 'memory_remember']));
-    expect(secondTools).not.toContain('memory_recall');
+    expect(firstTools).toEqual(expect.arrayContaining(['memory_search', 'memory_remember']));
+    expect(secondTools).not.toContain('memory_search');
     expect(secondTools).not.toContain('memory_remember');
     expect(secondTools).toContain('memory_forget');
     expect(mockStreamMessage.mock.calls[1][0][0].content).toContain(
@@ -527,9 +527,6 @@ describe('Orchestrator — toolFilter', () => {
       );
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).toContain(
         'memory_remember',
-      );
-      expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
-        'memory_manage',
       );
       expect(firstStreamOptions.tools.map((tool: { name: string }) => tool.name)).not.toContain(
         'calendar_list',

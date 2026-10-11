@@ -151,8 +151,8 @@ describe('e2eRunReport artifacts', () => {
                 query: 'SECRET-TRACE-RESULT',
                 tools: [
                   {
-                    name: 'memory_recall',
-                    activation: { name: 'memory_recall', eligible: true },
+                    name: 'memory_search',
+                    activation: { name: 'memory_search', eligible: true },
                   },
                 ],
                 totalMatches: 1,
@@ -296,7 +296,7 @@ describe('e2eRunReport artifacts', () => {
       const failedTrace = readFileSync(failedTracePath, 'utf8');
       expect(failedTrace).toContain('goal-evidence-complete');
       expect(failedTrace).toContain('"toolCatalogResult"');
-      expect(failedTrace).toContain('"memory_recall"');
+      expect(failedTrace).toContain('"memory_search"');
       expect(failedTrace).toContain('"totalMatches": 1');
       expect(failedTrace).not.toContain('SECRET-TRACE-ARG');
       expect(failedTrace).not.toContain('SECRET-TRACE-RESULT');

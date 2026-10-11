@@ -107,7 +107,7 @@ describe('E2E scenario taxonomy', () => {
           expect.objectContaining({ kind: 'token_budget' }),
         ]),
       );
-      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'memory_fact')).toBe(true);
+      expect(scenario!.rubrics.some((rubric) => rubric.kind === 'memory_item')).toBe(true);
       expect(scenarioRecord(scenario!)).not.toHaveProperty('allowedTools');
       for (const turn of scenario!.userTurns ?? []) {
         expect(turnRecord(turn)).not.toHaveProperty('allowedTools');

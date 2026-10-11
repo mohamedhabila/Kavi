@@ -179,7 +179,7 @@ export const tools: ToolDefinition[] = [
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
-    name: 'memory_recall',
+    name: 'memory_search',
     description: 'Recall memory facts.',
     input_schema: { type: 'object', properties: {}, required: [] },
     contract: {
@@ -330,7 +330,7 @@ export const resourceFlowTools: ToolDefinition[] = [
     },
   },
   {
-    name: 'memory_recall',
+    name: 'memory_search',
     description: 'Recall memory.',
     input_schema: { type: 'object', properties: {}, required: [] },
     contract: {

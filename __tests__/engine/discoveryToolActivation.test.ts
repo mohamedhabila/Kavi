@@ -17,7 +17,7 @@ describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
           {
             id: 'tc-catalog',
             name: 'tool_catalog',
-            arguments: '{"query":"memory_recall"}',
+            arguments: '{"query":"memory_search"}',
             status: 'pending',
           },
         ],
@@ -38,7 +38,7 @@ describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
           {
             id: 'tc-catalog',
             name: 'tool_catalog',
-            arguments: '{"query":"memory_recall"}',
+            arguments: '{"query":"memory_search"}',
             status: 'completed',
           },
         ],
@@ -46,7 +46,7 @@ describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
       {
         id: 'tool-1',
         role: 'tool',
-        content: '{"tools":[{"name":"memory_recall"}]}',
+        content: '{"tools":[{"name":"memory_search"}]}',
         toolCallId: 'tc-catalog',
         timestamp: 2,
       },
@@ -59,7 +59,7 @@ describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
 describe('selectOneShotDiscoveryToolCalls', () => {
   it('keeps ordinary tool batches unchanged', () => {
     const calls = [
-      { id: 'tc-read', name: 'memory_recall' },
+      { id: 'tc-read', name: 'memory_search' },
       { id: 'tc-write', name: 'memory_remember' },
     ];
 
@@ -69,7 +69,7 @@ describe('selectOneShotDiscoveryToolCalls', () => {
   it('executes only the earliest discovery call in a model turn', () => {
     expect(
       selectOneShotDiscoveryToolCalls([
-        { id: 'tc-read', name: 'memory_recall' },
+        { id: 'tc-read', name: 'memory_search' },
         { id: 'tc-catalog-1', name: 'tool_catalog' },
         { id: 'tc-catalog-2', name: 'tool_catalog' },
         { id: 'tc-describe', name: 'tool_describe' },
@@ -84,16 +84,16 @@ describe('collectActivatedToolNamesFromDiscoveryPayload', () => {
       collectActivatedToolNamesFromDiscoveryPayload({
         tools: [
           {
-            name: 'memory_recall',
+            name: 'memory_search',
             activation: {
-              name: 'memory_recall',
+              name: 'memory_search',
               eligible: true,
               callableNow: false,
             },
           },
         ],
       }),
-    ).toEqual(['memory_recall']);
+    ).toEqual(['memory_search']);
   });
 
   it('ignores non-registry tool names and ineligible activation entries', () => {
@@ -102,9 +102,9 @@ describe('collectActivatedToolNamesFromDiscoveryPayload', () => {
         tools: [
           { name: 'not_a_real_tool' },
           {
-            name: 'memory_recall',
+            name: 'memory_search',
             activation: {
-              name: 'memory_recall',
+              name: 'memory_search',
               eligible: false,
             },
           },
@@ -116,9 +116,9 @@ describe('collectActivatedToolNamesFromDiscoveryPayload', () => {
   it('keeps legacy catalog payloads structurally constrained to registry names', () => {
     expect(
       collectActivatedToolNamesFromDiscoveryPayload({
-        tools: [{ name: 'memory_recall' }, { name: 'not_a_real_tool' }],
+        tools: [{ name: 'memory_search' }, { name: 'not_a_real_tool' }],
       }),
-    ).toEqual(['memory_recall']);
+    ).toEqual(['memory_search']);
   });
 
   it('keeps legacy category payloads constrained to registered category tools', () => {

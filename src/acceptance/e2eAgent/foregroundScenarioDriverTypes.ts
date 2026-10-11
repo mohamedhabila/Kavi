@@ -18,6 +18,10 @@ import type {
 } from './e2eNativeMobileFixtures';
 import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
 import type {
+  ForegroundScenarioMemoryItemsState,
+  ForegroundScenarioMemoryPromptEvidence,
+} from './foregroundScenarioMemoryItemsEvidence';
+import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
@@ -198,6 +202,7 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: DeepReadonly<ForegroundScenarioRetrievalEvidence>;
+  memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{
     directive: ForegroundScenarioRouteDirective;
@@ -215,6 +220,7 @@ export type ForegroundScenarioDriverResult = Readonly<{
   conversationId: string;
   finalConversation: DeepReadonly<Conversation>;
   memoryFinalState: ForegroundScenarioMemoryFinalState;
+  memoryItems: ForegroundScenarioMemoryItemsState;
   turns: ReadonlyArray<ForegroundScenarioTurnSnapshot>;
 }>;
 

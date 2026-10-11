@@ -50,15 +50,7 @@ const WORKER_MEMORY_KINDS = new Set<MemoryFactKind>([
   'gotcha',
 ]);
 
-const MEMORY_TOOL_NAMES = new Set([
-  'memory_search',
-  'memory_recall',
-  'memory_remember',
-  'memory_pin',
-  'memory_unpin',
-  'memory_forget',
-  'memory_manage',
-]);
+const MEMORY_TOOL_NAMES = new Set(['memory_remember', 'memory_search', 'memory_forget']);
 
 const PROMPT_PREFIX = [
   '## Task-Scoped Memory Evidence',

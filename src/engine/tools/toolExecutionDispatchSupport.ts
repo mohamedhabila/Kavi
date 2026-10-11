@@ -29,10 +29,7 @@ export type ToolExecutionOutcome =
 /**
  * The context an executor runs with: the dispatcher's receipt and policy capabilities are
  * removed, so a tool cannot record, finalize or reconcile its own effect. The run and
- * tool-call identities stay — they are provenance, not authority, and the explicit
- * sensitive-recall grant binds to them. Deleting them too left that grant unissuable from
- * the day it shipped: every memory_recall the person explicitly asked for was withheld as
- * "request_missing".
+ * tool-call identities stay — they are provenance, not authority.
  */
 export function isolateExecutorContext(
   context: ToolExecutionContext | undefined,

@@ -31,15 +31,7 @@ const SCENARIO: E2EScenario = {
   contentClass: 'private',
   execution: { initialMode: 'agentic', route: 'production_auto' },
   prompt: 'PRIVATE-REQUEST-SENTINEL',
-  rubrics: [
-    {
-      kind: 'memory_fact',
-      subject: 'private-subject',
-      predicate: 'private_key',
-      value: 'PRIVATE-RUBRIC-SENTINEL',
-      scope: 'global',
-    },
-  ],
+  rubrics: [{ kind: 'memory_item', contains: ['private-subject', 'PRIVATE-RUBRIC-SENTINEL'] }],
 };
 
 const PRIVATE_APP_SOURCE = { commitSha: 'a'.repeat(40), dirty: false } as const;
@@ -137,6 +129,7 @@ function buildPrivateResult(): E2EScenarioResult {
           instrumentationStatus: 'recorded',
           events: [retrievalEvent],
         },
+        memoryPrompt: { status: 'missing', builds: [] },
         toolCalls: [
           { id: 'private-tool-call', name: 'write_file', arguments: 'PRIVATE-ARGS-SENTINEL' },
         ],

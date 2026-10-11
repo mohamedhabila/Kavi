@@ -55,7 +55,6 @@ function validRuntime(input?: {
         seed: executionSeed,
         condition: label,
       }),
-      oracleEvidenceCount: 0,
       status: 'completed' as const,
       result: buildFixtureResult({
         fixtureId: 'paired-artifact',
@@ -280,7 +279,6 @@ describe('paired public report artifact', () => {
           condition: 'memory_off',
           conditionConfigHash: stableHash('memory_off-config'),
           executionIdentityHash: runtime.conditions[0].executionIdentityHash,
-          oracleEvidenceCount: 0,
           status: 'failed',
           category: 'condition_execution',
           errorHash: stableHash('PRIVATE-INFRASTRUCTURE-PROSE'),
@@ -378,7 +376,6 @@ describe('paired public report artifact', () => {
           condition: 'memory_off',
           conditionConfigHash: stableHash('memory_off-config'),
           executionIdentityHash: failed.conditions[0].executionIdentityHash,
-          oracleEvidenceCount: 0,
           status: 'failed',
           category: 'state_reset',
           errorHash: stableHash('private error'),

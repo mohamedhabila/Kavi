@@ -30,7 +30,7 @@ const MINI_SCENARIO: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 0,
-      requiredFacts: [{ subject: 'user', predicate: 'duration', value: '45', scope: 'global' }],
+      requiredItems: [{ contains: ['45'], scope: 'global' }],
     },
     { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
   ],
@@ -59,20 +59,20 @@ function conditionResult(product: boolean): E2EScenarioResult {
   const baseTurn = buildFixtureTurnTrace();
   const stateAfter = JSON.parse(JSON.stringify(baseTurn.native.stateAfter));
   stateAfter.calendar.createdEventCount = product ? 1 : 0;
-  const fact = {
-    id: 'private-fact-id',
-    subject: 'user',
-    predicate: 'duration',
-    objectText: '45',
+  const item = {
+    id: 'private-item-id',
+    text: 'Design reviews last 45 minutes',
     scope: 'global',
-  } as E2EScenarioResult['memoryFinalState']['facts'][number];
+    pinned: false,
+    sensitive: false,
+    supersededBy: null,
+    createdAt: 1,
+    updatedAt: 1,
+  } as const;
   return buildFixtureResult({
     fixtureId: MINI_SCENARIO.id,
     userTurnCount: 1,
-    memoryFinalState: {
-      ...buildFixtureResult().memoryFinalState,
-      facts: product ? [fact] : [],
-    },
+    memoryItems: { capturedAt: 2, items: product ? [item] : [] },
     turnTraces: [
       buildFixtureTurnTrace({
         lifecycleBefore: {
@@ -90,6 +90,12 @@ function conditionResult(product: boolean): E2EScenarioResult {
               events: [buildPairedRetrievalEvent()],
             }
           : { sourceThreadIdHash: null, instrumentationStatus: 'opt_out', events: [] },
+        memoryPrompt: product
+          ? {
+              status: 'recorded',
+              builds: [{ itemIds: [item.id], turnIds: [], chars: 40, durationMs: 1 }],
+            }
+          : { status: 'opt_out', builds: [] },
       }),
     ],
   });
@@ -161,12 +167,8 @@ describe('paired causal-memory scenario and contract', () => {
         expect.objectContaining({
           kind: 'turn_memory_selection',
           turnIndex: 2,
-          requiredWrites: [
-            { turnIndex: 1, subject: 'user', value: '45 minutes', status: 'created' },
-          ],
-          supersededWrites: [
-            { turnIndex: 0, subject: 'user', value: '30 minutes', status: 'created' },
-          ],
+          requiredItems: [{ contains: ['45'] }],
+          forbiddenItems: [{ contains: ['30'], excludes: ['45'] }],
         }),
       ]),
     );
@@ -191,9 +193,6 @@ describe('paired causal-memory scenario and contract', () => {
         expect.objectContaining({ lifecycleBefore: 'new_conversation' }),
       ]),
     });
-    expect(
-      plan.conditions.every((condition) => condition.conditionConfig.oracleEvidenceCount === 0),
-    ).toBe(true);
     expect(JSON.stringify(plan)).not.toContain('private-key');
   });
 

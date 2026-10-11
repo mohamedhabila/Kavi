@@ -43,6 +43,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       conversationId: 'conversation-1',
       finalConversation: {},
       memoryFinalState: {},
+      memoryItems: { capturedAt: 1, items: [] },
       turns: [
         {
           turnIndex: 0,
@@ -67,6 +68,7 @@ describe('scenarioResultMapper tool outcomes', () => {
           memoryEvidence: { delta: {} },
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
+          memoryPrompt: { status: 'missing', builds: [] },
           messages,
           usage: null,
           error: null,
@@ -102,6 +104,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       memoryEvidence: { delta: {} },
       native,
       retrieval: {},
+      memoryPrompt: { status: 'missing', builds: [] },
       messages: [],
       usage: null,
       error: null,
@@ -112,6 +115,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       conversationId: 'conversation-1',
       finalConversation: {},
       memoryFinalState: {},
+      memoryItems: { capturedAt: 1, items: [] },
       turns: [
         {
           ...baseTurn,
@@ -183,6 +187,7 @@ describe('scenarioResultMapper tool outcomes', () => {
       conversationId: 'conversation-1',
       finalConversation: {},
       memoryFinalState: {},
+      memoryItems: { capturedAt: 1, items: [] },
       turns: [
         {
           turnIndex: 0,
@@ -214,6 +219,7 @@ describe('scenarioResultMapper tool outcomes', () => {
           memoryEvidence: { delta: {} },
           native: { stateBefore: {}, stateAfter: {}, invocations: [] },
           retrieval: {},
+          memoryPrompt: { status: 'missing', builds: [] },
           messages: [],
           usage: null,
           error: null,

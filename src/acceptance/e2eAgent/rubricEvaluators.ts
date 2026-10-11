@@ -10,7 +10,7 @@ import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics
 import { buildWorkingBlockScopeKey } from '../../services/memory/workingBlocks';
 import { readWorkspaceRelativeFile, workspaceFileExists } from './sandboxWorkspace';
 import { evaluateE2ETurnStageRubric } from './e2eTurnStageRubricEvaluators';
-import { evaluateE2EMemoryFactRubric } from './e2eMemoryFactRubricEvaluator';
+import { evaluateE2EMemoryItemRubric } from './e2eMemoryItemRubricEvaluator';
 import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type { E2ERubric, E2EScenarioResult, E2ETokenUsageSummary } from './types';
 import type { UsagePromptCacheTelemetry } from '../../types/usage';
@@ -341,9 +341,9 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
-    case 'memory_fact':
-    case 'memory_fact_absent':
-      return evaluateE2EMemoryFactRubric(result, rubric, fixtureId);
+    case 'memory_item':
+    case 'memory_item_absent':
+      return evaluateE2EMemoryItemRubric(result, rubric, fixtureId);
 
     case 'token_budget': {
       if (result.usage.totalTokens > rubric.maxTotalTokens) {

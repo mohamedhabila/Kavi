@@ -5,10 +5,12 @@
 import { closeMemoryDb, getMemoryDb } from '../../services/memory/database';
 import { closeExecutionJournalDb } from '../../services/executionJournal/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
+import {
+  ensureMemoryCoreSchema,
+  resetMemoryCoreSchemaCacheForTests,
+} from '../../services/memory/core/memorySchema';
 import { countEpisodes } from '../../services/memory/episodes/queries';
 import { countCompletedIngestionJobsForThread } from '../../services/memory/ingestionQueue';
-import { listFacts } from '../../services/memory/facts/queries';
-import type { MemoryFact } from '../../services/memory/facts/types';
 import { resolveGraphWorkingBlockScope } from '../../engine/graph/graphTaskScope';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import { getWorkingBlock, type WorkingBlockLabel } from '../../services/memory/workingBlocks';
@@ -26,7 +28,9 @@ export function resetE2EMemorySandbox(): void {
   closeExecutionJournalDb();
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
   resetFactSchemaCacheForTests();
+  resetMemoryCoreSchemaCacheForTests();
   ensureFactSchema();
+  ensureMemoryCoreSchema();
 }
 
 export const E2E_RESETTABLE_MEMORY_TABLES = [
@@ -41,12 +45,16 @@ export const E2E_RESETTABLE_MEMORY_TABLES = [
   'memory_ingestion_source_snapshots',
   'memory_ingestion_structural_receipts',
   'memory_ingestion_receipts',
+  'memory_items',
   'memory_migration_state',
+  'memory_extraction_cursor',
+  'memory_prompt_log',
   'memory_reflections',
   'memory_retrieval_events',
   'memory_retrieval_outcomes',
   'memory_tasks',
   'memory_verified_procedure_observations',
+  'memory_turns',
   'memory_working_blocks',
 ] as const;
 
@@ -86,19 +94,4 @@ export function readE2EWorkingBlockContent(
     graphState: snapshot,
   });
   return getWorkingBlock(label, scope)?.content ?? '';
-}
-
-export function findMemoryFactsMatching(params: {
-  predicate: string;
-  value: string;
-}): MemoryFact[] {
-  const predicate = params.predicate.trim().toLowerCase();
-  const value = params.value.trim().toLowerCase();
-  return listFacts({ includeInvalidated: false }).filter(
-    (fact) =>
-      fact.predicate.trim().toLowerCase() === predicate &&
-      fact.objectText.trim().toLowerCase() === value &&
-      fact.deletedAt == null &&
-      fact.invalidAt == null,
-  );
 }

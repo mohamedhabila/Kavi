@@ -17,17 +17,17 @@ import {
 describe('executeToolInner raw workspace routing', () => {
   const CONV_ID = 'test-conversation';
 
-  it('routes memory search through the structured living-memory store', async () => {
+  it('routes memory search through the memory store', async () => {
     const result = await executeTool(
       'memory_search',
       JSON.stringify({ query: 'remember this detail' }),
       CONV_ID,
     );
-    const parsed = JSON.parse(result.content);
-
-    expect(parsed.method).toBe('living_memory');
-    expect(parsed.index).toBe('memory_facts');
-    expect(parsed.results).toEqual([]);
+    expect(JSON.parse(result.content)).toEqual({
+      ok: true,
+      memories: [],
+      earlierConversations: [],
+    });
   });
 
   it('passes conversation workspace access to skill tools', async () => {

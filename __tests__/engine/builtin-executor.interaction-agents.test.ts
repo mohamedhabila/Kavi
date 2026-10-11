@@ -1,58 +1,20 @@
-const mockRecallFactSelectionForQuery = jest.fn();
-const mockMarkFactsRecalled = jest.fn();
-
-jest.mock('../../src/services/memory/factRecall', () => ({
-  recallFactSelectionForQuery: (...args: any[]) => mockRecallFactSelectionForQuery(...args),
-}));
-
-jest.mock('../../src/services/memory/facts/observations', () => ({
-  loadActiveMemoryFactConflictSignals: jest.fn().mockReturnValue([]),
-}));
-
-jest.mock('../../src/services/memory/facts/factAccessMutations', () => ({
-  markFactsRecalled: (...args: any[]) => mockMarkFactsRecalled(...args),
-}));
-
-jest.mock('../../src/services/memory/entities', () => ({
-  getEntityById: () => undefined,
-}));
-
-jest.mock('../../src/services/memory/memoryScopeStore', () => ({
-  resolveLocalMemoryAccessScope: (scope: Record<string, unknown>) => ({
-    memoryOwnerId: 'test-memory-owner',
-    ...scope,
-  }),
-}));
-
 import {
   executeAgentsConfigure,
   executeAgentsList,
   executeAgentsSwitch,
-  executeMemorySearch,
   executeMessageEffect,
   executePollCreate,
   executeSpeak,
   installBuiltinExecutorRuntimeReset,
 } from '../helpers/builtinExecutorRuntimeHarness';
-import { makeScoredFact } from '../helpers/memoryFactFixtures';
 import {
   failedToolContent,
   parseCompletedToolOutcome,
   parseFailedToolOutcome,
 } from '../helpers/toolRuntimeOutcome';
 
-describe('builtin executor interaction, agent, and memory tools', () => {
+describe('builtin executor interaction and agent tools', () => {
   installBuiltinExecutorRuntimeReset();
-
-  beforeEach(() => {
-    mockRecallFactSelectionForQuery.mockReset();
-    mockRecallFactSelectionForQuery.mockResolvedValue({
-      facts: [],
-      resolutionFacts: [],
-      scoredFacts: [],
-    });
-    mockMarkFactsRecalled.mockReset();
-  });
 
   describe('interactive helpers', () => {
     it('creates poll payloads with normalized options', async () => {
@@ -162,73 +124,6 @@ describe('builtin executor interaction, agent, and memory tools', () => {
       const parsed = parseCompletedToolOutcome(result);
       expect(parsed.status).toBe('configured');
       expect(parsed.persona.name).toBe('Agent B');
-    });
-  });
-
-  describe('executeMemorySearch (with citations)', () => {
-    it('returns citation-formatted results', async () => {
-      const scoredFacts = [
-        makeScoredFact({
-          fact: {
-            id: 'fact-1',
-            subjectId: 'subject-1',
-            predicate: 'preference',
-            objectText: 'User prefers dark mode',
-            sourceRunId: 'run-1',
-            memoryOwnerId: 'test-memory-owner',
-            factClass: 'workflow',
-            sourceAuthority: 'tool_observed',
-            scope: 'global',
-            originConversationId: null,
-            originThreadId: null,
-            originTaskId: null,
-            memoryKind: 'semantic_fact',
-          },
-          score: 0.9,
-        }),
-        makeScoredFact({
-          fact: {
-            id: 'fact-2',
-            subjectId: 'subject-2',
-            predicate: 'event',
-            objectText: 'Discussed project setup',
-            sourceMessageId: 'message-2',
-            memoryOwnerId: 'test-memory-owner',
-            factClass: 'workflow',
-            sourceAuthority: 'tool_observed',
-            scope: 'conversation',
-            originConversationId: 'conversation-1',
-            originThreadId: 'conversation-1',
-            contentHash: 'hash-2',
-            memoryKind: 'episodic_event',
-          },
-          score: 0.6,
-          importanceScore: 0.7,
-        }),
-      ];
-      mockRecallFactSelectionForQuery.mockResolvedValueOnce({
-        facts: scoredFacts.map((entry) => entry.fact),
-        resolutionFacts: [],
-        scoredFacts,
-      });
-
-      const result = await executeMemorySearch(
-        { query: 'preferences' },
-        {
-          memoryConversationId: 'conversation-1',
-          sourceThreadId: 'conversation-1',
-          personaId: 'default',
-          taskId: null,
-        },
-      );
-      const parsed = parseCompletedToolOutcome(result);
-      expect(parsed.method).toBe('living_memory');
-      expect(parsed.results).toHaveLength(2);
-      expect(parsed.results[0].citation).toBe('[1] run-1');
-      expect(parsed.results[0].relevance).toBe('90%');
-      expect(parsed.results[0].policy).toEqual({ action: 'use', reason: 'eligible' });
-      expect(parsed.results[1].citation).toBe('[2] message-2');
-      expect(mockMarkFactsRecalled).toHaveBeenCalledWith(['fact-1', 'fact-2'], expect.any(Number));
     });
   });
 });

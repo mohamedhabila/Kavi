@@ -2,7 +2,7 @@ import { resolveForegroundScenarioAllowedToolNames } from '../../src/acceptance/
 
 describe('foreground scenario turn tool surfaces', () => {
   it('uses the turn surface when present and otherwise inherits the scenario surface', () => {
-    const scenarioTools = ['memory_recall'];
+    const scenarioTools = ['memory_search'];
     const turnTools = ['memory_search'];
 
     expect(resolveForegroundScenarioAllowedToolNames(scenarioTools, turnTools)).toBe(turnTools);

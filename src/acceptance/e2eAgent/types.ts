@@ -11,7 +11,6 @@ import type {
 import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
-import type { MemoryFactScope } from '../../services/memory/facts/types';
 import type { IngestionProviderOutcome } from '../../services/memory/ingestionQueue';
 import type {
   ForegroundScenarioCompletionSnapshot,
@@ -28,6 +27,10 @@ import type {
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
 import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
+import type {
+  ForegroundScenarioMemoryItemsState,
+  ForegroundScenarioMemoryPromptEvidence,
+} from './foregroundScenarioMemoryItemsEvidence';
 import type { RequestClarificationSemanticRole } from '../../services/agents/requestClarification';
 
 export type E2EToolCallRecord = {
@@ -137,6 +140,7 @@ export type E2EScenarioTurnTrace = {
   memoryEvidence: ForegroundScenarioMemoryTurnEvidence;
   native: ForegroundScenarioNativeEvidenceSnapshot;
   retrieval: ForegroundScenarioRetrievalEvidence;
+  memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;
@@ -152,6 +156,7 @@ export type E2EScenarioResult = {
   toolResults: ReadonlyArray<E2EToolResultRecord>;
   graphSnapshots: ReadonlyArray<AgentRunControlGraphState>;
   memoryFinalState: ForegroundScenarioMemoryFinalState;
+  memoryItems: ForegroundScenarioMemoryItemsState;
   /** Per-orchestrator-invocation traces for turn-scoped rubrics. */
   turnTraces: ReadonlyArray<E2EScenarioTurnTrace>;
   usage: E2ETokenUsageSummary;
@@ -193,31 +198,25 @@ export type E2EWorkspaceSeedFile = {
   content: string;
 };
 
-export type E2EMemoryFactExpectation = Readonly<{
-  subject: string;
-  predicate: string;
-  value: string;
-  scope: MemoryFactScope;
+/**
+ * A memory item the scenario expects: its text contains every string in `contains` and
+ * none in `excludes` (case-insensitive, NFKC). Pick the smallest tokens that identify the
+ * memory (a code, a name, a number) rather than a phrase the model may word differently.
+ * `excludes` tells a stale value from a correction that mentions it ("45, not 30").
+ */
+export type E2EMemoryItemExpectation = Readonly<{
+  contains: ReadonlyArray<string>;
+  excludes?: ReadonlyArray<string>;
+  scope?: 'global' | 'conversation';
 }>;
 
-export type E2EMemoryWriteReference = Readonly<{
-  turnIndex: number;
-  subject: string;
-  value: string;
-  status: 'created' | 'duplicate';
+export type E2EMemorySelectionExpectation = Readonly<{
+  /** Each must match a current item the turn's memory section showed. */
+  requiredItems: ReadonlyArray<E2EMemoryItemExpectation>;
+  /** None may match an item the turn's memory section showed. */
+  forbiddenItems?: ReadonlyArray<E2EMemoryItemExpectation>;
+  maxSelectedItems?: number;
 }>;
-
-export type E2EMemorySelectionExpectation =
-  | Readonly<{
-      requiredFacts: ReadonlyArray<E2EMemoryFactExpectation>;
-      forbiddenFacts?: ReadonlyArray<E2EMemoryFactExpectation>;
-      maxSelectedFacts?: number;
-    }>
-  | Readonly<{
-      requiredWrites: ReadonlyArray<E2EMemoryWriteReference>;
-      supersededWrites?: ReadonlyArray<E2EMemoryWriteReference>;
-      maxSelectedFacts?: number;
-    }>;
 
 export type E2EMemoryProbeAnswerExpectation =
   | Readonly<{
@@ -241,8 +240,8 @@ export type E2ERubric =
   | { kind: 'graph_status'; status: AgentRunControlGraphState['status'] }
   | { kind: 'graph_terminal_success' }
   | { kind: 'completion_gate_hold'; reason?: string }
-  | ({ kind: 'memory_fact' } & E2EMemoryFactExpectation)
-  | ({ kind: 'memory_fact_absent' } & E2EMemoryFactExpectation)
+  | ({ kind: 'memory_item' } & E2EMemoryItemExpectation)
+  | ({ kind: 'memory_item_absent' } & E2EMemoryItemExpectation)
   | { kind: 'token_budget'; maxTotalTokens: number }
   | { kind: 'cache_read_tokens'; minCacheReadTokens: number }
   | {

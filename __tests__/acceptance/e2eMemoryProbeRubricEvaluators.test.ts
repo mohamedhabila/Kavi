@@ -1,126 +1,36 @@
+import type { ForegroundScenarioMemoryItemRecord } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
 import { evaluateE2ERubric } from '../../src/acceptance/e2eAgent/rubricEvaluators';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
-import type { MemoryFactEvidenceRecord } from '../../src/services/memory/evidenceSnapshot';
-import type { MemoryRetrievalEvent } from '../../src/services/memory/retrievalEventTypes';
 import { buildFixtureResult, buildFixtureTurnTrace } from '../helpers/e2eRunReportHarness';
 
-jest.mock('expo-sqlite', () => {
-  const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
-  return makeExpoSqliteMock();
-});
-
-function fact(
+function item(
   id: string,
-  predicate: string,
-  value: string,
-  overrides: Partial<MemoryFactEvidenceRecord> = {},
-): MemoryFactEvidenceRecord {
+  text: string,
+  overrides: Partial<ForegroundScenarioMemoryItemRecord> = {},
+): ForegroundScenarioMemoryItemRecord {
   return {
     id,
-    subjectId: 'memory-subject',
-    subject: 'memory-subject',
-    predicate,
-    objectText: value,
-    contentHash: `hash-${id}`,
-    confidence: 1,
+    text,
     scope: 'conversation',
-    memoryKind: 'semantic_fact',
-    personaId: null,
-    originConversationId: 'memory-conversation',
-    originThreadId: 'memory-thread',
-    originTaskId: null,
-    sourceMessageId: 'source-message',
-    sourceRunId: null,
-    sourceTurnId: null,
-    validAt: 1,
-    invalidAt: null,
-    expiresAt: null,
+    pinned: false,
+    sensitive: false,
+    supersededBy: null,
     createdAt: 1,
     updatedAt: 1,
-    deletedAt: null,
-    pinned: false,
-    reviewState: 'auto',
-    sensitivity: 'normal',
     ...overrides,
-  };
-}
-
-function retrievalEvent(selectedFactIds: string[]): MemoryRetrievalEvent {
-  return {
-    id: 'retrieval-event',
-    operation: 'prompt_assembly',
-    mode: 'query',
-    outcome: 'completed',
-    queryFingerprint: { hashAlgorithm: 'sha256', hash: 'a'.repeat(64), length: 10, unitCount: 2 },
-    scope: {
-      memoryConversationIdHash: 'b'.repeat(64),
-      sourceThreadIdHash: 'c'.repeat(64),
-      taskScopePresent: false,
-    },
-    counts: {
-      candidateFactCount: selectedFactIds.length,
-      selectedFactCount: selectedFactIds.length,
-      selectedFactIds,
-      candidateEpisodeCount: 0,
-      selectedEpisodeCount: 0,
-      selectedEpisodeIds: [],
-    },
-    timings: {
-      planMs: 0,
-      factRecallMs: 0,
-      episodeRecallMs: 0,
-      candidateFetchMs: 0,
-      scoreMs: 0,
-      selectorMs: 0,
-      evidenceExpansionMs: 0,
-      totalMs: 0,
-    },
-    candidates: {
-      strategy: 'lexical',
-      localSimilarityOutcome: 'not_requested',
-      eligibleScanCount: 0,
-      pinnedCount: 0,
-      exactQuotedCount: 0,
-      lexicalCount: selectedFactIds.length,
-      entityCount: 0,
-      temporalCount: 0,
-      localSimilarityCount: 0,
-      unionCount: selectedFactIds.length,
-      diversifiedCount: selectedFactIds.length,
-      unionMs: 0,
-    },
-    expansion: {
-      outcome: 'not_requested',
-      requestedSourceCount: 0,
-      acceptedSourceCount: 0,
-      sourceWithEvidenceCount: 0,
-      emittedEvidenceCount: 0,
-      promptBudgetDroppedCount: 0,
-      promptChars: 0,
-      durationMs: 0,
-    },
-    selector: { mode: 'deterministic', outcome: 'not_requested' },
-    barrier: null,
-    createdAt: 2,
   };
 }
 
 function result(input: {
   answer: string;
-  facts: MemoryFactEvidenceRecord[];
-  selectedFactIds: string[];
-  retrievalStatus?: 'recorded' | 'missing';
+  items: ForegroundScenarioMemoryItemRecord[];
+  selectedItemIds: string[];
+  promptStatus?: 'recorded' | 'missing';
 }): E2EScenarioResult {
+  const status = input.promptStatus ?? 'recorded';
   return buildFixtureResult({
     fixtureId: 'memory-probe',
-    memoryFinalState: {
-      capturedAt: 10,
-      scope: { memoryConversationId: 'memory-conversation', sourceThreadId: 'memory-thread' },
-      facts: input.facts,
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
+    memoryItems: { capturedAt: 10, items: input.items },
     turnTraces: [
       buildFixtureTurnTrace({
         turnIndex: 2,
@@ -132,12 +42,11 @@ function result(input: {
           finishReason: 'stop',
           terminalReason: null,
         },
-        retrieval: {
-          sourceThreadIdHash: 'c'.repeat(64),
-          instrumentationStatus: input.retrievalStatus ?? 'recorded',
-          events:
-            (input.retrievalStatus ?? 'recorded') === 'recorded'
-              ? [retrievalEvent(input.selectedFactIds)]
+        memoryPrompt: {
+          status,
+          builds:
+            status === 'recorded'
+              ? [{ itemIds: input.selectedItemIds, turnIds: [], chars: 100, durationMs: 1 }]
               : [],
         },
       }),
@@ -145,137 +54,14 @@ function result(input: {
   });
 }
 
-function rememberToolResult(input: {
-  id: string;
-  predicate: string;
-  value: string;
-  validAt: number;
-  scope?: 'global' | 'persona';
-  superseded?: Array<{ id: string; invalidAt: number }>;
-}): string {
-  return JSON.stringify({
-    ok: true,
-    status: 'created',
-    fact: {
-      id: input.id,
-      subject: 'user',
-      predicate: input.predicate,
-      value: input.value,
-      scope: input.scope ?? 'global',
-      validAt: input.validAt,
-      invalidAt: null,
-    },
-    superseded: input.superseded ?? [],
-  });
-}
-
-function lineageResult(input?: {
-  selectedFactIds?: string[];
-  currentPredicate?: string;
-  scope?: 'global' | 'persona';
-  supersessionReceipt?: boolean;
-}): E2EScenarioResult {
-  const predicate = input?.currentPredicate ?? 'مدة اجتماعات المراجعة المعتادة';
-  const scope = input?.scope ?? 'global';
-  const stale = fact('stale-write', predicate, '30 minutes', {
-    subject: 'user',
-    scope,
-    originConversationId: null,
-    sourceMessageId: 'source-old',
-    validAt: 1,
-    invalidAt: 5,
-    updatedAt: 5,
-  });
-  const current = fact('current-write', predicate, '45 minutes', {
-    subject: 'user',
-    scope,
-    originConversationId: null,
-    sourceMessageId: 'source-current',
-    validAt: 5,
-    createdAt: 5,
-    updatedAt: 5,
-  });
-  const oldTurn = buildFixtureTurnTrace({
-    turnIndex: 0,
-    toolCalls: [{ id: 'remember-old', name: 'memory_remember', arguments: '{}' }],
-    toolResults: [
-      {
-        toolCallId: 'remember-old',
-        name: 'memory_remember',
-        content: rememberToolResult({
-          id: stale.id,
-          predicate,
-          value: stale.objectText,
-          validAt: stale.validAt,
-          scope,
-        }),
-        isError: false,
-      },
-    ],
-    memoryEvidence: {
-      delta: {
-        ...buildFixtureTurnTrace().memoryEvidence.delta,
-        facts: { createdIds: [stale.id], updatedIds: [], removedIds: [] },
-      },
-    },
-  });
-  const currentTurn = buildFixtureTurnTrace({
-    turnIndex: 2,
-    toolCalls: [{ id: 'remember-current', name: 'memory_remember', arguments: '{}' }],
-    toolResults: [
-      {
-        toolCallId: 'remember-current',
-        name: 'memory_remember',
-        content: rememberToolResult({
-          id: current.id,
-          predicate,
-          value: current.objectText,
-          validAt: current.validAt,
-          scope,
-          superseded:
-            input?.supersessionReceipt === false
-              ? []
-              : [{ id: stale.id, invalidAt: current.validAt }],
-        }),
-        isError: false,
-      },
-    ],
-    memoryEvidence: {
-      delta: {
-        ...buildFixtureTurnTrace().memoryEvidence.delta,
-        facts: { createdIds: [current.id], updatedIds: [stale.id], removedIds: [] },
-        invalidatedFactIds: [stale.id],
-      },
-    },
-  });
-  const probeTurn = buildFixtureTurnTrace({
-    turnIndex: 3,
-    retrieval: {
-      sourceThreadIdHash: 'c'.repeat(64),
-      instrumentationStatus: 'recorded',
-      events: [retrievalEvent(input?.selectedFactIds ?? [current.id])],
-    },
-  });
-  return buildFixtureResult({
-    fixtureId: 'memory-write-lineage',
-    memoryFinalState: {
-      capturedAt: 10,
-      scope: { memoryConversationId: 'memory-conversation', sourceThreadId: 'memory-thread' },
-      facts: [stale, current],
-      episodes: [],
-      workingBlocks: [],
-      ingestionJobs: [],
-    },
-    turnTraces: [oldTurn, currentTurn, probeTurn],
-  });
-}
+const CURRENT = item('current', 'memory-subject access_code is ACCESS-CURRENT');
 
 describe('turn-scoped memory probe rubrics', () => {
   it('does not let a correct final database state mask a wrong probe answer', () => {
     const evidence = result({
       answer: 'I could not find it.',
-      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-      selectedFactIds: ['current'],
+      items: [CURRENT],
+      selectedItemIds: ['current'],
     });
 
     expect(
@@ -298,11 +84,7 @@ describe('turn-scoped memory probe rubrics', () => {
       'There is no evidence for ACCESS-CURRENT.',
       'القيمة الحالية هي ACCESS-CURRENT.',
     ]) {
-      const evidence = result({
-        answer,
-        facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-        selectedFactIds: ['current'],
-      });
+      const evidence = result({ answer, items: [CURRENT], selectedItemIds: ['current'] });
 
       expect(
         evaluateE2ERubric(evidence, {
@@ -318,8 +100,8 @@ describe('turn-scoped memory probe rubrics', () => {
     const evidence = result({
       answer:
         'I could not verify it against an external source. The remembered access code is ACCESS-CURRENT.',
-      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-      selectedFactIds: ['current'],
+      items: [CURRENT],
+      selectedItemIds: ['current'],
     });
 
     expect(
@@ -332,183 +114,66 @@ describe('turn-scoped memory probe rubrics', () => {
   });
 
   it('does not let a correct answer mask a prompt-retrieval miss', () => {
+    const evidence = result({ answer: 'ACCESS-CURRENT', items: [CURRENT], selectedItemIds: [] });
+
+    expect(
+      evaluateE2ERubric(evidence, {
+        kind: 'turn_memory_selection',
+        turnIndex: 2,
+        requiredItems: [{ contains: ['memory-subject', 'ACCESS-CURRENT'] }],
+      }),
+    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory item' });
+  });
+
+  it('requires the selected item to hold every token, in the named scope', () => {
     const evidence = result({
       answer: 'ACCESS-CURRENT',
-      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-      selectedFactIds: [],
+      items: [CURRENT, item('other', 'other-subject access_code is ACCESS-OTHER')],
+      selectedItemIds: ['other', 'current'],
     });
 
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'access_code',
-            value: 'ACCESS-CURRENT',
-            scope: 'conversation',
-          },
-        ],
-      }),
-    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
-  });
-
-  it('requires the selected fact to match the canonical subject and scope', () => {
-    const evidence = result({
-      answer: 'ACCESS-CURRENT',
-      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-      selectedFactIds: ['current'],
-    });
-    const expectation = {
-      predicate: 'access_code',
-      value: 'ACCESS-CURRENT',
-      scope: 'conversation' as const,
-    };
-
-    expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredFacts: [{ subject: 'wrong-subject', ...expectation }],
-      }),
-    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
-    expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredFacts: [{ subject: 'memory-subject', ...expectation, scope: 'global' }],
-      }),
-    ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory fact' });
-  });
-
-  it('tracks corrected memory by real write lineage without prescribing provider vocabulary', () => {
-    const evidence = lineageResult();
-
-    expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 3,
-        requiredWrites: [
-          {
-            turnIndex: 2,
-            subject: 'user',
-            value: '45 minutes',
-            status: 'created',
-          },
-        ],
-        supersededWrites: [
-          {
-            turnIndex: 0,
-            subject: 'user',
-            value: '30 minutes',
-            status: 'created',
-          },
-        ],
+        requiredItems: [{ contains: ['MEMORY-SUBJECT', 'access-current'], scope: 'conversation' }],
       }),
     ).toMatchObject({ passed: true });
-  });
-
-  it('uses the durable write scope instead of prescribing a hidden scope choice', () => {
-    const evidence = lineageResult({ scope: 'persona' });
-
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
-        turnIndex: 3,
-        requiredWrites: [
-          {
-            turnIndex: 2,
-            subject: 'user',
-            value: '45 minutes',
-            status: 'created',
-          },
-        ],
-        supersededWrites: [
-          {
-            turnIndex: 0,
-            subject: 'user',
-            value: '30 minutes',
-            status: 'created',
-          },
-        ],
+        turnIndex: 2,
+        requiredItems: [{ contains: ['memory-subject', 'ACCESS-CURRENT'], scope: 'global' }],
       }),
-    ).toMatchObject({ passed: true });
-  });
-
-  it('fails write-lineage selection when retrieval misses current memory', () => {
-    const evidence = lineageResult({ selectedFactIds: [] });
-
+    ).toMatchObject({ passed: false });
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
-        turnIndex: 3,
-        requiredWrites: [
-          {
-            turnIndex: 2,
-            subject: 'user',
-            value: '45 minutes',
-            status: 'created',
-          },
-        ],
-        supersededWrites: [
-          {
-            turnIndex: 0,
-            subject: 'user',
-            value: '30 minutes',
-            status: 'created',
-          },
-        ],
+        turnIndex: 2,
+        requiredItems: [{ contains: ['memory-subject', 'ACCESS-OTHER'] }],
       }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 3 did not select the current fact from the required memory write',
-    });
-  });
-
-  it('fails closed when a claimed correction lacks durable supersession lineage', () => {
-    const evidence = lineageResult({ supersessionReceipt: false });
-
-    expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 3,
-        requiredWrites: [
-          {
-            turnIndex: 2,
-            subject: 'user',
-            value: '45 minutes',
-            status: 'created',
-          },
-        ],
-        supersededWrites: [
-          {
-            turnIndex: 0,
-            subject: 'user',
-            value: '30 minutes',
-            status: 'created',
-          },
-        ],
-      }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 3 memory supersession lineage is invalid',
-    });
+    ).toMatchObject({ passed: false });
   });
 
   it('rejects a stale value in either the answer or selected prompt memory', () => {
-    const facts = [
-      fact('stale', 'preferred_station', 'STATION-OLD', { invalidAt: 5 }),
-      fact('current', 'preferred_station', 'STATION-NEW'),
+    const items = [
+      item('stale', 'memory-subject preferred_station is STATION-OLD', { supersededBy: 'current' }),
+      item('current', 'memory-subject preferred_station is STATION-NEW, replacing STATION-OLD'),
     ];
-    const evidence = result({
+    const staleSelected = result({
       answer: 'The current station is STATION-NEW (formerly STATION-OLD).',
-      facts,
-      selectedFactIds: ['current', 'stale'],
+      items,
+      selectedItemIds: ['current', 'stale'],
     });
+    const selection = {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredItems: [{ contains: ['memory-subject', 'STATION-NEW'] }],
+      forbiddenItems: [{ contains: ['memory-subject', 'STATION-OLD'], excludes: ['STATION-NEW'] }],
+    } as const;
 
     expect(
-      evaluateE2ERubric(evidence, {
+      evaluateE2ERubric(staleSelected, {
         kind: 'turn_memory_answer',
         turnIndex: 2,
         answer: {
@@ -521,63 +186,44 @@ describe('turn-scoped memory probe rubrics', () => {
       passed: false,
       detail: 'turn 2 final response surfaced forbidden memory value',
     });
+    expect(evaluateE2ERubric(staleSelected, selection)).toMatchObject({
+      passed: false,
+      detail: 'turn 2 selected a forbidden memory item',
+    });
+    // The correction mentions the old value; that alone is not the stale memory.
     expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'preferred_station',
-            value: 'STATION-NEW',
-            scope: 'conversation',
-          },
-        ],
-        forbiddenFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'preferred_station',
-            value: 'STATION-OLD',
-            scope: 'conversation',
-          },
-        ],
-      }),
-    ).toMatchObject({ passed: false, detail: 'turn 2 selected a forbidden memory fact' });
+      evaluateE2ERubric(
+        result({ answer: 'STATION-NEW', items, selectedItemIds: ['current'] }),
+        selection,
+      ),
+    ).toMatchObject({ passed: true });
   });
 
-  it('requires an explicit exact abstention and zero selected facts', () => {
-    const known = fact('known', 'known_code', 'KNOWN-CODE');
-    const vague = result({ answer: 'I am not sure.', facts: [known], selectedFactIds: [] });
+  it('requires an explicit exact abstention and zero selected items', () => {
+    const known = item('known', 'memory-subject known_code is KNOWN-CODE');
+    const abstain = {
+      kind: 'turn_memory_selection',
+      turnIndex: 2,
+      requiredItems: [],
+      forbiddenItems: [{ contains: ['KNOWN-CODE'] }],
+      maxSelectedItems: 0,
+    } as const;
+
     expect(
-      evaluateE2ERubric(vague, {
+      evaluateE2ERubric(result({ answer: 'I am not sure.', items: [known], selectedItemIds: [] }), {
         kind: 'turn_memory_answer',
         turnIndex: 2,
         answer: { kind: 'abstention', exactText: 'UNKNOWN' },
       }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 2 did not return the explicit abstention',
-    });
-
-    const polluted = result({ answer: 'UNKNOWN', facts: [known], selectedFactIds: ['known'] });
+    ).toMatchObject({ passed: false, detail: 'turn 2 did not return the explicit abstention' });
     expect(
-      evaluateE2ERubric(polluted, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredFacts: [],
-        forbiddenFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'known_code',
-            value: 'KNOWN-CODE',
-            scope: 'conversation',
-          },
-        ],
-        maxSelectedFacts: 0,
-      }),
-    ).toMatchObject({ passed: false, detail: 'turn 2 selected too many memory facts' });
+      evaluateE2ERubric(
+        result({ answer: 'UNKNOWN', items: [known], selectedItemIds: ['known'] }),
+        abstain,
+      ),
+    ).toMatchObject({ passed: false, detail: 'turn 2 selected too many memory items' });
 
-    const clean = result({ answer: ' UNKNOWN \n', facts: [known], selectedFactIds: [] });
+    const clean = result({ answer: ' UNKNOWN \n', items: [known], selectedItemIds: [] });
     expect(
       evaluateE2ERubric(clean, {
         kind: 'turn_memory_answer',
@@ -585,57 +231,37 @@ describe('turn-scoped memory probe rubrics', () => {
         answer: { kind: 'abstention', exactText: 'UNKNOWN' },
       }),
     ).toMatchObject({ passed: true });
-    expect(
-      evaluateE2ERubric(clean, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredFacts: [],
-        forbiddenFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'known_code',
-            value: 'KNOWN-CODE',
-            scope: 'conversation',
-          },
-        ],
-        maxSelectedFacts: 0,
-      }),
-    ).toMatchObject({ passed: true });
+    expect(evaluateE2ERubric(clean, abstain)).toMatchObject({ passed: true });
   });
 
   it('fails closed on missing instrumentation and malformed expectations', () => {
     const evidence = result({
       answer: 'ACCESS-CURRENT',
-      facts: [fact('current', 'access_code', 'ACCESS-CURRENT')],
-      selectedFactIds: [],
-      retrievalStatus: 'missing',
+      items: [CURRENT],
+      selectedItemIds: [],
+      promptStatus: 'missing',
     });
+
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredFacts: [
-          {
-            subject: 'memory-subject',
-            predicate: 'access_code',
-            value: 'ACCESS-CURRENT',
-            scope: 'conversation',
-          },
-        ],
+        requiredItems: [{ contains: ['ACCESS-CURRENT'] }],
       }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 2 prompt retrieval evidence is unavailable',
-    });
+    ).toMatchObject({ passed: false, detail: 'turn 2 prompt memory evidence is unavailable' });
+    expect(
+      evaluateE2ERubric(evidence, {
+        kind: 'turn_memory_selection',
+        turnIndex: 2,
+        requiredItems: [{ contains: [' ACCESS-CURRENT'] }],
+      }),
+    ).toMatchObject({ passed: false, detail: 'turn 2 memory selection expectation is invalid' });
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_answer',
         turnIndex: 2,
         answer: { kind: 'fact_values', requiredValues: [' ACCESS-CURRENT'] },
       }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 2 memory answer expectation is invalid',
-    });
+    ).toMatchObject({ passed: false, detail: 'turn 2 memory answer expectation is invalid' });
   });
 });

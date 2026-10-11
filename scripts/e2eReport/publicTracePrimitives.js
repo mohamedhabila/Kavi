@@ -4,7 +4,7 @@ const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const MAX_TRACE_ITEMS = 512;
 
 const SAFE_PUBLIC_TOOL_NAMES = new Set([
-  'memory_recall',
+  'memory_search',
   'tool_catalog',
   'tool_describe',
   'update_plan',

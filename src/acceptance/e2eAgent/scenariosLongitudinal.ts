@@ -82,19 +82,11 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
+      { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'], scope: 'global' },
       {
-        kind: 'memory_fact',
-        subject: 'profile-owner',
-        predicate: 'home_city',
-        value: 'Utrecht',
-        scope: 'global',
-      },
-      {
-        kind: 'memory_fact_absent',
-        subject: 'profile-owner',
-        predicate: 'home_city',
-        value: 'Rotterdam',
-        scope: 'global',
+        kind: 'memory_item_absent',
+        contains: ['profile-owner', 'Rotterdam'],
+        excludes: ['Utrecht'],
       },
       {
         kind: 'token_budget',
@@ -125,13 +117,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
-      {
-        kind: 'memory_fact',
-        subject: 'profile-owner',
-        predicate: 'default_meeting_duration_minutes',
-        value: '45',
-        scope: 'global',
-      },
+      { kind: 'memory_item', contains: ['profile-owner', '45'], scope: 'global' },
       {
         kind: 'native_fixture_state',
         path: 'calendar.createdEventCount',
@@ -226,13 +212,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...AGENTIC_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
-      {
-        kind: 'memory_fact',
-        subject: 'mobile-release-workflow',
-        predicate: 'required_artifact_suffix',
-        value: FAILURE_ARTIFACT_SUFFIX,
-        scope: 'project',
-      },
+      { kind: 'memory_item', contains: ['mobile-release-workflow', FAILURE_ARTIFACT_SUFFIX] },
       {
         kind: 'workspace_file',
         path: FAILURE_ARTIFACT_PATH,
@@ -270,13 +250,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
       { kind: 'turn_lifecycle_boundary', turnIndex: 1, boundary: 'app_relaunch' },
-      {
-        kind: 'memory_fact',
-        subject: 'profile-owner',
-        predicate: 'commute_mode',
-        value: 'bicycle',
-        scope: 'global',
-      },
+      { kind: 'memory_item', contains: ['profile-owner', 'bicycle'], scope: 'global' },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['relaunch-profile-continuity'],

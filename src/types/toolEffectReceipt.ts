@@ -39,7 +39,6 @@ export const TOOL_EFFECT_KINDS = [
   'artifact.write',
   'artifact.delete',
   'memory.write',
-  'memory.update',
   'memory.delete',
   'communication.draft_handoff',
   'communication.draft_save',

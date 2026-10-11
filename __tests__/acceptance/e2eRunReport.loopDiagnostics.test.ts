@@ -15,23 +15,23 @@ describe('e2eRunReport loop diagnostics', () => {
   it('surfaces discovery loops after session-level tool activation', () => {
     const result = buildFixtureResult({
       toolCalls: [
-        { id: 'tc-1', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
-        { id: 'tc-2', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
+        { id: 'tc-1', name: 'tool_catalog', arguments: '{"query":"memory_search"}' },
+        { id: 'tc-2', name: 'tool_catalog', arguments: '{"query":"memory_search"}' },
       ],
       graphSnapshots: [
         {
           status: 'running',
-          sessionActivatedToolNames: ['memory_recall'],
+          sessionActivatedToolNames: ['memory_search'],
           observedToolResults: [],
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'running',
-          sessionActivatedToolNames: ['memory_recall'],
+          sessionActivatedToolNames: ['memory_search'],
           observedToolResults: [{ id: 'tc-1', name: 'tool_catalog' }],
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'finalized',
-          sessionActivatedToolNames: ['memory_recall'],
+          sessionActivatedToolNames: ['memory_search'],
           observedToolResults: [
             { id: 'tc-1', name: 'tool_catalog' },
             { id: 'tc-2', name: 'tool_catalog' },
@@ -68,8 +68,8 @@ describe('e2eRunReport loop diagnostics', () => {
   it('does not classify pre-activation discovery fanout as post-activation catalog looping', () => {
     const result = buildFixtureResult({
       toolCalls: [
-        { id: 'tc-1', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
-        { id: 'tc-2', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
+        { id: 'tc-1', name: 'tool_catalog', arguments: '{"query":"memory_search"}' },
+        { id: 'tc-2', name: 'tool_catalog', arguments: '{"query":"memory_search"}' },
       ],
       graphSnapshots: [
         {
@@ -87,7 +87,7 @@ describe('e2eRunReport loop diagnostics', () => {
         } as E2EScenarioResult['graphSnapshots'][number],
         {
           status: 'finalized',
-          sessionActivatedToolNames: ['memory_recall'],
+          sessionActivatedToolNames: ['memory_search'],
           observedToolResults: [
             { id: 'tc-1', name: 'tool_catalog' },
             { id: 'tc-2', name: 'tool_catalog' },

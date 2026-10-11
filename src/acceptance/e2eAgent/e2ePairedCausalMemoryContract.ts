@@ -1,14 +1,14 @@
 import type { E2EPairedCausalMemoryContract, E2ERubric, E2EScenario } from './types';
 
 const CAUSAL_RUBRIC_KINDS = new Set<E2ERubric['kind']>([
-  'memory_fact',
+  'memory_item',
   'turn_memory_selection',
   'turn_memory_answer',
   'turn_native_invocation_count',
   'native_fixture_state',
 ]);
 const NEUTRAL_FORBIDDEN_RUBRIC_KINDS = new Set<E2ERubric['kind']>([
-  'memory_fact',
+  'memory_item',
   'turn_memory_selection',
   'turn_memory_answer',
 ]);

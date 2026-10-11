@@ -55,6 +55,7 @@ export type E2EPrivateScenarioEvidence = {
     usage: E2EScenarioResult['usage'];
     estimatedCost: E2EScenarioResult['estimatedCost'];
     memoryFinalState: E2EScenarioResult['memoryFinalState'];
+    memoryItems: E2EScenarioResult['memoryItems'];
     turns: ReadonlyArray<{
       turnIndex: number;
       lifecycleBefore: E2EScenarioTurnTrace['lifecycleBefore'];
@@ -67,6 +68,7 @@ export type E2EPrivateScenarioEvidence = {
       memory: E2EScenarioTurnTrace['memory'];
       memoryEvidence: E2EScenarioTurnTrace['memoryEvidence'];
       retrieval: E2EScenarioTurnTrace['retrieval'];
+      memoryPrompt: E2EScenarioTurnTrace['memoryPrompt'];
       native: E2EScenarioTurnTrace['native'];
       toolCalls: E2EScenarioTurnTrace['toolCalls'];
       toolResults: E2EScenarioTurnTrace['toolResults'];
@@ -145,6 +147,7 @@ function projectTurn(
     memory: turn.memory,
     memoryEvidence: turn.memoryEvidence,
     retrieval: turn.retrieval,
+    memoryPrompt: turn.memoryPrompt,
     native: turn.native,
     toolCalls: turn.toolCalls,
     toolResults: turn.toolResults,
@@ -203,6 +206,7 @@ export function buildE2EPrivateScenarioEvidence(params: {
       usage: params.result.usage,
       estimatedCost: params.result.estimatedCost,
       memoryFinalState: params.result.memoryFinalState,
+      memoryItems: params.result.memoryItems,
       turns: params.result.turnTraces.map(projectTurn),
     },
   };

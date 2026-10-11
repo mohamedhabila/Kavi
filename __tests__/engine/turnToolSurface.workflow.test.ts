@@ -333,12 +333,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: resourceFlowTools,
       observedToolNames: new Set<string>(),
-      sessionActivatedToolNames: ['memory_recall', 'sms_compose'],
+      sessionActivatedToolNames: ['memory_search', 'sms_compose'],
       workingMessages: [userMessage('Use what you remember, then text Avery.')],
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('memory_recall')).toBe(true);
+    expect(selectedToolNames.has('memory_search')).toBe(true);
     expect(selectedToolNames.has('sms_compose')).toBe(true);
     expect(selectedToolNames.has('tool_catalog')).toBe(true);
     expect(selectedToolNames.has('tool_describe')).toBe(true);

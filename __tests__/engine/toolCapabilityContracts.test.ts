@@ -54,10 +54,7 @@ import {
   IMAGE_GEN_TOOL,
 } from '../../src/engine/tools/extended-definitions';
 import { CORE_DOMAIN_TOOLS } from '../../src/engine/tools/domains/core';
-import {
-  MEMORY_RECALL_TOOL,
-  MEMORY_SEARCH_TOOL,
-} from '../../src/engine/tools/builtin-definitions-memory';
+import { MEMORY_SEARCH_TOOL } from '../../src/engine/tools/builtin-definitions-memory';
 import {
   SESSION_SEND_TOOL,
   SESSION_SPAWN_TOOL,
@@ -96,7 +93,6 @@ describe('tool capability contracts', () => {
     expect(SESSION_WAIT_TOOL.contract).toBeDefined();
     expect(WAIT_TOOL.contract).toBeDefined();
     expect(MEMORY_SEARCH_TOOL.contract).toBeDefined();
-    expect(MEMORY_RECALL_TOOL.contract).toBeDefined();
     expect(PDF_READ_TOOL.contract).toBeDefined();
     expect(TOOL_CATALOG_TOOL.contract).toBeDefined();
     expect(
@@ -533,15 +529,6 @@ describe('tool capability contracts', () => {
 
   it('uses explicit memory, pdf, tool catalog, and workflow ledger contracts for descriptor inference', () => {
     expect(inferToolCapabilityDescriptor(MEMORY_SEARCH_TOOL)).toEqual(
-      expect.objectContaining({
-        category: 'memory_search',
-        capabilities: ['discover', 'read'],
-        resourceKinds: ['memory'],
-        sideEffects: ['none'],
-      }),
-    );
-
-    expect(inferToolCapabilityDescriptor(MEMORY_RECALL_TOOL)).toEqual(
       expect.objectContaining({
         category: 'memory_search',
         capabilities: ['discover', 'read'],

@@ -10,7 +10,6 @@ import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext'
 import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { ToolEffectDispatchObservation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
-import type { ToolObservedMemoryEvidenceCapability } from '../../services/memory/toolObservedMemoryEvidence';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
@@ -42,7 +41,6 @@ export type ToolExecutionLifecycleParams = {
   allProviders?: LlmProviderConfig[];
   model: string;
   currentUserMessage?: CodeOwnedCurrentUserMessage;
-  toolObservedMemoryEvidence?: ReadonlyArray<ToolObservedMemoryEvidenceCapability>;
   memoryConversationId: string;
   workspaceConversationId?: string;
   workspaceReadFallbackConversationId?: string;

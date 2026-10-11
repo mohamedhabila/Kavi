@@ -28,9 +28,8 @@ import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestCl
 export const DEFAULT_CORE_TOOL_ORDER = [
   REQUEST_CLARIFICATION_TOOL_NAME,
   UPDATE_PLAN_TOOL_NAME,
-  'memory_recall',
   'memory_remember',
-  'memory_preserve_source',
+  'memory_search',
   'memory_forget',
   'read_file',
   'write_file',
@@ -50,9 +49,8 @@ export const DEFAULT_CORE_TOOL_ORDER = [
 const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   REQUEST_CLARIFICATION_TOOL_NAME,
   UPDATE_PLAN_TOOL_NAME,
-  'memory_recall',
   'memory_remember',
-  'memory_preserve_source',
+  'memory_search',
   'memory_forget',
   'read_file',
   'write_file',
@@ -99,9 +97,8 @@ export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
  */
 const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   REQUEST_CLARIFICATION_TOOL_NAME,
-  'memory_recall',
   'memory_remember',
-  'memory_preserve_source',
+  'memory_search',
   'memory_forget',
   'web_search',
   'web_fetch',

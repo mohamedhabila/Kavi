@@ -102,7 +102,7 @@ describe('chitchat authority is decided by contract, not a maintained tool-name 
     expect(authorized.has('calendar_create_event')).toBe(true);
     expect(authorized.has('sms_compose')).toBe(true);
     expect(authorized.has('reminder')).toBe(true);
-    expect(authorized.has('memory_recall')).toBe(true);
+    expect(authorized.has('memory_search')).toBe(true);
     expect(authorized.has('memory_remember')).toBe(true);
   });
 
@@ -164,7 +164,7 @@ describe('the refusal messages match what the model can actually do about them',
   it('never suggests a tool the run cannot call', () => {
     const message = buildUnknownToolResult({
       toolName: 'read_files',
-      availableToolNames: new Set(['memory_recall']),
+      availableToolNames: new Set(['memory_search']),
     });
 
     expect(message).not.toContain('read_file"');

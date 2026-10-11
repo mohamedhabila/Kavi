@@ -93,7 +93,6 @@ export function completedCondition(input: {
     condition: input.condition,
     conditionConfigHash: stableHash(`${input.condition}-config`),
     executionIdentityHash: stableHash(`${input.condition}-execution-placeholder`),
-    oracleEvidenceCount: input.condition === 'oracle_evidence' ? 1 : 0,
     status: 'completed',
     result: buildFixtureResult({
       fixtureId: 'paired-public-report',
@@ -139,7 +138,6 @@ export function failedCondition(
     condition,
     conditionConfigHash: stableHash(`${condition}-config`),
     executionIdentityHash: stableHash(`${condition}-execution-placeholder`),
-    oracleEvidenceCount: 0,
     status: 'failed',
     category: 'condition_execution',
     errorHash: stableHash('PRIVATE-INFRASTRUCTURE-ERROR'),

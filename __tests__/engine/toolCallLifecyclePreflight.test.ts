@@ -5,6 +5,7 @@ import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecutio
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
 import { MEMORY_REMEMBER_TOOL } from '../../src/engine/tools/builtin-definitions-memory';
 import type { ToolDefinition } from '../../src/types/tool';
+import { MEMORY_ITEM_TEXT_MAX_CHARS } from '../../src/services/memory/core/memorySchema';
 
 const calendarCreateTool: ToolDefinition = {
   name: 'calendar_create_event',
@@ -310,41 +311,31 @@ describe('resolveToolCallPreflight', () => {
     expect(lifecycle.toolCallHistory[0]?.preflightBlockedKind).toBe('schema_validation');
   });
 
-  it('returns the exact nested length constraint before executing an oversized memory write', () => {
+  it('returns the exact length constraint before executing an oversized memory write', () => {
     const result = validateToolArgumentsAgainstSchema({
       toolName: 'memory_remember',
       tools: [MEMORY_REMEMBER_TOOL],
-      argumentsText: JSON.stringify({
-        semanticEvidence: {
-          version: 4,
-          subject: { kind: 'named', label: 'Ellie', type: 'person' },
-          predicate: 'has_fixed_trip',
-          value: 'x'.repeat(223),
-          scope: 'global',
-          importance: 0.9,
-          confidence: 0.9,
-          operation: 'record',
-          assertion_class: 'current_direct',
-          sensitivity: 'personal',
-        },
-      }),
+      argumentsText: JSON.stringify({ content: 'x'.repeat(MEMORY_ITEM_TEXT_MAX_CHARS + 23) }),
     });
 
-    const parsed = JSON.parse(result ?? '{}');
-    expect(parsed).toMatchObject({
+    expect(JSON.parse(result ?? '{}')).toMatchObject({
       code: 'invalid_argument_shape',
       invalidArguments: [
         {
-          field: 'semanticEvidence.value',
-          expected: 'string with at most 200 characters',
-          actual: 'string with 223 characters',
-          constraint: { keyword: 'maxLength', limit: 200, actual: 223 },
+          field: 'content',
+          expected: `string with at most ${MEMORY_ITEM_TEXT_MAX_CHARS} characters`,
+          actual: `string with ${MEMORY_ITEM_TEXT_MAX_CHARS + 23} characters`,
+          constraint: {
+            keyword: 'maxLength',
+            limit: MEMORY_ITEM_TEXT_MAX_CHARS,
+            actual: MEMORY_ITEM_TEXT_MAX_CHARS + 23,
+          },
         },
       ],
       repair: {
         retryable: true,
-        invalidFields: ['semanticEvidence'],
-        invalidPaths: ['semanticEvidence.value'],
+        invalidFields: ['content'],
+        invalidPaths: ['content'],
         sideEffectApplied: false,
       },
     });

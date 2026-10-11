@@ -292,7 +292,7 @@ describe('e2eReadinessDashboard', () => {
         }),
         buildTaxonomyEntry({
           fixtureId: 'bench-bfcl-sequential-memory-chain',
-          failedRubricKinds: ['memory_fact'],
+          failedRubricKinds: ['memory_item'],
         }),
         buildTaxonomyEntry({
           fixtureId: 'bench-prompt-cache-long-horizon',

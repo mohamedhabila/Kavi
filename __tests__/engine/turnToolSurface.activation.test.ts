@@ -139,7 +139,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
       observedToolNames: new Set<string>(),
-      sessionActivatedToolNames: ['memory_recall'],
+      sessionActivatedToolNames: ['memory_search'],
       workingMessages: [
         userMessage('Find memory recall tooling.'),
         {
@@ -151,7 +151,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
             {
               id: 'tc-search',
               name: 'tool_catalog',
-              arguments: '{"query":"memory_recall"}',
+              arguments: '{"query":"memory_search"}',
               status: 'completed',
             },
           ],
@@ -161,8 +161,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
           role: 'tool',
           content: JSON.stringify({
             mode: 'search',
-            query: 'memory_recall',
-            tools: [{ name: 'memory_recall' }],
+            query: 'memory_search',
+            tools: [{ name: 'memory_search' }],
           }),
           toolCallId: 'tc-search',
           timestamp: 3,
@@ -172,7 +172,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('memory_recall')).toBe(true);
+    expect(selectedToolNames.has('memory_search')).toBe(true);
     expect(selectedToolNames.has('tool_catalog')).toBe(true);
     expect(selectedToolNames.has('tool_describe')).toBe(true);
   });
@@ -192,7 +192,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
             {
               id: 'tc-search',
               name: 'tool_catalog',
-              arguments: '{"query":"memory_recall"}',
+              arguments: '{"query":"memory_search"}',
               status: 'completed',
             },
           ],
@@ -202,8 +202,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
           role: 'tool',
           content: JSON.stringify({
             mode: 'search',
-            query: 'memory_recall',
-            tools: [{ name: 'memory_recall' }],
+            query: 'memory_search',
+            tools: [{ name: 'memory_search' }],
           }),
           toolCallId: 'tc-search',
           timestamp: 3,
@@ -213,7 +213,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('memory_recall')).toBe(true);
+    expect(selectedToolNames.has('memory_search')).toBe(true);
     expect(selectedToolNames.has('tool_catalog')).toBe(true);
   });
 
@@ -221,12 +221,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
       observedToolNames: new Set<string>(),
-      sessionActivatedToolNames: ['memory_recall'],
+      sessionActivatedToolNames: ['memory_search'],
       workingMessages: [userMessage('Recall the stored fact.')],
     });
 
     const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has('memory_recall')).toBe(true);
+    expect(names.has('memory_search')).toBe(true);
     expect(names.has('tool_catalog')).toBe(true);
   });
 

@@ -417,7 +417,7 @@ describe('runForegroundScenario', () => {
       defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       disableLongTermMemory: true,
-      allowedToolNames: ['memory_recall'],
+      allowedToolNames: ['memory_search'],
       beforeTurns,
       turns: [{ content: 'How are you?', route: 'production_auto' }],
     });
@@ -427,8 +427,8 @@ describe('runForegroundScenario', () => {
       workspaceConversationId: 'scenario-conversation',
     });
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
-    expect(toolFilter?.('memory_recall')).toBe(true);
-    expect(toolFilter?.('memory_search')).toBe(false);
+    expect(toolFilter?.('memory_search')).toBe(true);
+    expect(toolFilter?.('memory_remember')).toBe(false);
     expect(mockedRunOrchestrator.mock.calls[0][0].explicitToolSurfaceToolNames).toBeUndefined();
     expect(result.turns[0].retrieval).toEqual({
       sourceThreadIdHash: null,
@@ -466,7 +466,7 @@ describe('runForegroundScenario', () => {
     });
 
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
-    expect(toolFilter?.('memory_recall')).toBe(false);
+    expect(toolFilter?.('memory_search')).toBe(false);
     expect(toolFilter?.('device_info')).toBe(false);
     expect(mockedRunOrchestrator.mock.calls[0][0]).toMatchObject({ disableTooling: true });
   });
@@ -485,10 +485,10 @@ describe('runForegroundScenario', () => {
       runForegroundScenario({ ...base, allowedToolNames: ['not_a_product_tool'] }),
     ).rejects.toThrow('unique canonical tool names');
     await expect(
-      runForegroundScenario({ ...base, allowedToolNames: ['memory_recall', 'memory_recall'] }),
+      runForegroundScenario({ ...base, allowedToolNames: ['memory_search', 'memory_search'] }),
     ).rejects.toThrow('unique canonical tool names');
     await expect(
-      runForegroundScenario({ ...base, disableTools: true, allowedToolNames: ['memory_recall'] }),
+      runForegroundScenario({ ...base, disableTools: true, allowedToolNames: ['memory_search'] }),
     ).rejects.toThrow('cannot be configured together');
     await expect(
       runForegroundScenario({

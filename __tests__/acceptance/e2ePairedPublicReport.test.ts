@@ -93,7 +93,6 @@ describe('paired public report projection', () => {
       'baseUrl',
       'test-key',
       'https://example.com/v1',
-      '"oracleEvidence":',
       '"privateError":',
       '"result":',
     ]) {
@@ -278,34 +277,6 @@ describe('paired public report projection', () => {
         ]),
       ),
     ).toThrow('route evidence exceeds the user-turn count');
-
-    const nonOracleWithEvidence = {
-      ...completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
-      oracleEvidenceCount: 1,
-    } as E2EPairedConditionExecution;
-    expect(() =>
-      buildE2EPairedPublicReport(
-        runtime([
-          completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
-          nonOracleWithEvidence,
-        ]),
-      ),
-    ).toThrow('production_auto.oracleEvidenceCount is inconsistent');
-
-    for (const oracleEvidenceCount of [0, 33]) {
-      const invalidOracle = {
-        ...completedCondition({ condition: 'oracle_evidence', rubricPassed: 1, rubricTotal: 1 }),
-        oracleEvidenceCount,
-      } as E2EPairedConditionExecution;
-      expect(() =>
-        buildE2EPairedPublicReport(
-          runtime([
-            invalidOracle,
-            completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
-          ]),
-        ),
-      ).toThrow('oracle_evidence.oracleEvidenceCount is inconsistent');
-    }
   });
 
   it('does not make a memory observation from a paired route score', () => {

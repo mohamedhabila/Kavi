@@ -5,7 +5,6 @@ import {
   validateE2EAppSourceRevision,
   type E2EAppSourceRevision,
 } from './e2eAppSourceProvenance';
-import { seedE2EOracleEvidence } from './e2eOracleEvidenceSeeder';
 import { evaluateE2EScenarioRubrics } from './rubricEvaluators';
 import {
   validateE2EPairedExecutionPlan,
@@ -69,7 +68,6 @@ type E2EPairedConditionExecutionBase = Readonly<{
   condition: E2EPairedConditionPlan['condition'];
   conditionConfigHash: string;
   executionIdentityHash: string;
-  oracleEvidenceCount: number;
 }>;
 
 export type E2EPairedConditionExecution =
@@ -169,7 +167,6 @@ function buildConditionRunOptions(
   captureAppSource: () => E2EAppSourceRevision,
 ): E2EScenarioRunOptions {
   const invariant = conditionPlan.invariantConfig;
-  const oracleEvidence = conditionPlan.oracleEvidence;
   return {
     provider,
     maxTokens: invariant.budget.maxTokens,
@@ -195,17 +192,6 @@ function buildConditionRunOptions(
       },
     },
     captureAppSource,
-    ...(oracleEvidence
-      ? {
-          beforeTurns: async (identity: {
-            conversationId: string;
-            workspaceConversationId: string;
-          }) => {
-            validateE2EPairedExecutionPlan(plan);
-            await seedE2EOracleEvidence({ declaration: oracleEvidence, ...identity });
-          },
-        }
-      : {}),
   };
 }
 
@@ -227,7 +213,6 @@ function failedCondition(
     condition: plan.condition,
     conditionConfigHash: plan.conditionConfigHash,
     executionIdentityHash,
-    oracleEvidenceCount: plan.conditionConfig.oracleEvidenceCount,
     status: 'failed',
     category,
     ...privateFailure(error),
@@ -466,7 +451,6 @@ export async function runE2EPairedConditions(input: {
               condition: conditionPlan.condition,
               conditionConfigHash: conditionPlan.conditionConfigHash,
               executionIdentityHash,
-              oracleEvidenceCount: conditionPlan.conditionConfig.oracleEvidenceCount,
               status: 'completed',
               result,
               assessment: {

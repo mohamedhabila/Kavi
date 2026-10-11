@@ -132,7 +132,6 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   groundedRequestScopedTools: ToolDefinition[];
   /** What the run may execute, as opposed to what this turn advertises. */
   authorizedToolNames?: ReadonlySet<string>;
-  memoryEvidenceToolDefinitions: ReadonlyArray<ToolDefinition>;
   getGraphSnapshot: () => AgentRunControlGraphState;
   completedWorkflowToolNames: Set<string>;
   lastPendingAsyncSignature: string;
@@ -318,8 +317,6 @@ export async function executeAgentControlGraphToolTurn(
     pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
     groundedRequestScopedTools: params.groundedRequestScopedTools,
     authorizedToolNames: params.authorizedToolNames,
-    memoryEvidenceToolDefinitions: params.memoryEvidenceToolDefinitions,
-    workingMessages,
     completedWorkflowToolNames: params.completedWorkflowToolNames,
     emitPendingAsyncOperationsChange: params.emitPendingAsyncOperationsChange,
     recordPerformanceMetrics: params.recordPerformanceMetrics,

@@ -284,7 +284,7 @@ describe('ToolEffectReceipt', () => {
     [
       'definitive memory rejection',
       'memory_remember',
-      { status: 'rejected', ok: false, code: 'grounding_required' },
+      { status: 'rejected', ok: false, error: 'restricted' },
       {
         effectKind: 'memory.write',
         effectState: 'failed',
@@ -292,24 +292,14 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
-      'verified preserved memory source',
-      'memory_preserve_source',
-      { status: 'created', ok: true, fact: { id: 'fact-source-1' } },
-      {
-        effectKind: 'memory.write',
-        effectState: 'applied',
-        verificationState: 'verified',
-        resource: { kind: 'memory_fact', id: 'fact-source-1' },
-      },
-    ],
-    [
-      'definitive memory withdrawal precondition rejection',
+      'memory already deleted',
       'memory_forget',
-      { status: 'rejected', ok: false, code: 'not_found' },
+      { status: 'not_found', ok: true, id: 'mem-1' },
       {
         effectKind: 'memory.delete',
-        effectState: 'failed',
-        verificationState: 'unverified',
+        effectState: 'applied',
+        verificationState: 'verified',
+        resource: { kind: 'memory_item', id: 'mem-1' },
       },
     ],
     [

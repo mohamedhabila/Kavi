@@ -126,42 +126,14 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 3,
-      requiredWrites: [
-        {
-          turnIndex: 2,
-          subject: 'user',
-          value: '45 minutes',
-          status: 'created',
-        },
-      ],
-      supersededWrites: [
-        {
-          turnIndex: 0,
-          subject: 'user',
-          value: '30 minutes',
-          status: 'created',
-        },
-      ],
+      requiredItems: [{ contains: ['45'] }],
+      forbiddenItems: [{ contains: ['30'], excludes: ['45'] }],
     },
     {
       kind: 'turn_memory_selection',
       turnIndex: 5,
-      requiredWrites: [
-        {
-          turnIndex: 2,
-          subject: 'user',
-          value: '45 minutes',
-          status: 'created',
-        },
-      ],
-      supersededWrites: [
-        {
-          turnIndex: 0,
-          subject: 'user',
-          value: '30 minutes',
-          status: 'created',
-        },
-      ],
+      requiredItems: [{ contains: ['45'] }],
+      forbiddenItems: [{ contains: ['30'], excludes: ['45'] }],
     },
     {
       kind: 'turn_memory_answer',
@@ -171,22 +143,8 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 8,
-      requiredWrites: [
-        {
-          turnIndex: 2,
-          subject: 'user',
-          value: '45 minutes',
-          status: 'created',
-        },
-      ],
-      supersededWrites: [
-        {
-          turnIndex: 0,
-          subject: 'user',
-          value: '30 minutes',
-          status: 'created',
-        },
-      ],
+      requiredItems: [{ contains: ['45'] }],
+      forbiddenItems: [{ contains: ['30'], excludes: ['45'] }],
     },
     {
       kind: 'turn_memory_answer',

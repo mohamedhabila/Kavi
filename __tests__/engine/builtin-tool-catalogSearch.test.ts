@@ -12,8 +12,8 @@ import {
 
 describe('builtin-tool-catalogSearch', () => {
   it('tokenizes structural identifiers without English heuristics', () => {
-    expect(tokenizeStructuralIdentifiers('memory_recall read-verify')).toEqual([
-      'memory_recall',
+    expect(tokenizeStructuralIdentifiers('memory_search read-verify')).toEqual([
+      'memory_search',
       'read',
       'verify',
     ]);
@@ -21,12 +21,12 @@ describe('builtin-tool-catalogSearch', () => {
 
   it('searches tools by query tokens and capability filters', () => {
     const matches = searchToolCatalogEntries({
-      query: 'memory_recall',
+      query: 'memory_search',
       capabilities: ['read'],
       limit: 10,
     });
 
-    expect(matches.some((tool) => tool.name === 'memory_recall')).toBe(true);
+    expect(matches.some((tool) => tool.name === 'memory_search')).toBe(true);
     expect(matches.every((tool) => tool.capabilitySummary?.capabilities.includes('read'))).toBe(
       true,
     );
@@ -232,22 +232,22 @@ describe('builtin-tool-catalogSearch', () => {
   it('searches the full discoverable registry when only catalog is currently callable', async () => {
     const result = await executeToolCatalog(
       {
-        query: 'memory_recall',
+        query: 'memory_search',
         capabilities: ['read'],
       },
       { availableToolNames: new Set(['tool_catalog']) },
     );
     const parsed = parseCompletedToolOutcome(result);
     const memoryRecall = parsed.tools.find(
-      (tool: { name: string }) => tool.name === 'memory_recall',
+      (tool: { name: string }) => tool.name === 'memory_search',
     );
 
     expect(memoryRecall).toMatchObject({
-      name: 'memory_recall',
+      name: 'memory_search',
       source: 'built-in',
       schemaVersion: 'tool-catalog-entry-v1',
       activation: {
-        name: 'memory_recall',
+        name: 'memory_search',
         eligible: true,
         callableNow: false,
         reason: 'discoverable',
@@ -258,18 +258,18 @@ describe('builtin-tool-catalogSearch', () => {
   it('marks catalog results callable when they are already on the current surface', async () => {
     const result = await executeToolCatalog(
       {
-        query: 'memory_recall',
+        query: 'memory_search',
         capabilities: ['read'],
       },
-      { availableToolNames: new Set(['tool_catalog', 'memory_recall']) },
+      { availableToolNames: new Set(['tool_catalog', 'memory_search']) },
     );
     const parsed = parseCompletedToolOutcome(result);
     const memoryRecall = parsed.tools.find(
-      (tool: { name: string }) => tool.name === 'memory_recall',
+      (tool: { name: string }) => tool.name === 'memory_search',
     );
 
     expect(memoryRecall.activation).toMatchObject({
-      name: 'memory_recall',
+      name: 'memory_search',
       eligible: true,
       callableNow: true,
       reason: 'callable_now',
@@ -277,7 +277,7 @@ describe('builtin-tool-catalogSearch', () => {
   });
 
   it('does not reveal tools outside the code-owned catalog visibility boundary', async () => {
-    const visibleToolNames = new Set(['tool_catalog', 'tool_describe', 'memory_recall', 'wait']);
+    const visibleToolNames = new Set(['tool_catalog', 'tool_describe', 'memory_search', 'wait']);
     const search = parseCompletedToolOutcome(
       await executeToolCatalog({ query: 'sessions_spawn delegated worker' }, { visibleToolNames }),
     );

@@ -20,12 +20,11 @@ import {
   writeWorkspaceRelativeFile,
 } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { recordE2ENativeMobileInvocation } from '../../src/acceptance/e2eAgent/e2eNativeMobileEvidence';
-import { listFacts } from '../../src/services/memory/facts/queries';
 import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workingBlocks';
-import { executeMemoryRemember } from '../../src/services/memory/memoryTools';
+import { executeMemoryRemember } from '../../src/services/memory/core/memoryItemsTools';
+import { listMemoryItems } from '../../src/services/memory/core/memoryItemsStore';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
-import { memoryRememberArgs, memoryRememberExecution } from '../helpers/memoryRememberExecution';
 
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
@@ -41,12 +40,16 @@ describe('paired E2E state isolation', () => {
       'memory_ingestion_source_snapshots',
       'memory_ingestion_structural_receipts',
       'memory_ingestion_receipts',
+      'memory_items',
       'memory_migration_state',
+      'memory_extraction_cursor',
+      'memory_prompt_log',
       'memory_reflections',
       'memory_retrieval_events',
       'memory_retrieval_outcomes',
       'memory_tasks',
       'memory_verified_procedure_observations',
+      'memory_turns',
       'memory_working_blocks',
     ]);
   });
@@ -65,20 +68,11 @@ describe('paired E2E state isolation', () => {
     resetAndVerifyE2EScenarioSandboxes();
     writeWorkspaceRelativeFile('state-isolation', 'private.txt', 'PRIVATE-WORKSPACE');
     expect(
-      executeMemoryRemember(
-        memoryRememberArgs({
-          userMessageText: '主体🧑 label PRIVATE-MEMORY',
-          subjectRef: { kind: 'self' },
-          predicate: 'preferred label',
-          value: 'PRIVATE-MEMORY',
-          scope: 'conversation',
-        }),
-        memoryRememberExecution({
-          memoryConversationId: 'state-isolation',
-          sourceThreadId: 'state-isolation',
-          userMessageId: 'state-isolation-user',
-          userMessageText: '主体🧑 label PRIVATE-MEMORY',
-        }),
+      JSON.parse(
+        executeMemoryRemember(
+          { content: 'The user’s preferred label is PRIVATE-MEMORY' },
+          { conversationId: 'state-isolation', sourceMessageId: 'state-isolation-user', now: 1 },
+        ).content,
       ),
     ).toMatchObject({ ok: true });
     const nativeState = getE2ENativeMobileFixtureStateSnapshot();
@@ -92,7 +86,7 @@ describe('paired E2E state isolation', () => {
     resetAndVerifyE2EScenarioSandboxes();
 
     expect(listWorkspaceRelativePaths('state-isolation')).toEqual([]);
-    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+    expect(listMemoryItems({ limit: 10, offset: 0 })).toEqual([]);
     expect(getE2ENativeMobileInvocationSnapshots()).toEqual([]);
   });
 
@@ -113,20 +107,11 @@ describe('paired E2E state isolation', () => {
       isLoading: false,
     });
     expect(
-      executeMemoryRemember(
-        memoryRememberArgs({
-          userMessageText: '主体🧑 label MUST-NOT-CROSS-CONDITIONS',
-          subjectRef: { kind: 'self' },
-          predicate: 'preferred label',
-          value: 'MUST-NOT-CROSS-CONDITIONS',
-          scope: 'conversation',
-        }),
-        memoryRememberExecution({
-          memoryConversationId: 'paired-isolation',
-          sourceThreadId: 'paired-isolation',
-          userMessageId: 'paired-isolation-user',
-          userMessageText: '主体🧑 label MUST-NOT-CROSS-CONDITIONS',
-        }),
+      JSON.parse(
+        executeMemoryRemember(
+          { content: 'The user’s preferred label is MUST-NOT-CROSS-CONDITIONS' },
+          { conversationId: 'paired-isolation', sourceMessageId: 'paired-isolation-user', now: 1 },
+        ).content,
       ),
     ).toMatchObject({ ok: true });
     getMemoryDb().runSync(
@@ -159,7 +144,7 @@ describe('paired E2E state isolation', () => {
     await resetAndVerifyE2EPairedConditionState();
 
     expect(useChatStore.getState().conversations).toEqual([]);
-    expect(listFacts({ includeInvalidated: true })).toEqual([]);
+    expect(listMemoryItems({ limit: 10, offset: 0 })).toEqual([]);
     expect(
       getMemoryDb().getFirstSync<{ count: number }>(
         'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',

@@ -477,6 +477,8 @@ describe('e2eRunReport scenario entries', () => {
               },
             },
             native,
+            retrieval: { sourceThreadIdHash: null, instrumentationStatus: 'missing', events: [] },
+            memoryPrompt: { status: 'missing', builds: [] },
             toolCalls: [],
             toolResults: [],
             graphSnapshots: [],

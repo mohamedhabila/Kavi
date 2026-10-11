@@ -19,9 +19,7 @@ import {
 } from './thresholds';
 import type { E2EScenario } from './types';
 
-const EXECUTABLE_PAIRED_CONDITIONS = new Set<string>(
-  E2E_PAIRED_CONDITIONS.filter((condition) => condition !== 'oracle_evidence'),
-);
+const EXECUTABLE_PAIRED_CONDITIONS = new Set<string>(E2E_PAIRED_CONDITIONS);
 
 function requireExecutableCondition(value: string, label: string): E2EPairedCondition {
   if (!EXECUTABLE_PAIRED_CONDITIONS.has(value)) {

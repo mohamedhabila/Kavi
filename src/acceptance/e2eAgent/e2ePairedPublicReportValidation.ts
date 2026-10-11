@@ -1,4 +1,4 @@
-import { E2E_MAX_ORACLE_FACTS, E2E_PAIRED_CONDITIONS } from './e2ePairedConditions';
+import { E2E_PAIRED_CONDITIONS } from './e2ePairedConditions';
 import {
   buildE2EPairedExecutionIdentityHash,
   E2E_PAIRED_RUNTIME_SCHEMA_VERSION,
@@ -120,15 +120,6 @@ export function validateE2EPairedRuntimeForPublicProjection(runtime: E2EPairedRu
       throw new Error(`${condition.condition}.executionIdentityHash is inconsistent.`);
     }
     executionIdentityHashes.add(condition.executionIdentityHash);
-    const oracleEvidenceCountValid =
-      Number.isSafeInteger(condition.oracleEvidenceCount) &&
-      (condition.condition === 'oracle_evidence'
-        ? condition.oracleEvidenceCount >= 1 &&
-          condition.oracleEvidenceCount <= E2E_MAX_ORACLE_FACTS
-        : condition.oracleEvidenceCount === 0);
-    if (!oracleEvidenceCountValid) {
-      throw new Error(`${condition.condition}.oracleEvidenceCount is inconsistent.`);
-    }
     if (condition.status === 'completed') validateCompletedCondition(condition);
     else if (condition.status === 'failed') {
       if (

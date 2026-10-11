@@ -122,9 +122,7 @@ npm run eval:e2e:paired
 
 Set `E2E_PAIRED_REFERENCE_CONDITION` and
 `E2E_PAIRED_CANDIDATE_CONDITION` to compare another supported product
-treatment, such as `lexical_baseline` versus `production_auto`. Oracle evidence
-is intentionally excluded from this maintainer command because it is a
-diagnostic, not a product treatment. Reports are immutable under
+treatment, such as `lexical_baseline` versus `production_auto`. Reports are immutable under
 `.private/evals/runs/e2e-paired` by default; choose a new run ID for every
 attempt. A valid paired delta is local product evidence, not an official benchmark result or a capability pass bar.
 
@@ -598,8 +596,8 @@ Infrastructure errors and accidental successes remain visible.
 
 For probabilistic memory work, compare production memory, memory disabled, and
 a simple scoped lexical baseline with the same model, prompts, tools, evaluator,
-time budget, and trial seeds. Full-context and oracle-evidence conditions are
-diagnostics, not product scores.
+time budget, and trial seeds. The full-context condition is a diagnostic, not a
+product score.
 
 ## Failure taxonomy
 

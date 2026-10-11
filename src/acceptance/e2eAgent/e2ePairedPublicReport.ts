@@ -49,7 +49,6 @@ export type E2EPairedPublicCondition =
       condition: E2EPairedCondition;
       conditionConfigHash: string;
       executionIdentityHash: string;
-      oracleEvidenceCount: number;
       status: 'completed';
       metrics: PublicConditionMetrics;
     }>
@@ -57,7 +56,6 @@ export type E2EPairedPublicCondition =
       condition: E2EPairedCondition;
       conditionConfigHash: string;
       executionIdentityHash: string;
-      oracleEvidenceCount: number;
       status: 'failed';
       category: 'source_provenance' | 'state_reset' | 'condition_execution' | 'evidence_validation';
       errorHash: string;
@@ -137,10 +135,7 @@ const PRODUCTION_CONDITIONS = new Set<E2EPairedCondition>([
   'forced_agentic',
 ]);
 const MEMORY_CONTROL_CONDITIONS = new Set<E2EPairedCondition>(['memory_off', 'lexical_baseline']);
-const DIAGNOSTIC_CONDITIONS = new Set<E2EPairedCondition>([
-  'diagnostic_full_context',
-  'oracle_evidence',
-]);
+const DIAGNOSTIC_CONDITIONS = new Set<E2EPairedCondition>(['diagnostic_full_context']);
 
 function safeRate(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
@@ -214,7 +209,6 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
     condition: condition.condition,
     conditionConfigHash: condition.conditionConfigHash,
     executionIdentityHash: condition.executionIdentityHash,
-    oracleEvidenceCount: condition.oracleEvidenceCount,
   };
   if (condition.status === 'failed') {
     return {

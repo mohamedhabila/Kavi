@@ -52,19 +52,16 @@ describe('paired assessment plan', () => {
     expect(JSON.stringify(plan)).not.toContain('secret-not-retained');
   });
 
-  it.each(['oracle_evidence', 'unsupported'])(
-    'rejects %s without a declared product treatment',
-    (condition) => {
-      expect(() =>
-        buildE2EPairedAssessmentPlan({
-          pairId: 'invalid-treatment',
-          provider: PROVIDER,
-          scenario: SCENARIO,
-          referenceCondition: condition,
-          candidateCondition: 'production_auto',
-          seed: 1,
-        }),
-      ).toThrow('not an executable paired assessment condition');
-    },
-  );
+  it.each(['unsupported', ''])('rejects %s without a declared product treatment', (condition) => {
+    expect(() =>
+      buildE2EPairedAssessmentPlan({
+        pairId: 'invalid-treatment',
+        provider: PROVIDER,
+        scenario: SCENARIO,
+        referenceCondition: condition,
+        candidateCondition: 'production_auto',
+        seed: 1,
+      }),
+    ).toThrow('not an executable paired assessment condition');
+  });
 });

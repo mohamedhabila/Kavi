@@ -135,22 +135,8 @@ describe('organic mobile-assistant continuity scenario', () => {
       expect(scenario.rubrics).toContainEqual({
         kind: 'turn_memory_selection',
         turnIndex,
-        requiredWrites: [
-          {
-            turnIndex: 2,
-            subject: 'user',
-            value: '45 minutes',
-            status: 'created',
-          },
-        ],
-        supersededWrites: [
-          {
-            turnIndex: 0,
-            subject: 'user',
-            value: '30 minutes',
-            status: 'created',
-          },
-        ],
+        requiredItems: [{ contains: ['45'] }],
+        forbiddenItems: [{ contains: ['30'], excludes: ['45'] }],
       });
     }
     for (const turnIndex of [5, 8]) {

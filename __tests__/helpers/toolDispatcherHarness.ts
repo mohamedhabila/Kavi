@@ -209,7 +209,8 @@ jest.mock('../../src/engine/tools/builtin-media', () => ({
   executeSpeak: (...args: any[]) => mockBuiltinToolFns.executeSpeak(...args),
 }));
 
-jest.mock('../../src/engine/tools/builtin-memory', () => ({
+jest.mock('../../src/services/memory/core/memoryItemsTools', () => ({
+  ...jest.requireActual('../../src/services/memory/core/memoryItemsTools'),
   executeMemorySearch: (...args: any[]) => mockBuiltinToolFns.executeMemorySearch(...args),
 }));
 

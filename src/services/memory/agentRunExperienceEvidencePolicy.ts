@@ -1,14 +1,9 @@
 import type { MemoryFact } from './facts/types';
 
 const INTERNAL_AGENT_CONTROL_TOOL_NAMES = new Set([
-  'memory_search',
-  'memory_recall',
   'memory_remember',
-  'memory_preserve_source',
-  'memory_pin',
-  'memory_unpin',
+  'memory_search',
   'memory_forget',
-  'memory_manage',
   'request_clarification',
   'tool_catalog',
   'tool_describe',

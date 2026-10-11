@@ -129,6 +129,7 @@ export function buildPairedTurnTrace(
     },
     native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
     retrieval,
+    memoryPrompt: { status: 'missing', builds: [] },
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],

@@ -22,6 +22,7 @@ export function buildE2ERubricResult(
       workingBlocks: [],
       ingestionJobs: [],
     },
+    memoryItems: { capturedAt: 1, items: [] },
     usage: {
       inputTokens: 0,
       outputTokens: 0,

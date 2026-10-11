@@ -213,7 +213,7 @@ describe('e2eBenchmarkManifest', () => {
     expect(longMem?.finalStateEvaluators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          rubricKind: 'memory_fact_absent',
+          rubricKind: 'memory_item_absent',
           evidenceKind: 'memory_store',
         }),
       ]),
@@ -250,7 +250,7 @@ describe('e2eBenchmarkManifest', () => {
     expect(locomo?.finalStateEvaluators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          rubricKind: 'memory_fact_absent',
+          rubricKind: 'memory_item_absent',
           evidenceKind: 'memory_store',
         }),
         expect.objectContaining({
@@ -273,7 +273,7 @@ describe('e2eBenchmarkManifest', () => {
     expect(beam?.finalStateEvaluators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          rubricKind: 'memory_fact_absent',
+          rubricKind: 'memory_item_absent',
           evidenceKind: 'memory_store',
         }),
         expect.objectContaining({
@@ -288,7 +288,7 @@ describe('e2eBenchmarkManifest', () => {
     expect(experience?.finalStateEvaluators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          rubricKind: 'memory_fact',
+          rubricKind: 'memory_item',
           evidenceKind: 'memory_store',
         }),
         expect.objectContaining({
@@ -310,7 +310,7 @@ describe('e2eBenchmarkManifest', () => {
           evidenceKind: 'native_fixture_state',
         }),
         expect.objectContaining({
-          rubricKind: 'memory_fact_absent',
+          rubricKind: 'memory_item_absent',
           evidenceKind: 'memory_store',
         }),
       ]),

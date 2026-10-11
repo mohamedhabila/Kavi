@@ -1,5 +1,5 @@
 import type { LlmProviderConfig } from '../../types/provider';
-import type { Message, ToolCall } from '../../types/message';
+import type { ToolCall } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 
 import { detectLoops, type ToolCallRecord } from '../loopDetection';
@@ -27,10 +27,6 @@ import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
-import {
-  bindCurrentTurnToolObservedMemoryEvidence,
-  collectCurrentRunCompletedToolResults,
-} from '../../services/memory/toolObservedMemoryEvidence';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
@@ -81,8 +77,6 @@ export async function executeAgentControlGraphToolBatch(params: {
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
   authorizedToolNames?: ReadonlySet<string>;
-  memoryEvidenceToolDefinitions?: ReadonlyArray<ToolDefinition>;
-  workingMessages?: ReadonlyArray<Message>;
   completedWorkflowToolNames: Set<string>;
   emitPendingAsyncOperationsChange?: () => void;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
@@ -108,7 +102,6 @@ export async function executeAgentControlGraphToolBatch(params: {
    */
   const executionToolFilter = (toolName: string): boolean =>
     params.toolFilter ? params.toolFilter(toolName) : true;
-  const toolEvidenceWorkingMessages = [...(params.workingMessages ?? [])];
   const unsupportedEffectContracts = params.executableToolCalls.map((toolCall) =>
     resolveUnsupportedEffectContract({
       toolName: toolCall.name,
@@ -145,20 +138,6 @@ export async function executeAgentControlGraphToolBatch(params: {
     _index: number,
     _context: { previewCompletedToolNames: ReadonlySet<string> },
   ): Promise<ToolExecutionOutcome> => {
-    const toolObservedMemoryEvidence = params.currentUserMessage
-      ? bindCurrentTurnToolObservedMemoryEvidence({
-          executionRunId: params.executionRunId,
-          currentUserMessageId: params.currentUserMessage.id,
-          workingMessages: toolEvidenceWorkingMessages,
-          executedToolDefinitions:
-            params.memoryEvidenceToolDefinitions ?? params.groundedRequestScopedTools,
-          currentRunCompletedToolResults: collectCurrentRunCompletedToolResults({
-            executionRunId: params.executionRunId,
-            workingMessages: toolEvidenceWorkingMessages,
-            toolCallHistory: params.toolCallHistory,
-          }),
-        })
-      : [];
     const outcome = await executeToolCallLifecycle({
       tc: toolCall,
       iteration: params.iteration,
@@ -168,7 +147,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       allProviders: params.allProviders,
       model: params.activeModel,
       currentUserMessage: params.currentUserMessage,
-      toolObservedMemoryEvidence,
       memoryConversationId: params.memoryConversationId,
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId: params.workspaceReadFallbackConversationId,
@@ -231,9 +209,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       forceFinalText: yieldResult.forceFinalText,
       yieldCompletionNoteMessage: yieldResult.message,
     };
-    if (!executeBatchInParallel) {
-      toolEvidenceWorkingMessages.push(outcome.toolMessage);
-    }
     return resolvedOutcome;
   };
 

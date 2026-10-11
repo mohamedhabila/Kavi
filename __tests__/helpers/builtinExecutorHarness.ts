@@ -151,7 +151,6 @@ import {
 import { executeSessionSend } from '../../src/engine/tools/builtin-session-send';
 import { executePdfRead } from '../../src/engine/tools/builtin-utility';
 import { executeAudioTranscribe, executeCameraSnap } from '../../src/engine/tools/builtin-media';
-import { executeMemorySearch } from '../../src/engine/tools/builtin-memory';
 
 const MOCK_PROVIDER = makeBuiltinExecutorProvider() as any;
 
@@ -196,7 +195,6 @@ export {
   executePdfRead,
   executeAudioTranscribe,
   executeCameraSnap,
-  executeMemorySearch,
   MOCK_PROVIDER,
   mockChatStoreState,
   mockSettingsState,

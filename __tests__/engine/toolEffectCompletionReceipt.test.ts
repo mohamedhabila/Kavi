@@ -54,35 +54,35 @@ describe('tool effect completion receipts', () => {
   it.each([
     [
       'memory_remember',
-      '{}',
-      { status: 'created', fact: { id: 'fact-1' } },
+      '{"content":"Prefers window seats"}',
+      { ok: true, status: 'saved', memory: { id: 'mem-1' } },
       {
         effectKind: 'memory.write',
         effectState: 'applied',
         verificationState: 'verified',
-        resource: { kind: 'memory_fact', id: 'fact-1' },
+        resource: { kind: 'memory_item', id: 'mem-1' },
       },
     ],
     [
-      'memory_manage',
-      '{"action":"pin","factId":"fact-1"}',
-      { status: 'pinned', fact: { id: 'fact-1' } },
+      'memory_remember',
+      '{"content":"Prefers window seats"}',
+      { ok: true, status: 'already_saved', memory: { id: 'mem-1' } },
       {
-        effectKind: 'memory.update',
+        effectKind: 'memory.write',
         effectState: 'applied',
         verificationState: 'verified',
-        resource: { kind: 'memory_fact', id: 'fact-1' },
+        resource: { kind: 'memory_item', id: 'mem-1' },
       },
     ],
     [
       'memory_forget',
-      '{"factId":"fact-1"}',
-      { status: 'withdrawn', factId: 'fact-1' },
+      '{"id":"mem-1"}',
+      { ok: true, status: 'forgotten', id: 'mem-1' },
       {
         effectKind: 'memory.delete',
         effectState: 'applied',
         verificationState: 'verified',
-        resource: { kind: 'memory_fact', id: 'fact-1' },
+        resource: { kind: 'memory_item', id: 'mem-1' },
       },
     ],
   ])(

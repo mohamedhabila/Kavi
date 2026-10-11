@@ -314,28 +314,15 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     memory_remember: effectful(
       'memory.write',
-      { created: VERIFIED, duplicate: VERIFIED, rejected: FAILED },
-      { resource: selector('memory_fact', 'result', ['fact', 'id']) },
-    ),
-    memory_preserve_source: effectful(
-      'memory.write',
-      { created: VERIFIED, duplicate: VERIFIED, rejected: FAILED },
-      { resource: selector('memory_fact', 'result', ['fact', 'id']) },
+      { saved: VERIFIED, already_saved: VERIFIED, rejected: FAILED },
+      { resource: selector('memory_item', 'result', ['memory', 'id']) },
     ),
     memory_forget: effectful(
       'memory.delete',
-      { withdrawn: VERIFIED, already_withdrawn: VERIFIED, rejected: FAILED },
+      { forgotten: VERIFIED, not_found: VERIFIED, rejected: FAILED },
       {
-        resource: selector('memory_fact', 'result', ['factId']),
-        completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
-      },
-    ),
-    memory_manage: effectful(
-      'memory.update',
-      { pinned: VERIFIED, unpinned: VERIFIED, invalidated: VERIFIED, rejected: FAILED },
-      {
-        resource: selector('memory_fact', 'arguments', ['factId']),
-        completion: { resource: selector('memory_fact', 'arguments', ['factId']) },
+        resource: selector('memory_item', 'result', ['id']),
+        completion: { resource: selector('memory_item', 'arguments', ['id']) },
       },
     ),
     // Image persistence checks file existence and exact byte count before

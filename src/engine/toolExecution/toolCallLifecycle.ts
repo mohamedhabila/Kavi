@@ -296,7 +296,6 @@ export async function executeToolCallLifecycle(
           effectReconciliationRequired = true;
         },
         currentUserMessage: params.currentUserMessage,
-        toolObservedMemoryEvidence: params.toolObservedMemoryEvidence,
         pendingSessionIds: getPendingTrackedAsyncOperations(params.trackedAsyncOperations)
           .filter((operation) => operation.kind === 'session')
           .map((operation) => operation.resourceId),

@@ -25,6 +25,11 @@ import {
   completeForegroundScenarioRetrievalCapture,
 } from './foregroundScenarioRetrievalEvidence';
 import {
+  beginForegroundScenarioMemoryPromptCapture,
+  captureForegroundScenarioMemoryItems,
+  completeForegroundScenarioMemoryPromptCapture,
+} from './foregroundScenarioMemoryItemsEvidence';
+import {
   applyForegroundScenarioRoute,
   buildForegroundScenarioCompletionSnapshot,
   buildForegroundScenarioUsageDelta,
@@ -216,6 +221,9 @@ async function runScenarioIsolated(
         }),
         scenarioDeadline,
       );
+      const memoryPromptCapture = beginForegroundScenarioMemoryPromptCapture({
+        memoryOptOut: input.disableLongTermMemory === true,
+      });
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
       const route = applyForegroundScenarioRoute(
@@ -452,6 +460,10 @@ async function runScenarioIsolated(
             invocations: nativeInvocations,
           },
           retrieval: completeForegroundScenarioRetrievalCapture({ capture: retrievalCapture }),
+          memoryPrompt: completeForegroundScenarioMemoryPromptCapture({
+            capture: memoryPromptCapture,
+            memoryConversationId: memoryScope.memoryConversationId,
+          }),
           route: { directive: turn.route, ...route },
           run,
           timedOut,
@@ -488,6 +500,7 @@ async function runScenarioIsolated(
       conversationId: input.conversationId,
       finalConversation,
       memoryFinalState: sealedMemory.memoryFinalState,
+      memoryItems: captureForegroundScenarioMemoryItems(),
       turns: sealedMemory.turns,
     }) as ForegroundScenarioDriverResult;
   } finally {

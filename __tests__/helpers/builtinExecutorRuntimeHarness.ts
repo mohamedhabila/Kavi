@@ -278,7 +278,6 @@ import {
   executeAgentsList,
   executeAgentsSwitch,
 } from '../../src/engine/tools/builtin-agents';
-import { executeMemorySearch } from '../../src/engine/tools/builtin-memory';
 
 export function installBuiltinExecutorRuntimeReset(): void {
   beforeEach(() => {
@@ -367,5 +366,4 @@ export {
   executeAgentsConfigure,
   executeAgentsList,
   executeAgentsSwitch,
-  executeMemorySearch,
 };

@@ -3,7 +3,6 @@ import {
   buildE2EPairedConditionPlan,
   buildE2EPairedExecutionPlan,
   validateE2EPairedExecutionPlan,
-  type E2EOracleEvidenceDeclaration,
   type E2EPairedConditionPlan,
   type E2EPairedExecutionPlan,
 } from '../../src/acceptance/e2eAgent/e2ePairedConditions';
@@ -67,7 +66,7 @@ function makeInvariant(
     provider: makeProvider(),
     scenario: makeScenario(),
     systemPrompt: 'Stable system prompt.',
-    toolSurface: ['memory_recall', 'memory_search', 'memory_recall'],
+    toolSurface: ['memory_remember', 'memory_search', 'memory_remember'],
     maxTokens: 4_096,
     scenarioTimeoutMs: 90_000,
     perTurnTimeoutMs: 30_000,
@@ -80,13 +79,12 @@ function makeInvariant(
 function makeCondition(
   condition: (typeof E2E_PAIRED_CONDITIONS)[number],
   invariantConfig = makeInvariant(),
-  oracleEvidence?: E2EOracleEvidenceDeclaration,
 ): E2EPairedConditionPlan {
-  return buildE2EPairedConditionPlan({ condition, invariantConfig, oracleEvidence });
+  return buildE2EPairedConditionPlan({ condition, invariantConfig });
 }
 
 describe('paired E2E condition contract', () => {
-  it('exposes only the seven declared condition labels and canonical behavior', () => {
+  it('exposes only the six declared condition labels and canonical behavior', () => {
     expect(E2E_PAIRED_CONDITIONS).toEqual([
       'production_auto',
       'forced_chitchat',
@@ -94,7 +92,6 @@ describe('paired E2E condition contract', () => {
       'memory_off',
       'lexical_baseline',
       'diagnostic_full_context',
-      'oracle_evidence',
     ]);
 
     const invariant = makeInvariant();
@@ -121,7 +118,7 @@ describe('paired E2E condition contract', () => {
 
   it('canonicalizes the tool surface and freezes the entire invariant', () => {
     const invariant = makeInvariant();
-    expect(invariant.toolSurface).toEqual(['memory_recall', 'memory_search']);
+    expect(invariant.toolSurface).toEqual(['memory_remember', 'memory_search']);
     expect(invariant.toolSurfaceDefinitionHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(Object.isFrozen(invariant)).toBe(true);
     expect(Object.isFrozen(invariant.provider)).toBe(true);
@@ -291,107 +288,6 @@ describe('paired E2E condition contract', () => {
       conditions: [production, tampered],
     } as E2EPairedExecutionPlan;
     expect(() => validateE2EPairedExecutionPlan(plan)).toThrow('stale condition config hash');
-  });
-
-  it('requires explicit oracle permission and canonical bounded oracle facts', () => {
-    const invariant = makeInvariant();
-    expect(() => makeCondition('oracle_evidence', invariant)).toThrow(
-      'explicitly allowed memory_remember declaration',
-    );
-    expect(() =>
-      makeCondition('production_auto', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [{ subject: 'user', predicate: 'preference', value: 'tea', sensitivity: 'normal' }],
-      }),
-    ).toThrow('only be supplied');
-    expect(() =>
-      makeCondition('oracle_evidence', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [{ subject: 'user', predicate: 'preference', value: 'tea' } as never],
-      }),
-    ).toThrow('sensitivity is unsupported');
-
-    const duplicateFact = {
-      subject: 'user',
-      subjectType: 'self' as const,
-      predicate: 'preference',
-      value: 'tea',
-      sensitivity: 'normal' as const,
-      confidence: 0.9,
-      pinned: true,
-      scope: 'global' as const,
-      importance: 1,
-    };
-    const oracle = makeCondition('oracle_evidence', invariant, {
-      interface: 'memory_remember',
-      allowSeeding: true,
-      facts: [duplicateFact, duplicateFact],
-    });
-    expect(oracle.oracleEvidence?.facts).toEqual([duplicateFact]);
-    expect(oracle.conditionConfig.oracleEvidenceCount).toBe(1);
-    expect(oracle.conditionConfig.oracleEvidenceHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
-
-    expect(() =>
-      makeCondition('oracle_evidence', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [
-          {
-            subject: 'user',
-            predicate: 'preference',
-            value: 'tea',
-            sensitivity: 'normal',
-            originConversationId: 'provider-controlled-origin',
-            sourceRunId: 'provider-controlled-run',
-          } as never,
-        ],
-      }),
-    ).toThrow('unsupported fields');
-
-    expect(() =>
-      makeCondition('oracle_evidence', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: Array.from({ length: 33 }, (_, index) => ({
-          subject: 'user',
-          predicate: `fact-${index}`,
-          value: 'value',
-          sensitivity: 'normal' as const,
-        })),
-      }),
-    ).toThrow('at most 32');
-    expect(() =>
-      makeCondition('oracle_evidence', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [
-          {
-            subject: 'user',
-            predicate: 'preference',
-            value: 'tea',
-            sensitivity: 'normal',
-            confidence: 2,
-          },
-        ],
-      }),
-    ).toThrow('between 0 and 1');
-    expect(() =>
-      makeCondition('oracle_evidence', invariant, {
-        interface: 'memory_remember',
-        allowSeeding: true,
-        facts: [
-          {
-            subject: 'user',
-            predicate: 'preference',
-            value: 'tea',
-            sensitivity: 'normal',
-            promptInjection: 'PRIVATE-ORACLE-PROMPT',
-          } as never,
-        ],
-      }),
-    ).toThrow('unsupported fields');
   });
 
   it('validates budgets, seeds, and canonical identifiers at construction', () => {

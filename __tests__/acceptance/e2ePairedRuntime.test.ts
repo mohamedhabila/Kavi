@@ -66,7 +66,7 @@ function buildPlan(left: E2EPairedCondition, right: E2EPairedCondition, seed = 7
     provider: PROVIDER,
     scenario: SCENARIO,
     systemPrompt: SCENARIO.systemPrompt!,
-    toolSurface: ['memory_recall', 'memory_search'],
+    toolSurface: ['memory_remember', 'memory_search'],
     maxTokens: 4_096,
     scenarioTimeoutMs: 60_000,
     perTurnTimeoutMs: 30_000,
@@ -116,7 +116,7 @@ describe('paired E2E runtime coordinator', () => {
       expect(runOptions.scenarioTimeoutMs).toBe(60_000);
       expect(runOptions.perTurnTimeoutMs).toBe(30_000);
       expect(runOptions.memoryTimeoutMs).toBe(10_000);
-      expect(runOptions.allowedToolNames).toEqual(['memory_recall', 'memory_search']);
+      expect(runOptions.allowedToolNames).toEqual(['memory_remember', 'memory_search']);
       return successfulExecutionResult({ conditionPlan, runOptions, scenario: SCENARIO });
     });
     const resetConditionState = jest.fn(async () => {

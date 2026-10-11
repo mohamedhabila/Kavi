@@ -22,7 +22,7 @@ function requireStaticTool(name: string): ToolDefinition {
 
 const READ_FILE = requireStaticTool('read_file');
 const WRITE_FILE = requireStaticTool('write_file');
-const MEMORY_RECALL = requireStaticTool('memory_recall');
+const MEMORY_RECALL = requireStaticTool('memory_search');
 
 type TurnFixtureOptions = Readonly<{
   toolName?: string;
