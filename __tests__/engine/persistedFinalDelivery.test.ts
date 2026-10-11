@@ -1,5 +1,4 @@
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
-import { createGoal } from '../../src/engine/goals/types';
 import {
   buildAgentControlGraphAfterPersistedFinalDelivery,
   inspectPersistedAgentRunFinalDelivery,
@@ -160,38 +159,5 @@ describe('persisted final delivery graph boundary', () => {
     const finalized = graph('finalized', { terminalReason: 'completed' });
 
     expect(reconcile(finalized)).toBe(finalized);
-  });
-
-  it('acknowledges a persisted constraint obligation on an already-finalized graph', () => {
-    const constrainedGoal = {
-      ...createGoal({
-        id: 'deliver',
-        title: 'Deliver the verified result',
-        status: 'active',
-        completionPolicy: 'blocking',
-        successCriteria: ['evidence.tool:read_file'],
-        evidence: ['read_file:{"status":"completed"}'],
-        userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
-        now: 1,
-      }),
-      status: 'completed' as const,
-      updatedAt: 2,
-      completedAt: 2,
-      userConstraintDeliveryPending: true as const,
-    };
-    const reconciled = reconcile(
-      graph('finalized', {
-        terminalReason: 'completed',
-        goals: [constrainedGoal],
-      }),
-    );
-
-    expect(reconciled?.status).toBe('finalized');
-    expect(reconciled?.goals?.[0]).not.toHaveProperty('userConstraints');
-    expect(reconciled?.goals?.[0]).not.toHaveProperty('userConstraintDeliveryPending');
-    expect(reconciled?.audit.slice(-2).map((event) => event.type)).toEqual([
-      'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
-      'FINALIZED',
-    ]);
   });
 });

@@ -3,12 +3,7 @@ import type { AgentGoal } from '../engine/goals/types';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { ToolEffectDigest } from './toolEffectReceipt';
 
-export type {
-  AgentGoal,
-  AgentGoalCompletionPolicy,
-  AgentGoalStatus,
-  AgentGoalUserConstraint,
-} from '../engine/goals/types';
+export type { AgentGoal, AgentGoalCompletionPolicy, AgentGoalStatus } from '../engine/goals/types';
 
 export type AgentRunTaskOwner = 'supervisor' | 'worker' | 'either';
 

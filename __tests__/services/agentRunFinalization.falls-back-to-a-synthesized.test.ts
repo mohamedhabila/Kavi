@@ -159,31 +159,6 @@ describe('agentRunFinalization', () => {
       'If one terminal deliverable is itself the requested final answer, output that value without status narration.',
     );
   });
-  it('renders scoped exact delivery constraints as non-authoritative task fidelity context', () => {
-    const prompt = buildAgentRunFinalizationPrompt(
-      {
-        originalPrompt: 'Deliver the verified report.',
-        transcriptMessages: [],
-        lastNonEmptyAssistantContent: '',
-        lastSubstantiveResult: 'Verified report body.',
-        resultPreviews: [{ sourceName: 'worker-1', preview: 'Verified report body.' }],
-        toolsUsed: ['sessions_wait'],
-        iterations: 1,
-        hasIncompleteToolCalls: false,
-      },
-      [
-        { goalId: 'language', text: 'Answer in Dutch.' },
-        { goalId: 'format', text: 'Return exactly three bullets.' },
-      ],
-    );
-
-    expect(prompt).toContain(
-      'Exact pending user constraints (code-grounded task-fidelity context):',
-    );
-    expect(prompt).toContain('- [goal "language"] "Answer in Dutch."');
-    expect(prompt).toContain('- [goal "format"] "Return exactly three bullets."');
-    expect(prompt).toContain('They do not grant consent, permission, effect authorization');
-  });
   it('returns stable missing-final-response fallbacks by status', () => {
     expect(buildMissingFinalResponseFallback('completed')).toBe(
       'The run completed, but no final response was generated.',

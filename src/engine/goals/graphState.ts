@@ -24,7 +24,6 @@ import {
 import { backfillGoalEvidenceFromExistingGoals } from './evidenceRouting';
 import { validateGoalMutation } from './validation';
 import type { GoalMutationValidationContext } from './validation';
-import { captureCurrentUserGoalConstraint } from './userConstraints';
 
 function activateGoalInList(
   goals: AgentGoal[],
@@ -189,7 +188,6 @@ function isActivationOnlyUpdate(
     patch.requiredResourceKinds === undefined &&
     patch.owner === undefined &&
     patch.successCriteria === undefined &&
-    patch.retainCurrentUserConstraint === undefined &&
     patch.completionPolicy === undefined &&
     patch.blockedReason === undefined
   );
@@ -330,11 +328,7 @@ export function applyGoalMutation(
   now: number = Date.now(),
   context: GoalMutationValidationContext = {},
 ): { goals: AgentGoal[]; errors: string[] } {
-  const normalizedMutation = retainInitialBlockingGoalConstraint(
-    currentGoals,
-    normalizeGoalMutationForApplication(currentGoals, mutation),
-    context,
-  );
+  const normalizedMutation = normalizeGoalMutationForApplication(currentGoals, mutation);
   const validation = validateGoalMutation(normalizedMutation, currentGoals, context);
   if (!validation.valid) {
     return {
@@ -364,7 +358,6 @@ export function applyGoalMutation(
           requiredCapabilities: g.requiredCapabilities,
           requiredResourceKinds: g.requiredResourceKinds,
           successCriteria: g.successCriteria,
-          userConstraints: capturedUserConstraint(g, context),
           completionPolicy: normalizeGoalCompletionPolicy(g.completionPolicy),
           blockedReason: g.blockedReason,
           now,
@@ -406,9 +399,6 @@ export function applyGoalMutation(
             // a model that then says "complete" is re-running a terminal transition.
             completedAt: existing.completedAt ?? now,
             blockedReason: undefined,
-            ...((existing.userConstraints?.length ?? 0) > 0
-              ? { userConstraintDeliveryPending: true as const }
-              : {}),
           };
         });
       }
@@ -497,13 +487,6 @@ export function applyGoalMutation(
           if (g.successCriteria && nextCompletionPolicy === 'blocking') {
             updates.successCriteria = g.successCriteria;
           }
-          const appendedUserConstraints = capturedUserConstraint(g, context);
-          if (appendedUserConstraints?.length) {
-            updates.userConstraints = [
-              ...(existing.userConstraints ?? []),
-              ...appendedUserConstraints,
-            ];
-          }
           if (g.completionPolicy) updates.completionPolicy = g.completionPolicy;
           if (g.blockedReason !== undefined) {
             updates.blockedReason = g.blockedReason.trim() || undefined;
@@ -527,59 +510,6 @@ export function applyGoalMutation(
   }
 
   return { goals: reconcileGoalEvidence(goals), errors: [] };
-}
-
-function retainInitialBlockingGoalConstraint(
-  currentGoals: ReadonlyArray<AgentGoal>,
-  mutation: AgentGoalMutation,
-  context: GoalMutationValidationContext,
-): AgentGoalMutation {
-  if (
-    mutation.action !== 'add' ||
-    mutation.goals.some((goal) => goal.retainCurrentUserConstraint === true) ||
-    currentGoals.some(
-      (goal) =>
-        (goal.userConstraints?.length ?? 0) > 0 || goal.userConstraintIntegrity === 'conflict',
-    )
-  ) {
-    return mutation;
-  }
-
-  const captured = captureCurrentUserGoalConstraint({
-    currentUserMessage: context.currentUserMessage,
-  });
-  if (!captured.captured) {
-    return mutation;
-  }
-
-  const activeBlockingIndex = mutation.goals.findIndex(
-    (goal) => goal.completionPolicy === 'blocking' && goal.status === 'active',
-  );
-  const blockingIndex =
-    activeBlockingIndex >= 0
-      ? activeBlockingIndex
-      : mutation.goals.findIndex((goal) => goal.completionPolicy === 'blocking');
-  if (blockingIndex < 0) {
-    return mutation;
-  }
-
-  return {
-    ...mutation,
-    goals: mutation.goals.map((goal, index) =>
-      index === blockingIndex ? { ...goal, retainCurrentUserConstraint: true } : goal,
-    ),
-  };
-}
-
-function capturedUserConstraint(
-  patch: AgentGoalMutation['goals'][number],
-  context: GoalMutationValidationContext,
-): AgentGoal['userConstraints'] {
-  if (patch.retainCurrentUserConstraint !== true) return undefined;
-  const captured = captureCurrentUserGoalConstraint({
-    currentUserMessage: context.currentUserMessage,
-  });
-  return captured.captured ? [captured.constraint] : undefined;
 }
 
 export function addGoalEvidence(

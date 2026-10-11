@@ -273,42 +273,6 @@ describe('resolveDelegatedWorkerSpawnPlan', () => {
     });
   });
 
-  it('blocks a selected workstream with conflicted constraint state', () => {
-    const conversation = buildConversation([
-      {
-        id: 'worker-goal',
-        title: 'Delegated work',
-        status: 'active',
-        completionPolicy: 'blocking',
-        owner: DELEGATED_WORKER_GOAL_OWNER,
-        dependencies: [],
-        evidence: [],
-        successCriteria: ['evidence.tool:read_file'],
-        userConstraintIntegrity: 'conflict',
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ]);
-
-    const plan = resolveDelegatedWorkerSpawnPlan({
-      request: {
-        prompt: 'Run delegated research.',
-        workstreamId: 'worker-goal',
-      },
-      conversation,
-      parentConversationId: conversation.id,
-      agentRunId: conversation.activeAgentRunId,
-      liveWorkers: [],
-    });
-
-    expect(plan.status).toBe('blocked');
-    expect(plan.response).toEqual({
-      status: 'blocked',
-      code: 'user_constraint_state_conflict',
-      error: 'Goal "worker-goal" has conflicted user constraint state.',
-    });
-  });
-
   it('accepts a coordinate goal with code-owned terminal worker evidence', () => {
     const conversation = buildConversation([
       {

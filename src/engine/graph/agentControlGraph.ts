@@ -78,15 +78,6 @@ export function getAgentControlGraphModelTurnBlocker(
     return 'Agent control graph is waiting for the user to answer a registered clarification.';
   }
 
-  const conflictedConstraintGoal = snapshot.goals?.find(
-    (goal) =>
-      goal.userConstraintIntegrity === 'conflict' &&
-      (goal.status !== 'completed' || goal.userConstraintDeliveryPending === true),
-  );
-  if (conflictedConstraintGoal) {
-    return `Agent control graph has conflicted user constraint state for live goal ${conflictedConstraintGoal.id}; cancel the run before further execution.`;
-  }
-
   const missingToolResultIds = getMissingToolResultIds(snapshot);
   if (snapshot.status === 'awaiting_tool_results' || missingToolResultIds.length > 0) {
     return `Agent control graph is waiting for tool result(s): ${missingToolResultIds.join(', ')}.`;

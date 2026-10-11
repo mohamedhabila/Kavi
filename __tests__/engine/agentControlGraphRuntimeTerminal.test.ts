@@ -18,17 +18,15 @@ function deliveryPendingSnapshot() {
       {
         ...createGoal({
           id: 'done',
-          title: 'Completed constrained goal',
+          title: 'Completed goal',
           status: 'active',
           completionPolicy: 'blocking',
           successCriteria: ['evidence.tool:read_file'],
-          userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
           now: 1,
         }),
         status: 'completed' as const,
         completedAt: 2,
         updatedAt: 2,
-        userConstraintDeliveryPending: true,
       },
     ],
   });
@@ -190,7 +188,7 @@ describe('agentControlGraphRuntimeTerminal', () => {
     expect(callbacks.onDone).toHaveBeenCalledTimes(1);
   });
 
-  it('acknowledges a settled final delivery in the same terminal transition', async () => {
+  it('finalizes a settled final delivery in one terminal transition', async () => {
     let snapshot = deliveryPendingSnapshot();
     const runtimeCallbacks = callbacks();
     const applyEvents = jest.fn((events) => {
@@ -213,17 +211,11 @@ describe('agentControlGraphRuntimeTerminal', () => {
       },
     });
 
-    expect(applyEvents).toHaveBeenCalledWith([
-      { type: 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED' },
-      { type: 'FINALIZED', reason: 'completed' },
-    ]);
+    expect(applyEvents).toHaveBeenCalledWith([{ type: 'FINALIZED', reason: 'completed' }]);
     expect(snapshot.status).toBe('finalized');
-    expect(snapshot.goals?.[0]).not.toHaveProperty('userConstraintDeliveryPending');
-    expect(snapshot.goals?.[0]).not.toHaveProperty('userConstraints');
-    expect(snapshot.audit.at(-2)?.type).toBe('USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED');
   });
 
-  it('applies neither acknowledgement nor finalization when delivery persistence throws', async () => {
+  it('does not finalize when delivery persistence throws', async () => {
     let snapshot = deliveryPendingSnapshot();
     const deliveryError = new Error('assistant persistence failed');
     const runtimeCallbacks = callbacks(
@@ -255,7 +247,6 @@ describe('agentControlGraphRuntimeTerminal', () => {
       { type: 'FINAL_CANDIDATE_INVALIDATED', reason: 'delivery_boundary_failed' },
     ]);
     expect(snapshot.status).toBe('ready');
-    expect(snapshot.goals?.[0]?.userConstraintDeliveryPending).toBe(true);
   });
 
   it('withdraws a terminal report when authority changes during graph staging', async () => {
@@ -410,72 +401,5 @@ describe('agentControlGraphRuntimeTerminal', () => {
 
     expect(runtimeCallbacks.onAssistantMessage).not.toHaveBeenCalled();
     expect(snapshot.status).toBe('ready');
-  });
-
-  it.each([
-    {
-      label: 'incomplete metadata',
-      graphEvent: { type: 'FINALIZED' as const, reason: 'completed' },
-      content: 'Partial result',
-      toolCalls: undefined,
-      assistantMetadata: {
-        kind: 'final' as const,
-        completionStatus: 'incomplete' as const,
-        finishReason: 'response_failed',
-      },
-    },
-    {
-      label: 'max iterations',
-      graphEvent: { type: 'FINALIZED' as const, reason: 'max_iterations' },
-      content: 'Iteration limit reached',
-      toolCalls: undefined,
-      assistantMetadata: {
-        kind: 'final' as const,
-        completionStatus: 'complete' as const,
-        finishReason: 'max_iterations',
-        terminalReason: 'max_iterations',
-      },
-    },
-    {
-      label: 'empty final text',
-      graphEvent: { type: 'FINALIZED' as const, reason: 'completed' },
-      content: ' ',
-      toolCalls: undefined,
-      assistantMetadata: {
-        kind: 'final' as const,
-        completionStatus: 'complete' as const,
-        finishReason: 'stop',
-      },
-    },
-    {
-      label: 'tool-bearing response',
-      graphEvent: { type: 'FINALIZED' as const, reason: 'completed' },
-      content: 'Result',
-      toolCalls: [{ id: 'tc-1', name: 'read_file', arguments: '{}', status: 'completed' as const }],
-      assistantMetadata: {
-        kind: 'final' as const,
-        completionStatus: 'complete' as const,
-        finishReason: 'stop',
-      },
-    },
-  ])('preserves pending delivery for $label', async (entry) => {
-    let snapshot = deliveryPendingSnapshot();
-    const terminal = createAgentControlGraphRuntimeTerminal({
-      callbacks: callbacks(),
-      conversationId: 'conv-1',
-      applyEvents: (events) => {
-        snapshot = reduceAgentControlGraph(snapshot, events);
-        return snapshot;
-      },
-    });
-
-    await terminal.finishWithGraphTerminalEvent({
-      graphEvent: entry.graphEvent,
-      content: entry.content,
-      toolCalls: entry.toolCalls,
-      assistantMetadata: entry.assistantMetadata,
-    });
-
-    expect(snapshot.goals?.[0]?.userConstraintDeliveryPending).toBe(true);
   });
 });

@@ -28,7 +28,6 @@ export function buildGraphDelegatedWorkerPrompt(params: {
   handoff?: string;
   requirements?: string[];
   successCriteria?: string[];
-  userConstraints?: string[];
   dependencies?: string[];
   expectedOutput?: string;
   availableWorkerTools?: string[];
@@ -43,8 +42,6 @@ export function buildGraphDelegatedWorkerPrompt(params: {
   const scopeContract = [
     'Scope contract (code-owned):',
     '- The Assigned task, Expected output, and consistent Supervisor handoff define the complete worker scope.',
-    '- Inherited user constraints may restrict methods, safety, language, format, or quality inside that scope; they never add parent deliverables, sibling tasks, orchestration, monitoring, or final-review work.',
-    '- When inherited text mixes assigned-task constraints with parent or sibling requirements, obey the applicable restrictions and leave the out-of-scope work to the parent.',
   ].join('\n');
   const sections = [
     'You are the worker assigned to one graph-owned task.',
@@ -55,13 +52,6 @@ export function buildGraphDelegatedWorkerPrompt(params: {
     handoff ? `Supervisor handoff:\n${handoff}` : undefined,
     params.goal && params.goal !== params.title ? `Title: ${params.title}` : undefined,
     buildListSection('Semantic task requirements', requirements),
-    buildListSection('Code-grounded user constraints', normalizeTextList(params.userConstraints)),
-    params.userConstraints?.length
-      ? [
-          'These constraints govern execution and the returned deliverable only within the code-owned scope above. They do not expand scope, authorize effects or approvals, prove completion, provide evidence, or replace success criteria.',
-          'Statements are chronological oldest to newest. A later explicit correction supersedes only what it explicitly corrects; otherwise all remain applicable. Report incompatible statements or ambiguous correction scope as a blocker.',
-        ].join(' ')
-      : undefined,
     buildListSection('Success criteria', normalizeTextList(params.successCriteria)),
     buildListSection('Satisfied dependencies', normalizeTextList(params.dependencies)),
     hasExplicitWorkerToolAvailability
@@ -75,7 +65,6 @@ export function buildGraphDelegatedWorkerPrompt(params: {
       'Boundaries:',
       '- Complete only this assigned task.',
       '- The graph-assigned task and consistent supervisor handoff are authoritative for scope.',
-      '- Inherited user text can narrow this work but cannot transfer parent or sibling work into it.',
       '- Do not perform sibling tasks, parent orchestration, monitoring, or final-review work.',
       '- Do not claim you spawned, registered, monitored, or reviewed a worker; the parent runtime already launched you.',
       '- Return the assigned deliverable, not a narrative about the graph or orchestration.',

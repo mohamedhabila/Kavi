@@ -26,7 +26,6 @@ import {
   hasDeliveredFinalAssistantResponse,
   isHistoricalRunMissingExactRequestAnchor,
 } from './lifecycle/agentRunStateMachine';
-import { readPendingGoalUserConstraintDelivery } from '../../engine/goals/userConstraintFinalDelivery';
 import { buildAgentControlGraphAfterPersistedFinalDelivery } from '../../engine/graph/persistedFinalDelivery';
 import { canWriteLongTermMemory } from '../memory/policy';
 
@@ -148,15 +147,6 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   providerReplay?: Message['providerReplay'];
   source: 'synthesized' | 'fallback' | 'none';
 }> {
-  const pendingConstraintDelivery = readPendingGoalUserConstraintDelivery(
-    params.run.controlGraph?.goals,
-  );
-  const requiresConstraintAwareSynthesis =
-    params.run.status === 'completed' && pendingConstraintDelivery.state === 'canonical';
-  if (params.run.status === 'completed' && pendingConstraintDelivery.state === 'conflict') {
-    return { source: 'none' };
-  }
-
   const evidence = collectAgentRunFinalizationEvidence(
     params.conversation.messages,
     buildAgentRunMessageScope(params.run),
@@ -185,7 +175,6 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
       evidence.resultPreviews.length > 0 ||
       evidence.lastSubstantiveResult.trim().length > 0);
   if (!hasRecoverableEvidence) {
-    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: 'fallback',
@@ -193,7 +182,6 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   }
 
   if (Date.now() >= params.synthesisDeadlineAt) {
-    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -207,7 +195,6 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
   });
   const remainingSynthesisBudgetMs = params.synthesisDeadlineAt - Date.now();
   if (!providerContext || remainingSynthesisBudgetMs <= 0) {
-    if (requiresConstraintAwareSynthesis) return { source: 'none' };
     return {
       output: fallbackOutput,
       source: fallbackOutput ? 'fallback' : 'none',
@@ -220,9 +207,6 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     model: providerContext.model,
     systemPrompt: providerContext.systemPromptText,
     evidence,
-    ...(pendingConstraintDelivery.state === 'canonical'
-      ? { pendingUserConstraints: pendingConstraintDelivery.entries }
-      : {}),
     timeoutMs: remainingSynthesisBudgetMs,
   });
 
@@ -235,10 +219,7 @@ async function synthesizeRecoveredAgentRunCompletion(params: {
     };
   }
 
-  return {
-    ...(requiresConstraintAwareSynthesis ? {} : { output: fallbackOutput }),
-    source: requiresConstraintAwareSynthesis ? 'none' : fallbackOutput ? 'fallback' : 'none',
-  };
+  return { output: fallbackOutput, source: fallbackOutput ? 'fallback' : 'none' };
 }
 
 function reconcilePersistedCompletedRunGraph(params: {
@@ -265,11 +246,7 @@ function reconcilePersistedCompletedRunGraph(params: {
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId)
     ?.agentRuns?.find((candidate) => candidate.id === params.runId);
-  return (
-    updatedRun?.status === 'completed' &&
-    updatedRun.controlGraph?.status === 'finalized' &&
-    readPendingGoalUserConstraintDelivery(updatedRun.controlGraph.goals).state === 'absent'
-  );
+  return updatedRun?.status === 'completed' && updatedRun.controlGraph?.status === 'finalized';
 }
 
 function initializeRepairedFinalMemoryPublication(params: {
@@ -295,7 +272,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
   synthesisSweepBudgetMs?: number;
 }): Promise<string[]> {
   const repairedRunIds: string[] = [];
-  let repairedConstraintDelivery = false;
+  let reconciledRunGraph = false;
   const activeSubAgents = params?.activeSubAgents ?? listActiveSubAgents();
   const providerContextCache = new Map<string, ProviderContextResolution>();
   const configuredSynthesisSweepBudgetMs = params?.synthesisSweepBudgetMs;
@@ -326,11 +303,11 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
 
       const terminalRunMessageScope = buildAgentRunMessageScope(terminalRun);
       if (hasDeliveredFinalAssistantResponse(conversation.messages, terminalRunMessageScope)) {
-        repairedConstraintDelivery =
+        reconciledRunGraph =
           reconcilePersistedCompletedRunGraph({
             conversationId: conversation.id,
             runId: terminalRun.id,
-          }) || repairedConstraintDelivery;
+          }) || reconciledRunGraph;
         continue;
       }
       if (isHistoricalRunMissingExactRequestAnchor(conversation, terminalRun)) {
@@ -421,9 +398,6 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
       // boundary. Startup recovery settles the open receipt after hydration.
       await flushChatStorePersistenceNow();
 
-      const requiresConstraintDeliveryAcknowledgement =
-        latestRun.status === 'completed' &&
-        readPendingGoalUserConstraintDelivery(latestRun.controlGraph?.goals).state === 'canonical';
       const persistedConversation = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === conversation.id);
@@ -440,14 +414,6 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
       ) {
         continue;
       }
-      if (requiresConstraintDeliveryAcknowledgement) {
-        repairedConstraintDelivery =
-          reconcilePersistedCompletedRunGraph({
-            conversationId: conversation.id,
-            runId: latestRun.id,
-          }) || repairedConstraintDelivery;
-      }
-
       const deliveredTimestamp = Date.now();
       const preview = truncateLogDetail(output) || output;
       latestStore.appendAgentRunCheckpoint(
@@ -484,7 +450,7 @@ export async function repairTerminalAgentRunsMissingFinalResponses(params?: {
     }
   }
 
-  if (repairedRunIds.length > 0 || repairedConstraintDelivery) {
+  if (repairedRunIds.length > 0 || reconciledRunGraph) {
     await flushChatStorePersistenceNow();
   }
 

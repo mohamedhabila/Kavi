@@ -49,7 +49,6 @@ export function buildGraphDelegatedWorkerContract(
       // a fact it can never record, and a traced run stalled there with its deliverable
       // already written.
       successCriteria: resolveWorkerVisibleSuccessCriteria(goal.successCriteria),
-      userConstraints: goal.userConstraints?.map((constraint) => constraint.text),
       dependencies: goal.dependencies,
       availableWorkerTools,
     }),

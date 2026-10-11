@@ -450,49 +450,6 @@ describe('agent-run restart effect reconciliation', () => {
     },
   );
 
-  it('fails the graph when persisted completion reconciliation fails closed', () => {
-    const chat = conversation({ completeFinal: true });
-    chat.messages[1] = { ...chat.messages[1], toolCalls: undefined };
-    chat.agentRuns![0] = {
-      ...chat.agentRuns![0],
-      controlGraph: createInitialAgentRunControlGraphState({
-        status: 'awaiting_review',
-        goals: [
-          {
-            id: 'deliver',
-            title: 'Deliver the verified result',
-            status: 'completed',
-            dependencies: [],
-            evidence: ['verified'],
-            successCriteria: ['evidence.tool:calendar_create_event'],
-            completionPolicy: 'blocking',
-            userConstraintDeliveryPending: true,
-            userConstraintIntegrity: 'conflict',
-            createdAt: 1,
-            updatedAt: 2,
-            completedAt: 2,
-          },
-        ],
-        updatedAt: 2,
-      }),
-    };
-
-    const recovered = recoverInterruptedAgentRunsInConversation(chat, [], { timestamp: 200 });
-
-    expect(recovered.agentRuns?.[0]).toMatchObject({
-      status: 'failed',
-      latestSummary: expect.stringContaining('completion boundary could not be verified'),
-      controlGraph: {
-        status: 'failed',
-        terminalReason: expect.stringContaining('completion boundary could not be verified'),
-      },
-    });
-    expect(recovered.agentRuns?.[0]?.controlGraph?.audit.at(-1)).toMatchObject({
-      type: 'FAILED',
-      timestamp: 200,
-    });
-  });
-
   it('requires a fresh review boundary after an ambiguous effect is later verified', () => {
     const recovered = recoverInterruptedAgentRunsInConversation(
       conversation({ completeFinal: true }),

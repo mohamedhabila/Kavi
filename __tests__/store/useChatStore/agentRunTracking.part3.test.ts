@@ -352,7 +352,7 @@ describe('useChatStore', () => {
       );
     });
 
-    it('reconciles a persisted constrained final with graph ACK and FINALIZED on restart', () => {
+    it('reconciles a persisted final with FINALIZED on restart', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-constrained-restart',
@@ -382,13 +382,6 @@ describe('useChatStore', () => {
               evidence: ['read_file:{"status":"completed"}'],
               successCriteria: ['evidence.tool:read_file'],
               completionPolicy: 'blocking',
-              userConstraints: [
-                {
-                  text: 'Answer in Dutch.',
-                  sourceMessageId: 'msg-user-constrained-restart',
-                },
-              ],
-              userConstraintDeliveryPending: true,
               createdAt: 1700000009200,
               updatedAt: 1700000009250,
               completedAt: 1700000009250,
@@ -414,14 +407,7 @@ describe('useChatStore', () => {
         .agentRuns?.find((run) => run.id === runId)!;
       expect(recoveredRun.status).toBe('completed');
       expect(recoveredRun.controlGraph?.status).toBe('finalized');
-      expect(recoveredRun.controlGraph?.goals?.[0]).not.toHaveProperty('userConstraints');
-      expect(recoveredRun.controlGraph?.goals?.[0]).not.toHaveProperty(
-        'userConstraintDeliveryPending',
-      );
-      expect(recoveredRun.controlGraph?.audit.slice(-2).map((event) => event.type)).toEqual([
-        'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
-        'FINALIZED',
-      ]);
+      expect(recoveredRun.controlGraph?.audit.at(-1)?.type).toBe('FINALIZED');
     });
   });
 });

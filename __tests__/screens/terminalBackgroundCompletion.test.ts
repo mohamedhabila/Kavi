@@ -38,8 +38,6 @@ function makeRun(): AgentRun {
           evidence: ['worker:verified_success'],
           successCriteria: ['evidence.prefix:worker'],
           completionPolicy: 'blocking',
-          userConstraints: [{ text: 'Answer in Dutch.', sourceMessageId: 'user-1' }],
-          userConstraintDeliveryPending: true,
           createdAt: 1,
           updatedAt: 2,
           completedAt: 2,
@@ -71,7 +69,7 @@ function makeRun(): AgentRun {
 
 describe('terminal background completion', () => {
   it.each(['waiting_async', 'ready'] as const)(
-    'acknowledges constrained delivery and terminalizes from a %s background boundary',
+    'terminalizes a delivered run from a %s background boundary',
     (backgroundStatus) => {
       const run = makeRun();
       run.controlGraph = { ...run.controlGraph!, status: backgroundStatus };
@@ -128,12 +126,7 @@ describe('terminal background completion', () => {
         awaitingBackgroundWorkers: false,
         pendingOperations: [],
       });
-      expect(completedRun?.controlGraph?.goals?.[0].userConstraintDeliveryPending).toBeUndefined();
-      expect(completedRun?.controlGraph?.goals?.[0]).not.toHaveProperty('userConstraints');
-      expect(completedRun?.controlGraph?.audit.slice(-2).map((event) => event.type)).toEqual([
-        'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
-        'FINALIZED',
-      ]);
+      expect(completedRun?.controlGraph?.audit.at(-1)?.type).toBe('FINALIZED');
       expect(completedRun?.controlGraph?.audit.map((event) => event.type)).toEqual(
         expect.arrayContaining(['ASYNC_WAITING', 'FINAL_CANDIDATE_READY']),
       );
@@ -321,74 +314,5 @@ describe('terminal background completion', () => {
     expect(
       useChatStore.getState().conversations[0].agentRuns?.[0]?.controlGraph?.expectedToolCalls,
     ).toEqual([{ id: 'call-1', name: 'read_file' }]);
-  });
-
-  it('keeps background review retryable when completed delivery validation fails', () => {
-    const run = makeRun();
-    run.controlGraph = {
-      ...run.controlGraph!,
-      goals: run.controlGraph!.goals?.map((goal) => {
-        const conflicted = {
-          ...goal,
-          userConstraintIntegrity: 'conflict' as const,
-          userConstraintDeliveryPending: true as const,
-        };
-        delete conflicted.userConstraints;
-        return conflicted;
-      }),
-    };
-    const conversation = {
-      id: 'conversation-1',
-      title: 'Background completion',
-      messages: [
-        { id: 'user-1', role: 'user', content: run.goal, timestamp: 1 },
-        {
-          id: 'final-1',
-          role: 'assistant',
-          content: 'Worker report.',
-          timestamp: 3,
-          assistantMetadata: {
-            kind: 'final',
-            completionStatus: 'complete',
-            finishReason: 'stop',
-          },
-        },
-      ],
-      createdAt: 1,
-      updatedAt: 3,
-      agentRuns: [run],
-    } as Conversation;
-    useChatStore.setState({
-      conversations: [conversation],
-      activeConversationId: conversation.id,
-      isLoading: false,
-    });
-
-    expect(
-      completeTerminalBackgroundReviewRun({
-        appendConversationLog: jest.fn(),
-        completeAgentRun: useChatStore.getState().completeAgentRun,
-        updateAgentRunControlGraph: useChatStore.getState().updateAgentRunControlGraph,
-        completion: {
-          status: 'completed',
-          latestSummary: 'Worker report.',
-          checkpointTitle: 'Background workers finished',
-          logLevel: 'info',
-          logTitle: 'Background workers finished',
-        },
-        conversationId: conversation.id,
-        reviewTimestamp: 4,
-        runId: run.id,
-        targetRun: run,
-      }),
-    ).toBe(false);
-
-    expect(useChatStore.getState().conversations[0].agentRuns?.[0]).toMatchObject({
-      status: 'running',
-      controlGraph: {
-        status: 'waiting_async',
-        asyncWork: { awaitingBackgroundWorkers: true },
-      },
-    });
   });
 });

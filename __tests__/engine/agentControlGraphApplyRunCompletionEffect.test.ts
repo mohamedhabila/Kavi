@@ -208,26 +208,24 @@ describe('applyConversationRunCompletionEffect', () => {
   });
 
   describe('persisted final delivery boundary', () => {
-    function constrainedConversation(messages: Conversation['messages']): Conversation {
-      const constrainedGoal = {
+    function conversationAwaitingReview(messages: Conversation['messages']): Conversation {
+      const completedGoal = {
         ...createGoal({
           id: 'done',
-          title: 'Completed constrained goal',
+          title: 'Completed goal',
           status: 'active',
           completionPolicy: 'blocking',
           successCriteria: ['evidence.tool:read_file'],
           evidence: ['read_file:{"status":"completed"}'],
-          userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
           now: 1,
         }),
         status: 'completed' as const,
         updatedAt: 2,
         completedAt: 2,
-        userConstraintDeliveryPending: true as const,
       };
       const controlGraph = createInitialAgentControlGraphSnapshot({
         status: 'awaiting_review',
-        goals: [constrainedGoal],
+        goals: [completedGoal],
       });
       return {
         id: 'conv1',
@@ -260,8 +258,8 @@ describe('applyConversationRunCompletionEffect', () => {
       } as Conversation;
     }
 
-    it('acknowledges only after the latest scoped projection is a settled final', () => {
-      const conversation = constrainedConversation([
+    it('finalizes only after the latest scoped projection is a settled final', () => {
+      const conversation = conversationAwaitingReview([
         { id: 'user-1', role: 'user', content: 'Reply in Dutch.', timestamp: 1 },
         {
           id: 'final-1',
@@ -293,11 +291,6 @@ describe('applyConversationRunCompletionEffect', () => {
 
       const nextGraph = updateAgentRunControlGraph.mock.calls[0]?.[1];
       expect(nextGraph).toMatchObject({ status: 'finalized' });
-      expect(nextGraph?.goals?.[0]).not.toHaveProperty('userConstraintDeliveryPending');
-      expect(nextGraph?.goals?.[0]).not.toHaveProperty('userConstraints');
-      expect(
-        nextGraph?.audit.some((event) => event.type === 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED'),
-      ).toBe(true);
       expect(completeAgentRun).toHaveBeenCalledTimes(1);
     });
 
@@ -350,7 +343,7 @@ describe('applyConversationRunCompletionEffect', () => {
         ],
       ],
     ] as const)('holds completed state when final proof is %s', (_label, messages) => {
-      const conversation = constrainedConversation(messages as Conversation['messages']);
+      const conversation = conversationAwaitingReview(messages as Conversation['messages']);
       const updateAgentRunControlGraph = jest.fn();
       const completeAgentRun = jest.fn();
 
@@ -367,8 +360,8 @@ describe('applyConversationRunCompletionEffect', () => {
       expect(completeAgentRun).not.toHaveBeenCalled();
     });
 
-    it('may fail a run without acknowledging an undelivered constraint', () => {
-      const conversation = constrainedConversation([]);
+    it('may fail a run that delivered no final answer', () => {
+      const conversation = conversationAwaitingReview([]);
       const updateAgentRunControlGraph = jest.fn();
 
       expect(
@@ -382,12 +375,10 @@ describe('applyConversationRunCompletionEffect', () => {
       ).toBe(true);
       const nextGraph = updateAgentRunControlGraph.mock.calls[0]?.[1];
       expect(nextGraph).toMatchObject({ status: 'failed' });
-      expect(nextGraph?.goals?.[0]?.userConstraintDeliveryPending).toBe(true);
-      expect(nextGraph?.goals?.[0]?.userConstraints).toHaveLength(1);
     });
 
     it('rejects completed effects when the run has no control graph', () => {
-      const conversation = constrainedConversation([
+      const conversation = conversationAwaitingReview([
         { id: 'user-1', role: 'user', content: 'Reply in Dutch.', timestamp: 1 },
         {
           id: 'final-1',

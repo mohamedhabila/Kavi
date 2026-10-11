@@ -99,8 +99,6 @@ describe('resolvePreferredAgentRunFinalResponseMessageId', () => {
             dependencies: [],
             evidence: ['read_file:ok'],
             successCriteria: ['evidence.tool:read_file'],
-            userConstraints: [{ text: 'Reply in Dutch.', sourceMessageId: 'user-1' }],
-            userConstraintDeliveryPending: true,
             createdAt: 1,
             updatedAt: 2,
             completedAt: 2,

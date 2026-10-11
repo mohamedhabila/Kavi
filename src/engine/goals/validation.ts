@@ -9,12 +9,7 @@
 import { evaluateGoalEvidenceGaps, isSuccessCriterionMet } from './completionEvidence';
 import type { AgentGoal, AgentGoalMutation, AgentGoalStatus } from './types';
 import { createGoal, isBlockingGoal } from './types';
-import {
-  validateGoalConstraintMutationCapacity,
-  validateGoalConstraintRemoval,
-  validateGoalUserConstraints,
-  type GoalMutationValidationContext,
-} from './goalUserConstraintValidation';
+import type { ToolCallRecord } from '../loopDetection';
 import { validateBlockingGoalUpdate } from './blockingGoalUpdateValidation';
 import { assessGoalInfeasibilityClaim } from './infeasibility';
 import {
@@ -29,7 +24,18 @@ import {
   shouldValidateSuccessCriteria,
 } from './successCriteriaInspection';
 
-export type { GoalMutationValidationContext } from './goalUserConstraintValidation';
+export interface GoalMutationValidationContext {
+  /**
+   * Recent tool calls for this run, used to assess whether an infeasibility claim
+   * is earned. Abandoning a blocking goal requires evidence of exhausted
+   * alternatives in the same way completing one requires evidence of work.
+   */
+  toolCallHistory?: ReadonlyArray<ToolCallRecord>;
+  /** Tools on the active surface able to serve the goal's declared capabilities. */
+  capabilityToolNames?: ReadonlyArray<string>;
+  /** Clarification tool name when the active surface exposes one. */
+  clarificationToolName?: string;
+}
 
 type GoalValidationErrorCode =
   | 'missing_title'
@@ -46,11 +52,7 @@ type GoalValidationErrorCode =
   | 'evidence_satisfied'
   | 'invalid_block'
   | 'invalid_update_action'
-  | 'invalid_add_status'
-  | 'invalid_user_constraints'
-  | 'duplicate_user_constraints'
-  | 'ungrounded_user_constraints'
-  | 'unsupported_user_constraints';
+  | 'invalid_add_status';
 
 interface GoalValidationError {
   goalId?: string;
@@ -270,14 +272,6 @@ export function validateGoalMutation(
 
   for (let i = 0; i < mutation.goals.length; i++) {
     const g = mutation.goals[i];
-    errors.push(
-      ...validateGoalUserConstraints({
-        action: mutation.action,
-        patch: g,
-        existingGoals,
-        context,
-      }),
-    );
     if (mutation.action === 'add') {
       if (!g.title?.trim()) {
         errors.push({
@@ -490,21 +484,6 @@ export function validateGoalMutation(
       }
     }
   }
-
-  if (mutation.action === 'remove') {
-    for (const removalError of validateGoalConstraintRemoval(mutation, existingGoals)) {
-      if (
-        errors.some(
-          (error) => error.goalId === removalError.goalId && error.code === removalError.code,
-        )
-      ) {
-        continue;
-      }
-      errors.push(removalError);
-    }
-  }
-
-  errors.push(...validateGoalConstraintMutationCapacity(mutation, existingGoals));
 
   if (mutation.action === 'add') {
     const cycle = detectDependencyCycle(mutation.goals, existingGoals);

@@ -19,10 +19,6 @@ import {
   resolveDefaultGoalCompletionPolicy,
 } from '../../engine/goals/types';
 import { normalizeAgentPlan } from '../../engine/plan/agentPlan';
-import {
-  MAX_AGENT_GOAL_USER_CONSTRAINTS,
-  readPersistedAgentGoalUserConstraintState,
-} from '../../engine/goals/userConstraints';
 import { normalizeToolNameList } from '../../engine/tools/toolNameNormalization';
 import {
   normalizeAgentRunControlGraphAsyncWorkState,
@@ -324,10 +320,6 @@ export function normalizeAgentRunControlGraphGoals(
 
   const seen = new Set<string>();
   const normalized: AgentGoal[] = [];
-  const constraintLineageEntries: Array<{
-    goalId: string;
-    constraints: Array<{ text: string; sourceMessageId: string }>;
-  }> = [];
 
   for (const g of goals) {
     if (!g || typeof g !== 'object') continue;
@@ -378,14 +370,6 @@ export function normalizeAgentRunControlGraphGoals(
     const completionPolicy =
       normalizeGoalCompletionPolicy(g.completionPolicy) ??
       resolveDefaultGoalCompletionPolicy({ successCriteria });
-    const userConstraintState =
-      g.userConstraintIntegrity !== undefined
-        ? ({ state: 'conflict' } as const)
-        : readPersistedAgentGoalUserConstraintState({
-            value: g.userConstraints,
-            allowedOnGoal: completionPolicy === 'blocking',
-          });
-
     const blockedReason =
       typeof g.blockedReason === 'string' && g.blockedReason.trim().length > 0
         ? g.blockedReason.trim()
@@ -400,27 +384,6 @@ export function normalizeAgentRunControlGraphGoals(
       status === 'completed' && typeof g.completedAt === 'number' && Number.isFinite(g.completedAt)
         ? g.completedAt
         : undefined;
-    const hasCanonicalUserConstraints =
-      userConstraintState.state === 'canonical' && userConstraintState.constraints.length > 0;
-    const hasCompletedConstraintObligation =
-      status === 'completed' &&
-      (hasCanonicalUserConstraints ||
-        userConstraintState.state === 'conflict' ||
-        g.userConstraintDeliveryPending === true);
-    const hasCanonicalPendingConstraintDelivery =
-      status === 'completed' &&
-      g.userConstraintDeliveryPending === true &&
-      hasCanonicalUserConstraints;
-    const hasUserConstraintConflict =
-      userConstraintState.state === 'conflict' ||
-      (hasCompletedConstraintObligation && !hasCanonicalPendingConstraintDelivery);
-    if (userConstraintState.state === 'canonical') {
-      constraintLineageEntries.push({
-        goalId: finalId,
-        constraints: userConstraintState.constraints,
-      });
-    }
-
     normalized.push({
       id: finalId,
       title,
@@ -437,60 +400,12 @@ export function normalizeAgentRunControlGraphGoals(
       ...(requiredCapabilities?.length ? { requiredCapabilities } : {}),
       ...(requiredResourceKinds?.length ? { requiredResourceKinds } : {}),
       ...(successCriteria?.length ? { successCriteria } : {}),
-      ...(userConstraintState.state === 'canonical' && !hasUserConstraintConflict
-        ? { userConstraints: userConstraintState.constraints }
-        : {}),
-      ...(hasUserConstraintConflict ? { userConstraintIntegrity: 'conflict' as const } : {}),
-      ...(hasCompletedConstraintObligation ? { userConstraintDeliveryPending: true as const } : {}),
       completionPolicy,
       ...(blockedReason ? { blockedReason } : {}),
     });
   }
 
-  const constraintBearingGoals = normalized.filter(
-    (goal) =>
-      (goal.status === 'active' ||
-        goal.status === 'blocked' ||
-        goal.status === 'pending' ||
-        goal.userConstraintDeliveryPending === true) &&
-      (goal.userConstraints?.length ?? 0) > 0,
-  );
-  const retainedStatementCount = constraintBearingGoals.reduce(
-    (count, goal) => count + (goal.userConstraints?.length ?? 0),
-    0,
-  );
-  const conflictingGoalIds = new Set(
-    normalized.filter((goal) => goal.userConstraintIntegrity === 'conflict').map((goal) => goal.id),
-  );
-  if (retainedStatementCount > MAX_AGENT_GOAL_USER_CONSTRAINTS) {
-    for (const goal of constraintBearingGoals) conflictingGoalIds.add(goal.id);
-  }
-  const sourceLineage = new Map<string, { texts: Set<string>; goalIds: Set<string> }>();
-  for (const entry of constraintLineageEntries) {
-    for (const constraint of entry.constraints) {
-      const existing = sourceLineage.get(constraint.sourceMessageId);
-      if (!existing) {
-        sourceLineage.set(constraint.sourceMessageId, {
-          texts: new Set([constraint.text]),
-          goalIds: new Set([entry.goalId]),
-        });
-        continue;
-      }
-      existing.goalIds.add(entry.goalId);
-      existing.texts.add(constraint.text);
-    }
-  }
-  for (const lineage of sourceLineage.values()) {
-    if (lineage.texts.size <= 1) continue;
-    for (const goalId of lineage.goalIds) conflictingGoalIds.add(goalId);
-  }
-  if (conflictingGoalIds.size === 0) return normalized;
-  return normalized.map((goal) => {
-    if (!conflictingGoalIds.has(goal.id)) return goal;
-    const conflicted = { ...goal, userConstraintIntegrity: 'conflict' as const };
-    delete conflicted.userConstraints;
-    return conflicted;
-  });
+  return normalized;
 }
 
 export function normalizeAgentRunControlGraphTurnDirectives(
@@ -622,24 +537,14 @@ export function prepareAgentRunControlGraphForResume(
   }
 
   const timestamp = params.updatedAt ?? Date.now();
-  const previousStatus = normalized.status;
-  const clearsPendingDelivery = previousStatus === 'cancelled';
   const pendingUserInput = admitAgentControlGraphClarificationReply({
     pendingUserInput: normalized.pendingUserInput,
     resolvedUserInformationKeys: params.resolvedUserInformationKeys,
     updatedAt: timestamp,
   });
+  const previousStatus = normalized.status;
   return {
     ...normalized,
-    goals: clearsPendingDelivery
-      ? normalized.goals?.map((goal) => {
-          const next = { ...goal };
-          delete next.userConstraintDeliveryPending;
-          delete next.userConstraints;
-          delete next.userConstraintIntegrity;
-          return next;
-        })
-      : normalized.goals,
     status: 'ready',
     pendingUserInput,
     expectedToolCalls: [],

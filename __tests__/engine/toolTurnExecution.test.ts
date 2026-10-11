@@ -393,12 +393,6 @@ describe('toolTurnExecution', () => {
           status: 'active',
           completionPolicy: 'blocking',
           successCriteria: ['evidence.tool:mobile_ui_action'],
-          userConstraints: [
-            {
-              text: 'Update the device according to my request.',
-              sourceMessageId: 'user-message-1',
-            },
-          ],
           now: 100,
         }),
       ],

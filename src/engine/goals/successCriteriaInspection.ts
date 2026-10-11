@@ -31,7 +31,7 @@ export function formatRegisteredNonToolEvidencePrefixes(): string {
     .join(', ');
 }
 
-export function resolvePatchCompletionPolicy(
+function resolvePatchCompletionPolicy(
   patch: AgentGoalMutation['goals'][number],
   existingGoals: ReadonlyArray<AgentGoal>,
 ): AgentGoal['completionPolicy'] | undefined {

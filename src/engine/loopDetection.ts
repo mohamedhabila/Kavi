@@ -200,7 +200,7 @@ export function buildToolMultisetKey(toolNames: ReadonlyArray<string>): string {
 }
 
 export function buildGoalProgressFingerprint(
-  goals: ReadonlyArray<Pick<AgentGoal, 'id' | 'status' | 'evidence' | 'userConstraints'>>,
+  goals: ReadonlyArray<Pick<AgentGoal, 'id' | 'status' | 'evidence'>>,
 ): string {
   if (goals.length === 0) {
     return '';
@@ -213,7 +213,7 @@ export function buildGoalProgressFingerprint(
   const goalStateFingerprint = goals
     .map(
       (goal) =>
-        `${goal.id}:${goal.status}:${goal.evidence.length}:${simpleLoopDetectionHash(goal.evidence.join('\n'))}:constraints:${goal.userConstraints?.length ?? 0}`,
+        `${goal.id}:${goal.status}:${goal.evidence.length}:${simpleLoopDetectionHash(goal.evidence.join('\n'))}`,
     )
     .sort()
     .join(';');

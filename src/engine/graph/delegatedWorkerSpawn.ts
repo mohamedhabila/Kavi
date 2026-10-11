@@ -6,7 +6,6 @@ import {
   resolveSpawnWorkstream,
 } from '../../services/agents/mobileSpawnPolicy';
 import { isBlockingGoal } from '../goals/types';
-import { arePersistedAgentGoalUserConstraintsCanonical } from '../goals/userConstraints';
 import { isDelegationOwnedGoal, readDelegatedWorkerLaunchSessionId } from '../goals/delegation';
 
 export interface DelegatedWorkerSpawnRequest {
@@ -99,15 +98,6 @@ function normalizeDependencyRefs(value: unknown): {
   return { values };
 }
 
-function hasUserConstraintStateConflict(goal: AgentGoal): boolean {
-  if (goal.userConstraintIntegrity === 'conflict') return true;
-  const stored = (goal as AgentGoal & { userConstraints?: unknown }).userConstraints;
-  return (
-    stored !== undefined &&
-    (!isBlockingGoal(goal) || !arePersistedAgentGoalUserConstraintsCanonical(stored))
-  );
-}
-
 export function resolveDelegatedWorkerSpawnPlan(params: {
   request: DelegatedWorkerSpawnRequest;
   conversation: Conversation | undefined;
@@ -191,20 +181,6 @@ export function resolveDelegatedWorkerSpawnPlan(params: {
         error,
         invalidFields: ['workstreamId'],
       }),
-    };
-  }
-  const conflictedScopedGoal = scopedGoals.find(hasUserConstraintStateConflict);
-  if (conflictedScopedGoal) {
-    const error = `Goal "${conflictedScopedGoal.id}" has conflicted user constraint state.`;
-    return {
-      status: 'blocked',
-      goals,
-      spawnGate: { status: 'blocked', workstreamId, error },
-      response: {
-        status: 'blocked',
-        code: 'user_constraint_state_conflict',
-        error,
-      },
     };
   }
 

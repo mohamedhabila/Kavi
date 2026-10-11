@@ -47,7 +47,6 @@ const SAFE_GRAPH_AUDIT_TYPES = new Set([
   'TOOL_SURFACE_TOKEN_AUDIT',
   'TURN_DIRECTIVES_CONSUMED',
   'TURN_DIRECTIVES_RECORDED',
-  'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED',
   'YIELDED',
 ]);
 
@@ -202,7 +201,7 @@ function projectAuditEvent(value) {
     }
     projected.iteration = iteration;
   }
-  if (source.detailHash !== undefined && type !== 'USER_CONSTRAINT_DELIVERY_ACKNOWLEDGED') {
+  if (source.detailHash !== undefined) {
     const detailHash = projectHash(source.detailHash);
     if (!detailHash) {
       return null;
