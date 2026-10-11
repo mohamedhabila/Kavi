@@ -11,7 +11,8 @@ import {
   appendVerifiedProcedureAdvisoryPrompt,
   VERIFIED_PROCEDURE_ADVISORY_MAX_TOKENS,
 } from '../../src/engine/graph/modelTurn/verifiedProcedureAdvisoryPrompt';
-import { buildMemoryPromptDispatchGuard } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { buildModelTurnMemoryPolicyDispatchGuard } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { buildModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
 const mockProjectionCurrent = jest.fn(() => true);
@@ -70,6 +71,15 @@ afterEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false } as never);
   jest.restoreAllMocks();
 });
+
+function buildMemoryPromptDispatchGuard(
+  preparedTurn: { memoryReadFence?: Parameters<typeof buildModelTurnMemoryPolicyBinding>[0] },
+  now: () => number = Date.now,
+): (() => void) | undefined {
+  const fence = preparedTurn.memoryReadFence;
+  if (!fence) return undefined;
+  return buildModelTurnMemoryPolicyDispatchGuard(buildModelTurnMemoryPolicyBinding(fence), now);
+}
 
 describe('verified procedure advisory prompt', () => {
   it('adds bounded non-cacheable advisory evidence without changing the tool surface', async () => {

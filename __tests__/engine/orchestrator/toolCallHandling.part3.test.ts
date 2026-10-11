@@ -4,8 +4,6 @@
 
 import {
   runOrchestrator,
-  collectScopedToolResults,
-  selectWorkflowScopedMessagesForRun,
   executeTool,
   mockStreamMessage,
   makeProvider,
@@ -15,59 +13,10 @@ import {
   expectFinalCandidateGraphBeforeDone,
   createStreamGenerator,
   type OrchestratorOptions,
-  type Message,
 } from '../../helpers/orchestratorHarness';
 
 describe('Orchestrator', () => {
   describe('Tool call handling part 3', () => {
-    it('scopes workflow replay evidence to the active run user message', () => {
-      const messages: Message[] = [
-        { id: 'u1', role: 'user', content: 'Previous task', timestamp: 1 },
-        {
-          id: 'a1',
-          role: 'assistant',
-          content: '',
-          timestamp: 2,
-          toolCalls: [
-            {
-              id: 'old-tc',
-              name: 'skill__github__commit_files',
-              arguments: '{}',
-              status: 'completed',
-              result: '{"commitSha":"old"}',
-            },
-          ],
-        },
-        {
-          id: 'old-tool',
-          role: 'tool',
-          content: '{"commitSha":"old"}',
-          toolCallId: 'old-tc',
-          timestamp: 3,
-          toolCalls: [
-            {
-              id: 'old-tc',
-              name: 'skill__github__commit_files',
-              arguments: '{}',
-              status: 'completed',
-              result: '{"commitSha":"old"}',
-            },
-          ],
-        },
-        { id: 'u2', role: 'user', content: 'New task', timestamp: 4 },
-      ];
-
-      expect(collectScopedToolResults(selectWorkflowScopedMessagesForRun(messages, 'u2'))).toEqual(
-        [],
-      );
-      expect(collectScopedToolResults(selectWorkflowScopedMessagesForRun(messages, 'u1'))).toEqual([
-        expect.objectContaining({
-          toolName: 'skill__github__commit_files',
-          status: 'completed',
-        }),
-      ]);
-    });
-
     it('runs eligible read-only tool batches in parallel', async () => {
       const resolvers: Array<(value: { status: 'completed'; content: string }) => void> = [];
       (executeTool as jest.Mock).mockImplementation(

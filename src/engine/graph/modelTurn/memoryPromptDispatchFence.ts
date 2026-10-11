@@ -6,7 +6,6 @@ import type { Message } from '../../../types/message';
 import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  buildModelTurnMemoryPolicyBinding,
   type ModelTurnMemoryPolicyBinding,
 } from '../../authority/modelTurnMemoryPolicyBinding';
 
@@ -30,15 +29,6 @@ export function isPreparedMemoryReadCurrent(
           fence.verifiedProcedureAuthoritySnapshot,
         )))
   );
-}
-
-export function buildMemoryPromptDispatchGuard(
-  preparedTurn: PreparedAgentTurn,
-  now: () => number = Date.now,
-): (() => void) | undefined {
-  const fence = preparedTurn.memoryReadFence;
-  if (!fence) return undefined;
-  return buildModelTurnMemoryPolicyDispatchGuard(buildModelTurnMemoryPolicyBinding(fence), now);
 }
 
 export function buildModelTurnMemoryPolicyDispatchGuard(

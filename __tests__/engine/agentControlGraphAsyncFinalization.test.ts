@@ -3,7 +3,6 @@ import {
   buildAgentControlGraphInterruptedOpenWorkRecovery,
   buildAgentControlGraphOpenWorkCloseoutDecision,
   buildAgentControlGraphOpenWorkPhasePresentation,
-  getAgentControlGraphWaitingBackgroundWorkerCount,
 } from '../../src/engine/graph/asyncOpenWork';
 import {
   buildAgentControlGraphAsyncFinalizationHoldNote,
@@ -106,13 +105,6 @@ describe('agent control graph async finalization', () => {
   });
 
   it('ignores detached background worker counts when deciding foreground open work', () => {
-    expect(
-      getAgentControlGraphWaitingBackgroundWorkerCount({
-        runningLiveCount: 1.8,
-        orphanedRunningCount: 3,
-        outstandingSpawnedCount: -2,
-      }),
-    ).toBe(3);
     expect(buildAgentControlGraphBackgroundWorkerWaitSummary(1)).toBe(
       'Waiting for 1 background worker to finish.',
     );

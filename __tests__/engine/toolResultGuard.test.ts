@@ -11,8 +11,8 @@ import {
   SINGLE_TOOL_RESULT_CONTEXT_SHARE,
   MIN_KEEP_CHARS,
   TOOL_RESULT_CHARS_PER_TOKEN,
-  COMPACTION_PLACEHOLDER,
 } from '../../src/engine/toolResultGuard';
+import { isToolResultPlaceholder } from '../../src/utils/toolResultSummary';
 import type { Message } from '../../src/types/message';
 import {
   buildBoundaryStraddlingText,
@@ -230,7 +230,7 @@ describe('compactToolResults', () => {
 
     // Old tool should be replaced with a summarized placeholder, not dropped entirely.
     const oldContent = result.find((m) => m.id === 't1')!.content;
-    expect(oldContent.startsWith(COMPACTION_PLACEHOLDER)).toBe(true);
+    expect(isToolResultPlaceholder(oldContent, 'compacted')).toBe(true);
     expect(oldContent).toContain('Summary:');
     expect(oldContent).toContain('Do not retry only because it was compacted');
   });

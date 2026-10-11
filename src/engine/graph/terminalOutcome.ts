@@ -33,17 +33,6 @@ export function isAgentControlGraphUnsuccessfulTerminalState(
   );
 }
 
-export function isAgentControlGraphFailureResponseState(
-  state: AgentControlGraphOutcomeState | undefined,
-): boolean {
-  return Boolean(
-    state &&
-    (state.status === 'blocked' ||
-      state.status === 'yielded' ||
-      (state.status === 'finalized' && state.terminalReason === 'max_iterations')),
-  );
-}
-
 export function resolveAgentControlGraphTerminalFailure(params: {
   state?: AgentControlGraphOutcomeState;
   reportedError?: Error;

@@ -27,30 +27,6 @@ export function selectWorkflowScopedMessagesForRun(
   return messages.slice(scopeStartIndex + 1);
 }
 
-export function selectWorkflowScopedUserMessagesForRun(
-  messages: ReadonlyArray<Message>,
-  workflowScopeUserMessageId?: string,
-): Message[] {
-  const explicitScopeId = workflowScopeUserMessageId?.trim();
-  if (!explicitScopeId) {
-    const fallbackLastUser = [...messages].reverse().find((message) => message.role === 'user');
-    return fallbackLastUser ? [fallbackLastUser] : [];
-  }
-
-  const scopeStartIndex = messages.findIndex(
-    (message) => message.role === 'user' && message.id === explicitScopeId,
-  );
-  if (scopeStartIndex < 0) {
-    return [];
-  }
-
-  const scopedUserMessages = messages
-    .slice(scopeStartIndex)
-    .filter((message) => message.role === 'user');
-
-  return scopedUserMessages;
-}
-
 export function collectAgentControlGraphCompletedWorkflowToolNames(
   messages: ReadonlyArray<Message>,
 ): Set<string> {
@@ -88,63 +64,4 @@ export function collectAgentControlGraphCompletedWorkflowToolNames(
   }
 
   return completedToolNames;
-}
-
-export interface ScopedToolResult {
-  toolName: string;
-  result: string;
-  status: 'completed' | 'failed';
-  timestamp: number;
-  argumentsText?: string;
-}
-
-export function collectScopedToolResults(messages: ReadonlyArray<Message>): ScopedToolResult[] {
-  const toolCallsById = new Map<string, { name: string; arguments?: string; status?: string }>();
-
-  for (const message of messages) {
-    for (const toolCall of message.toolCalls ?? []) {
-      const toolCallId = toolCall.id?.trim();
-      if (!toolCallId) {
-        continue;
-      }
-      toolCallsById.set(toolCallId, {
-        name: normalizeToolName(toolCall.name),
-        arguments: toolCall.arguments,
-        status: toolCall.status,
-      });
-    }
-  }
-
-  const results: ScopedToolResult[] = [];
-  for (const message of messages) {
-    if (message.role !== 'tool') {
-      continue;
-    }
-
-    const toolCallId = message.toolCallId?.trim();
-    const linkedToolCall = toolCallId ? toolCallsById.get(toolCallId) : undefined;
-    const embeddedToolCall = message.toolCalls?.[0];
-    const toolName = normalizeToolName(linkedToolCall?.name || embeddedToolCall?.name || '');
-    if (!toolName) {
-      continue;
-    }
-
-    const status =
-      message.isError ||
-      linkedToolCall?.status === 'failed' ||
-      embeddedToolCall?.status === 'failed'
-        ? 'failed'
-        : 'completed';
-    const argumentsText = linkedToolCall?.arguments ?? embeddedToolCall?.arguments;
-
-    results.push({
-      toolName,
-      result: message.content,
-      status,
-      timestamp: message.timestamp,
-      ...(argumentsText ? { argumentsText } : {}),
-    });
-  }
-
-  return results;
 }

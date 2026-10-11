@@ -2,7 +2,6 @@ import {
   AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE,
   AGENT_CONTROL_GRAPH_FINAL_RESPONSE_SYNTHESIS_DETAIL,
   AGENT_CONTROL_GRAPH_FINAL_RESPONSE_SYNTHESIS_TITLE,
-  buildAgentControlGraphFinalDeliveryResolution,
   getAgentControlGraphFinalReportTitle,
 } from '../../src/engine/graph/finalDelivery';
 import {
@@ -115,36 +114,6 @@ describe('agent control graph final delivery helpers', () => {
         systemPrompt: expect.stringContaining('required_output: visible_user_answer'),
       }),
     );
-  });
-
-  it('resolves final delivery summaries from recovered preview, fallback, or checkpoint', () => {
-    expect(
-      buildAgentControlGraphFinalDeliveryResolution({
-        status: 'completed',
-        finalPreview: 'Recovered final.',
-        latestSummary: 'Pilot summary.',
-        checkpointDetail: 'Pilot detail.',
-      }),
-    ).toEqual({ type: 'use_recovered_preview', latestSummary: 'Recovered final.' });
-
-    expect(
-      buildAgentControlGraphFinalDeliveryResolution({
-        status: 'completed',
-        checkpointDetail: 'Pilot detail.',
-      }),
-    ).toEqual({
-      type: 'insert_missing_final_response_fallback',
-      completionStatus: 'complete',
-      finishReason: 'fallback_missing_final_response',
-    });
-
-    expect(
-      buildAgentControlGraphFinalDeliveryResolution({
-        status: 'failed',
-        latestSummary: '',
-        checkpointDetail: 'Blocked detail.',
-      }),
-    ).toEqual({ type: 'use_checkpoint_summary', latestSummary: 'Blocked detail.' });
   });
 
   it('defers final review for non-user-facing assistant artifacts', () => {

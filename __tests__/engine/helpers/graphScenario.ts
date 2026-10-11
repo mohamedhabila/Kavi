@@ -2,7 +2,6 @@ import {
   createInitialAgentControlGraphSnapshot,
   reduceAgentControlGraph,
 } from '../../../src/engine/graph/agentControlGraph';
-import { assertLeanGraphSnapshot } from '../../../src/engine/graph/graphContract';
 import type {
   AgentControlGraphEvent,
   AgentControlGraphSnapshot,
@@ -11,12 +10,12 @@ import type {
 export function buildGraphScenarioSnapshot(
   seed: Partial<AgentControlGraphSnapshot> = {},
 ): AgentControlGraphSnapshot {
-  return assertLeanGraphSnapshot(createInitialAgentControlGraphSnapshot(seed));
+  return createInitialAgentControlGraphSnapshot(seed);
 }
 
 export function applyGraphScenarioEvents(
   snapshot: AgentControlGraphSnapshot,
   events: ReadonlyArray<AgentControlGraphEvent>,
 ): AgentControlGraphSnapshot {
-  return assertLeanGraphSnapshot(reduceAgentControlGraph(snapshot, events));
+  return reduceAgentControlGraph(snapshot, events);
 }

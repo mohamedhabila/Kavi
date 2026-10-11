@@ -33,16 +33,6 @@ export function buildSupersededRunSummary(cancelledWorkerCount: number): string 
       : 'A new user turn started before the previous run finished.';
 }
 
-export function buildStoppedBackgroundWorkerDetail(
-  cancelledWorkerCount: number,
-): string | undefined {
-  return cancelledWorkerCount === 1
-    ? '1 background worker was stopped.'
-    : cancelledWorkerCount > 1
-      ? `${cancelledWorkerCount} background workers were stopped.`
-      : undefined;
-}
-
 export function buildForegroundRunAbortCompletionEffect(): ConversationRunCompletionEffect {
   return {
     status: 'cancelled',

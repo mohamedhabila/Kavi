@@ -1,7 +1,6 @@
 import {
   classifyAgentControlGraphTerminalReason,
   createAgentControlGraphTerminalOutcomeTracker,
-  isAgentControlGraphFailureResponseState,
   resolveAgentControlGraphTerminalFailure,
 } from '../../src/engine/graph/terminalOutcome';
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
@@ -96,19 +95,6 @@ describe('agent control graph terminal outcomes', () => {
 
     expect(tracker.resolveFailure()).toBe(error);
   });
-
-  it.each([
-    ['blocked', 'empty_final_text_after_recovery', true],
-    ['yielded', 'tool_yielded', true],
-    ['finalized', 'max_iterations', true],
-    ['failed', 'provider_error', false],
-    ['awaiting_review', undefined, false],
-  ] as const)(
-    'classifies whether %s owns a visible terminal response',
-    (status, terminalReason, expected) => {
-      expect(isAgentControlGraphFailureResponseState(state(status, terminalReason))).toBe(expected);
-    },
-  );
 
   it.each([
     ['loop_detected', 'blocked', 'loop_detected'],

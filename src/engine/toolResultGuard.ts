@@ -34,9 +34,6 @@ export const PREEMPTIVE_OVERFLOW_RATIO = 0.9;
 export const CHARS_PER_TOKEN = 4;
 export const TOOL_RESULT_CHARS_PER_TOKEN = 2; // Tool results are denser
 
-/** Prefix used to identify compacted tool results. */
-export const COMPACTION_PLACEHOLDER = '[compacted:';
-
 /** Suffix appended to truncated results */
 const TRUNCATION_NOTICE = '\n[truncated: output exceeded context limit]';
 

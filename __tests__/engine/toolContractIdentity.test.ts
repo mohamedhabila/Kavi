@@ -5,7 +5,6 @@ import {
 import {
   buildCodeOwnedToolContractIdentity,
   buildRuntimeExternalToolContractIdentity,
-  matchesCurrentCodeOwnedToolContractIdentity,
   type RuntimeExternalToolEvidence,
 } from '../../src/engine/toolExecution/toolContractIdentity';
 import * as effectContracts from '../../src/engine/toolExecution/toolEffectReceiptContracts';
@@ -74,7 +73,7 @@ describe('code-owned tool contract identity', () => {
       executionPolicyDigest: expect.stringMatching(SHA256_PATTERN),
     });
     expect(Object.isFrozen(identity)).toBe(true);
-    await expect(matchesCurrentCodeOwnedToolContractIdentity(identity!)).resolves.toBe(true);
+    await expect(buildCodeOwnedToolContractIdentity(identity!.toolName)).resolves.toEqual(identity);
   });
 
   it('normalizes registered aliases and keeps read and mutation calendar tools eligible', async () => {

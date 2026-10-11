@@ -5,7 +5,6 @@
 import {
   runOrchestrator,
   createInitialAgentControlGraphSnapshot,
-  collectScopedToolResults,
   mockStreamMessage,
   makeProvider,
   makeCallbacks,
@@ -16,48 +15,6 @@ import {
 
 describe('Orchestrator', () => {
   describe('Model selection', () => {
-    it('replays tool results by resolving prior tool-call ids when result messages omit embedded calls', () => {
-      const results = collectScopedToolResults([
-        {
-          id: 'u1',
-          role: 'user',
-          content: 'Continue',
-          timestamp: 1000,
-        },
-        {
-          id: 'a1',
-          role: 'assistant',
-          content: '',
-          timestamp: 1100,
-          toolCalls: [
-            {
-              id: 'call-1',
-              name: 'skill__remote__inspect',
-              arguments: '{"target":"service"}',
-              status: 'completed',
-            },
-          ],
-        },
-        {
-          id: 't1',
-          role: 'tool',
-          content: '{"status":"ok"}',
-          toolCallId: 'call-1',
-          timestamp: 1200,
-        },
-      ]);
-
-      expect(results).toEqual([
-        {
-          toolName: 'skill__remote__inspect',
-          result: '{"status":"ok"}',
-          status: 'completed',
-          timestamp: 1200,
-          argumentsText: '{"target":"service"}',
-        },
-      ]);
-    });
-
     it('keeps the requested model on later tool-follow-up turns by default', async () => {
       let callCount = 0;
       mockStreamMessage.mockImplementation(() => {

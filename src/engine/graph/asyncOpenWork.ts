@@ -37,27 +37,11 @@ function normalizeCount(value: number | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-export function getAgentControlGraphWaitingBackgroundWorkerCount(
-  counts: AgentControlGraphBackgroundWorkerCounts,
-): number {
-  return Math.max(
-    normalizeCount(counts.runningLiveCount),
-    normalizeCount(counts.orphanedRunningCount),
-    normalizeCount(counts.outstandingSpawnedCount),
-  );
-}
-
 export function buildAgentControlGraphBackgroundWorkerWaitSummary(workerCount: number): string {
   const normalizedCount = normalizeCount(workerCount);
   return normalizedCount === 1
     ? 'Waiting for 1 background worker to finish.'
     : `Waiting for ${normalizedCount} background workers to finish.`;
-}
-
-export function buildAgentControlGraphInterruptedBackgroundWorkerWaitSummary(
-  workerCount: number,
-): string {
-  return `${buildAgentControlGraphBackgroundWorkerWaitSummary(workerCount)} The supervisor response was interrupted before the run could be finalized.`;
 }
 
 export function buildAgentControlGraphInterruptedAsyncMonitoringSummary(

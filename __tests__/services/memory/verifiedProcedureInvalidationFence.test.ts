@@ -5,7 +5,8 @@ jest.mock('expo-sqlite', () => {
 
 import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
 import type { PreparedAgentTurn } from '../../../src/engine/graph/agentTurnPreparation';
-import { buildMemoryPromptDispatchGuard } from '../../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { buildModelTurnMemoryPolicyDispatchGuard } from '../../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
+import { buildModelTurnMemoryPolicyBinding } from '../../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { runMemoryTransaction } from '../../../src/services/memory/access/transaction';
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 import { getLocalMemoryVaultOwnerId } from '../../../src/services/memory/memoryVaultIdentity';
@@ -163,6 +164,15 @@ async function authority(sourceRunId: string) {
 
 async function recordRun(sourceRunId: string) {
   return recordVerifiedProcedureObservation(await authority(sourceRunId), NOW);
+}
+
+function buildMemoryPromptDispatchGuard(
+  preparedTurn: { memoryReadFence?: Parameters<typeof buildModelTurnMemoryPolicyBinding>[0] },
+  now: () => number = Date.now,
+): (() => void) | undefined {
+  const fence = preparedTurn.memoryReadFence;
+  if (!fence) return undefined;
+  return buildModelTurnMemoryPolicyDispatchGuard(buildModelTurnMemoryPolicyBinding(fence), now);
 }
 
 describe('verified procedure invalidation fence', () => {

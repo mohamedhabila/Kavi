@@ -92,12 +92,6 @@ export function getAgentControlGraphTurnDirectives(
   return normalizeAgentRunControlGraphTurnDirectives(snapshot?.turnDirectives);
 }
 
-export function getAgentControlGraphFinalizationBlocker(
-  snapshot: AgentControlGraphSnapshot | undefined,
-): string | undefined {
-  return getAgentControlGraphModelTurnBlocker(snapshot);
-}
-
 export function selectAgentControlGraphRuntimeCommand(
   snapshot: AgentControlGraphSnapshot | undefined,
 ): AgentControlGraphRuntimeCommand {

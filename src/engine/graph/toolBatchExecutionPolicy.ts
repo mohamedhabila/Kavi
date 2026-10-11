@@ -24,18 +24,6 @@ const MUTATION_CAPABILITIES = new Set<ToolCapability>([
   'coordinate',
 ]);
 
-export function isParallelizableToolName(name: string): boolean {
-  if (!name) {
-    return false;
-  }
-
-  const descriptor = inferToolCapabilityDescriptor({
-    name,
-    description: name,
-  });
-  return isParallelizableToolDescriptor(descriptor);
-}
-
 function isParallelizableToolDescriptor(descriptor: ToolCapabilityDescriptor): boolean {
   if (descriptor.category === 'other') {
     return false;

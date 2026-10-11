@@ -1,4 +1,4 @@
-import type { Message, ToolCall } from '../types/message';
+import type { Message } from '../types/message';
 import { normalizeToolName } from './tools/index';
 import { ensureToolResultPairing, deduplicateToolResults } from './toolResultPairingGuard';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
@@ -113,45 +113,6 @@ export function upsertPendingToolCall(
 
 export function repairModelVisibleToolResultTranscript(messages: Message[]): Message[] {
   return deduplicateToolResults(ensureToolResultPairing(messages));
-}
-
-export function getLastExecutedToolCall(messages: Message[]): ToolCall | undefined {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    if (message.role !== 'tool' || !message.toolCalls?.length) {
-      continue;
-    }
-    return message.toolCalls[message.toolCalls.length - 1];
-  }
-  return undefined;
-}
-
-export function collectRecentToolNames(messages: Message[], limit = 4): Set<string> {
-  const recentToolNames = new Set<string>();
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === 'user') {
-      break;
-    }
-
-    if (!message.toolCalls?.length) {
-      continue;
-    }
-
-    for (let toolIndex = message.toolCalls.length - 1; toolIndex >= 0; toolIndex -= 1) {
-      const normalizedName = normalizeToolName(message.toolCalls[toolIndex]?.name || '').trim();
-      if (!normalizedName) {
-        continue;
-      }
-      recentToolNames.add(normalizedName);
-      if (recentToolNames.size >= limit) {
-        return recentToolNames;
-      }
-    }
-  }
-
-  return recentToolNames;
 }
 
 export function isToolLoopInProgress(messages: Message[]): boolean {

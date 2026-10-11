@@ -11,10 +11,7 @@ import {
 } from '../../src/engine/orchestrator';
 import { finalizeProviderConfig } from '../../src/constants/api';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
-import {
-  collectScopedToolResults,
-  selectWorkflowScopedMessagesForRun,
-} from '../../src/engine/graph/workflowMessages';
+import { selectWorkflowScopedMessagesForRun } from '../../src/engine/graph/workflowMessages';
 import { AssistantMessageMetadata, Message } from '../../src/types/message';
 import { LlmProviderConfig } from '../../src/types/provider';
 import { makeOrchestratorProviderConfig } from '../fixtures/providers';
@@ -441,7 +438,6 @@ export {
   MAX_IDENTICAL_TOOL_CALLS,
   finalizeProviderConfig,
   createInitialAgentControlGraphSnapshot,
-  collectScopedToolResults,
   selectWorkflowScopedMessagesForRun,
   LlmService,
   executeTool,

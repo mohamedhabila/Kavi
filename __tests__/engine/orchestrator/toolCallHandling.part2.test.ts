@@ -4,7 +4,6 @@
 
 import {
   runOrchestrator,
-  collectScopedToolResults,
   executeTool,
   mockStreamMessage,
   makeProvider,
@@ -402,24 +401,6 @@ describe('Orchestrator', () => {
       const completedCall = callbacks.calls.onToolCallComplete[0];
       expect(completedCall.status).toBe('failed');
       expect(completedCall.error).toContain('HTTP 403');
-      expect(
-        collectScopedToolResults([
-          {
-            id: 'tool-msg',
-            role: 'tool',
-            content: completedCall.result,
-            toolCallId: completedCall.id,
-            toolCalls: [completedCall],
-            isError: true,
-            timestamp: Date.now(),
-          },
-        ]),
-      ).toEqual([
-        expect.objectContaining({
-          toolName: 'read_file',
-          status: 'failed',
-        }),
-      ]);
     });
   });
 });

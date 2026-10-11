@@ -23,24 +23,6 @@ export type SessionMemoryAccessCandidate = Readonly<{
   livingMemory: LivingMemoryBridgeOutput | null;
 }>;
 
-const DEGRADED_CONSISTENCY_BARRIER: NextTurnMemoryConsistencyResult = Object.freeze({
-  outcome: 'degraded',
-  durationMs: 0,
-  waitedMs: 0,
-  queryCount: 0,
-  matchedJobCount: 0,
-  queueAgeMs: null,
-  initialJobStatus: null,
-  finalJobStatus: null,
-});
-
-export function createDegradedSessionMemoryAccessCandidate(): SessionMemoryAccessCandidate {
-  return Object.freeze({
-    consistencyBarrier: DEGRADED_CONSISTENCY_BARRIER,
-    livingMemory: null,
-  });
-}
-
 export function admitSessionMemoryContext(
   candidate: SessionMemoryAccessCandidate,
 ): AdmittedSessionMemoryContext {

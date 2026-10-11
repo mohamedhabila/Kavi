@@ -17,7 +17,6 @@ jest.mock('../../src/services/memory/policy', () => ({
 
 import {
   admitSessionMemoryContext,
-  createDegradedSessionMemoryAccessCandidate,
   isAdmittedSessionMemoryContextFresh,
 } from '../../src/engine/graph/sessionMemoryContext';
 
@@ -99,13 +98,6 @@ describe('session memory context', () => {
     expect(context.livingMemory).toBeNull();
     expect(context.consistencyBarrier.outcome).toBe('degraded');
     expect(context.authoritySnapshot).toBe(authoritySnapshot);
-  });
-
-  it('keeps an authority-unavailable retrieval failure stable for the session', () => {
-    const context = admitSessionMemoryContext(createDegradedSessionMemoryAccessCandidate());
-
-    expect(isAdmittedSessionMemoryContextFresh(context)).toBe(true);
-    expect(mockIsMemoryProjectionSnapshotDurablyCurrent).not.toHaveBeenCalled();
   });
 
   it('refreshes an admitted context when its projection changes', () => {

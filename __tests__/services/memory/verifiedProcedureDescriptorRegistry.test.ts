@@ -1,13 +1,16 @@
-import {
-  buildCodeOwnedToolContractIdentity,
-  matchesCurrentCodeOwnedToolContractIdentity,
-} from '../../../src/engine/toolExecution/toolContractIdentity';
+import { buildCodeOwnedToolContractIdentity } from '../../../src/engine/toolExecution/toolContractIdentity';
+import type { CodeOwnedToolContractIdentity } from '../../../src/types/toolEffectReceipt';
 import {
   digestVerifiedProcedureIdentity,
   getCurrentVerifiedProcedureDescriptor,
   listCurrentVerifiedProcedureDescriptors,
   verifiedProcedureDescriptorMatches,
 } from '../../../src/services/memory/verifiedProcedure/descriptorRegistry';
+
+async function currentIdentityMatches(identity: CodeOwnedToolContractIdentity): Promise<boolean> {
+  const current = await buildCodeOwnedToolContractIdentity(identity.toolName);
+  return JSON.stringify(current) === JSON.stringify(identity);
+}
 
 describe('verified procedure descriptor registry', () => {
   it('exposes one frozen code-owned calendar procedure with current ordered identities', async () => {
@@ -36,12 +39,8 @@ describe('verified procedure descriptor registry', () => {
       ['calendar-list', 'calendar_list'],
       ['calendar-create-event', 'calendar_create_event'],
     ]);
-    await expect(
-      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[0].contractIdentity),
-    ).resolves.toBe(true);
-    await expect(
-      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[1].contractIdentity),
-    ).resolves.toBe(true);
+    await expect(currentIdentityMatches(descriptor.steps[0].contractIdentity)).resolves.toBe(true);
+    await expect(currentIdentityMatches(descriptor.steps[1].contractIdentity)).resolves.toBe(true);
     expect(descriptor.linkage).toEqual({
       sourceStepKey: 'calendar-list',
       sourceResultSelector: 'literal-writable-calendar-id',
@@ -90,12 +89,8 @@ describe('verified procedure descriptor registry', () => {
       receiptEffectState: 'applied',
       receiptVerificationState: 'verified',
     });
-    await expect(
-      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[0].contractIdentity),
-    ).resolves.toBe(true);
-    await expect(
-      matchesCurrentCodeOwnedToolContractIdentity(descriptor.steps[1].contractIdentity),
-    ).resolves.toBe(true);
+    await expect(currentIdentityMatches(descriptor.steps[0].contractIdentity)).resolves.toBe(true);
+    await expect(currentIdentityMatches(descriptor.steps[1].contractIdentity)).resolves.toBe(true);
   });
 
   it('is deterministic and has no runtime registration surface', async () => {

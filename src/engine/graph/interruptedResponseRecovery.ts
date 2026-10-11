@@ -5,9 +5,6 @@ import type {
 } from '../../types/agentRun';
 import { buildAgentControlGraphInterruptedOpenWorkRecovery } from './asyncOpenWork';
 
-export const AGENT_CONTROL_GRAPH_INTERRUPTED_RESPONSE_CANDIDATE_SUMMARY =
-  'The supervisor response stream was interrupted after tool work completed. Decide whether goals are satisfied or more work is required.';
-
 export type AgentControlGraphInterruptedResponseOutcome = {
   status: Exclude<AgentRunStatus, 'running'>;
   checkpointTitle: string;

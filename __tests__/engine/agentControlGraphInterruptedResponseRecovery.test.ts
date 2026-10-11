@@ -1,5 +1,4 @@
 import {
-  AGENT_CONTROL_GRAPH_INTERRUPTED_RESPONSE_CANDIDATE_SUMMARY,
   buildAgentControlGraphInterruptedRecoveredOutcome,
   buildAgentControlGraphInterruptedNoEvidenceOutcome,
   buildAgentControlGraphInterruptedTurnFailedOutcome,
@@ -22,15 +21,6 @@ function createPendingOperation(): AgentRunAsyncOperation {
 }
 
 describe('agent control graph interrupted response recovery', () => {
-  it('keeps a compact graph-owned candidate summary for goal review', () => {
-    expect(AGENT_CONTROL_GRAPH_INTERRUPTED_RESPONSE_CANDIDATE_SUMMARY).toContain(
-      'response stream was interrupted',
-    );
-    expect(AGENT_CONTROL_GRAPH_INTERRUPTED_RESPONSE_CANDIDATE_SUMMARY).toContain(
-      'goals are satisfied',
-    );
-  });
-
   it('builds provider and generic failed outcomes without screen decisions', () => {
     expect(buildAgentControlGraphProviderRejectedInterruptedOutcome('quota exceeded')).toEqual({
       status: 'failed',

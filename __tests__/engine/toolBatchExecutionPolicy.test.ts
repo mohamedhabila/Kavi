@@ -1,7 +1,4 @@
-import {
-  isParallelizableToolName,
-  shouldExecuteToolBatchInParallel,
-} from '../../src/engine/graph/toolBatchExecutionPolicy';
+import { shouldExecuteToolBatchInParallel } from '../../src/engine/graph/toolBatchExecutionPolicy';
 import type { ToolDefinition } from '../../src/types/tool';
 
 describe('tool batch execution policy', () => {
@@ -34,10 +31,6 @@ describe('tool batch execution policy', () => {
     expect(
       shouldExecuteToolBatchInParallel([{ name: 'sessions_spawn' }, { name: 'sessions_wait' }]),
     ).toBe(false);
-  });
-
-  it('treats unknown tools as non-parallelizable', () => {
-    expect(isParallelizableToolName('unknown_custom_tool')).toBe(false);
   });
 
   it('does not parallelize canonical native tools with permission evidence dependencies', () => {

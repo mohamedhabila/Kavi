@@ -11,23 +11,6 @@ import type { Message, ToolCall } from '../types/message';
 // ── Extraction helpers ───────────────────────────────────────────────────
 
 /**
- * Extract tool_call IDs from an assistant message.
- * Returns a Map<toolCallId, toolName> for all tool calls in the message.
- */
-export function extractToolCallIds(message: Message): Map<string, string> {
-  const ids = new Map<string, string>();
-  if (message.role !== 'assistant' || !message.toolCalls?.length) {
-    return ids;
-  }
-  for (const tc of message.toolCalls) {
-    if (tc.id) {
-      ids.set(tc.id, tc.name || 'unknown');
-    }
-  }
-  return ids;
-}
-
-/**
  * Extract the tool_call_id from a tool result message.
  */
 export function extractToolResultId(message: Message): string | undefined {
@@ -36,35 +19,6 @@ export function extractToolResultId(message: Message): string | undefined {
 }
 
 // ── Synthetic result creation ────────────────────────────────────────────
-
-/**
- * Create a synthetic tool_result message for an orphaned tool_call.
- * This prevents the LLM from seeing unanswered tool calls and retrying them.
- */
-export function makeSyntheticToolResult(
-  toolCallId: string,
-  toolName: string,
-  reason: string = 'Tool execution did not produce a result.',
-): Message {
-  const content = `Error: ${reason}`;
-  return {
-    id: `msg_synthetic_${toolCallId}`,
-    role: 'tool',
-    content,
-    toolCallId,
-    toolCalls: [
-      {
-        id: toolCallId,
-        name: toolName,
-        arguments: '{}',
-        status: 'failed',
-        error: reason,
-      },
-    ],
-    timestamp: Date.now(),
-    isError: true,
-  };
-}
 
 function getSyntheticToolResultId(
   assistantMessageId: string | undefined,
@@ -151,59 +105,6 @@ function makeOrphanResultsForAssistant(
 }
 
 // ── Main guard ───────────────────────────────────────────────────────────
-
-/**
- * Scan working messages for orphaned tool_calls (assistant messages with
- * tool_calls that don't have matching tool_result messages following them).
- * Returns synthetic tool_result messages for any orphans found.
- *
- * This implements the Kavi invariant:
- * "An assistant message with tool_calls must ALWAYS be immediately followed
- *  by matching tool_result messages before the next LLM call."
- */
-export function findOrphanedToolCalls(messages: Message[]): Message[] {
-  const syntheticResults: Message[] = [];
-
-  let pendingAssistant: Message | undefined;
-  let pendingCalls = new Map<string, ToolCall>();
-
-  for (const msg of messages) {
-    if (msg.role === 'assistant' && getAssistantToolCalls(msg).length > 0) {
-      if (pendingAssistant && pendingCalls.size > 0) {
-        syntheticResults.push(
-          ...makeOrphanResultsForAssistant(
-            pendingAssistant,
-            Array.from(pendingCalls.values()),
-            'Tool call was orphaned because no result was received before the next assistant turn.',
-          ),
-        );
-      }
-
-      pendingAssistant = msg;
-      pendingCalls = new Map<string, ToolCall>();
-      for (const toolCall of getAssistantToolCalls(msg)) {
-        pendingCalls.set(toolCall.id, toolCall);
-      }
-    } else if (msg.role === 'tool') {
-      const resultId = extractToolResultId(msg);
-      if (resultId) {
-        pendingCalls.delete(resultId);
-      }
-    }
-  }
-
-  if (pendingAssistant && pendingCalls.size > 0) {
-    syntheticResults.push(
-      ...makeOrphanResultsForAssistant(
-        pendingAssistant,
-        Array.from(pendingCalls.values()),
-        'Tool execution did not produce a result before the next model turn.',
-      ),
-    );
-  }
-
-  return syntheticResults;
-}
 
 /**
  * Validate and repair tool result pairing in the working message list.

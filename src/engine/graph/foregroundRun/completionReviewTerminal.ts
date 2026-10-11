@@ -79,14 +79,3 @@ export function buildAgentControlGraphTerminalReviewCompletion(
     logDetail: detail,
   };
 }
-
-export function shouldMarkCandidatePendingReview(
-  candidateMessage: ReviewCandidateMessage | undefined,
-): boolean {
-  return (
-    candidateMessage?.role === 'assistant' &&
-    !candidateMessage.subAgentEvent &&
-    (candidateMessage.toolCalls?.length ?? 0) === 0 &&
-    isDeliverableAssistantCompletionMetadata(candidateMessage.assistantMetadata)
-  );
-}

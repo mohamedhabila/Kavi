@@ -376,32 +376,3 @@ export function codeOwnedToolContractIdentitiesEqual(
     left.executionPolicyDigest === right.executionPolicyDigest
   );
 }
-
-export function toolContractIdentitiesEqual(
-  left: ToolContractIdentity,
-  right: ToolContractIdentity,
-): boolean {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === 'code_owned' && right.kind === 'code_owned') {
-    return codeOwnedToolContractIdentitiesEqual(left, right);
-  }
-  if (left.kind === 'runtime_external' && right.kind === 'runtime_external') {
-    return (
-      left.version === right.version &&
-      left.toolName === right.toolName &&
-      left.source === right.source &&
-      left.namespace === right.namespace &&
-      left.effectClass === right.effectClass &&
-      left.declarationDigest === right.declarationDigest &&
-      left.executionBindingDigest === right.executionBindingDigest
-    );
-  }
-  return false;
-}
-
-export async function matchesCurrentCodeOwnedToolContractIdentity(
-  identity: CodeOwnedToolContractIdentity,
-): Promise<boolean> {
-  const current = await buildCodeOwnedToolContractIdentity(identity.toolName);
-  return Boolean(current && codeOwnedToolContractIdentitiesEqual(current, identity));
-}

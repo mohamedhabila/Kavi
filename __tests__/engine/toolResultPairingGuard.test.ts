@@ -3,10 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  extractToolCallIds,
   extractToolResultId,
-  makeSyntheticToolResult,
-  findOrphanedToolCalls,
   ensureToolResultPairing,
   deduplicateToolResults,
 } from '../../src/engine/toolResultPairingGuard';
@@ -62,41 +59,6 @@ const makeSystemMsg = (id: string, content: string): Message => ({
   timestamp: Date.now(),
 });
 
-// ── extractToolCallIds ───────────────────────────────────────────────────
-
-describe('extractToolCallIds', () => {
-  it('returns empty map for non-assistant messages', () => {
-    const msg = makeUserMsg('u1', 'hello');
-    expect(extractToolCallIds(msg).size).toBe(0);
-  });
-
-  it('returns empty map for assistant message without tool calls', () => {
-    const msg = makeAssistantMsg('a1', 'hello');
-    expect(extractToolCallIds(msg).size).toBe(0);
-  });
-
-  it('extracts tool call IDs from assistant message', () => {
-    const msg = makeAssistantMsg('a1', '', [
-      { id: 'tc_1', name: 'read_file', arguments: '{"path":"a.ts"}' },
-      { id: 'tc_2', name: 'write_file', arguments: '{"path":"b.ts"}' },
-    ]);
-    const ids = extractToolCallIds(msg);
-    expect(ids.size).toBe(2);
-    expect(ids.get('tc_1')).toBe('read_file');
-    expect(ids.get('tc_2')).toBe('write_file');
-  });
-
-  it('skips tool calls without IDs', () => {
-    const msg = makeAssistantMsg('a1', '', [
-      { id: '', name: 'read_file', arguments: '{}' },
-      { id: 'tc_1', name: 'write_file', arguments: '{}' },
-    ]);
-    const ids = extractToolCallIds(msg);
-    expect(ids.size).toBe(1);
-    expect(ids.has('tc_1')).toBe(true);
-  });
-});
-
 // ── extractToolResultId ──────────────────────────────────────────────────
 
 describe('extractToolResultId', () => {
@@ -122,89 +84,7 @@ describe('extractToolResultId', () => {
   });
 });
 
-// ── makeSyntheticToolResult ──────────────────────────────────────────────
-
-describe('makeSyntheticToolResult', () => {
-  it('creates a valid tool message with error flag', () => {
-    const result = makeSyntheticToolResult('tc_42', 'read_file', 'Timed out');
-    expect(result.role).toBe('tool');
-    expect(result.toolCallId).toBe('tc_42');
-    expect(result.content).toContain('Timed out');
-    expect(result.isError).toBe(true);
-    expect(result.id).toContain('tc_42');
-  });
-
-  it('uses default reason when none provided', () => {
-    const result = makeSyntheticToolResult('tc_1', 'test');
-    expect(result.content).toContain('did not produce a result');
-  });
-});
-
-// ── findOrphanedToolCalls ────────────────────────────────────────────────
-
-describe('findOrphanedToolCalls', () => {
-  it('returns empty for messages with no tool calls', () => {
-    const messages = [makeUserMsg('u1', 'hello'), makeAssistantMsg('a1', 'hi there')];
-    expect(findOrphanedToolCalls(messages)).toHaveLength(0);
-  });
-
-  it('returns empty when all tool calls have matching results', () => {
-    const messages = [
-      makeUserMsg('u1', 'hello'),
-      makeAssistantMsg('a1', '', [
-        { id: 'tc_1', name: 'read_file', arguments: '{}' },
-        { id: 'tc_2', name: 'write_file', arguments: '{}' },
-      ]),
-      makeToolMsg('t1', 'tc_1', 'file contents'),
-      makeToolMsg('t2', 'tc_2', 'ok'),
-    ];
-    expect(findOrphanedToolCalls(messages)).toHaveLength(0);
-  });
-
-  it('detects orphaned tool call when one result is missing', () => {
-    const messages = [
-      makeAssistantMsg('a1', '', [
-        { id: 'tc_1', name: 'read_file', arguments: '{}' },
-        { id: 'tc_2', name: 'write_file', arguments: '{}' },
-      ]),
-      makeToolMsg('t1', 'tc_1', 'file contents'),
-      // tc_2 has no result!
-    ];
-    const orphans = findOrphanedToolCalls(messages);
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0].toolCallId).toBe('tc_2');
-    expect(orphans[0].isError).toBe(true);
-  });
-
-  it('recovers an orphaned result from completed assistant tool-call metadata', () => {
-    const messages = [
-      {
-        ...makeAssistantMsg('a1', '', [
-          { id: 'tc_1', name: 'read_file', arguments: '{"path":"a.txt"}' },
-        ]),
-        toolCalls: [
-          {
-            id: 'tc_1',
-            name: 'read_file',
-            arguments: '{"path":"a.txt"}',
-            status: 'completed' as const,
-            result: 'file contents from persisted tool call',
-          },
-        ],
-      },
-    ];
-    const orphans = findOrphanedToolCalls(messages);
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0]).toEqual(
-      expect.objectContaining({
-        role: 'tool',
-        toolCallId: 'tc_1',
-        content: 'file contents from persisted tool call',
-      }),
-    );
-    expect(orphans[0].isError).toBeUndefined();
-  });
-
+describe('ensureToolResultPairing for running tool calls', () => {
   it('repairs running orphaned tool calls with an in-progress result instead of a failed error', () => {
     const messages: Message[] = [
       {
@@ -235,52 +115,6 @@ describe('findOrphanedToolCalls', () => {
         toolName: 'slow_tool',
       }),
     );
-  });
-
-  it('detects all orphans when no results exist', () => {
-    const messages = [
-      makeAssistantMsg('a1', '', [
-        { id: 'tc_1', name: 'read_file', arguments: '{}' },
-        { id: 'tc_2', name: 'write_file', arguments: '{}' },
-      ]),
-    ];
-    const orphans = findOrphanedToolCalls(messages);
-    expect(orphans).toHaveLength(2);
-  });
-
-  it('handles multiple assistant messages with mixed orphans', () => {
-    const messages = [
-      // First assistant message — fully paired
-      makeAssistantMsg('a1', '', [{ id: 'tc_1', name: 'read_file', arguments: '{}' }]),
-      makeToolMsg('t1', 'tc_1', 'result'),
-      // Second assistant message — orphaned
-      makeAssistantMsg('a2', '', [
-        { id: 'tc_2', name: 'search', arguments: '{}' },
-        { id: 'tc_3', name: 'write', arguments: '{}' },
-      ]),
-      makeToolMsg('t2', 'tc_2', 'found'),
-      // tc_3 is orphaned
-    ];
-    const orphans = findOrphanedToolCalls(messages);
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0].toolCallId).toBe('tc_3');
-  });
-
-  it('detects orphans from previous assistant message when new assistant arrives without results', () => {
-    const messages = [
-      makeAssistantMsg('a1', '', [{ id: 'tc_1', name: 'read_file', arguments: '{}' }]),
-      // No tool result for tc_1!
-      makeAssistantMsg('a2', '', [{ id: 'tc_2', name: 'search', arguments: '{}' }]),
-      makeToolMsg('t2', 'tc_2', 'found'),
-    ];
-    const orphans = findOrphanedToolCalls(messages);
-    expect(orphans).toHaveLength(1);
-    expect(orphans[0].toolCallId).toBe('tc_1');
-  });
-
-  it('handles assistant message with empty toolCalls array', () => {
-    const messages = [makeAssistantMsg('a1', 'just text', [])];
-    expect(findOrphanedToolCalls(messages)).toHaveLength(0);
   });
 });
 

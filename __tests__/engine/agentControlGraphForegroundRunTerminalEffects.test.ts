@@ -5,7 +5,6 @@ import {
   buildForegroundRunSupersededEffect,
   buildForegroundRunUserStopCompletionEffect,
   buildForegroundRunUserStopLogEntry,
-  buildStoppedBackgroundWorkerDetail,
   buildSupersededRunSummary,
 } from '../../src/engine/graph/foregroundRunTerminalEffects';
 
@@ -18,8 +17,6 @@ describe('foregroundRunTerminalEffects', () => {
     expect(buildSupersededRunSummary(1)).toBe(
       'A new user turn started before the previous run finished and 1 background worker was stopped.',
     );
-    expect(buildStoppedBackgroundWorkerDetail(0)).toBeUndefined();
-    expect(buildStoppedBackgroundWorkerDetail(2)).toBe('2 background workers were stopped.');
   });
 
   it('builds user-stop completion and aggregate log effects', () => {
