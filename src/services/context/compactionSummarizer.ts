@@ -17,41 +17,11 @@ import {
   type StructuredSummaryMemoryHints,
 } from './compactionSummary';
 import type { CompactionSummarizerConfig } from './compactionModelResolver';
+import { readReplyText } from '../llm/support/replyText';
 
 const COMPACTION_LLM_TIMEOUT_MS = 45_000;
 const SELECTIVE_SUMMARY_MAX_TOKENS = 2_000;
 const AGGRESSIVE_SUMMARY_MAX_TOKENS = 1_200;
-
-function extractAssistantText(response: unknown): string {
-  if (typeof response === 'string') {
-    return response;
-  }
-  if (!response || typeof response !== 'object') {
-    return '';
-  }
-  const value = response as Record<string, unknown>;
-  const choiceContent = (
-    value.choices as Array<{ message?: { content?: unknown } }> | undefined
-  )?.[0]?.message?.content;
-  if (typeof choiceContent === 'string') {
-    return choiceContent;
-  }
-  if (Array.isArray(choiceContent)) {
-    return choiceContent
-      .map((part) =>
-        typeof part === 'string'
-          ? part
-          : ((part as { text?: string }).text ??
-            (part as { output_text?: string }).output_text ??
-            ''),
-      )
-      .join('');
-  }
-  if (typeof value.output_text === 'string') {
-    return value.output_text;
-  }
-  return '';
-}
 
 function buildCompactionLlmPrompt(
   messages: ReadonlyArray<Message>,
@@ -135,7 +105,7 @@ export async function buildCompactionSummary(params: {
         signal: createTimeoutSignal(COMPACTION_LLM_TIMEOUT_MS),
       },
     );
-    const normalized = normalizeLlmSummary(extractAssistantText(response));
+    const normalized = normalizeLlmSummary(readReplyText(response));
     if (!normalized) {
       return deterministic();
     }
