@@ -2,6 +2,7 @@
 // Tests - useChatStore: agent run tracking part 4
 // ---------------------------------------------------------------------------
 
+import { AMBIGUOUS_EFFECT_RESTART_ERROR } from '../../../src/services/executionJournal/toolEffectRestartProjection';
 import { useChatStore } from '../../helpers/chatStoreHarness';
 
 describe('useChatStore', () => {
@@ -128,7 +129,9 @@ describe('useChatStore', () => {
       );
     });
 
-    it('should hold in-flight tool calls for reconciliation when exact execution ownership is unavailable', () => {
+    // Without its execution owner the effect cannot be looked up, so the call is reported as
+    // possibly applied and the run settles; holding it `recovering` blocked the conversation.
+    it('settles in-flight tool calls whose exact execution ownership is unavailable', () => {
       const convId = useChatStore.getState().createConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-11',
@@ -166,20 +169,14 @@ describe('useChatStore', () => {
       const toolCall = assistantMessage.toolCalls?.[0];
       const run = conv.agentRuns?.find((candidate) => candidate.id === runId)!;
 
-      expect(conv.activeAgentRunId).toBe(runId);
-      expect(run.status).toBe('running');
-      expect(run.controlGraph?.status).toBe('recovering');
-      expect(run.latestSummary).toBe(
-        'Waiting for durable tool-effect reconciliation after app restart. No tool or model execution will be replayed.',
-      );
+      expect(conv.activeAgentRunId).toBeUndefined();
+      expect(run.status).toBe('failed');
+      expect(run.controlGraph?.status).toBe('failed');
       expect(toolCall).toEqual(
         expect.objectContaining({
-          status: 'running',
+          status: 'failed',
+          error: AMBIGUOUS_EFFECT_RESTART_ERROR,
         }),
-      );
-      expect(toolCall).not.toHaveProperty('error');
-      expect(run.checkpoints[run.checkpoints.length - 1]).toEqual(
-        expect.objectContaining({ title: 'Tool effect reconciliation pending' }),
       );
     });
   });
