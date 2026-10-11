@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
-import { resolveTurnToolSurface } from '../../engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../engine/tools/toolSurface';
 import {
   compactToolDefinitionForPrompt,
   compressToolDescription,

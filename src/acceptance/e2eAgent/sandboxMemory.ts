@@ -9,7 +9,7 @@ import { countEpisodes } from '../../services/memory/episodes/queries';
 import { countCompletedIngestionJobsForThread } from '../../services/memory/ingestionQueue';
 import { listFacts } from '../../services/memory/facts/queries';
 import type { MemoryFact } from '../../services/memory/facts/types';
-import { resolveGraphWorkingBlockScope } from '../../engine/goals/graphTaskScope';
+import { resolveGraphWorkingBlockScope } from '../../engine/graph/graphTaskScope';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import { getWorkingBlock, type WorkingBlockLabel } from '../../services/memory/workingBlocks';
 

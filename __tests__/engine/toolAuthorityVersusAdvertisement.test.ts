@@ -1,4 +1,4 @@
-import { resolveAuthorizedToolNames } from '../../src/engine/goals/toolSurfaceAuthority';
+import { resolveAuthorizedToolNames } from '../../src/engine/tools/toolSurfaceAuthority';
 import { buildUnknownToolResult } from '../../src/engine/toolExecution/unknownToolSuggestion';
 import { buildUnauthorizedToolResult } from '../../src/engine/toolExecution/unauthorizedToolResult';
 import { tools } from '../helpers/turnToolSurfaceHarness';

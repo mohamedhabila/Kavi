@@ -21,7 +21,7 @@ jest.mock('../../src/store/useChatStore', () => ({
   },
 }));
 
-jest.mock('../../src/engine/goals/graphTaskScope', () => ({
+jest.mock('../../src/engine/graph/graphTaskScope', () => ({
   resolveGraphTaskId: () => 'active-task',
 }));
 

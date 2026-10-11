@@ -1,4 +1,4 @@
-import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../src/engine/tools/toolSurface';
 import { CORE_DOMAIN_TOOLS } from '../../src/engine/tools/domains/core';
 import { tools } from '../helpers/turnToolSurfaceHarness';
 import type { ToolDefinition } from '../../src/types/tool';

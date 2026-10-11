@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { createHash } from 'crypto';
-import { resolveGraphWorkingBlockScope } from '../../engine/goals/graphTaskScope';
+import { resolveGraphWorkingBlockScope } from '../../engine/graph/graphTaskScope';
 import { readJsonFieldAtPath, structuralValuesMatch } from './jsonFieldPath';
 import type { AcceptanceFixtureOutcome } from '../acceptanceMetrics/types';
 import { estimateUsageCacheEligibleInputTokens } from './evaluateE2EAgentMetrics';

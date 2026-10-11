@@ -1,4 +1,4 @@
-import { resolveTurnToolSurface } from '../../../src/engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../../src/engine/tools/toolSurface';
 import type { ToolDefinition } from '../../../src/types/tool';
 
 const discoveryTools: ToolDefinition[] = [

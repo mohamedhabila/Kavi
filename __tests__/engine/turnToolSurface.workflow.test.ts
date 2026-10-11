@@ -1,5 +1,5 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
-import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../src/engine/tools/toolSurface';
 import { SESSION_SPAWN_TOOL } from '../../src/engine/tools/builtin-definitions-sessions';
 import { WAIT_TOOL } from '../../src/engine/tools/builtin-definitions-utility';
 import type { ToolDefinition } from '../../src/types/tool';

@@ -1,4 +1,4 @@
-import { resolveGraphTaskId } from '../../engine/goals/graphTaskScope';
+import { resolveGraphTaskId } from '../../engine/graph/graphTaskScope';
 import { useChatStore } from '../../store/useChatStore';
 import type { Conversation } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';

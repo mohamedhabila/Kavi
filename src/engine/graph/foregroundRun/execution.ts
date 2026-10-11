@@ -26,7 +26,7 @@ import {
   commitPendingVerifiedProcedureObservation,
   type PendingVerifiedProcedureObservation,
 } from '../../../services/memory/verifiedProcedure/executionSession';
-import { resolveGraphTaskId } from '../../goals/graphTaskScope';
+import { resolveGraphTaskId } from '../graphTaskScope';
 import { enforceSemanticMemoryHandoffGate } from './semanticMemoryHandoffGate';
 import { publishForegroundTerminalMemory } from './terminalMemoryPublication';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';

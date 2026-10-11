@@ -11,9 +11,9 @@ import type { ConversationMode } from '../../types/conversation';
 import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
-} from '../tools/toolWorkflowContracts';
-import { normalizeToolName } from '../tools/toolNameNormalization';
-import { UPDATE_PLAN_TOOL_NAME } from '../tools/plan-definitions';
+} from './toolWorkflowContracts';
+import { normalizeToolName } from './toolNameNormalization';
+import { UPDATE_PLAN_TOOL_NAME } from './plan-definitions';
 import { isRepeatableActivatedTool, shouldAcceptContinuationTool } from './toolSurfaceRetention';
 import { isChitchatAuthorizedTool } from './toolSurfaceAuthority';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';

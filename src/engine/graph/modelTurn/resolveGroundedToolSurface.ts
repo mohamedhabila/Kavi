@@ -2,7 +2,7 @@ import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
 import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
-import { resolveAuthorizedToolNames } from '../../goals/toolSurfaceAuthority';
+import { resolveAuthorizedToolNames } from '../../tools/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';

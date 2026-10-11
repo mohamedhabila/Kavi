@@ -1,5 +1,5 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
-import { resolveTurnToolSurface } from '../../src/engine/goals/toolSurface';
+import { resolveTurnToolSurface } from '../../src/engine/tools/toolSurface';
 import { tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
 describe('resolveDefaultGroundedRequestScopedTools', () => {

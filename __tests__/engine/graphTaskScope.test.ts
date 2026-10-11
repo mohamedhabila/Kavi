@@ -1,7 +1,7 @@
 import {
   resolveGraphTaskId,
   resolveGraphWorkingBlockScope,
-} from '../../src/engine/goals/graphTaskScope';
+} from '../../src/engine/graph/graphTaskScope';
 
 describe('graphTaskScope', () => {
   it('scopes memory work to the workstream a worker run serves', () => {

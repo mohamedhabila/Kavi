@@ -11,8 +11,8 @@
 
 import type { ToolDefinition } from '../../types/tool';
 import type { ConversationMode } from '../../types/conversation';
-import { normalizeToolName } from '../tools/toolNameNormalization';
-import { isToolAllowedForConversationMode } from '../tools/conversationModeToolAuthority';
+import { normalizeToolName } from './toolNameNormalization';
+import { isToolAllowedForConversationMode } from './conversationModeToolAuthority';
 
 /**
  * An open-world tool reaches an unbounded external surface — the whole web, an

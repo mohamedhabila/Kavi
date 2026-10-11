@@ -7,7 +7,7 @@ import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
 } from '../tools/toolWorkflowContracts';
-import { DEFAULT_CORE_TOOL_NAMES, resolveTurnToolSurface } from '../goals/toolSurface';
+import { DEFAULT_CORE_TOOL_NAMES, resolveTurnToolSurface } from '../tools/toolSurface';
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
   extractDiscoveryActivatedToolNames,

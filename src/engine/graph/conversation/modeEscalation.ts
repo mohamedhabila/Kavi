@@ -19,7 +19,7 @@
 
 import type { ConversationMode } from '../../../types/conversation';
 import type { ToolDefinition } from '../../../types/tool';
-import { isChitchatAuthorizedTool } from '../../goals/toolSurfaceAuthority';
+import { isChitchatAuthorizedTool } from '../../tools/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 
 export type ConversationModeEscalation =

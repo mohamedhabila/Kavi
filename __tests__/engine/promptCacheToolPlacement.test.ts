@@ -3,7 +3,7 @@ import {
   buildPromptCachingToolOrder,
   buildToolDeclarationDigest,
 } from '../../src/services/llm/core/toolCaching';
-import { DEFAULT_CORE_TOOL_ORDER } from '../../src/engine/goals/toolSurface';
+import { DEFAULT_CORE_TOOL_ORDER } from '../../src/engine/tools/toolSurface';
 import { compressToolDefinitions } from '../../src/engine/tools/toolManagerTokenBudget';
 import { buildAgentTurnPromptBundle } from '../../src/engine/graph/agentTurnPromptBundle';
 import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/systemPromptSections';

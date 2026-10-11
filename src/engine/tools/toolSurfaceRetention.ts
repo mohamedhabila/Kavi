@@ -7,8 +7,8 @@
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
-import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
-import { descriptorIsPassiveAsyncObserver } from '../tools/toolLifecycleSemantics';
+import { inferToolCapabilityDescriptor } from './capabilityRegistry';
+import { descriptorIsPassiveAsyncObserver } from './toolLifecycleSemantics';
 
 export function isSideEffectfulTool(tool: Pick<ToolDefinition, 'contract'> | undefined): boolean {
   const sideEffects = tool?.contract?.sideEffects ?? [];

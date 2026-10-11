@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { resolveDefaultGroundedRequestScopedTools } from '../../engine/graph/turnToolSurface';
-import { DEFAULT_CORE_TOOL_NAMES } from '../../engine/goals/toolSurface';
+import { DEFAULT_CORE_TOOL_NAMES } from '../../engine/tools/toolSurface';
 import type { AcceptanceFixtureOutcome } from './types';
 import type { SessionToolActivationFixture } from './sessionToolActivationFixtures';
 

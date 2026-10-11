@@ -1,4 +1,4 @@
-import { DEFAULT_CORE_TOOL_ORDER } from '../goals/toolSurface';
+import { DEFAULT_CORE_TOOL_ORDER } from '../tools/toolSurface';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import type { ToolDefinition } from '../../types/tool';
 

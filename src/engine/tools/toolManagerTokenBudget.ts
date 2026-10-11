@@ -1,6 +1,6 @@
 import { ToolDefinition } from '../../types/tool';
 import { estimateTokens } from '../../services/context/tokenCounter';
-import { DEFAULT_CORE_TOOL_NAMES } from '../goals/toolSurface';
+import { DEFAULT_CORE_TOOL_NAMES } from './toolSurface';
 import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
 /**

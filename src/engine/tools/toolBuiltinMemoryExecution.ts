@@ -1,7 +1,7 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useChatStore } from '../../store/useChatStore';
 import { resolveCodeOwnedMemoryPersonaId } from '../../services/memory/memoryScopeIdentity';
-import { resolveGraphTaskId } from '../goals/graphTaskScope';
+import { resolveGraphTaskId } from '../graph/graphTaskScope';
 import {
   executeMemoryForget,
   executeMemoryInvalidate,
