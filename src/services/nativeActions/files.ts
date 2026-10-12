@@ -49,7 +49,7 @@ export function resolveLocalFile(
     throw new NativeActionError(
       'file_not_found',
       `${fieldName} does not exist or is not readable.`,
-      'failed',
+      'not_found',
       { uri: normalized },
     );
   }

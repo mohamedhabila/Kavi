@@ -36,7 +36,11 @@ import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecutio
 import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
 import { useToolPermissionsStore } from '../../src/services/security/permissions';
 import type { ToolDefinition } from '../../src/types/tool';
-import { MAPS_OPEN_TOOL } from '../../src/engine/tools/native/communication/definitions';
+import {
+  MAPS_OPEN_TOOL,
+  OPEN_URL_TOOL,
+} from '../../src/engine/tools/native/communication/definitions';
+import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import {
   CAMERA_CLIP_TOOL,
   SCREEN_RECORD_TOOL,
@@ -147,6 +151,42 @@ describe('native effect settlement', () => {
         .getAllSync<{ status: string }>('SELECT status FROM execution_effects ORDER BY id')
         .map((row) => row.status),
     ).toEqual(['returned', 'returned', 'returned']);
+  });
+
+  // Traced on the GLM 5.3 Flash suite (e7f3-r1, bench-androidworld-permission-denial): asked to
+  // handle denied location access, the model opened `app-settings:`, which open_url refuses
+  // before touching the device. The refusal was reported as a failure of unknown effect, the
+  // journal required reconciliation, and the run's maps_open was blocked.
+  it('settles a refused request as not applied, so the run’s later effects still dispatch', async () => {
+    mockedExecuteToolInner.mockImplementation(async (name, argsString) =>
+      name === 'open_url'
+        ? executeNativeTool(name, argsString)
+        : completedToolOutcome(JSON.stringify({ status: 'opened', code: 'maps_opened' })),
+    );
+
+    const results = [];
+    for (const [definition, args] of [
+      [OPEN_URL_TOOL, { url: 'app-settings:' }],
+      [MAPS_OPEN_TOOL, { query: 'E2E Station' }],
+    ] as const) {
+      const result = await executeToolCallLifecycle(nativeLifecycle(definition, args));
+      if (!('toolMessage' in result)) throw new Error(`${definition.name} was deferred`);
+      results.push(result);
+    }
+
+    expect(JSON.parse(results[0]!.toolMessage.content)).toMatchObject({
+      status: 'invalid_request',
+      code: 'disallowed_url_scheme',
+    });
+    expect(results.map((result) => result.effectReconciliationRequired)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(mockedExecuteToolInner).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(results[1]!.toolMessage.content)).toEqual({
+      status: 'opened',
+      code: 'maps_opened',
+    });
   });
 
   // Traced on the GLM 5.3 Flash suite (bench-androidworld-clipboard-share-notify, f6687f45):

@@ -113,12 +113,23 @@ export interface OpenUrlArgs {
   url: string;
 }
 
+/**
+ * A native action refused before it touched the device. Its status defaults to
+ * `invalid_request`: nothing happened, so the call's effect is settled as not applied. An
+ * unexpected throw from the platform is not one of these; it reaches the caller as a
+ * `failed` result whose effect is unknown.
+ */
 export class NativeActionError extends Error {
   readonly code: string;
   readonly status: string;
   readonly details?: Record<string, unknown>;
 
-  constructor(code: string, message: string, status = 'failed', details?: Record<string, unknown>) {
+  constructor(
+    code: string,
+    message: string,
+    status = 'invalid_request',
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'NativeActionError';
     this.code = code;

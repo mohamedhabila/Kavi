@@ -116,7 +116,7 @@ export function normalizeUrlWithAllowlist(
     throw new NativeActionError(
       'disallowed_url_scheme',
       `URL scheme "${scheme}" is not allowed for this action.`,
-      'failed',
+      'invalid_request',
       { scheme },
     );
   }
