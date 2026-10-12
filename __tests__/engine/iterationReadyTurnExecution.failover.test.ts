@@ -80,7 +80,7 @@ function buildParams() {
   const runtime = {
     activeModel: primaryProvider.model,
     activeProvider: primaryProvider,
-    admittedMemoryContext: { livingMemory: null },
+    memory: { status: 'off', policyEpoch: 0 },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
     llm: {} as never,

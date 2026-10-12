@@ -35,7 +35,6 @@ describe('orchestrator request decision integration', () => {
       model: 'gpt-5.4',
       conversationId: 'conv-request-wait-resume',
       personaId: 'super-agent',
-      taskId: null,
       systemPrompt: 'You are helpful',
       messages: [
         {

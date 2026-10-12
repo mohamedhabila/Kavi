@@ -60,7 +60,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     lastPendingAsyncSignature: params.runtime.lastPendingAsyncSignature,
     contextWindow: params.contextWindow,
     compactionEngine: params.iterationParams.compactionEngine,
-    livingMemory: params.runtime.admittedMemoryContext.livingMemory,
     onCompaction: params.iterationParams.onCompaction,
     warn: params.iterationParams.warn,
     yieldToUiFrame: params.iterationParams.yieldToUiFrame,

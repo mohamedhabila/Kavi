@@ -674,7 +674,7 @@ describe('initializeServices', () => {
     const hookCallback = mockLoadHooksFromDirectory.mock.calls[0][0];
     const executionSignal = new AbortController();
     mockRunOrchestrator.mockImplementationOnce(async (options) => {
-      expect(options).toMatchObject({ taskId: 'attempt-1', agentRunId: 'attempt-1' });
+      expect(options).toMatchObject({ agentRunId: 'attempt-1' });
       executionSignal.abort(new Error('background'));
       expect(options.signal.signal.aborted).toBe(true);
       return { terminalDisposition: 'cancelled' as const };

@@ -25,7 +25,6 @@ import {
   type IngestionJob,
   type IngestionProviderOutcome,
 } from '../../../src/services/memory/ingestionQueueStore';
-import { waitForNextTurnMemoryConsistency } from '../../../src/services/memory/nextTurnConsistency';
 import {
   ensureFactSchema,
   resetFactSchemaCacheForTests,
@@ -347,21 +346,6 @@ describe('slow provider structural consistency', () => {
       }),
     ]);
 
-    const wait = jest.fn(async () => undefined);
-    await expect(
-      waitForNextTurnMemoryConsistency({
-        memoryConversationId: job.memoryConversationId,
-        sourceThreadId: job.threadId,
-        sourceEndMessageId: job.sourceEndMessageId,
-        clock: { now: () => 100, wait },
-      }),
-    ).resolves.toMatchObject({
-      outcome: 'completed',
-      waitedMs: 0,
-      finalJobStatus: 'processing',
-    });
-    expect(wait).not.toHaveBeenCalled();
-
     provider.resolve(providerPayload('stable'));
     const result = await processing;
     expect(result).toMatchObject({ processed: true, enriched: true });
@@ -434,16 +418,6 @@ describe('slow provider structural consistency', () => {
     expect(listIngestionStructuralCheckpointReceipts(job.id)).toEqual([receiptBeforeInterruption]);
     expect(scopedFacts(job).some((fact) => fact.predicate === 'file_operation')).toBe(true);
     expect(listEpisodes({ conversationId: job.memoryConversationId })).toHaveLength(1);
-    const wait = jest.fn(async () => undefined);
-    await expect(
-      waitForNextTurnMemoryConsistency({
-        memoryConversationId: job.memoryConversationId,
-        sourceThreadId: job.threadId,
-        sourceEndMessageId: job.sourceEndMessageId,
-        clock: { now: () => 101, wait },
-      }),
-    ).resolves.toMatchObject({ outcome: 'completed', waitedMs: 0 });
-    expect(wait).not.toHaveBeenCalled();
   });
 
   it('reconciles a checkpoint gap on retry without duplicate memory or a stale-owner receipt', async () => {
@@ -488,14 +462,6 @@ describe('slow provider structural consistency', () => {
     });
     const retrying = getIngestionJob(job.id)!;
     expect(retrying).toMatchObject({ status: 'retrying', structuralCompletedAt: 100 });
-    await expect(
-      waitForNextTurnMemoryConsistency({
-        memoryConversationId: job.memoryConversationId,
-        sourceThreadId: job.threadId,
-        sourceEndMessageId: job.sourceEndMessageId,
-        clock: { now: () => staleAt, wait: async () => undefined },
-      }),
-    ).resolves.toMatchObject({ outcome: 'completed', finalJobStatus: 'retrying' });
 
     const retryAt = retrying.nextAttemptAt!;
     const secondClaim = claimIngestionJob(job.id, retryAt)!;

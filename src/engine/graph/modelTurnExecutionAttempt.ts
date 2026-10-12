@@ -121,7 +121,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     enrichedSystemPrompt: params.preparedTurn.enrichedSystemPrompt,
     enrichedSystemPromptSections: params.preparedTurn.enrichedSystemPromptSections,
     iteration: params.iteration,
-    livingMemory: params.livingMemory,
+    memorySectionText: params.memorySectionText,
     onCompaction: stageCompaction,
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,

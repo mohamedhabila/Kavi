@@ -38,6 +38,10 @@ const bannedFiles = [
   'src/services/memory/verifiedToolEffectExperienceLearning.ts',
   'src/services/memory/verifiedProcedure/executionSession.ts',
   'src/services/memory/verifiedProcedure/observationStore.ts',
+  'src/services/memory/livingMemoryBridge.ts',
+  'src/services/memory/nextTurnConsistency.ts',
+  'src/services/memory/promptAssembly.ts',
+  'src/services/memory/promptAssemblyRetrievalEvent.ts',
 ];
 
 const bannedPatterns = [

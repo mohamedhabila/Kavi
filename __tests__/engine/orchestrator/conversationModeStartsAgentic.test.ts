@@ -10,7 +10,6 @@
 import {
   runOrchestrator,
   executeTool,
-  memoryAccessGateway,
   mockStreamMessage,
   makeProvider,
   makeCallbacks,
@@ -21,37 +20,7 @@ import {
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
-/**
- * The real gateway hits durable memory subsystems this harness does not set up;
- * stub a well-formed success so only the `mode` argument under test matters.
- */
-function mockMemoryAccessSuccess(): jest.SpyInstance {
-  return jest
-    .spyOn(memoryAccessGateway, 'buildUnifiedMemoryAccessContext')
-    .mockImplementation(async (params: any) => ({
-      boundary: {
-        startIndex: 0,
-        reason: 'full_history',
-        similarityScore: 1,
-        idleGapMs: 0,
-        droppedMessageCount: 0,
-      },
-      scopedMessages: params.messages,
-      livingMemory: null,
-      consistencyBarrier: {
-        outcome: 'no_job',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 0,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-    }));
-}
-
-describe('Orchestrator conversation mode drives tool surface and memory access', () => {
+describe('Orchestrator conversation mode drives the tool surface', () => {
   beforeEach(() => {
     useChatStore.setState({
       conversations: [],
@@ -64,15 +33,13 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
     useSettingsStore.setState({ developerModeEnabled: false });
   });
 
-  it('gives a non-SuperAgent persona in an agentic conversation the agentic tool baseline and agentic memory access', async () => {
+  it('gives a non-SuperAgent persona in an agentic conversation the agentic tool baseline', async () => {
     const conversationId = useChatStore
       .getState()
       .createConversation('openai', 'You are helpful', undefined, {
         personaId: 'default',
         mode: 'agentic',
       });
-
-    const memoryAccessSpy = mockMemoryAccessSuccess();
 
     mockStreamMessage.mockImplementationOnce(() =>
       createStreamGenerator(
@@ -104,10 +71,9 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
       (tool: any) => tool.name,
     );
     expect(advertisedToolNames).toContain('sessions_spawn');
-    expect(memoryAccessSpy).toHaveBeenCalledWith(expect.objectContaining({ mode: 'agentic' }));
   });
 
-  it('gives a SuperAgent persona in a chitchat conversation the chitchat tool baseline and chat memory access', async () => {
+  it('gives a SuperAgent persona in a chitchat conversation the chitchat tool baseline', async () => {
     (getPersona as jest.Mock).mockImplementation((personaId: string) =>
       personaId === 'super-agent'
         ? {
@@ -124,8 +90,6 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
         personaId: 'super-agent',
         mode: 'chitchat',
       });
-
-    const memoryAccessSpy = mockMemoryAccessSuccess();
 
     mockStreamMessage.mockImplementationOnce(() =>
       createStreamGenerator(
@@ -155,7 +119,6 @@ describe('Orchestrator conversation mode drives tool surface and memory access',
       (tool: any) => tool.name,
     );
     expect(advertisedToolNames).not.toContain('sessions_spawn');
-    expect(memoryAccessSpy).toHaveBeenCalledWith(expect.objectContaining({ mode: 'chat' }));
   });
 
   it('dispatches the first mobile_ui_action call of a run', async () => {

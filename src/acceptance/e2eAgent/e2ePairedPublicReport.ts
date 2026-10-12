@@ -134,7 +134,7 @@ const PRODUCTION_CONDITIONS = new Set<E2EPairedCondition>([
   'forced_chitchat',
   'forced_agentic',
 ]);
-const MEMORY_CONTROL_CONDITIONS = new Set<E2EPairedCondition>(['memory_off', 'lexical_baseline']);
+const MEMORY_CONTROL_CONDITIONS = new Set<E2EPairedCondition>(['memory_off']);
 const DIAGNOSTIC_CONDITIONS = new Set<E2EPairedCondition>(['diagnostic_full_context']);
 
 function safeRate(numerator: number, denominator: number): number {
@@ -328,21 +328,12 @@ function hasCandidateStrategyCoverage(
 
 function hasExpectedMemoryControlRetrieval(condition: CompletedPublicCondition): boolean {
   const { retrieval, userTurnCount } = condition.metrics;
-  if (condition.condition === 'memory_off') {
-    return (
-      hasCompleteRetrievalTurnCoverage(condition) &&
-      retrieval.turnStatusCounts.optOut === userTurnCount &&
-      retrieval.turnStatusCounts.recorded === 0 &&
-      retrieval.eventCount === 0
-    );
-  }
   return (
-    condition.condition === 'lexical_baseline' &&
-    hasCompleteEnabledRetrieval(condition) &&
-    hasCandidateStrategyCoverage(condition, 'lexical') &&
-    retrieval.selectorCounts.notRequested === retrieval.eventCount &&
-    retrieval.selectorCounts.applied === 0 &&
-    retrieval.selectorCounts.deterministicFallback === 0
+    condition.condition === 'memory_off' &&
+    hasCompleteRetrievalTurnCoverage(condition) &&
+    retrieval.turnStatusCounts.optOut === userTurnCount &&
+    retrieval.turnStatusCounts.recorded === 0 &&
+    retrieval.eventCount === 0
   );
 }
 
@@ -376,10 +367,7 @@ function buildMemoryPairedObservation(
     !hasCompleteEnabledRetrieval(product) ||
     !hasCandidateStrategyCoverage(product, 'hybrid') ||
     (product.metrics.retrieval.selectedFactCount === 0 &&
-      product.metrics.retrieval.selectedEpisodeCount === 0) ||
-    (control.condition === 'lexical_baseline' &&
-      (product.metrics.retrieval.selectorCounts.applied === 0 ||
-        product.metrics.retrieval.selectorCounts.deterministicFallback !== 0));
+      product.metrics.retrieval.selectedEpisodeCount === 0);
   if (instrumentationInvalid) {
     return {
       status: 'invalid_instrumentation',

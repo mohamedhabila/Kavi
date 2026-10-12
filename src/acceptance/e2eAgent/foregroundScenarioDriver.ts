@@ -252,8 +252,6 @@ async function runScenarioIsolated(
         maxTokens: turn.maxTokens ?? input.maxTokens,
         disableTools: input.disableTools,
         ...(allowedToolNames ? { allowedToolNames } : {}),
-        memoryRetrievalStrategy: input.memoryRetrievalStrategy,
-        memoryContextStrategy: input.memoryContextStrategy,
         enableCompaction: input.enableCompaction,
       };
       // A mid-run message goes through the same composer path, so it steers the run.

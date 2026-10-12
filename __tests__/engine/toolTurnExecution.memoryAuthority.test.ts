@@ -121,7 +121,6 @@ function createParams(
     lastPendingAsyncSignature: '',
     contextWindow: 24000,
     compactionEngine: null,
-    livingMemory: null,
     onCompaction: undefined,
     warn: jest.fn(),
     yieldToUiFrame: jest.fn().mockResolvedValue(undefined),

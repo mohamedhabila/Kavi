@@ -35,13 +35,9 @@ describe('graphObservability', () => {
       }),
     ).toBe('count:2,tokens:1200,tools:read_file,web_search');
 
-    expect(
-      buildMemoryRetrievalObservabilityDetail({
-        factCount: 3,
-        episodeCount: 1,
-        sectionCount: 2,
-      }),
-    ).toBe('facts:3,episodes:1,sections:2');
+    expect(buildMemoryRetrievalObservabilityDetail({ itemCount: 3, turnCount: 1 })).toBe(
+      'items:3,turns:1',
+    );
 
     expect(
       buildToolSurfaceTokenAuditDetail({

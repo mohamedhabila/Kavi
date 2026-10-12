@@ -135,7 +135,6 @@ const DEFAULT_CONFIG = {
     'docs/formal/MemoryCapture.cfg',
     'docs/formal/MemoryCapture.tla',
     'docs/formal/README.md',
-    'docs/memory-hybrid-retrieval.md',
     'docs/privacy-and-permissions.md',
     'docs/user-guide.md',
     'docs/privacy-policy.md',

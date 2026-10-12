@@ -53,11 +53,6 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
       effectiveForceTextReasonThisTurn: undefined,
       hasPendingAsyncOperations: false,
       iteration: 1,
-      livingMemory: {
-        cacheableSignature: 'cacheable-signature',
-        cacheableProfileSections: [{ title: 'Profile', content: 'Stable profile facts.' }],
-        dynamicContext: 'Recent memory context.',
-      },
       llm: { streamMessage, sendMessage: jest.fn() },
       onCompaction: undefined,
       preparedTurn: {
@@ -146,7 +141,6 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
       effectiveForceTextReasonThisTurn: undefined,
       hasPendingAsyncOperations: false,
       iteration: 1,
-      livingMemory: undefined,
       llm: { streamMessage, sendMessage: jest.fn() },
       onCompaction: undefined,
       preparedTurn: {
@@ -204,7 +198,6 @@ describe('executeAgentControlGraphModelTurnAttempt replay retries', () => {
         effectiveForceTextReasonThisTurn: undefined,
         hasPendingAsyncOperations: false,
         iteration: 1,
-        livingMemory: undefined,
         llm: { streamMessage, sendMessage },
         onCompaction: undefined,
         preparedTurn: {

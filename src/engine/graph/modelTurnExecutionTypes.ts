@@ -1,4 +1,3 @@
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type {
   AssistantCompletionMetadata,
   Message,
@@ -47,7 +46,8 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   /** True only for a foreground interactive run; selects the tighter inactivity timeout. */
   isForegroundRun?: boolean;
   iteration: number;
-  livingMemory?: LivingMemoryBridgeOutput | null;
+  /** The memory section in this turn's prompt, for the request budget audit. */
+  memorySectionText?: string;
   llm: {
     sendMessage: (
       messages: Array<{ role: string; content: any }>,

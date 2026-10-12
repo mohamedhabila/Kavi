@@ -13,10 +13,6 @@ import type {
   ForegroundScenarioMemoryItemsState,
   ForegroundScenarioMemoryPromptEvidence,
 } from './foregroundScenarioMemoryItemsEvidence';
-import type {
-  MemoryContextStrategy,
-  MemoryRetrievalStrategy,
-} from '../../services/memory/memoryAccessPolicy';
 
 export type ForegroundScenarioRouteDirective =
   | 'production_auto'
@@ -97,8 +93,6 @@ export type ForegroundScenarioDriverInput = {
     conversationId: string;
     workspaceConversationId: string;
   }) => Promise<void> | void;
-  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
-  memoryContextStrategy?: MemoryContextStrategy;
   enableCompaction?: boolean;
 };
 

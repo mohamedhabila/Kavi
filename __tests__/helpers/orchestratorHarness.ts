@@ -83,17 +83,8 @@ jest.mock('../../src/services/skills/manager', () => ({
   getSkillSystemPrompts: jest.fn().mockResolvedValue(''),
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
 }));
-jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
-  buildLivingMemorySections: jest.fn().mockResolvedValue({
-    memoryReadEpoch: 0,
-    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
-    sections: [],
-    cacheableSignature: '00000000',
-    focusBlockText: '',
-    openThreadLabels: [],
-    recalledFactCount: 0,
-    recalledEpisodeCount: 0,
-  }),
+jest.mock('../../src/services/memory/core/memoryPrompt', () => ({
+  prepareMemoryPromptSection: jest.fn(() => null),
 }));
 jest.mock('../../src/services/memory/memoryAuthority', () => {
   const actual = jest.requireActual('../../src/services/memory/memoryAuthority');
@@ -143,10 +134,9 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
 import { LlmService } from '../../src/services/llm/LlmService';
 import { executeTool } from '../../src/engine/tools/index';
 import { getSkillSystemPrompts, getSkillToolDefinitions } from '../../src/services/skills/manager';
-import { buildLivingMemorySections } from '../../src/services/memory/livingMemoryBridge';
+import { prepareMemoryPromptSection } from '../../src/services/memory/core/memoryPrompt';
 import { getProviderApiKey } from '../../src/services/storage/SecureStorage';
 import { getPersona } from '../../src/services/agents/registry';
-import * as memoryAccessGateway from '../../src/services/memory/memoryAccessGateway';
 import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 
 const legacyFileSystem = jest.requireMock('expo-file-system/legacy') as {
@@ -407,17 +397,8 @@ beforeEach(() => {
     streamMessage: mockStreamMessage,
     sendMessage: mockSendMessage,
   }));
-  (buildLivingMemorySections as jest.Mock).mockReset();
-  (buildLivingMemorySections as jest.Mock).mockResolvedValue({
-    memoryReadEpoch: 0,
-    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
-    sections: [],
-    cacheableSignature: '00000000',
-    focusBlockText: '',
-    openThreadLabels: [],
-    recalledFactCount: 0,
-    recalledEpisodeCount: 0,
-  });
+  (prepareMemoryPromptSection as jest.Mock).mockReset();
+  (prepareMemoryPromptSection as jest.Mock).mockReturnValue(null);
   (getSkillSystemPrompts as jest.Mock).mockReset();
   (getSkillSystemPrompts as jest.Mock).mockResolvedValue('');
   (getSkillToolDefinitions as jest.Mock).mockReset();
@@ -443,10 +424,9 @@ export {
   executeTool,
   getSkillSystemPrompts,
   getSkillToolDefinitions,
-  buildLivingMemorySections,
+  prepareMemoryPromptSection,
   getProviderApiKey,
   getPersona,
-  memoryAccessGateway,
   legacyFileSystem,
   mockStreamMessage,
   mockSendMessage,

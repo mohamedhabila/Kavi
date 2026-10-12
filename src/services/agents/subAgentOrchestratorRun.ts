@@ -56,7 +56,6 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;
   explicitToolSelectionRejectedMessage?: string;
-  taskId?: string;
   subAgent: TAgent;
   config: SubAgentConfig;
   runtimeState: SubAgentExecutionRuntimeState;
@@ -135,7 +134,6 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
       conversationId: params.sessionId,
       memoryConversationId: params.sessionId,
       personaId: SUPER_AGENT_PERSONA_ID,
-      taskId: params.taskId ?? null,
       executionRunId: params.sessionId,
       usageConversationId: params.usageConversationId,
       workspaceConversationId: params.workspaceConversationId,

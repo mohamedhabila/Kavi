@@ -114,7 +114,6 @@ export async function runBootOnce(
           model: bootModel,
           conversationId: sessionId,
           personaId: SUPER_AGENT_PERSONA_ID,
-          taskId: null,
           executionRunId: sessionId,
           systemPrompt:
             'You are executing startup instructions from BOOT.md. ' +

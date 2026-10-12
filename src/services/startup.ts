@@ -158,7 +158,6 @@ async function registerStartupHooks(): Promise<void> {
           personaId: resolveConversationPersonaForMode({
             nextMode: settings.defaultConversationMode,
           }),
-          taskId: agentRunId ?? null,
           executionRunId: hookExecutionRunId,
           agentRunId,
           systemPrompt:

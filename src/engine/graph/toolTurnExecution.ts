@@ -1,4 +1,3 @@
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type {
   AssistantCompletionMetadata,
@@ -136,7 +135,6 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   lastPendingAsyncSignature: string;
   contextWindow: number;
   compactionEngine: AgentTurnCompactionEngine;
-  livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   warn: (message: string, error: unknown) => void;
   yieldToUiFrame: () => Promise<void>;
@@ -423,7 +421,6 @@ export async function executeAgentControlGraphToolTurn(
     conversationId: params.conversationId,
     currentUserMessage: params.currentUserMessage,
     compactionEngine: params.compactionEngine,
-    livingMemory: params.livingMemory,
     onCompaction: params.onCompaction,
     requestFamily: resolveProviderFamily(params.activeProvider),
     warn: params.warn,

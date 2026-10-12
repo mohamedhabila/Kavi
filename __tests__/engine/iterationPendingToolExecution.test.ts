@@ -42,7 +42,6 @@ function createParams(overrides: Record<string, unknown> = {}) {
         workspaceReadFallbackConversationId: undefined,
       },
       compactionEngine: null,
-      livingMemory: null,
       onCompaction: undefined,
       warn: jest.fn(),
       yieldToUiFrame: jest.fn(),
@@ -68,7 +67,7 @@ function createParams(overrides: Record<string, unknown> = {}) {
       },
     },
     runtime: {
-      admittedMemoryContext: { livingMemory: null },
+      memory: { status: 'off', policyEpoch: 0 },
       consecutivePendingAsyncNoToolTurns: 0,
       activeProvider: { id: 'provider-1' },
       activeModel: 'gemini-3.5-flash',

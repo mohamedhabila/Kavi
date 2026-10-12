@@ -3,8 +3,10 @@ import {
   runMediaUnderstanding,
   type MediaUnderstandingDocumentRefusal,
 } from '../services/media/service';
-import { type LivingMemoryBridgeOutput } from '../services/memory/livingMemoryBridge';
-import { buildUnifiedMemoryAccessContext } from '../services/memory/memoryAccessGateway';
+import {
+  readSessionMemory,
+  type SessionMemoryRead,
+} from '../services/memory/memoryAccessGateway';
 import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
 import type { RequestContinuation, RequestFrame } from '../services/agents/requestFrame';
 import { getSkillSystemPrompts } from '../services/skills/manager';
@@ -12,13 +14,6 @@ import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
 import type { Attachment } from '../types/attachment';
 import type { Message } from '../types/message';
-import {
-  resolveMemoryContextStrategy,
-  resolveMemoryRetrievalStrategy,
-  type MemoryContextStrategy,
-  type MemoryRetrievalStrategy,
-} from '../services/memory/memoryAccessPolicy';
-import { buildScopedFallbackMemoryAccessContext } from './orchestratorContext';
 import { prepareAgentControlGraphRequestContext } from './graph/requestContext';
 import {
   getUserMessagePromptContent,
@@ -26,7 +21,7 @@ import {
 } from './prompts/orchestratorPromptSections';
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
 import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
-import { isMemoryReadEpochCurrent } from '../services/memory/policy';
+import { getMemoryPolicyEpoch } from '../services/memory/policy';
 import {
   captureSessionInternalUserMessages,
   rebuildSessionMemoryRefreshMessages,
@@ -93,20 +88,10 @@ function applyDocumentInputRefusals(
 }
 
 export type OrchestratorMemoryAccessInput = Readonly<{
-  activeModel: string;
-  activeProvider: LlmProviderConfig;
-  asyncWork?: AgentRunControlGraphState['asyncWork'];
   internalUserMessageCount: number;
-  /** Whether this conversation starts in agentic mode; see resolveConversationStartsAgentic. */
-  startsAgentic: boolean;
   logger: LoggerLike;
-  memoryContextStrategy?: MemoryContextStrategy;
   memoryConversationId: string;
-  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
   messages: Message[];
-  personaId: string;
-  sourceThreadId: string;
-  taskId: string | null;
 }>;
 
 function resolveRequestContinuation(
@@ -211,54 +196,32 @@ async function enrichLatestUserMessageForRequest(params: {
   };
 }
 
-export async function loadOrchestratorMemoryAccessContext(
-  params: OrchestratorMemoryAccessInput,
-): Promise<Awaited<ReturnType<typeof buildUnifiedMemoryAccessContext>>> {
-  const memoryRetrievalStrategy = resolveMemoryRetrievalStrategy(params.memoryRetrievalStrategy);
-  const memoryContextStrategy = resolveMemoryContextStrategy(params.memoryContextStrategy);
+/**
+ * The request's messages without trailing internal user messages, and what it read from
+ * memory for them. A memory read that fails leaves the request without memory, never
+ * without an answer.
+ */
+export function loadOrchestratorMemoryAccessContext(params: OrchestratorMemoryAccessInput): {
+  scopedMessages: Message[];
+  memory: SessionMemoryRead;
+} {
+  const scopedMessages = excludeTrailingInternalUserMessages(
+    params.messages,
+    params.internalUserMessageCount,
+  );
   try {
-    return await buildUnifiedMemoryAccessContext({
-      messages: params.messages,
-      memoryConversationId: params.memoryConversationId,
-      sourceThreadId: params.sourceThreadId,
-      personaId: params.personaId,
-      taskId: params.taskId,
-      mode: params.startsAgentic ? 'agentic' : 'chat',
-      internalUserMessageCount: params.internalUserMessageCount,
-      ...(params.taskId ? { activeTaskId: params.taskId } : {}),
-      ...(params.asyncWork ? { asyncWork: params.asyncWork } : {}),
-      retrievalLlm: {
-        provider: params.activeProvider,
-        model: params.activeModel,
-      },
-      retrievalStrategy: memoryRetrievalStrategy,
-      contextStrategy: memoryContextStrategy,
-    });
-  } catch (memoryAccessError: unknown) {
-    if (memoryRetrievalStrategy !== 'production' || memoryContextStrategy !== 'production') {
-      throw memoryAccessError;
-    }
+    return {
+      scopedMessages,
+      memory: readSessionMemory(params.memoryConversationId, scopedMessages),
+    };
+  } catch (memoryReadError: unknown) {
     params.logger.devWarn(
-      'Unified memory access unavailable for this request:',
-      memoryAccessError instanceof Error ? memoryAccessError.message : String(memoryAccessError),
+      'Memory unavailable for this request:',
+      memoryReadError instanceof Error ? memoryReadError.message : String(memoryReadError),
     );
     return {
-      ...buildScopedFallbackMemoryAccessContext({
-        messages: params.messages,
-        personaId: params.personaId,
-        mode: params.startsAgentic ? 'agentic' : 'chat',
-        internalUserMessageCount: params.internalUserMessageCount,
-      }),
-      consistencyBarrier: {
-        outcome: 'degraded',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 0,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
+      scopedMessages,
+      memory: { status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() },
     };
   }
 }
@@ -276,25 +239,17 @@ export async function prepareOrchestratorRequestBundle(params: {
   maxLinks: number;
   mediaUnderstandingEnabled: boolean;
   messages: Message[];
-  personaId: string;
-  taskId: string | null;
   workflowScopeUserMessageId?: string;
   graphSnapshot?: AgentRunControlGraphState;
-  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
-  memoryContextStrategy?: MemoryContextStrategy;
 }): Promise<{
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   latestUserMessageText: string;
-  livingMemory: LivingMemoryBridgeOutput | null;
-  memoryConsistencyBarrier: Awaited<
-    ReturnType<typeof buildUnifiedMemoryAccessContext>
-  >['consistencyBarrier'];
+  memory: SessionMemoryRead;
   memoryRefreshInternalUserMessages: ReadonlyArray<Message>;
   requestFrame: RequestFrame;
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
 }> {
-  const graphActiveTaskId = params.graphSnapshot?.activeTaskId ?? params.taskId;
   const enrichedRequest = await enrichLatestUserMessageForRequest({
     activeModel: params.activeModel,
     activeProvider: params.activeProvider,
@@ -308,36 +263,12 @@ export async function prepareOrchestratorRequestBundle(params: {
     enrichedRequest.messages,
     params.internalUserMessageCount,
   );
-  const memoryAccessContext = await loadOrchestratorMemoryAccessContext({
-    activeModel: params.activeModel,
-    activeProvider: params.activeProvider,
-    ...(params.graphSnapshot?.asyncWork ? { asyncWork: params.graphSnapshot.asyncWork } : {}),
+  const memoryAccessContext = loadOrchestratorMemoryAccessContext({
     internalUserMessageCount: params.internalUserMessageCount,
-    // `graphOwnedRun` already carries "does this conversation start agentic"
-    // (resolved once in bootstrap.ts); memory access follows the same signal
-    // rather than re-deriving it from a persona flag.
-    startsAgentic: params.graphOwnedRun,
     logger: params.logger,
-    memoryContextStrategy: params.memoryContextStrategy,
     memoryConversationId: params.memoryConversationId,
-    memoryRetrievalStrategy: params.memoryRetrievalStrategy,
     messages: enrichedRequest.messages,
-    personaId: params.personaId,
-    sourceThreadId: params.conversationId,
-    taskId: graphActiveTaskId ?? null,
   });
-
-  if (memoryAccessContext.boundary.startIndex > 0) {
-    params.logger.devLog(
-      'Scoped context boundary:',
-      JSON.stringify({
-        startIndex: memoryAccessContext.boundary.startIndex,
-        reason: memoryAccessContext.boundary.reason,
-        idleGapMs: memoryAccessContext.boundary.idleGapMs,
-        droppedMessages: memoryAccessContext.boundary.droppedMessageCount,
-      }),
-    );
-  }
 
   const requestContext = prepareAgentControlGraphRequestContext({
     memoryScopedMessages: memoryAccessContext.scopedMessages,
@@ -353,14 +284,6 @@ export async function prepareOrchestratorRequestBundle(params: {
   }
 
   const skillPrompts = await getSkillSystemPrompts(params.conversationId);
-  const livingMemoryEpoch = memoryAccessContext.livingMemory?.memoryReadEpoch;
-  const memoryReadStillCurrent =
-    memoryAccessContext.livingMemory === null ||
-    (livingMemoryEpoch !== undefined && isMemoryReadEpochCurrent(livingMemoryEpoch));
-  const livingMemory = memoryReadStillCurrent ? memoryAccessContext.livingMemory : null;
-  const memoryConsistencyBarrier = memoryReadStillCurrent
-    ? memoryAccessContext.consistencyBarrier
-    : { ...memoryAccessContext.consistencyBarrier, outcome: 'opt_out' as const };
 
   let workingMessages = repairModelVisibleToolResultTranscript(
     requestContext.graphOwnedModelContextMessages.map((message) => {
@@ -420,8 +343,7 @@ export async function prepareOrchestratorRequestBundle(params: {
         }
       : {}),
     latestUserMessageText: requestContext.lastUserMessageText,
-    livingMemory,
-    memoryConsistencyBarrier,
+    memory: memoryAccessContext.memory,
     memoryRefreshInternalUserMessages,
     requestFrame: requestContext.requestFrame,
     skillPrompts,

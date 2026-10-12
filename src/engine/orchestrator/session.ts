@@ -22,7 +22,6 @@ import { persistConversationModeEscalation } from '../graph/conversation/persist
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
-import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
@@ -76,7 +75,6 @@ export async function runOrchestratorGraphSession(params: {
     allProviders,
   } = options;
   const personaId = resolveCodeOwnedMemoryPersonaId(options.personaId);
-  const taskId = options.taskId ?? null;
 
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
   const explicitToolSurfaceToolNames = resolveRuntimeExplicitToolSurfaceToolNames(
@@ -122,8 +120,7 @@ export async function runOrchestratorGraphSession(params: {
 
   const {
     currentUserMessage,
-    livingMemory,
-    memoryConsistencyBarrier,
+    memory,
     memoryRefreshInternalUserMessages,
     requestFrame: structuralRequestFrame,
     skillPrompts,
@@ -147,12 +144,8 @@ export async function runOrchestratorGraphSession(params: {
     mediaUnderstandingEnabled,
     memoryConversationId: sharedConversationId,
     messages: options.messages,
-    personaId,
-    taskId,
     workflowScopeUserMessageId: options.workflowScopeUserMessageId,
     graphSnapshot: options.initialAgentControlGraphState,
-    memoryRetrievalStrategy: options.memoryRetrievalStrategy,
-    memoryContextStrategy: options.memoryContextStrategy,
   });
   callbacks.onTurnLatencyMark?.('request_context_prepared');
   const requestFrame = resolveGraphEntryRequestDecision({
@@ -162,10 +155,6 @@ export async function runOrchestratorGraphSession(params: {
       availableToolNames,
       personaId,
     }),
-  });
-  const admittedMemoryContext = admitSessionMemoryContext({
-    consistencyBarrier: memoryConsistencyBarrier,
-    livingMemory,
   });
   const graphCallbacks = {
     ...callbacks,
@@ -235,7 +224,7 @@ export async function runOrchestratorGraphSession(params: {
       initialRuntime: {
         activeModel,
         activeProvider,
-        admittedMemoryContext,
+        memory,
         consecutivePendingAsyncNoToolTurns,
         lastPendingAsyncSignature,
         lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
@@ -264,32 +253,16 @@ export async function runOrchestratorGraphSession(params: {
         recordUsage(usageConversationId, usage);
       },
       requestFrame,
-      refreshSessionMemoryContext: async (refreshInput) => {
-        const graphSnapshot = refreshInput.graphSnapshot;
-        const activeTaskId = graphSnapshot.activeTaskId ?? taskId;
-        const refreshedMemory = await loadOrchestratorMemoryAccessContext({
-          activeModel: refreshInput.activeModel,
-          activeProvider: refreshInput.activeProvider,
-          asyncWork: graphSnapshot.asyncWork,
+      refreshSessionMemory: (workingMessages) =>
+        loadOrchestratorMemoryAccessContext({
           internalUserMessageCount: memoryRefreshInternalUserMessages.length,
-          startsAgentic,
           logger,
-          memoryContextStrategy: options.memoryContextStrategy,
           memoryConversationId: sharedConversationId,
-          memoryRetrievalStrategy: options.memoryRetrievalStrategy,
           messages: rebuildSessionMemoryRefreshMessages({
             internalUserMessages: memoryRefreshInternalUserMessages,
-            workingMessages: refreshInput.workingMessages,
+            workingMessages,
           }),
-          personaId,
-          sourceThreadId: conversationId,
-          taskId: activeTaskId ?? null,
-        });
-        return {
-          consistencyBarrier: refreshedMemory.consistencyBarrier,
-          livingMemory: refreshedMemory.livingMemory,
-        };
-      },
+        }).memory,
       signal,
       temperature: persona?.temperature ?? temperature,
       thinkingLevel,

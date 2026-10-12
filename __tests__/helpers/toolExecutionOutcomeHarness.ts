@@ -84,7 +84,6 @@ export function buildBaseParams() {
     conversationId: 'conv-test',
     currentUserMessage: { id: 'user-test', text: 'Test request' },
     compactionEngine: null,
-    livingMemory: null,
     onCompaction: undefined,
     warn: jest.fn(),
     publishMobileControllerHandoff: jest.fn().mockResolvedValue(undefined),

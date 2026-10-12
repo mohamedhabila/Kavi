@@ -177,8 +177,6 @@ function buildConditionRunOptions(
       ? { routeOverride: conditionPlan.conditionConfig.routeOverride }
       : {}),
     disableLongTermMemory: conditionPlan.conditionConfig.memoryMode === 'off',
-    memoryRetrievalStrategy: conditionPlan.conditionConfig.retrievalMode,
-    memoryContextStrategy: conditionPlan.conditionConfig.contextMode,
     enableCompaction: conditionPlan.conditionConfig.contextMode !== 'full_context',
     conversationIdSuffix,
     allowedToolNames: invariant.toolSurface,
@@ -278,7 +276,7 @@ export function buildE2EPairedExecutionIdentityHash(input: {
 }): string {
   return stableHash(
     stableStringify({
-      namespace: 'e2e-paired-condition-v4',
+      namespace: 'e2e-paired-condition-v5',
       pairIdHash: input.pairIdHash,
       seed: input.seed,
       condition: input.condition,

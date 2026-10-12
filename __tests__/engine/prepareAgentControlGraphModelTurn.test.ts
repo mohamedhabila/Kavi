@@ -29,6 +29,15 @@ const mockAdmittedMemoryAuthoritySnapshot = {
   policy: { enabled: true, revision: 0 },
 } as const;
 
+function memoryRead(text: string, policyEpoch: number) {
+  return {
+    status: 'read' as const,
+    policyEpoch,
+    authoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+    section: { text, itemIds: [], turnIds: [] },
+  };
+}
+
 jest.mock('../../src/services/memory/memoryAuthority', () => ({
   ...jest.requireActual('../../src/services/memory/memoryAuthority'),
   captureMemoryAuthoritySnapshot: jest.fn(() => mockAdmittedMemoryAuthoritySnapshot),
@@ -282,7 +291,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     },
   );
 
-  it('treats forced-text proceed turns as non-actionable for budgeting and living memory', async () => {
+  it('treats forced-text proceed turns as non-actionable for budgeting and memory', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -295,9 +304,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        livingMemorySections: [{ text: 'Living memory section' }],
-        livingMemoryReadEpoch: 0,
-        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+        memory: memoryRead('Living memory section', 0),
       },
       turnDirectives: {
         forceFinalText: true,
@@ -315,7 +322,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptBundleContext: expect.objectContaining({
-          livingMemorySections: undefined,
+          memorySection: undefined,
         }),
       }),
     );
@@ -378,23 +385,20 @@ describe('prepareAgentControlGraphModelTurn', () => {
       }),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        livingMemorySections: [{ text: 'Living memory section' }],
-        livingMemoryReadEpoch: 0,
-        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+        memory: memoryRead('Living memory section', 0),
       },
     });
 
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptBundleContext: expect.objectContaining({
-          livingMemorySections: [{ text: 'Living memory section' }],
+          memorySection: 'Living memory section',
         }),
       }),
     );
   });
 
   it('carries the exact admitted memory authority to the dispatch boundary', async () => {
-    const validUntil = Date.now() + 60_000;
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -402,11 +406,11 @@ describe('prepareAgentControlGraphModelTurn', () => {
       reason: 'test',
     } as any);
     mockedPrepareAgentTurn.mockImplementation((input) => {
-      const hasLivingMemory = Boolean(input.promptBundleContext.livingMemorySections?.length);
+      const hasMemory = Boolean(input.promptBundleContext.memorySection);
       return {
-        enrichedSystemPrompt: hasLivingMemory ? 'System with private memory' : 'Memory-free system',
+        enrichedSystemPrompt: hasMemory ? 'System with private memory' : 'Memory-free system',
         enrichedSystemPromptSections: [
-          { text: hasLivingMemory ? 'System with private memory' : 'Memory-free system' },
+          { text: hasMemory ? 'System with private memory' : 'Memory-free system' },
         ],
         pinnedToolNames: [],
         selectedToolTokenEstimate: 0,
@@ -419,10 +423,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        livingMemorySections: [{ text: 'Private memory' }],
-        livingMemoryReadEpoch: 0,
-        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
-        livingMemoryValidUntil: validUntil,
+        memory: memoryRead('Private memory', 0),
       },
     });
 
@@ -430,12 +431,11 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(result.preparedTurn.memoryReadFence).toMatchObject({
       readEpoch: 0,
       memoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
-      validUntil,
     });
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
-  it('drops living-memory sections from the model prompt when their read epoch is stale', async () => {
+  it('drops the memory section from the model prompt when its read epoch is stale', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -448,15 +448,13 @@ describe('prepareAgentControlGraphModelTurn', () => {
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        livingMemorySections: [{ text: 'Private stale memory section' }],
-        livingMemoryReadEpoch: -1,
-        livingMemoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
+        memory: memoryRead('Private stale memory section', -1),
       },
     });
 
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        promptBundleContext: expect.objectContaining({ livingMemorySections: undefined }),
+        promptBundleContext: expect.objectContaining({ memorySection: undefined }),
       }),
     );
   });

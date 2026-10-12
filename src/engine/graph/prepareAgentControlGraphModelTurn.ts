@@ -9,7 +9,6 @@ import type {
 } from './prepareAgentControlGraphModelTurnTypes';
 
 export type {
-  LivingMemorySection,
   PrepareAgentControlGraphModelTurnParams,
   PreparedAgentControlGraphModelTurnReady,
   PromptContextSupport,

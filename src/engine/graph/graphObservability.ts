@@ -58,11 +58,10 @@ export function buildToolSurfaceTokenAuditDetail(audit: ToolSurfaceTokenAudit): 
 }
 
 export function buildMemoryRetrievalObservabilityDetail(params: {
-  factCount: number;
-  episodeCount: number;
-  sectionCount: number;
+  itemCount: number;
+  turnCount: number;
 }): string {
-  return `facts:${params.factCount},episodes:${params.episodeCount},sections:${params.sectionCount}`;
+  return `items:${params.itemCount},turns:${params.turnCount}`;
 }
 
 export function buildToolBatchIncompleteObservabilityDetail(params: {

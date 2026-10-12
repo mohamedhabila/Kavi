@@ -13,7 +13,6 @@ import {
   MESSAGE_FRAMING_TOKENS,
 } from '../../services/context/tokenCounter';
 import { estimateContentTokens } from '../../services/context/contentTokens';
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolDefinition } from '../../types/tool';
@@ -42,7 +41,7 @@ export interface PrepareAgentTurnRequestBudgetParams {
   enrichedSystemPrompt: string;
   enrichedSystemPromptSections?: ReadonlyArray<SystemPromptSection>;
   iteration?: number;
-  livingMemory?: LivingMemoryBridgeOutput | null;
+  memorySectionText?: string;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   /** True when the turn runs on an on-device runtime, which needs a phone-sized window. */
   onDeviceProvider?: boolean;
@@ -217,13 +216,10 @@ function buildMessageTokenBuckets(
 function buildUsageTokenBuckets(params: {
   budgetResult: ReturnType<typeof enforceContextBudget>;
   family: string | undefined;
-  memoryCacheableTokens: number;
-  memoryDynamicTokens: number;
+  memoryTokens: number;
   planTokens: number;
 }): UsageTokenBuckets {
-  const rawMemoryContextTokens = Math.round(
-    params.memoryCacheableTokens + params.memoryDynamicTokens + params.planTokens,
-  );
+  const rawMemoryContextTokens = Math.round(params.memoryTokens + params.planTokens);
   const memoryContextTokens = Math.min(
     Math.max(0, rawMemoryContextTokens),
     Math.max(0, params.budgetResult.result.systemPromptTokens),
@@ -373,20 +369,13 @@ export async function prepareAgentTurnRequestBudget(
         })
       : undefined;
 
-  const memoryCacheableTokens = (params.livingMemory?.sections ?? [])
-    .filter((section) => section.cacheable === true)
-    .reduce((sum, section) => sum + estimateTokens(section.text, params.requestFamily), 0);
   const planTokens = estimateTokens(planPromptSection ?? '', params.requestFamily);
-  const memoryDynamicTokens = Math.max(
-    0,
-    Math.round((params.livingMemory?.recalledFactCount ?? 0) * 48),
-  );
+  const memoryTokens = estimateTokens(params.memorySectionText ?? '', params.requestFamily);
   const usageTokenBuckets = buildUsageTokenBuckets({
     budgetResult,
     family: params.requestFamily,
-    memoryCacheableTokens,
+    memoryTokens,
     planTokens,
-    memoryDynamicTokens,
   });
   recordBudgetAuditEntry({
     conversationId: params.conversationId,
@@ -396,8 +385,7 @@ export async function prepareAgentTurnRequestBudget(
       system: budgetPreview.pressure.systemPromptTokens,
       tools: budgetPreview.pressure.toolsTokens,
       messages: budgetPreview.pressure.messagesTokens,
-      memory_cacheable: Math.round(memoryCacheableTokens),
-      memory_dynamic: memoryDynamicTokens,
+      memory: memoryTokens,
       plan: Math.round(planTokens),
     },
     totalTokens: budgetPreview.pressure.totalTokens,

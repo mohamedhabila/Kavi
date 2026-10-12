@@ -4,7 +4,6 @@ import { buildToolSchemaDigest } from '../../src/engine/tools/builtin-tool-schem
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 import { windowMessages } from '../../src/services/context/budgetManager';
 import { estimateApiMessageCost } from '../../src/services/context/contentTokens';
-import { selectContextStartIndex } from '../../src/services/context/contextStartSelector';
 import { mcpManager } from '../../src/services/mcp/manager';
 import { bindCurrentTurnToolObservedMemoryEvidence } from '../../src/services/memory/toolObservedMemoryEvidence';
 import type { Conversation } from '../../src/types/conversation';
@@ -119,35 +118,6 @@ describe('tool-observed memory evidence across a steer', () => {
     });
 
     expect(capabilities).toHaveLength(1);
-  });
-});
-
-describe('context start across a steered turn', () => {
-  it('never starts the context between a request and its steer', () => {
-    const final = (id: string, timestamp: number): Message => ({
-      id,
-      role: 'assistant',
-      content: 'Done.',
-      timestamp,
-      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
-    });
-    const messages: Message[] = [
-      { id: 'u1', role: 'user', content: 'First request', timestamp: 1 },
-      final('a1', 2),
-      { id: 'u2', role: 'user', content: 'Plan the trip', timestamp: 3 },
-      ...toolStep('tc-1', 'web_search', '{}', 'ok', 4),
-      steer('s2', 'Under 500 euros', 6),
-      final('a2', 7),
-      { id: 'u3', role: 'user', content: 'Thanks', timestamp: 8 },
-    ];
-
-    const selection = selectContextStartIndex(messages, {
-      mode: 'chat',
-      now: 8,
-      policyOverride: { maxCarryoverUserTurns: 1, minRecentUserTurns: 1, hardIdleCutoffMs: 1e9 },
-    });
-
-    expect(messages[selection.startIndex]?.id).toBe('u2');
   });
 });
 

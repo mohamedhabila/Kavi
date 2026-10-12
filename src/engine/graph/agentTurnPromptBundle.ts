@@ -14,11 +14,6 @@ import {
   type WorkflowTaskAnchor,
 } from './workflowTaskAnchor';
 
-type LivingMemorySection = {
-  text: string;
-  cacheable?: boolean;
-};
-
 export interface AgentTurnPromptBundleParams {
   /** Full tool registry for this run, used to index capabilities not on the surface. */
   allTools?: ReadonlyArray<ToolDefinition>;
@@ -26,7 +21,8 @@ export interface AgentTurnPromptBundleParams {
   effectiveForceTextReasonThisTurn?: AgentControlGraphForcedTextReason;
   groundedRequestScopedTools: ReadonlyArray<ToolDefinition>;
   iteration: number;
-  livingMemorySections?: ReadonlyArray<LivingMemorySection>;
+  /** The memory section read for this request; changes per request, so never cacheable. */
+  memorySection?: string;
   maxToolIterations: number;
   /** The run's plan as the model last set it; see `renderPlanPromptSection`. */
   planPromptSection?: string | null;
@@ -78,12 +74,9 @@ export function buildAgentTurnPromptBundle(
   appendSystemPromptSection(baseSystemPromptSections, params.runtimePolicyPrompt, {
     purpose: 'memory_policy',
   });
-  for (const section of params.livingMemorySections ?? []) {
-    appendSystemPromptSection(baseSystemPromptSections, section.text, {
-      cacheable: section.cacheable === true,
-      purpose: 'living_memory',
-    });
-  }
+  appendSystemPromptSection(baseSystemPromptSections, params.memorySection, {
+    purpose: 'memory',
+  });
   appendSystemPromptSection(
     baseSystemPromptSections,
     params.workflowTaskAnchor

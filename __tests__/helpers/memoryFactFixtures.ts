@@ -1,5 +1,4 @@
 import type { MemoryFact } from '../../src/services/memory/facts/types';
-import type { ScoredFact } from '../../src/services/memory/factRecallTypes';
 
 export function makeMemoryFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -50,30 +49,5 @@ export function makeMemoryFact(overrides: Partial<MemoryFact> = {}): MemoryFact 
     sensitivity: 'normal',
     memoryKind: 'semantic_fact',
     ...overrides,
-  };
-}
-
-export function makeScoredFact(
-  overrides: Partial<Omit<ScoredFact, 'fact'>> & { fact?: Partial<MemoryFact> } = {},
-): ScoredFact {
-  const score = overrides.score ?? 0.9;
-  return {
-    fact: makeMemoryFact(overrides.fact),
-    score,
-    textScore: overrides.textScore ?? score,
-    lexicalScore: overrides.lexicalScore ?? score,
-    pinnedBoost: overrides.pinnedBoost ?? 0,
-    decayMultiplier: overrides.decayMultiplier ?? 1,
-    scopeBoost: overrides.scopeBoost ?? 1,
-    reinforcementBoost: overrides.reinforcementBoost ?? 1,
-    importanceScore: overrides.importanceScore ?? 0.8,
-    retrievabilityScore: overrides.retrievabilityScore ?? 1,
-    relevanceScore: overrides.relevanceScore ?? score,
-    candidateRelevanceScore: overrides.candidateRelevanceScore ?? 0,
-    candidateProvenance: overrides.candidateProvenance ?? {
-      reasons: [],
-      fusionScore: 0,
-      localSimilarityScore: null,
-    },
   };
 }

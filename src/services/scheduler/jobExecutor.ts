@@ -129,7 +129,6 @@ export async function executeScheduledJob(
           model,
           conversationId,
           personaId: executionPersonaId,
-          taskId: job.runningAttemptId ?? null,
           executionRunId: projectionLease.owner.runId,
           agentRunId: job.runningAttemptId,
           beforeEffectDispatch: () => markScheduledAttemptEffectUnsafe(job),

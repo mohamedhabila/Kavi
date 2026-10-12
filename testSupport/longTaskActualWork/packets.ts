@@ -132,10 +132,10 @@ const SOURCE_PACKET_SPECS: SourcePacketSpec[] = [
   },
   {
     title: 'Long-term memory retrieval and consistency',
-    question: 'Check recall authority, next-turn consistency, and stale-memory failure modes.',
+    question: 'Check recall, memory turned on or off mid-run, and stale-memory failure modes.',
     sources: [
-      'src/services/memory/livingMemoryBridge.ts',
-      'src/services/memory/nextTurnConsistency.ts',
+      'src/services/memory/memoryAccessGateway.ts',
+      'src/services/memory/core/memoryPrompt.ts',
     ],
   },
   {

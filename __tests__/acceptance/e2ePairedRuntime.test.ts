@@ -397,7 +397,7 @@ describe('paired E2E runtime coordinator', () => {
       successfulExecutionResult(executionInput),
     );
     const result = await runE2EPairedConditions({
-      plan: buildPlan('lexical_baseline', 'diagnostic_full_context', 8),
+      plan: buildPlan('production_auto', 'diagnostic_full_context', 8),
       scenario: SCENARIO,
       provider: PROVIDER,
       dependencies: {
@@ -409,16 +409,8 @@ describe('paired E2E runtime coordinator', () => {
       },
     });
     expect(resetConditionState).toHaveBeenCalledTimes(2);
-    expect(executeCondition.mock.calls[0][0].runOptions).toMatchObject({
-      memoryRetrievalStrategy: 'lexical_only',
-      memoryContextStrategy: 'production',
-      enableCompaction: true,
-    });
-    expect(executeCondition.mock.calls[1][0].runOptions).toMatchObject({
-      memoryRetrievalStrategy: 'production',
-      memoryContextStrategy: 'full_context',
-      enableCompaction: false,
-    });
+    expect(executeCondition.mock.calls[0][0].runOptions).toMatchObject({ enableCompaction: true });
+    expect(executeCondition.mock.calls[1][0].runOptions).toMatchObject({ enableCompaction: false });
     expect(result.validForDeltaClaims).toBe(true);
   });
 

@@ -13,7 +13,6 @@ import {
   MemoryPromptEpochExpiredError,
   serializeDurableModelEffectAuthority,
 } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
-import { resolveLivingMemoryValidUntil } from '../../src/services/memory/livingMemoryBridge';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
@@ -38,46 +37,6 @@ afterEach(() => {
 });
 
 describe('time-driven memory validity fence', () => {
-  it('uses the earliest expiry across prompt-visible facts', () => {
-    expect(
-      resolveLivingMemoryValidUntil({
-        facts: [{ expiresAt: 900 }, { expiresAt: 700 }, { expiresAt: null }],
-        episodeSelections: [],
-        now: 500,
-      }),
-    ).toBe(700);
-  });
-
-  it('preserves episode-policy expiry as an equally authoritative deadline', () => {
-    expect(
-      resolveLivingMemoryValidUntil({
-        facts: [{ expiresAt: 900 }],
-        episodeSelections: [{ policyExpiresAt: 650 }, { policyExpiresAt: null }],
-        now: 500,
-      }),
-    ).toBe(650);
-  });
-
-  it('omits the deadline only when every projected memory is non-expiring', () => {
-    expect(
-      resolveLivingMemoryValidUntil({
-        facts: [{ expiresAt: null }],
-        episodeSelections: [{ policyExpiresAt: null }],
-        now: 500,
-      }),
-    ).toBeUndefined();
-  });
-
-  it('rejects an expiry exactly at the projection boundary', () => {
-    expect(() =>
-      resolveLivingMemoryValidUntil({
-        facts: [{ expiresAt: 500 }],
-        episodeSelections: [],
-        now: 500,
-      }),
-    ).toThrow('memory_validity_deadline_invalid');
-  });
-
   it('expires local and durable turn authority at exact deadline equality', () => {
     const binding = buildModelTurnMemoryPolicyBinding({
       ...captureCurrentModelTurnMemoryFence(),

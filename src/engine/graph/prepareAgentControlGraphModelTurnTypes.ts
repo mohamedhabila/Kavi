@@ -9,20 +9,13 @@ import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { ConversationModeEscalation } from './conversation/modeEscalation';
-import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
-
-export type LivingMemorySection = {
-  text: string;
-  cacheable?: boolean;
-};
+import type { SessionMemoryRead } from '../../services/memory/memoryAccessGateway';
 
 export type PromptContextSupport = {
   /** The run's plan, read from the graph each turn. */
   graphPlan?: ReadonlyArray<AgentPlanStep>;
-  livingMemorySections?: ReadonlyArray<LivingMemorySection>;
-  livingMemoryReadEpoch?: number;
-  livingMemoryAuthoritySnapshot?: MemoryAuthoritySnapshot;
-  livingMemoryValidUntil?: number;
+  /** What the run read from memory for its prompt. */
+  memory?: SessionMemoryRead;
   maxToolIterations: number;
   resolvedPrompt: string;
   runtimeContext?: string | null;

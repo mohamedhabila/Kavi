@@ -4,13 +4,7 @@
 // Ring buffer of layer usage for debug surfaces and Settings diagnostics.
 // ---------------------------------------------------------------------------
 
-export type BudgetAuditLayer =
-  | 'system'
-  | 'tools'
-  | 'messages'
-  | 'memory_cacheable'
-  | 'memory_dynamic'
-  | 'plan';
+export type BudgetAuditLayer = 'system' | 'tools' | 'messages' | 'memory' | 'plan';
 
 export interface BudgetAuditEntry {
   conversationId: string;

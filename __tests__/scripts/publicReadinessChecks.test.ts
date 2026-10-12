@@ -39,7 +39,6 @@ describe('public readiness checks', () => {
         'docs/android-long-horizon-testing.md',
         'docs/dynamic-code-execution.md',
         'docs/evaluation.md',
-        'docs/memory-hybrid-retrieval.md',
         'docs/testing.md',
         'docs/release.md',
         'docs/private-surprise.md',

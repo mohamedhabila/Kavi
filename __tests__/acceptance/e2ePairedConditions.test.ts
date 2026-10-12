@@ -84,13 +84,12 @@ function makeCondition(
 }
 
 describe('paired E2E condition contract', () => {
-  it('exposes only the six declared condition labels and canonical behavior', () => {
+  it('exposes only the five declared condition labels and canonical behavior', () => {
     expect(E2E_PAIRED_CONDITIONS).toEqual([
       'production_auto',
       'forced_chitchat',
       'forced_agentic',
       'memory_off',
-      'lexical_baseline',
       'diagnostic_full_context',
     ]);
 
@@ -98,7 +97,6 @@ describe('paired E2E condition contract', () => {
     expect(makeCondition('production_auto', invariant).conditionConfig).toMatchObject({
       routeOverride: 'production_auto',
       memoryMode: 'production',
-      retrievalMode: 'production',
       contextMode: 'production',
     });
     expect(makeCondition('forced_chitchat', invariant).conditionConfig.routeOverride).toBe(
@@ -108,9 +106,6 @@ describe('paired E2E condition contract', () => {
       'forced_agentic',
     );
     expect(makeCondition('memory_off', invariant).conditionConfig.memoryMode).toBe('off');
-    expect(makeCondition('lexical_baseline', invariant).conditionConfig.retrievalMode).toBe(
-      'lexical_only',
-    );
     expect(makeCondition('diagnostic_full_context', invariant).conditionConfig.contextMode).toBe(
       'full_context',
     );
@@ -279,7 +274,7 @@ describe('paired E2E condition contract', () => {
       conditionConfigHash: 'sha256:stale',
     } as E2EPairedConditionPlan;
     const plan = {
-      schemaVersion: 'e2e-paired-plan-v4',
+      schemaVersion: 'e2e-paired-plan-v5',
       pairId: 'tampered',
       comparison: {
         referenceCondition: 'production_auto',

@@ -65,17 +65,8 @@ jest.mock('../../src/services/skills/manager', () => ({
   getSkillSystemPrompts: jest.fn().mockResolvedValue(''),
   filterToolsByInvocationPolicy: jest.fn().mockImplementation((tools: any[]) => tools),
 }));
-jest.mock('../../src/services/memory/livingMemoryBridge', () => ({
-  buildLivingMemorySections: jest.fn().mockResolvedValue({
-    memoryReadEpoch: 0,
-    memoryAuthoritySnapshot: mockMemoryAuthoritySnapshot,
-    sections: [],
-    cacheableSignature: '00000000',
-    focusBlockText: '',
-    openThreadLabels: [],
-    recalledFactCount: 0,
-    recalledEpisodeCount: 0,
-  }),
+jest.mock('../../src/services/memory/core/memoryPrompt', () => ({
+  prepareMemoryPromptSection: jest.fn(() => null),
 }));
 jest.mock('../../src/services/memory/memoryAuthority', () => {
   const actual = jest.requireActual('../../src/services/memory/memoryAuthority');

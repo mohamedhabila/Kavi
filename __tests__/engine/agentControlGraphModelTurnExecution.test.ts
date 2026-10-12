@@ -52,7 +52,6 @@ describe('agent control graph model turn execution', () => {
       ...safeWorkingMessages,
     ];
     const memoryFence = captureCurrentModelTurnMemoryFence();
-    const { readEpoch } = memoryFence;
     let resolveFirstBudget!: (value: ReturnType<typeof createBudgetResult>) => void;
     const firstBudget = new Promise<ReturnType<typeof createBudgetResult>>((resolve) => {
       resolveFirstBudget = resolve;
@@ -81,10 +80,6 @@ describe('agent control graph model turn execution', () => {
       conversationId: 'conv-memory-budget-race',
       hasPendingAsyncOperations: false,
       iteration: 1,
-      livingMemory: {
-        memoryReadEpoch: readEpoch,
-        sections: [{ text: 'PRIVATE LIVING MEMORY', cacheable: true }],
-      } as never,
       llm,
       preparedTurn: createPreparedTurn({
         enrichedSystemPrompt: 'System\n\nPRIVATE LIVING MEMORY',
@@ -203,7 +198,6 @@ describe('agent control graph model turn execution', () => {
       conversationId: 'conv-memory-stream-race',
       hasPendingAsyncOperations: false,
       iteration: 1,
-      livingMemory: null,
       llm,
       preparedTurn: createPreparedTurn({
         enrichedSystemPrompt: 'Memory-enabled system',
@@ -237,7 +231,6 @@ describe('agent control graph model turn execution', () => {
   it('fences replay dispatches after opt-out and escalates to the session', async () => {
     const workingMessages = createWorkingMessages();
     const memoryFence = captureCurrentModelTurnMemoryFence();
-    const { readEpoch } = memoryFence;
     mockedPrepareAgentTurnRequestBudget.mockImplementation(async (params) => ({
       ...createBudgetResult(params.workingMessages),
       budgetResult: {
@@ -285,7 +278,6 @@ describe('agent control graph model turn execution', () => {
       conversationId: 'conv-memory-replay-race',
       hasPendingAsyncOperations: false,
       iteration: 1,
-      livingMemory: { memoryReadEpoch: readEpoch, sections: [] } as never,
       llm,
       preparedTurn: createPreparedTurn({
         enrichedSystemPrompt: 'System\n\nPRIVATE REPLAY MEMORY',

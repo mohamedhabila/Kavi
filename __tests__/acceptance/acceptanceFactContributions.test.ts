@@ -35,7 +35,7 @@ function identity(
   overrides: Partial<AcceptanceFactContributionIdentity> = {},
 ): AcceptanceFactContributionIdentity {
   return {
-    producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryHybridAblation,
+    producerId: ACCEPTANCE_FACT_PRODUCER_IDS.memoryCorrection,
     fixtureId: 'fixture-one',
     eventKey: 'fact-one',
     memoryConversationId: 'fixture-conversation',
@@ -79,7 +79,7 @@ describe('acceptance fixture fact contributions', () => {
       ),
     ).toEqual([
       {
-        producer_id: ACCEPTANCE_FACT_PRODUCER_IDS.memoryHybridAblation,
+        producer_id: ACCEPTANCE_FACT_PRODUCER_IDS.memoryCorrection,
         memory_conversation_id: 'fixture-conversation',
         source_thread_id: 'fixture-thread',
       },

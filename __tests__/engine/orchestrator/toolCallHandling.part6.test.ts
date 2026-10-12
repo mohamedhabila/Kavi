@@ -6,7 +6,7 @@ import {
   runOrchestrator,
   executeTool,
   getSkillSystemPrompts,
-  memoryAccessGateway,
+  prepareMemoryPromptSection,
   mockStreamMessage,
   makeProvider,
   makeCallbacks,
@@ -81,7 +81,7 @@ describe('Orchestrator', () => {
       );
     });
 
-    it('uses a conservative scoped fallback when unified memory access is unavailable', async () => {
+    it('answers without memory when reading memory fails', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
@@ -109,9 +109,9 @@ describe('Orchestrator', () => {
         },
       ]);
 
-      const memoryAccessSpy = jest
-        .spyOn(memoryAccessGateway, 'buildUnifiedMemoryAccessContext')
-        .mockRejectedValueOnce(new Error('memory gateway unavailable'));
+      (prepareMemoryPromptSection as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('memory unavailable');
+      });
 
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
@@ -183,11 +183,7 @@ describe('Orchestrator', () => {
         ],
       };
 
-      try {
-        await runOrchestrator(options, callbacks);
-      } finally {
-        memoryAccessSpy.mockRestore();
-      }
+      await runOrchestrator(options, callbacks);
 
       const systemPromptMessage = mockStreamMessage.mock.calls[0][0][0];
       expect(systemPromptMessage.content).toContain(

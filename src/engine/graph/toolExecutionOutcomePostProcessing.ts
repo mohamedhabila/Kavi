@@ -1,4 +1,3 @@
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { Message } from '../../types/message';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
 import {
@@ -27,7 +26,6 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
   contextWindow: number;
   conversationId: string;
   compactionEngine: AgentTurnCompactionEngine;
-  livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
   requestFamily?: string;

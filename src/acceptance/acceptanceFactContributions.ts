@@ -8,7 +8,6 @@ import { codeOwnedMemorySensitivityDeclaration } from '../services/memory/memory
 
 export const ACCEPTANCE_FACT_PRODUCER_IDS = {
   memoryCorrection: 'acceptance_memory_correction_v1',
-  memoryHybridAblation: 'acceptance_memory_hybrid_v1',
 } as const;
 
 type AcceptanceFactProducerId =

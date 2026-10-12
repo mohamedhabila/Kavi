@@ -1,4 +1,3 @@
-import type { LivingMemoryBridgeOutput } from '../../services/memory/livingMemoryBridge';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type { Message } from '../../types/message';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
@@ -88,7 +87,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
   conversationId: string;
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   compactionEngine: AgentTurnCompactionEngine;
-  livingMemory?: LivingMemoryBridgeOutput | null;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
   requestFamily?: string;
@@ -487,7 +485,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     contextWindow: params.contextWindow,
     conversationId: params.conversationId,
     compactionEngine: params.compactionEngine,
-    livingMemory: params.livingMemory,
     onCompaction: params.onCompaction,
     requestFamily: params.requestFamily,
     warn: params.warn,

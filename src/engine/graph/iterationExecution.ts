@@ -25,7 +25,6 @@ export async function executeAgentControlGraphIteration(
     ...params.runtime,
     workingMessages: [...params.runtime.workingMessages],
   };
-  const livingMemory = runtime.admittedMemoryContext.livingMemory;
 
   // A foreground interactive run is bounded far tighter than a background or
   // delegated-worker run: reaching the iteration or wall-clock ceiling forces a
@@ -99,10 +98,7 @@ export async function executeAgentControlGraphIteration(
     promptContextSupport: {
       ...params.promptContextSupport,
       graphPlan: graphSnapshot.plan,
-      livingMemorySections: livingMemory?.sections,
-      livingMemoryReadEpoch: livingMemory?.memoryReadEpoch,
-      livingMemoryAuthoritySnapshot: livingMemory?.memoryAuthoritySnapshot,
-      livingMemoryValidUntil: livingMemory?.validUntil,
+      memory: runtime.memory,
       runtimeContext: appendRequestUnderstandingToRuntimeContext(
         params.promptContextSupport.runtimeContext,
         requestUnderstandingPrompt,

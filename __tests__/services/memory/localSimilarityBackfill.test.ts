@@ -27,7 +27,7 @@ import {
 } from '../../../src/services/memory/memoryAuthority';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-/** Opt-in wall-clock gate shared with memoryLocalSimilarityProduct.test.ts. */
+/** Opt-in wall-clock gate (KAVI_LOCAL_SIMILARITY_WALL_CLOCK_GATE=1) for a quiet host. */
 const REQUIRE_WALL_CLOCK_LATENCY = process.env.KAVI_LOCAL_SIMILARITY_WALL_CLOCK_GATE === '1';
 
 beforeEach(() => {
@@ -328,8 +328,7 @@ describe('local-similarity backfill', () => {
 
     // Wall-clock latency is only a contract on a quiet host. On a shared CI runner the
     // same batch measures several times slower for reasons unrelated to this code, so
-    // the budget is enforced only when the wall-clock gate is explicitly requested,
-    // matching the retrieval latency gate in memoryLocalSimilarityProduct.test.ts. The
+    // the budget is enforced only when the wall-clock gate is explicitly requested. The
     // structural assertions above (batch size, pagination) always run.
     if (REQUIRE_WALL_CLOCK_LATENCY) {
       expect(p95(durations)).toBeLessThanOrEqual(LOCAL_SIMILARITY_BACKFILL_P95_BUDGET_MS);

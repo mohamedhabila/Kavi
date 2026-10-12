@@ -15,7 +15,6 @@ import {
 } from './requestBootstrap';
 import { resolveForegroundConversationExecutionContext } from './executionContext';
 import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
-import { requestScheduledIngestionDrain } from '../../../services/memory/ingestionQueue';
 import { modelProjectionOwnerForForegroundLease } from '../../../services/executionJournal/foregroundModelExecutionJournal';
 import type { ForegroundModelExecutionLease } from '../../../services/executionJournal/foregroundModelExecutionTypes';
 import type { ModelProjectionOwner } from '../../../types/conversation';
@@ -462,8 +461,6 @@ async function executeReservedForegroundConversationRun(
         workspaceReadFallbackConversationId: workspaceTarget.workspaceReadFallbackConversationId,
         disableTools: options?.disableTools ?? false,
         allowedToolNames: options?.allowedToolNames,
-        memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
-        memoryContextStrategy: options?.memoryContextStrategy,
       },
       modelState: {
         providerId: provider.id,
@@ -553,7 +550,6 @@ async function executeReservedForegroundConversationRun(
           maxTokens: options?.maxTokens,
           signal: abortController,
           personaId: executionContext.personaId,
-          taskId: resumePreparation.initialAgentControlGraphState?.activeTaskId ?? null,
           executionRunId: foregroundRequestId,
           allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
           enableCompaction: options?.enableCompaction ?? true,
@@ -574,8 +570,6 @@ async function executeReservedForegroundConversationRun(
           workflowScopeUserMessageId: resumePreparation.workflowScopeUserMessageId,
           workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
           agentRunId: bootstrapResult.trackedAgentRunId,
-          memoryRetrievalStrategy: options?.memoryRetrievalStrategy,
-          memoryContextStrategy: options?.memoryContextStrategy,
           // This is the interactive chat entry point: a person is watching the screen
           // wait for a reply, so this run gets the tighter foreground iteration/wall-clock
           // budget and inactivity timeout instead of the full background ceiling.
@@ -628,9 +622,7 @@ async function executeReservedForegroundConversationRun(
         terminalStatus = runtime.terminalLifecycle.handleCatch(error);
       }
     } finally {
-      if (inferenceLease.release()) {
-        requestScheduledIngestionDrain();
-      }
+      inferenceLease.release();
     }
   }
   if (!journalTerminal) {

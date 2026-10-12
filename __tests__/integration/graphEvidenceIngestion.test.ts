@@ -6,8 +6,6 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { listFacts } from '../../src/services/memory/facts/queries';
-import { recallFactSelectionForQuery } from '../../src/services/memory/factRecall';
-import { resolveLocalMemoryAccessScope } from '../../src/services/memory/memoryScopeStore';
 import { processIngestionTurn } from '../../src/services/memory/turnProcessor';
 import type { Message } from '../../src/types/message';
 
@@ -69,20 +67,6 @@ describe('graph evidence ingestion bridge', () => {
     const storedFacts = listFacts({ originConversationId: THREAD_ID });
     expect(storedFacts.some((fact) => fact.objectText.includes(evidence))).toBe(true);
     expect(storedFacts.some((fact) => fact.originTaskId === TASK_ID)).toBe(true);
-
-    const recalled = await recallFactSelectionForQuery('python artifact reports analysis json', {
-      memoryScope: resolveLocalMemoryAccessScope({
-        memoryConversationId: THREAD_ID,
-        sourceThreadId: THREAD_ID,
-        personaId: 'default',
-        taskId: TASK_ID,
-      }),
-      useIntent: 'explicit_user_request',
-      threshold: 0.05,
-    });
-
-    expect(recalled.facts).toEqual([]);
-    expect(recalled.resolutionFacts.some((fact) => fact.objectText.includes(evidence))).toBe(true);
   });
 
   it('does not reinforce graph evidence on turn replay but does on a later turn', async () => {

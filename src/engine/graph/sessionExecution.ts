@@ -7,13 +7,10 @@ import type {
   ExecuteAgentControlGraphIterationParams,
 } from './iterationExecutionTypes';
 import type { Message } from '../../types/message';
-import type { LlmProviderConfig } from '../../types/provider';
 import {
-  admitSessionMemoryContext,
-  isAdmittedSessionMemoryContextFresh,
-  type SessionMemoryAccessCandidate,
-} from './sessionMemoryContext';
-import type { AgentControlGraphSnapshot } from './agentControlGraph';
+  isSessionMemoryReadCurrent,
+  type SessionMemoryRead,
+} from '../../services/memory/memoryAccessGateway';
 import { removeLivingMemoryCompactionMessages } from './modelTurn/memoryPromptDispatchFence';
 import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
@@ -30,12 +27,8 @@ export interface ExecuteAgentControlGraphSessionParams extends Omit<
 > {
   allowLongHorizonIterationExtensions?: boolean;
   initialRuntime: AgentControlGraphIterationRuntimeState;
-  refreshSessionMemoryContext: (params: {
-    activeModel: string;
-    activeProvider: LlmProviderConfig;
-    graphSnapshot: AgentControlGraphSnapshot;
-    workingMessages: Message[];
-  }) => Promise<SessionMemoryAccessCandidate>;
+  /** Reads memory again for the run's current messages. */
+  refreshSessionMemory: (workingMessages: ReadonlyArray<Message>) => SessionMemoryRead;
 }
 
 export const MAX_MEMORY_AUTHORITY_REPREPARATIONS_PER_ITERATION = 2;
@@ -105,10 +98,7 @@ export async function executeAgentControlGraphSession(
           }),
       }));
 
-      if (
-        restrictiveRefreshRequested ||
-        !isAdmittedSessionMemoryContextFresh(runtime.admittedMemoryContext)
-      ) {
+      if (restrictiveRefreshRequested || !isSessionMemoryReadCurrent(runtime.memory)) {
         if (authorityRepreparationCount >= MAX_MEMORY_AUTHORITY_REPREPARATIONS_PER_ITERATION) {
           await params.graph.finishWithGraphTerminalEvent({
             graphEvent: {
@@ -127,19 +117,9 @@ export async function executeAgentControlGraphSession(
         }
 
         runtime.workingMessages = removeLivingMemoryCompactionMessages(runtime.workingMessages);
-        const refreshedCandidate = await params.refreshSessionMemoryContext({
-          activeModel: runtime.activeModel,
-          activeProvider: runtime.activeProvider,
-          graphSnapshot: params.graph.getGraphSnapshot(),
-          workingMessages: runtime.workingMessages,
-        });
-        runtime.admittedMemoryContext = admitSessionMemoryContext(refreshedCandidate);
+        runtime.memory = params.refreshSessionMemory(runtime.workingMessages);
         authorityRepreparationCount += 1;
         restrictiveRefreshRequested = false;
-        if (!isAdmittedSessionMemoryContextFresh(runtime.admittedMemoryContext)) {
-          restrictiveRefreshRequested = true;
-          continue;
-        }
       }
 
       const iterationExecution = await executeAgentControlGraphIteration({

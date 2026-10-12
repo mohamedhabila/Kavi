@@ -18,10 +18,6 @@ import type { OrchestratorState } from '../../types/conversation';
 import type { TokenUsage } from '../../types/usage';
 import type { ThinkingLevel } from '../thinking';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
-import type {
-  MemoryContextStrategy,
-  MemoryRetrievalStrategy,
-} from '../../services/memory/memoryAccessPolicy';
 import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { MobileControllerRuntimePort } from '../mobileController/runtimeBinding';
@@ -126,13 +122,10 @@ export interface OrchestratorOptions {
   initialAgentControlGraphState?: AgentRunControlGraphState;
   workflowScopeUserMessageId?: string;
   workflowTaskAnchor?: WorkflowTaskAnchor;
-  taskId: string | null;
   /** Code-owned identity for this exact execution attempt. */
   executionRunId: string;
   agentRunId?: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   /** Code-owned controller capability; omitted for ordinary chat sessions. */
   mobileController?: MobileControllerRuntimePort;
-  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
-  memoryContextStrategy?: MemoryContextStrategy;
 }

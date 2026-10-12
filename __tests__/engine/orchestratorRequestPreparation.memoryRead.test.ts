@@ -1,5 +1,5 @@
 jest.mock('../../src/services/memory/memoryAccessGateway', () => ({
-  buildUnifiedMemoryAccessContext: jest.fn(),
+  readSessionMemory: jest.fn(),
 }));
 
 jest.mock('../../src/services/skills/manager', () => ({
@@ -7,11 +7,11 @@ jest.mock('../../src/services/skills/manager', () => ({
 }));
 
 import { prepareOrchestratorRequestBundle } from '../../src/engine/orchestratorRequestPreparation';
-import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
+import { readSessionMemory } from '../../src/services/memory/memoryAccessGateway';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
-const mockedBuildUnifiedMemoryAccessContext =
-  buildUnifiedMemoryAccessContext as jest.MockedFunction<typeof buildUnifiedMemoryAccessContext>;
+const mockedReadSessionMemory = jest.mocked(readSessionMemory);
+const MEMORY_READ = Object.freeze({ status: 'off', policyEpoch: 7 } as const);
 
 const provider = {
   id: 'provider-1',
@@ -21,33 +21,13 @@ const provider = {
   model: 'model-1',
 } as LlmProviderConfig;
 
-describe('orchestrator request memory consistency identity', () => {
+describe('orchestrator request memory read', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue({
-      boundary: {
-        startIndex: 0,
-        reason: 'full_history',
-        similarityScore: 1,
-        idleGapMs: 0,
-        droppedMessageCount: 0,
-      },
-      scopedMessages: [{ id: 'user-current', role: 'user', content: 'Continue.', timestamp: 2 }],
-      livingMemory: null,
-      consistencyBarrier: {
-        outcome: 'no_job',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 1,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-    });
+    mockedReadSessionMemory.mockReturnValue(MEMORY_READ);
   });
 
-  it('passes the real source thread separately from shared memory identity', async () => {
+  it('reads memory under the shared memory identity', async () => {
     const result = await prepareOrchestratorRequestBundle({
       activeModel: 'model-1',
       activeProvider: provider,
@@ -63,16 +43,10 @@ describe('orchestrator request memory consistency identity', () => {
       messages: [{ id: 'user-current', role: 'user', content: 'Continue.', timestamp: 2 }],
     });
 
-    expect(mockedBuildUnifiedMemoryAccessContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        memoryConversationId: 'shared-memory-1',
-        sourceThreadId: 'source-thread-1',
-        messages: [{ id: 'user-current', role: 'user', content: 'Continue.', timestamp: 2 }],
-      }),
-    );
-    expect(result.memoryConsistencyBarrier).toEqual(
-      expect.objectContaining({ outcome: 'no_job', queryCount: 1 }),
-    );
+    expect(mockedReadSessionMemory).toHaveBeenCalledWith('shared-memory-1', [
+      { id: 'user-current', role: 'user', content: 'Continue.', timestamp: 2 },
+    ]);
+    expect(result.memory).toBe(MEMORY_READ);
     expect(result.currentUserMessage).toEqual({ id: 'user-current', text: 'Continue.' });
     expect(result.requestFrame).toMatchObject({
       mode: 'chitchat',
@@ -83,36 +57,6 @@ describe('orchestrator request memory consistency identity', () => {
   });
 
   it('keeps tool grounding on raw user text rather than enriched model context', async () => {
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValueOnce({
-      boundary: {
-        startIndex: 0,
-        reason: 'full_history',
-        similarityScore: 1,
-        idleGapMs: 0,
-        droppedMessageCount: 0,
-      },
-      scopedMessages: [
-        {
-          id: 'user-raw',
-          role: 'user',
-          content: 'Remember the value I wrote.',
-          enrichedContent: 'Remember the value I wrote.\n[link summary: provider-only detail]',
-          timestamp: 3,
-        },
-      ],
-      livingMemory: null,
-      consistencyBarrier: {
-        outcome: 'no_job',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 1,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-    });
-
     const result = await prepareOrchestratorRequestBundle({
       activeModel: 'model-1',
       activeProvider: provider,
@@ -134,8 +78,6 @@ describe('orchestrator request memory consistency identity', () => {
           timestamp: 3,
         },
       ],
-      personaId: 'default',
-      taskId: null,
     });
 
     expect(result.latestUserMessageText).toContain('provider-only detail');
@@ -158,28 +100,6 @@ describe('orchestrator request memory consistency identity', () => {
       content: `内部継続制御${'画'.repeat(600)}`,
       timestamp: 5,
     };
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValueOnce({
-      boundary: {
-        startIndex: 0,
-        reason: 'full_history',
-        similarityScore: 1,
-        idleGapMs: 0,
-        droppedMessageCount: 0,
-      },
-      scopedMessages: [visibleArabic],
-      livingMemory: null,
-      consistencyBarrier: {
-        outcome: 'no_job',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 1,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-    });
-
     const result = await prepareOrchestratorRequestBundle({
       activeModel: 'model-1',
       activeProvider: provider,
@@ -193,8 +113,6 @@ describe('orchestrator request memory consistency identity', () => {
       mediaUnderstandingEnabled: false,
       memoryConversationId: 'shared-memory-1',
       messages: [visibleArabic, internalJapanese],
-      personaId: 'default',
-      taskId: null,
     });
 
     expect(result.memoryRefreshInternalUserMessages).toEqual([internalJapanese]);
@@ -203,11 +121,6 @@ describe('orchestrator request memory consistency identity', () => {
       id: visibleArabic.id,
       text: visibleArabic.content,
     });
-    expect(mockedBuildUnifiedMemoryAccessContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        internalUserMessageCount: 1,
-        messages: [visibleArabic, internalJapanese],
-      }),
-    );
+    expect(mockedReadSessionMemory).toHaveBeenCalledWith('shared-memory-1', [visibleArabic]);
   });
 });

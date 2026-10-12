@@ -10,7 +10,6 @@ import {
   isRestrictiveMemoryAuthoritySnapshotCurrent,
   isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
 } from '../../../services/memory/memoryAuthority';
-import { isMemoryValidityDeadlineCurrent } from '../../../services/memory/memoryValidityDeadline';
 import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
 import { renderPlanPromptSection } from '../../plan/agentPlan';
@@ -37,14 +36,15 @@ export function buildPreparedModelTurnPrompt(params: {
   workingMessages: ReadonlyArray<Message>;
 }): PreparedAgentTurn {
   const currentReadEpoch = captureMemoryReadEpoch();
-  const livingMemoryAuthoritySnapshot = params.promptContextSupport.livingMemoryAuthoritySnapshot;
-  const livingMemoryAuthorityCurrent =
-    livingMemoryAuthoritySnapshot !== undefined &&
-    isRestrictiveMemoryAuthoritySnapshotCurrent(livingMemoryAuthoritySnapshot) &&
-    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(livingMemoryAuthoritySnapshot);
+  const memory = params.promptContextSupport.memory;
+  const memoryRead = memory?.status === 'read' ? memory : undefined;
+  const memoryReadAuthorityCurrent =
+    memoryRead !== undefined &&
+    isRestrictiveMemoryAuthoritySnapshotCurrent(memoryRead.authoritySnapshot) &&
+    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(memoryRead.authoritySnapshot);
   const currentMemoryAuthoritySnapshot =
-    livingMemoryAuthorityCurrent && livingMemoryAuthoritySnapshot
-      ? livingMemoryAuthoritySnapshot
+    memoryReadAuthorityCurrent && memoryRead
+      ? memoryRead.authoritySnapshot
       : currentReadEpoch !== null
         ? captureMemoryAuthoritySnapshot()
         : null;
@@ -63,25 +63,21 @@ export function buildPreparedModelTurnPrompt(params: {
     params.toolingEnabledForProvider &&
     !params.effectiveForceTextThisTurn &&
     groundedRequestScopedTools.some((tool) => !isToolAllowedForMemoryPolicy(tool, false));
-  const livingMemoryReadEpoch = params.promptContextSupport.livingMemoryReadEpoch;
-  const livingMemoryReadCurrent =
-    livingMemoryReadEpoch !== undefined &&
-    isMemoryReadEpochCurrent(livingMemoryReadEpoch) &&
-    livingMemoryAuthorityCurrent &&
-    isMemoryValidityDeadlineCurrent(params.promptContextSupport.livingMemoryValidUntil);
-  const memoryReadEpoch = livingMemoryReadCurrent
-    ? livingMemoryReadEpoch
+  const memoryReadCurrent =
+    memoryRead !== undefined &&
+    isMemoryReadEpochCurrent(memoryRead.policyEpoch) &&
+    memoryReadAuthorityCurrent;
+  const memoryReadEpoch = memoryReadCurrent
+    ? memoryRead.policyEpoch
     : hasCallableMemoryCapability && currentReadEpoch !== null
       ? currentReadEpoch
       : undefined;
-  const memoryAuthoritySnapshot = livingMemoryReadCurrent
-    ? livingMemoryAuthoritySnapshot
+  const memoryAuthoritySnapshot = memoryReadCurrent
+    ? memoryRead.authoritySnapshot
     : memoryReadEpoch !== undefined
       ? currentMemoryAuthoritySnapshot
       : undefined;
-  const livingMemorySections = livingMemoryReadCurrent
-    ? params.promptContextSupport.livingMemorySections
-    : undefined;
+  const memorySection = memoryReadCurrent ? memoryRead.section?.text : undefined;
   const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
   const transcriptCarriesSoleFirstTurnAnchor =
     params.iteration === 1 &&
@@ -92,7 +88,7 @@ export function buildPreparedModelTurnPrompt(params: {
     groundedTools: ReadonlyArray<ToolDefinition>;
     longTermMemoryEnabled: boolean;
     pinnedTools: ReadonlyArray<string>;
-    sections: PromptContextSupport['livingMemorySections'];
+    memorySection: string | undefined;
   }) =>
     prepareAgentTurn({
       allowSessionCoordinationTools: params.allowSessionCoordinationTools,
@@ -105,7 +101,7 @@ export function buildPreparedModelTurnPrompt(params: {
         effectiveForceTextReasonThisTurn: params.effectiveForceTextReasonThisTurn,
         groundedRequestScopedTools: options.groundedTools,
         iteration: params.iteration,
-        livingMemorySections: params.actionablePromptTurn ? options.sections : undefined,
+        memorySection: params.actionablePromptTurn ? options.memorySection : undefined,
         maxToolIterations: params.promptContextSupport.maxToolIterations,
         planPromptSection: params.actionablePromptTurn
           ? renderPlanPromptSection(params.promptContextSupport.graphPlan)
@@ -123,7 +119,7 @@ export function buildPreparedModelTurnPrompt(params: {
     groundedTools: groundedRequestScopedTools,
     longTermMemoryEnabled,
     pinnedTools: policyAuthorizedPinnedToolNames,
-    sections: livingMemorySections,
+    memorySection,
   });
   if (memoryReadEpoch === undefined || !memoryAuthoritySnapshot) return preparedTurn;
   return {
@@ -131,10 +127,6 @@ export function buildPreparedModelTurnPrompt(params: {
     memoryReadFence: {
       readEpoch: memoryReadEpoch,
       memoryAuthoritySnapshot,
-      ...(livingMemoryReadCurrent &&
-      params.promptContextSupport.livingMemoryValidUntil !== undefined
-        ? { validUntil: params.promptContextSupport.livingMemoryValidUntil }
-        : {}),
     },
   };
 }

@@ -34,28 +34,8 @@ export const PAIRED_TEST_MODEL = {
   endpointSha256: 'c'.repeat(64),
 } as const;
 
-function defaultRetrievalEvent(
-  condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>['condition'],
-) {
-  const event = buildPairedRetrievalEvent();
-  if (condition !== 'lexical_baseline') return event;
-  return {
-    ...event,
-    candidates: {
-      strategy: 'lexical' as const,
-      localSimilarityOutcome: 'not_requested' as const,
-      eligibleScanCount: 0,
-      pinnedCount: 0,
-      exactQuotedCount: 0,
-      lexicalCount: 1,
-      entityCount: 0,
-      temporalCount: 0,
-      localSimilarityCount: 0,
-      unionCount: 1,
-      diversifiedCount: 1,
-      unionMs: 0,
-    },
-  };
+function defaultRetrievalEvent() {
+  return buildPairedRetrievalEvent();
 }
 
 export function completedCondition(input: {
@@ -84,7 +64,7 @@ export function completedCondition(input: {
         : {
             sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
             instrumentationStatus: 'recorded',
-            events: [defaultRetrievalEvent(input.condition)],
+            events: [defaultRetrievalEvent()],
           },
       { route: defaultRoute },
     ),

@@ -58,22 +58,7 @@ function createParams(
     initialRuntime: {
       activeModel: 'gpt-5-mini',
       activeProvider: { id: 'provider-1', name: 'OpenAI', enabled: true } as any,
-      admittedMemoryContext: {
-        admission: 'degraded',
-        authoritySnapshot: null,
-        consistencyBarrier: {
-          outcome: 'degraded',
-          durationMs: 0,
-          waitedMs: 0,
-          queryCount: 0,
-          matchedJobCount: 0,
-          queueAgeMs: null,
-          initialJobStatus: null,
-          finalJobStatus: null,
-        },
-        livingMemory: null,
-        policyEpoch: getMemoryPolicyEpoch(),
-      },
+      memory: { status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() },
       consecutivePendingAsyncNoToolTurns: 0,
       lastPendingAsyncSignature: '',
       lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
@@ -90,19 +75,10 @@ function createParams(
       skillPrompts: [],
     },
     reportUsage: jest.fn(),
-    refreshSessionMemoryContext: jest.fn().mockResolvedValue({
-      consistencyBarrier: {
-        outcome: 'degraded',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 0,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-      livingMemory: null,
-    }),
+    refreshSessionMemory: jest.fn(() => ({
+      status: 'unavailable' as const,
+      policyEpoch: getMemoryPolicyEpoch(),
+    })),
     requestFrame: buildGraphEntryRequestFrame({
       text: 'Run the task',
       attachmentCount: 0,
@@ -228,7 +204,7 @@ describe('agentControlGraphSessionExecution', () => {
     expect(
       mockedExecuteAgentControlGraphIteration.mock.calls.map(([input]) => input.iteration),
     ).toEqual([1, 1]);
-    expect(params.refreshSessionMemoryContext).toHaveBeenCalledTimes(1);
+    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
     expect(params.graph.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
   });
 
@@ -254,7 +230,7 @@ describe('agentControlGraphSessionExecution', () => {
     expect(
       mockedExecuteAgentControlGraphIteration.mock.calls.map(([input]) => input.iteration),
     ).toEqual([1, 1]);
-    expect(params.refreshSessionMemoryContext).toHaveBeenCalledTimes(1);
+    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
     expect(params.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
       {
         type: 'MODEL_TURN_INVALIDATED',
@@ -292,16 +268,8 @@ describe('agentControlGraphSessionExecution', () => {
     };
     const params = createParams({ maxToolIterations: 1 });
     params.initialRuntime.workingMessages = [compactMessage, arabicMessage, japaneseMessage];
-    params.initialRuntime.admittedMemoryContext = {
-      ...params.initialRuntime.admittedMemoryContext,
-      admission: 'admitted',
-      authoritySnapshot: {
-        processEpochs: { restrictive: -1, projection: -1 },
-        restrictiveRevision: { memoryOwnerId: 'owner', value: 0 },
-        projectionRevision: { memoryOwnerId: 'owner', value: 0 },
-        policy: { enabled: true, revision: 0 },
-      },
-    } as never;
+    // Read before memory was last turned on or off: no longer current.
+    params.initialRuntime.memory = { status: 'off', policyEpoch: getMemoryPolicyEpoch() - 1 };
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
       runtime: params.initialRuntime,
@@ -309,12 +277,8 @@ describe('agentControlGraphSessionExecution', () => {
 
     await executeAgentControlGraphSession(params);
 
-    expect(params.refreshSessionMemoryContext).toHaveBeenCalledTimes(1);
-    expect(params.refreshSessionMemoryContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workingMessages: [arabicMessage, japaneseMessage],
-      }),
-    );
+    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
+    expect(params.refreshSessionMemory).toHaveBeenCalledWith([arabicMessage, japaneseMessage]);
     expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledWith(
       expect.objectContaining({
         iteration: 1,
@@ -327,48 +291,15 @@ describe('agentControlGraphSessionExecution', () => {
 
   it('blocks with a typed terminal after two unstable authority repreparations', async () => {
     const params = createParams({ maxToolIterations: 1 });
-    params.initialRuntime.admittedMemoryContext = {
-      ...params.initialRuntime.admittedMemoryContext,
-      admission: 'admitted',
-      authoritySnapshot: {
-        processEpochs: { restrictive: -1, projection: -1 },
-        restrictiveRevision: { memoryOwnerId: 'owner', value: 0 },
-        projectionRevision: { memoryOwnerId: 'owner', value: 0 },
-        policy: { enabled: true, revision: 0 },
-      },
-    } as never;
-    (params.refreshSessionMemoryContext as jest.Mock).mockResolvedValue({
-      consistencyBarrier: {
-        outcome: 'no_job',
-        durationMs: 0,
-        waitedMs: 0,
-        queryCount: 0,
-        matchedJobCount: 0,
-        queueAgeMs: null,
-        initialJobStatus: null,
-        finalJobStatus: null,
-      },
-      livingMemory: {
-        sections: [],
-        cacheableSignature: 'empty',
-        focusBlockText: '',
-        openThreadLabels: [],
-        recalledFactCount: 0,
-        recalledEpisodeCount: 0,
-        applicabilityPolicy: {},
-        memoryAuthoritySnapshot: {
-          processEpochs: { restrictive: -1, projection: -1 },
-          restrictiveRevision: { memoryOwnerId: 'owner', value: 0 },
-          projectionRevision: { memoryOwnerId: 'owner', value: 0 },
-          policy: { enabled: true, revision: 0 },
-        },
-      },
+    mockedExecuteAgentControlGraphIteration.mockResolvedValue({
+      status: 'retry_current_iteration',
+      runtime: params.initialRuntime,
     });
 
     await executeAgentControlGraphSession(params);
 
-    expect(params.refreshSessionMemoryContext).toHaveBeenCalledTimes(2);
-    expect(mockedExecuteAgentControlGraphIteration).not.toHaveBeenCalled();
+    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(2);
+    expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledTimes(3);
     expect(params.graph.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         graphEvent: { type: 'BLOCKED', reason: 'memory_authority_unstable' },

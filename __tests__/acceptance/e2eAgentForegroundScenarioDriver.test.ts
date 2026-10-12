@@ -245,8 +245,6 @@ describe('runForegroundScenario', () => {
       systemPrompt: 'Scenario prompt',
       defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
-      memoryRetrievalStrategy: 'lexical_only',
-      memoryContextStrategy: 'full_context',
       enableCompaction: false,
       turns: [{ content: 'How are you?', route: 'production_auto', maxTokens: 321 }],
     });
@@ -260,8 +258,6 @@ describe('runForegroundScenario', () => {
       expect.objectContaining({
         maxTokens: 321,
         personaId: 'default',
-        memoryRetrievalStrategy: 'lexical_only',
-        memoryContextStrategy: 'full_context',
         enableCompaction: false,
       }),
       expect.any(Object),

@@ -80,16 +80,7 @@ describe('prepareAgentTurnRequestBudget', () => {
       toolsForIteration: [],
       warn: jest.fn(),
       workingMessages: messages,
-      livingMemory: {
-        sections: [],
-        cacheableSignature: 'memory-signature',
-        focusBlockText: 'PRIVATE_FOCUS_SENTINEL',
-        openThreadLabels: ['PRIVATE_THREAD_SENTINEL'],
-        idleSinceLastTurnMs: 99_000,
-        recalledFactCount: 1,
-        recalledEpisodeCount: 1,
-        applicabilityPolicy: {} as never,
-      },
+      memorySectionText: '## Memory\n- (2026-10-01) PRIVATE_MEMORY_SENTINEL [id: item-1]',
     });
 
     expect(compact).toHaveBeenCalled();

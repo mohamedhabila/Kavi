@@ -55,7 +55,6 @@ function baseParams(overrides: Record<string, any> = {}) {
     effectiveForceTextReasonThisTurn: undefined,
     hasPendingAsyncOperations: false,
     iteration: 1,
-    livingMemory: null,
     onCompaction: undefined,
     preparedTurn: {
       enrichedSystemPrompt: 'Be concise.',

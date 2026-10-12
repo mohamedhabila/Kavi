@@ -9,7 +9,7 @@ export type SystemPromptSectionPurpose =
   | 'capability_index'
   | 'execution_mode'
   | 'forced_text'
-  | 'living_memory'
+  | 'memory'
   | 'memory_policy'
   | 'plan'
   | 'runtime_context'

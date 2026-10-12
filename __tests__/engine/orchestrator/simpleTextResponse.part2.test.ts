@@ -5,7 +5,7 @@
 import {
   runOrchestrator,
   legacyFileSystem,
-  buildLivingMemorySections,
+  prepareMemoryPromptSection,
   mockStreamMessage,
   mockSendMessage,
   makeProvider,
@@ -136,10 +136,8 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      const memoryInput = (buildLivingMemorySections as jest.Mock).mock.calls[0][0];
-      expect(memoryInput.messages[0].enrichedContent).toContain('<media_context>');
-      expect(memoryInput.messages[0].enrichedContent).toContain(
-        'The current screen shows an Update button',
+      expect(prepareMemoryPromptSection).toHaveBeenCalledWith(
+        expect.objectContaining({ latestUserMessage: 'What should I do on this screen?' }),
       );
       expect(callbacks.onUserMessageEnriched).toHaveBeenCalledWith(
         'msg1',

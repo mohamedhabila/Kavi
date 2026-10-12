@@ -227,7 +227,6 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       linkUnderstandingEnabled: params.config.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: params.config.mediaUnderstandingEnabled,
       explicitToolSelectionRejectedMessage,
-      taskId: params.config.workstreamId,
       subAgent,
       config: params.config,
       runtimeState,

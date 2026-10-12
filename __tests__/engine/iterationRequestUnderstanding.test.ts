@@ -23,7 +23,7 @@ function params(iteration: number) {
   const runtime = {
     activeModel: 'test-model',
     activeProvider: { id: 'provider', name: 'Provider', enabled: true },
-    admittedMemoryContext: { livingMemory: null },
+    memory: { status: 'off', policyEpoch: 0 },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
     lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,

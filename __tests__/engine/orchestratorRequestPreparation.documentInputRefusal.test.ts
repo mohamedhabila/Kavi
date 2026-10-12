@@ -8,7 +8,7 @@
 // never just fold a notice into the enriched text and drop the structured signal.
 
 jest.mock('../../src/services/memory/memoryAccessGateway', () => ({
-  buildUnifiedMemoryAccessContext: jest.fn(),
+  readSessionMemory: jest.fn(() => ({ status: 'off', policyEpoch: 0 })),
 }));
 
 jest.mock('../../src/services/skills/manager', () => ({
@@ -16,11 +16,8 @@ jest.mock('../../src/services/skills/manager', () => ({
 }));
 
 import { prepareOrchestratorRequestBundle } from '../../src/engine/orchestratorRequestPreparation';
-import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { Message } from '../../src/types/message';
-
-const mockedBuildUnifiedMemoryAccessContext = jest.mocked(buildUnifiedMemoryAccessContext);
 
 const provider = {
   id: 'provider-1',
@@ -30,30 +27,6 @@ const provider = {
   apiKey: 'key',
   model: 'model-1',
 } as LlmProviderConfig;
-
-function gatewayResult(messages: Message[]) {
-  return {
-    boundary: {
-      startIndex: 0,
-      reason: 'full_history' as const,
-      similarityScore: 1,
-      idleGapMs: 0,
-      droppedMessageCount: 0,
-    },
-    scopedMessages: messages,
-    livingMemory: null,
-    consistencyBarrier: {
-      outcome: 'no_job' as const,
-      durationMs: 0,
-      waitedMs: 0,
-      queryCount: 1,
-      matchedJobCount: 0,
-      queueAgeMs: null,
-      initialJobStatus: null,
-      finalJobStatus: null,
-    },
-  };
-}
 
 describe('orchestrator request preparation — document-input refusal', () => {
   beforeEach(() => {
@@ -79,7 +52,6 @@ describe('orchestrator request preparation — document-input refusal', () => {
         ],
       },
     ];
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult(messages));
     const onUserMessageAttachmentsUpdated = jest.fn();
 
     const result = await prepareOrchestratorRequestBundle({
@@ -131,7 +103,6 @@ describe('orchestrator request preparation — document-input refusal', () => {
         ],
       },
     ];
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult(messages));
     const onUserMessageAttachmentsUpdated = jest.fn();
     const anthropicProvider = {
       ...provider,
@@ -182,7 +153,6 @@ describe('orchestrator request preparation — document-input refusal', () => {
         ],
       },
     ];
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult(messages));
     const onUserMessageAttachmentsUpdated = jest.fn();
     const anthropicProvider = {
       ...provider,

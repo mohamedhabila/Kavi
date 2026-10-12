@@ -456,14 +456,12 @@ describe('scheduled job conversation transcript', () => {
       async (
         options: {
           signal?: AbortController;
-          taskId?: string;
           agentRunId?: string;
           executionRunId?: string;
         },
         callbacks: OrchestratorCallbacks,
       ) => {
         expect(options).toMatchObject({
-          taskId: 'attempt-job-1',
           agentRunId: 'attempt-job-1',
           executionRunId: 'occurrence-job-1',
         });

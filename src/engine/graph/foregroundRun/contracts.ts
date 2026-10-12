@@ -1,9 +1,5 @@
 import { AgentRun, AgentRunAsyncOperation } from '../../../types/agentRun';
 import { LlmProviderConfig } from '../../../types/provider';
-import type {
-  MemoryContextStrategy,
-  MemoryRetrievalStrategy,
-} from '../../../services/memory/memoryAccessPolicy';
 import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
 import type { MobileControllerOutcome } from '../../mobileController/contracts';
 import type { AgentRunMobileControllerHandoffRef } from '../../../types/agentRun';
@@ -33,8 +29,6 @@ export type RunChatOptions = {
   additionalUserPrompt?: string;
   disableTools?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
-  memoryRetrievalStrategy?: MemoryRetrievalStrategy;
-  memoryContextStrategy?: MemoryContextStrategy;
   enableCompaction?: boolean;
   initialPendingAsyncOperations?: AgentRunAsyncOperation[];
   /** Optional permitted host controller for this exact foreground execution. */

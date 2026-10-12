@@ -61,10 +61,7 @@ describe('buildAgentTurnPromptBundle', () => {
   it('keeps cacheable sections as a contiguous provider-visible prefix after memory and the plan are appended', () => {
     const bundle = buildAgentTurnPromptBundle({
       ...baseParams,
-      livingMemorySections: [
-        { text: '## This Turn\n### Retrieved Memory\nUser prefers concise updates.' },
-        { text: '## Stable Addendum\nInvariant policy.', cacheable: true },
-      ],
+      memorySection: '## Memory\n- (2026-10-01) User prefers concise updates. [id: item-1]',
       planPromptSection: '## Plan\n- [ ] Finish the task.',
     });
     const firstDynamicIndex = bundle.enrichedSystemPromptSections.findIndex(
@@ -77,9 +74,13 @@ describe('buildAgentTurnPromptBundle', () => {
     expect(firstDynamicIndex).toBeGreaterThan(-1);
     expect(lastCacheableIndex).toBeGreaterThan(-1);
     expect(lastCacheableIndex).toBeLessThan(firstDynamicIndex);
-    expect(bundle.enrichedSystemPrompt).toMatch(
-      /## Stable Addendum\nInvariant policy\.[\s\S]*## This Turn[\s\S]*## Plan/,
-    );
+    expect(bundle.enrichedSystemPrompt).toMatch(/User prefers concise updates\.[\s\S]*## Plan/);
+    expect(
+      bundle.enrichedSystemPromptSections.find((section) => section.purpose === 'memory'),
+    ).toEqual({
+      text: '## Memory\n- (2026-10-01) User prefers concise updates. [id: item-1]',
+      purpose: 'memory',
+    });
     expect(bundle.enrichedSystemPrompt).not.toContain('Runtime context:');
   });
 

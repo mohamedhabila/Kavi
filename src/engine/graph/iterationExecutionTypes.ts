@@ -30,7 +30,7 @@ import type { AgentControlGraphWorkflowToolResultProgress } from './workflowTool
 import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
-import type { AdmittedSessionMemoryContext } from './sessionMemoryContext';
+import type { SessionMemoryRead } from '../../services/memory/memoryAccessGateway';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
@@ -62,7 +62,8 @@ export type IterationCallbacks = {
 export interface AgentControlGraphIterationRuntimeState {
   activeModel: string;
   activeProvider: LlmProviderConfig;
-  admittedMemoryContext: AdmittedSessionMemoryContext;
+  /** What the run read from memory for its prompt. */
+  memory: SessionMemoryRead;
   consecutivePendingAsyncNoToolTurns: number;
   /** Set once this run escalated out of chitchat; later iterations keep agentic authority. */
   escalatedToAgentic?: boolean;
@@ -90,13 +91,7 @@ export type FinalCandidateGraphEvent = Extract<
 >;
 
 export type PromptContextSupport = PrepareAgentControlGraphModelTurnParams['promptContextSupport'];
-export type SessionPromptContextSupport = Omit<
-  PromptContextSupport,
-  | 'livingMemorySections'
-  | 'livingMemoryReadEpoch'
-  | 'livingMemoryAuthoritySnapshot'
-  | 'livingMemoryValidUntil'
->;
+export type SessionPromptContextSupport = Omit<PromptContextSupport, 'memory'>;
 
 export type GraphIterationBindings = {
   applyAgentControlGraphEvents: (

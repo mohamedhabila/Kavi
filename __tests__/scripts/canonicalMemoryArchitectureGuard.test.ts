@@ -149,6 +149,26 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
+  it('rejects restoring the retired living-memory prompt path', () => {
+    for (const filePath of [
+      'src/services/memory/livingMemoryBridge.ts',
+      'src/services/memory/nextTurnConsistency.ts',
+      'src/services/memory/promptAssembly.ts',
+      'src/services/memory/promptAssemblyRetrievalEvent.ts',
+    ]) {
+      writeProjectFile(projectRoot, filePath, 'export const restored = true;\n');
+    }
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        'src/services/memory/livingMemoryBridge.ts restores a retired memory implementation',
+        'src/services/memory/nextTurnConsistency.ts restores a retired memory implementation',
+        'src/services/memory/promptAssembly.ts restores a retired memory implementation',
+        'src/services/memory/promptAssemblyRetrievalEvent.ts restores a retired memory implementation',
+      ]),
+    );
+  });
+
   it('allows only the one-way raw-block table drop and rejects restoring its store or tools', () => {
     writeProjectFile(
       projectRoot,

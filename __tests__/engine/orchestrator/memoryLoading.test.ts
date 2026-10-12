@@ -4,7 +4,7 @@
 
 import {
   runOrchestrator,
-  buildLivingMemorySections,
+  prepareMemoryPromptSection,
   mockStreamMessage,
   makeProvider,
   makeCallbacks,
@@ -14,7 +14,12 @@ import {
 
 describe('Orchestrator', () => {
   describe('Memory loading', () => {
-    it('delegates memory retrieval to the canonical memory bridge', async () => {
+    it('puts the memory section for the latest user message in the system prompt', async () => {
+      (prepareMemoryPromptSection as jest.Mock).mockReturnValue({
+        text: '## Memory\n- (2026-10-01) The user prefers green tea. [id: item-1]',
+        itemIds: ['item-1'],
+        turnIds: [],
+      });
       mockStreamMessage.mockImplementationOnce(() => {
         return createStreamGenerator(
           [
@@ -36,23 +41,16 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(buildLivingMemorySections).toHaveBeenCalledWith(
-        expect.objectContaining({
-          conversationId: 'conv1',
-          messages: expect.any(Array),
-          retrievalLlm: expect.objectContaining({
-            model: 'gpt-5.4',
-            provider: expect.objectContaining({
-              id: options.provider.id,
-            }),
-          }),
-        }),
-      );
+      expect(prepareMemoryPromptSection).toHaveBeenCalledWith({
+        visibility: { conversationId: 'conv1' },
+        latestUserMessage: 'Hello',
+      });
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{
         role: string;
         content: string;
       }>;
-      expect(apiMessages[0]?.content).not.toContain('Conversation memory:');
+      expect(apiMessages[0]?.role).toBe('system');
+      expect(apiMessages[0]?.content).toContain('The user prefers green tea. [id: item-1]');
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
@@ -80,10 +78,8 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(buildLivingMemorySections).toHaveBeenCalledWith(
-        expect.objectContaining({
-          conversationId: 'parent-memory-7',
-        }),
+      expect(prepareMemoryPromptSection).toHaveBeenCalledWith(
+        expect.objectContaining({ visibility: { conversationId: 'parent-memory-7' } }),
       );
     });
 

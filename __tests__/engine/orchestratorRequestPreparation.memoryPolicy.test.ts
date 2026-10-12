@@ -1,5 +1,6 @@
 jest.mock('../../src/services/memory/memoryAccessGateway', () => ({
-  buildUnifiedMemoryAccessContext: jest.fn(),
+  ...jest.requireActual('../../src/services/memory/memoryAccessGateway'),
+  readSessionMemory: jest.fn(),
 }));
 
 jest.mock('../../src/services/skills/manager', () => ({
@@ -7,16 +8,19 @@ jest.mock('../../src/services/skills/manager', () => ({
 }));
 
 import { prepareOrchestratorRequestBundle } from '../../src/engine/orchestratorRequestPreparation';
-import { buildUnifiedMemoryAccessContext } from '../../src/services/memory/memoryAccessGateway';
+import {
+  isSessionMemoryReadCurrent,
+  readSessionMemory,
+} from '../../src/services/memory/memoryAccessGateway';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { getSkillSystemPrompts } from '../../src/services/skills/manager';
 import {
-  captureMemoryReadEpoch,
+  getMemoryPolicyEpoch,
   initializeMemoryPolicyObservation,
 } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
-const mockedBuildUnifiedMemoryAccessContext = jest.mocked(buildUnifiedMemoryAccessContext);
+const mockedReadSessionMemory = jest.mocked(readSessionMemory);
 const provider = {
   id: 'provider-1',
   name: 'Provider',
@@ -43,27 +47,12 @@ function baseParams() {
   };
 }
 
-function gatewayResult() {
+function memoryRead() {
   return {
-    boundary: {
-      startIndex: 0,
-      reason: 'full_history' as const,
-      similarityScore: 1,
-      idleGapMs: 0,
-      droppedMessageCount: 0,
-    },
-    scopedMessages: [{ id: 'user-1', role: 'user' as const, content: 'Continue.', timestamp: 1 }],
-    livingMemory: null,
-    consistencyBarrier: {
-      outcome: 'no_job' as const,
-      durationMs: 0,
-      waitedMs: 0,
-      queryCount: 1,
-      matchedJobCount: 0,
-      queueAgeMs: null,
-      initialJobStatus: null,
-      finalJobStatus: null,
-    },
+    status: 'read' as const,
+    policyEpoch: getMemoryPolicyEpoch(),
+    authoritySnapshot: {} as never,
+    section: { text: 'private memory prompt section', itemIds: ['item-1'], turnIds: [] },
   };
 }
 
@@ -78,58 +67,22 @@ describe('orchestrator request memory policy', () => {
     useSettingsStore.setState({ disableLongTermMemory: false } as never);
   });
 
-  it('forwards explicit retrieval and context strategies to the unified gateway', async () => {
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult());
-
-    await prepareOrchestratorRequestBundle({
-      ...baseParams(),
-      memoryRetrievalStrategy: 'lexical_only',
-      memoryContextStrategy: 'full_context',
+  it('answers without memory when reading it fails', async () => {
+    mockedReadSessionMemory.mockImplementation(() => {
+      throw new Error('memory unavailable');
     });
-
-    expect(mockedBuildUnifiedMemoryAccessContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        retrievalStrategy: 'lexical_only',
-        contextStrategy: 'full_context',
-        retrievalLlm: { provider, model: provider.model },
-      }),
-    );
-  });
-
-  it('rejects an invalid strategy before entering the degradable gateway boundary', async () => {
-    await expect(
-      prepareOrchestratorRequestBundle({
-        ...baseParams(),
-        memoryRetrievalStrategy: 'invalid' as never,
-      }),
-    ).rejects.toThrow('Unsupported memory retrieval strategy');
-    expect(mockedBuildUnifiedMemoryAccessContext).not.toHaveBeenCalled();
-  });
-
-  it('propagates operational failures for explicit diagnostic policies', async () => {
-    const operationalFailure = new Error('diagnostic retrieval unavailable');
-    mockedBuildUnifiedMemoryAccessContext.mockRejectedValue(operationalFailure);
-    await expect(
-      prepareOrchestratorRequestBundle({
-        ...baseParams(),
-        memoryRetrievalStrategy: 'lexical_only',
-      }),
-    ).rejects.toBe(operationalFailure);
-  });
-
-  it('preserves scoped graceful fallback for ordinary production behavior', async () => {
-    mockedBuildUnifiedMemoryAccessContext.mockRejectedValue(new Error('memory unavailable'));
     const params = baseParams();
     const result = await prepareOrchestratorRequestBundle(params);
     expect(result.workingMessages).toEqual(params.messages);
+    expect(result.memory).toEqual({ status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() });
     expect(params.logger.devWarn).toHaveBeenCalledWith(
-      'Unified memory access unavailable for this request:',
+      'Memory unavailable for this request:',
       'memory unavailable',
     );
   });
 
   it('captures a waiting-async resume as code-owned continuation state', async () => {
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue(gatewayResult());
+    mockedReadSessionMemory.mockReturnValue(memoryRead());
     const result = await prepareOrchestratorRequestBundle({
       ...baseParams(),
       graphOwnedRun: true,
@@ -150,9 +103,11 @@ describe('orchestrator request memory policy', () => {
   });
 
   it('grounds current-user identity to sanitized raw content, never runtime context or enrichment', async () => {
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue({
-      ...gatewayResult(),
-      scopedMessages: [
+    mockedReadSessionMemory.mockReturnValue(memoryRead());
+
+    const result = await prepareOrchestratorRequestBundle({
+      ...baseParams(),
+      messages: [
         {
           id: 'user-1',
           role: 'user' as const,
@@ -164,38 +119,14 @@ describe('orchestrator request memory policy', () => {
       ],
     });
 
-    const result = await prepareOrchestratorRequestBundle(baseParams());
-
     expect(result.currentUserMessage).toEqual({
       id: 'user-1',
       text: 'Keep the report local.',
     });
   });
 
-  it('drops retrieved prompt sections when opt-out lands during later async preparation', async () => {
-    const memoryReadEpoch = captureMemoryReadEpoch()!;
-    mockedBuildUnifiedMemoryAccessContext.mockResolvedValue({
-      ...gatewayResult(),
-      livingMemory: {
-        memoryReadEpoch,
-        sections: [{ text: 'private memory prompt section' }],
-        cacheableSignature: 'private-signature',
-        focusBlockText: '',
-        openThreadLabels: [],
-        recalledFactCount: 1,
-        recalledEpisodeCount: 0,
-        applicabilityPolicy: {
-          state: 'applied',
-          useCount: 1,
-          askCount: 0,
-          abstainCount: 0,
-          silentCount: 0,
-          promptVisibleFactCount: 1,
-          promptBudgetDroppedFactCount: 0,
-          reasonCounts: {},
-        },
-      },
-    });
+  it('leaves a read made before memory is turned off during preparation no longer current', async () => {
+    mockedReadSessionMemory.mockReturnValue(memoryRead());
     let releaseSkills!: () => void;
     const skillGate = new Promise<void>((resolve) => {
       releaseSkills = resolve;
@@ -215,9 +146,8 @@ describe('orchestrator request memory policy', () => {
     useSettingsStore.setState({ disableLongTermMemory: true } as never);
     releaseSkills();
 
-    await expect(pending).resolves.toMatchObject({
-      livingMemory: null,
-      memoryConsistencyBarrier: { outcome: 'opt_out' },
-    });
+    const result = await pending;
+    expect(result.memory.status).toBe('read');
+    expect(isSessionMemoryReadCurrent(result.memory)).toBe(false);
   });
 });

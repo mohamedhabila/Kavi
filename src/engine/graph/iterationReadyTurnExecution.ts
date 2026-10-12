@@ -84,15 +84,14 @@ export async function executePreparedAgentControlGraphTurn(params: {
     });
   }
 
-  const livingMemory = runtime.admittedMemoryContext.livingMemory;
-  if (livingMemory) {
+  const memorySection = runtime.memory.status === 'read' ? runtime.memory.section : null;
+  if (memorySection) {
     iterationParams.graph.recordObservability({
       observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.MEMORY_RETRIEVAL,
       iteration: iterationParams.iteration,
       detail: buildMemoryRetrievalObservabilityDetail({
-        factCount: livingMemory.recalledFactCount,
-        episodeCount: livingMemory.recalledEpisodeCount,
-        sectionCount: livingMemory.sections.length,
+        itemCount: memorySection.itemIds.length,
+        turnCount: memorySection.turnIds.length,
       }),
     });
   }
@@ -133,7 +132,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
         getPendingTrackedAsyncOperations(iterationParams.trackedAsyncOperations).length > 0,
       isForegroundRun: iterationParams.isForegroundRun,
       iteration: iterationParams.iteration,
-      livingMemory,
+      memorySectionText: memorySection?.text,
       llm: runtime.llm,
       onCompaction: iterationParams.onCompaction,
       preparedTurn,
