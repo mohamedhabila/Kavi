@@ -14,10 +14,6 @@ import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
 import type { OrchestratorCallbacks, OrchestratorOptions } from './types';
-import {
-  resolveCodeOwnedMemoryConversationId,
-  resolveCodeOwnedMemoryPersonaId,
-} from '../../services/memory/memoryScopeIdentity';
 import { persistConversationModeEscalation } from '../graph/conversation/persistModeEscalation';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
@@ -73,7 +69,6 @@ export async function runOrchestratorGraphSession(params: {
     signal,
     allProviders,
   } = options;
-  const personaId = resolveCodeOwnedMemoryPersonaId(options.personaId);
 
   const availableToolNames = new Set(allTools.map((tool) => tool.name));
   const explicitToolSurfaceToolNames = resolveRuntimeExplicitToolSurfaceToolNames(
@@ -81,10 +76,7 @@ export async function runOrchestratorGraphSession(params: {
     runtimeToolAvailability,
   );
   const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
-  const sharedConversationId = resolveCodeOwnedMemoryConversationId(
-    options.memoryConversationId,
-    conversationId,
-  );
+  const sharedConversationId = options.memoryConversationId ?? conversationId;
   const runtimeContextNote = buildRuntimeContextNote();
   const workflowTaskAnchor = (() => {
     if (options.workflowTaskAnchor) {
@@ -150,10 +142,7 @@ export async function runOrchestratorGraphSession(params: {
   const requestFrame = resolveGraphEntryRequestDecision({
     frame: structuralRequestFrame,
     graphSnapshot: options.initialAgentControlGraphState,
-    toolAuthority: buildRuntimeRequestDecisionToolAuthority({
-      availableToolNames,
-      personaId,
-    }),
+    toolAuthority: buildRuntimeRequestDecisionToolAuthority(availableToolNames),
   });
   const graphCallbacks = {
     ...callbacks,
