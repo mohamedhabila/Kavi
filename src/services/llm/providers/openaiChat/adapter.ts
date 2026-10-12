@@ -162,10 +162,15 @@ export async function sendOpenAICompatibleChat(args: {
   if (requestTools?.length) {
     body.tools = requestTools.map((tool) => {
       const normalizedSchema = normalizeToolInputSchema(tool.input_schema);
-      const useStrict =
-        args.isOpenAIProvider() &&
-        tool.strict !== false &&
-        args.isStrictCompatibleSchema(normalizedSchema);
+      // Every compatible schema goes out in strict form — each optional property required
+      // and nullable — not only to OpenAI. An OpenAI-compatible server (a router upstream, a
+      // local vLLM or llama.cpp) may leave out what a schema does not require: GLM 5.3 Flash
+      // on one OpenRouter upstream dropped an argument the call needed in 24 of 24 pinned
+      // calls (a reminder without its title or time, an update without its new time, a
+      // calendar update without the note it was asked to add) and sent all 24 complete in
+      // the strict form. The engine reads a null the tool's own schema does not admit as
+      // "not given" (omitNullsTheSchemaRejects).
+      const useStrict = tool.strict !== false && args.isStrictCompatibleSchema(normalizedSchema);
 
       return {
         type: 'function',
@@ -173,7 +178,7 @@ export async function sendOpenAICompatibleChat(args: {
           name: tool.name,
           description: tool.description,
           parameters: useStrict ? args.strictifyOpenAiSchema(normalizedSchema) : normalizedSchema,
-          ...(useStrict ? { strict: true } : {}),
+          ...(useStrict && args.isOpenAIProvider() ? { strict: true } : {}),
         },
       };
     });

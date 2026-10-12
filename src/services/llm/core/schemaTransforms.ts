@@ -37,6 +37,77 @@ export function strictifyOpenAiSchema(schema: Record<string, any>): Record<strin
   return result;
 }
 
+function isSchemaRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function schemaAdmitsNull(schema: unknown): boolean {
+  if (!isSchemaRecord(schema)) return true;
+  const types = normalizeSchemaTypeList(schema.type);
+  const variants = [schema.anyOf, schema.oneOf].filter(Array.isArray).flat();
+  if (types.length === 0 && !Array.isArray(schema.enum) && variants.length === 0) return true;
+  return (
+    types.includes('null') ||
+    schema.nullable === true ||
+    (Array.isArray(schema.enum) && schema.enum.includes(null)) ||
+    variants.some(schemaAdmitsNull)
+  );
+}
+
+/** The schema an object value is read against: its own, or its object-shaped variant. */
+function objectPropertiesOf(schema: Record<string, any>): Record<string, any> | undefined {
+  if (isSchemaRecord(schema.properties)) return schema.properties;
+  const variant = [schema.anyOf, schema.oneOf]
+    .filter(Array.isArray)
+    .flat()
+    .find((entry) => isSchemaRecord(entry) && isSchemaRecord(entry.properties));
+  return variant?.properties;
+}
+
+/** Deletes, in place, every null the schema at its position does not admit; true if any. */
+function deleteNullsTheSchemaRejects(value: unknown, schema: unknown): boolean {
+  if (!isSchemaRecord(schema)) return false;
+  let deleted = false;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      deleted = deleteNullsTheSchemaRejects(entry, schema.items) || deleted;
+    }
+    return deleted;
+  }
+  const properties = objectPropertiesOf(schema);
+  if (!isSchemaRecord(value) || !properties) return false;
+  for (const [key, entry] of Object.entries(value)) {
+    const propertySchema = properties[key];
+    if (entry === null && propertySchema !== undefined && !schemaAdmitsNull(propertySchema)) {
+      delete value[key];
+      deleted = true;
+    } else {
+      deleted = deleteNullsTheSchemaRejects(entry, propertySchema) || deleted;
+    }
+  }
+  return deleted;
+}
+
+/**
+ * The inverse of `strictifyOpenAiSchema` for the arguments a model returns. The strict form
+ * declares every optional property required and nullable, so a null where the tool's own
+ * schema admits none means the property was not given. Returns the text unchanged when it is
+ * not a JSON object or holds no such null.
+ */
+export function omitNullsTheSchemaRejects(
+  argumentsText: string,
+  schema: Record<string, any> | undefined,
+): string {
+  if (!schema || !argumentsText) return argumentsText;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(argumentsText);
+  } catch {
+    return argumentsText;
+  }
+  return deleteNullsTheSchemaRejects(parsed, schema) ? JSON.stringify(parsed) : argumentsText;
+}
+
 function makeSchemaNullable(schema: Record<string, any>): Record<string, any> {
   if (!schema || typeof schema !== 'object') {
     return schema;

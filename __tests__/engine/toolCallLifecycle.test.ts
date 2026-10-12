@@ -234,6 +234,61 @@ describe('executeToolCallLifecycle', () => {
     expect(mockedExecuteTool).not.toHaveBeenCalled();
   });
 
+  // Tool schemas go to chat-compatible servers in strict form, every optional property
+  // required and nullable, so a model answers an optional property it does not use with null.
+  it('reads a null the tool schema does not admit as an argument not given', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome('{"status":"reminder_created"}'));
+    const reminderTool: ToolDefinition = {
+      name: 'reminder',
+      description: 'Create a reminder.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['create', 'list'] },
+          title: { type: 'string' },
+          notes: { type: 'string' },
+          labels: { type: 'array', items: { type: 'string' } },
+          when: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string' },
+              delaySeconds: { type: 'number' },
+              at: { type: 'string' },
+            },
+            required: ['kind'],
+          },
+        },
+        required: ['action'],
+      },
+      contract: { sideEffects: ['external_run'] },
+    };
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-reminder',
+          name: 'reminder',
+          arguments: JSON.stringify({
+            action: 'create',
+            title: 'Stretch',
+            notes: null,
+            labels: null,
+            when: { kind: 'once', delaySeconds: 60, at: null },
+          }),
+        },
+        availableToolNames: new Set(['reminder']),
+        groundedRequestScopedTools: [reminderTool],
+      }),
+    );
+
+    expect('toolMessage' in result && result.toolMessage.isError).toBeFalsy();
+    expect(JSON.parse(mockedExecuteTool.mock.calls[0][1])).toEqual({
+      action: 'create',
+      title: 'Stretch',
+      when: { kind: 'once', delaySeconds: 60 },
+    });
+  });
+
   it('passes the code-owned current user message only through execution context', async () => {
     mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome('{}'));
     const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };

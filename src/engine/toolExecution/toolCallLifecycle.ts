@@ -19,7 +19,7 @@ import {
   recordLifecycleToolCall,
   yieldToUiFrame,
 } from './toolCallLifecycleRecording';
-import { resolveToolCallPreflight } from './toolCallLifecyclePreflight';
+import { findToolDeclaration, resolveToolCallPreflight } from './toolCallLifecyclePreflight';
 import { buildRepeatedToolCallNotice } from './repeatedToolCallNotice';
 import { enrichToolResultWithSchemaRepair } from './toolResultRepair';
 import { appendExecutionReceipt, attachExecutionReceipt } from './toolCallLifecycleReceipts';
@@ -38,6 +38,7 @@ import {
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
+import { omitNullsTheSchemaRejects } from '../../services/llm/core/schemaTransforms';
 
 function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
   return lifecycle.groundedRequestScopedTools?.find(
@@ -57,9 +58,14 @@ export { isDeferredToolExecutionLifecycleResult } from './toolCallLifecycleTypes
 export async function executeToolCallLifecycle(
   params: ToolExecutionLifecycleParams,
 ): Promise<ToolExecutionLifecycleResult> {
+  const name = resolveRegisteredToolName(params.tc.name);
   const effectiveToolCall = {
     ...params.tc,
-    name: resolveRegisteredToolName(params.tc.name),
+    name,
+    arguments: omitNullsTheSchemaRejects(
+      params.tc.arguments,
+      findToolDeclaration(name, params.groundedRequestScopedTools)?.input_schema,
+    ),
   };
   const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(
     effectiveToolCall.name,

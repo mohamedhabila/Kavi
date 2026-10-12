@@ -128,6 +128,17 @@ function findGroundedToolDeclaration(
   return tools?.find((tool) => resolveRegisteredToolName(tool.name) === toolName);
 }
 
+/** The declaration a call is held to: the one this turn advertised, else the registered one. */
+export function findToolDeclaration(
+  toolName: string,
+  tools: ToolExecutionLifecycleParams['groundedRequestScopedTools'],
+) {
+  return (
+    findGroundedToolDeclaration(toolName, tools) ??
+    findGroundedToolDeclaration(toolName, withRegisteredToolDefinition(toolName, undefined))
+  );
+}
+
 export function resolveToolCallPreflight(
   params: ToolExecutionLifecycleParams,
   effectiveToolCall: RuntimeToolCallInput,
@@ -166,12 +177,10 @@ export function resolveToolCallPreflight(
 
   // Falls back to the registered contract: memory policy must bind identically whether or
   // not this turn advertised the tool, now that an unadvertised call is allowed to run.
-  const groundedDeclaration =
-    findGroundedToolDeclaration(canonicalToolCall.name, params.groundedRequestScopedTools) ??
-    findGroundedToolDeclaration(
-      canonicalToolCall.name,
-      withRegisteredToolDefinition(canonicalToolCall.name, undefined),
-    );
+  const groundedDeclaration = findToolDeclaration(
+    canonicalToolCall.name,
+    params.groundedRequestScopedTools,
+  );
   if (groundedDeclaration && !isToolAllowedForMemoryPolicy(groundedDeclaration)) {
     return completePreflightFailure({
       lifecycle: params,
