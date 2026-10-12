@@ -39,6 +39,19 @@ Requires `.env.local` setup below. Structural E2E rubrics such as `memory_item`,
 `e2eStructuralScenarioRubrics.test.ts`. The live suite pass bar is **>=90%**
 (`E2E_SCENARIO_MIN_PASS_RATE`).
 
+**Memory benchmark (`eval:longmemeval`)** asks [LongMemEval](https://github.com/xiaowu0162/LongMemEval)
+questions (ICLR 2025, MIT) through the same live conversation path and scores the answers
+with LongMemEval's own judge prompts and reference judge (`openai/gpt-4o-2024-08-06`, via the
+selected provider). Download a file from
+[longmemeval-cleaned](https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned) and set
+`LONGMEMEVAL_DATA` to it: `longmemeval_oracle.json` (evidence sessions only) or
+`longmemeval_s_cleaned.json` (~40 sessions per question). `LONGMEMEVAL_ARM=memory` (default)
+indexes the history as earlier rounds of the conversation that have left the request, so it
+reaches the model only through memory; `LONGMEMEVAL_ARM=context` keeps the whole history in
+the request as the long-context reference. `LONGMEMEVAL_PER_TYPE` (default 10) draws a fixed
+subset per question type; results go to `LONGMEMEVAL_OUT` (default
+`.artifacts/longmemeval-<arm>.jsonl`) and a summary is printed at the end.
+
 **Tier 3 nightly:** `.github/workflows/agent-e2e-nightly.yml` runs
 `verify:strict` + `eval:e2e` on a daily schedule (not PR-blocking). Configure
 repository secrets for the selected provider to enable live scenarios. Nightly
