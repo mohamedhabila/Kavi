@@ -14,6 +14,17 @@ jest.mock('expo-sqlite', () => ({
 
 import { closeMemoryDb, getMemoryDb } from '../../../src/services/memory/database';
 
+const RETIRED_TABLE_DROPS = [
+  'memory_chunks',
+  'memory_product_experience_observations',
+  'memory_verified_procedure_observations',
+  'memory_verified_procedure_run_invalidations',
+  'memory_verified_procedure_state',
+  'memory_extraction_cursor',
+].map((table) => `DROP TABLE IF EXISTS ${table}`);
+/** Statements one successful open executes: the secure-delete pragma, then each retired-table drop. */
+const OPEN_EXEC_COUNT = 1 + RETIRED_TABLE_DROPS.length;
+
 describe('memory database lifecycle', () => {
   beforeEach(() => {
     closeMemoryDb();
@@ -33,12 +44,10 @@ describe('memory database lifecycle', () => {
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(1);
     expect(mockOpenDatabaseSync).toHaveBeenCalledWith('kavi-memory.db');
-    expect(mockExecSync).toHaveBeenNthCalledWith(1, 'PRAGMA secure_delete = ON');
-    expect(mockExecSync).toHaveBeenNthCalledWith(2, 'DROP TABLE IF EXISTS memory_chunks');
-    expect(mockExecSync).toHaveBeenNthCalledWith(
-      3,
-      'DROP TABLE IF EXISTS memory_product_experience_observations;',
-    );
+    expect(mockExecSync.mock.calls.map(([statement]) => statement)).toEqual([
+      'PRAGMA secure_delete = ON',
+      ...RETIRED_TABLE_DROPS,
+    ]);
     expect(mockGetFirstSync).toHaveBeenCalledWith('PRAGMA secure_delete');
   });
 
@@ -49,7 +58,7 @@ describe('memory database lifecycle', () => {
 
     getMemoryDb();
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(6);
+    expect(mockExecSync).toHaveBeenCalledTimes(2 * OPEN_EXEC_COUNT);
   });
 
   it('retries cleanup with a fresh database after cleanup fails', () => {
@@ -62,7 +71,8 @@ describe('memory database lifecycle', () => {
 
     expect(getMemoryDb()).toBe(mockDatabase);
     expect(mockOpenDatabaseSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync).toHaveBeenCalledTimes(4);
+    // The first open fails on its first statement; the retry runs every statement.
+    expect(mockExecSync).toHaveBeenCalledTimes(1 + OPEN_EXEC_COUNT);
   });
 
   it('fails closed and closes the handle when secure deletion is unavailable', () => {
