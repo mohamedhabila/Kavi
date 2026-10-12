@@ -15,7 +15,7 @@ export interface CodeOwnedToolEffectContract {
   readonly effectMode: 'none' | 'effectful';
   readonly effectKind: ToolEffectKind;
   readonly completionMode?: 'operational';
-  readonly receiptSettlementMode?: 'returned_unverified' | 'acknowledged_returned_unverified';
+  readonly receiptSettlementMode?: 'returned_unverified';
   readonly tracksExecution?: true;
   readonly result?: ToolEffectResultContract;
   readonly completion?: {
@@ -249,7 +249,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         },
       ),
       completionMode: 'operational' as const,
-      receiptSettlementMode: 'acknowledged_returned_unverified' as const,
     }),
     // Python blocks worker network primitives unless the invocation explicitly
     // enables network access. The runtime may therefore verify a successful
@@ -287,7 +286,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         },
       ),
       completionMode: 'operational' as const,
-      receiptSettlementMode: 'acknowledged_returned_unverified' as const,
     }),
     // Workspace writes read the exact resource back after mutation. A result
     // is verified only when that readback matches the requested content.

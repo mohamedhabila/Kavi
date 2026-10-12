@@ -41,18 +41,23 @@ function isReturnedCodeOwnedOperationalEffect(receipt: ToolEffectReceipt): boole
   );
 }
 
-function isTerminalAcknowledgedCodeExecution(receipt: ToolEffectReceipt): boolean {
-  return (
-    receipt.contractIdentity.kind === 'code_owned' &&
-    receipt.transportState === 'returned' &&
-    receipt.executionState === 'completed' &&
-    receipt.effectKind === 'compute.execute' &&
-    receipt.effectState === 'applied' &&
-    receipt.verificationState === 'acknowledged' &&
-    getCodeOwnedToolEffectContract(receipt.toolName)?.receiptSettlementMode ===
-      'acknowledged_returned_unverified'
-  );
+/**
+ * The code-owned executor returned this exact dispatch's outcome: a change it applied, or a
+ * handoff to another app (maps, the dialer, a share sheet). The effect happened even though
+ * no read-back verified it, so it settles — it is never dispatched again and does not hold
+ * back the execution's later effects — and stays unverified, so it is not goal evidence.
+ * Only an outcome nobody reported (the executor threw, timed out or returned an undeclared
+ * status) needs reconciling.
+ */
+function isReturnedCodeOwnedOutcome(receipt: ToolEffectReceipt): boolean {
+  return receipt.contractIdentity.kind === 'code_owned' && receipt.transportState === 'returned';
 }
+
+const RETURNED_UNVERIFIED: EffectDispatchReceiptClassification = Object.freeze({
+  disposition: 'returned_unverified',
+  nextEffectStatus: 'returned',
+  requiresReconciliation: false,
+});
 
 export function classifyEffectDispatchReceipt(
   effectClass: ExecutionEffectClass,
@@ -71,16 +76,7 @@ export function classifyEffectDispatchReceipt(
           requiresReconciliation: false,
         };
       }
-      // The reviewed code runtime has acknowledged that a completed local
-      // workspace change was persisted. Settle the dispatch so the graph can
-      // inspect it, without treating the artifact as verified goal evidence.
-      if (isTerminalAcknowledgedCodeExecution(receipt)) {
-        return {
-          disposition: 'returned_unverified',
-          nextEffectStatus: 'returned',
-          requiresReconciliation: false,
-        };
-      }
+      if (isReturnedCodeOwnedOutcome(receipt)) return RETURNED_UNVERIFIED;
       return {
         disposition: 'applied_unverified',
         nextEffectStatus: 'applied',
@@ -112,6 +108,9 @@ export function classifyEffectDispatchReceipt(
         requiresReconciliation: true,
       };
     case 'handed_off':
+      if (isReturnedCodeOwnedOutcome(receipt)) return RETURNED_UNVERIFIED;
+    // A handoff nobody reported back is as uncertain as a pending or unknown outcome.
+    // falls through
     case 'pending':
     case 'unknown':
       // An operational contract deliberately separates "the code-owned

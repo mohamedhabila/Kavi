@@ -156,12 +156,6 @@ describe('exactly-once effect dispatch coordinator', () => {
       'uncertain',
       'ambiguous',
     ],
-    [
-      'partial acknowledged mutation',
-      effectReceipt({ effectState: 'applied', verificationState: 'acknowledged' }),
-      'applied_unverified',
-      'applied',
-    ],
   ] as const)('never automatically retries a %s', async (_label, receipt, disposition, status) => {
     const test = harness({ dispatchResult: receipt });
 
@@ -181,6 +175,36 @@ describe('exactly-once effect dispatch coordinator', () => {
     );
     expect(test.calls.dispatches).toHaveLength(1);
   });
+
+  it.each([
+    [
+      'change it applied without reading it back',
+      effectReceipt({ effectState: 'applied', verificationState: 'acknowledged' }),
+    ],
+    [
+      'handoff to another app',
+      effectReceipt({ effectState: 'handed_off', verificationState: 'unverified' }),
+    ],
+  ] as const)(
+    'settles a %s that the code-owned executor returned, without reconciliation or retry',
+    async (_label, receipt) => {
+      const test = harness({ dispatchResult: receipt });
+
+      const first = await dispatchEffectExactlyOnce(test.identity, test.ports);
+      const retry = await dispatchEffectExactlyOnce(test.identity, test.ports);
+
+      expect(first).toEqual(
+        expect.objectContaining({
+          kind: 'settled',
+          disposition: 'returned_unverified',
+          requiresReconciliation: false,
+        }),
+      );
+      expect(test.calls.settlements[0]?.nextEffectStatus).toBe('returned');
+      expect(retry).toEqual(expect.objectContaining({ kind: 'duplicate_suppressed' }));
+      expect(test.calls.dispatches).toHaveLength(1);
+    },
+  );
 
   it('keeps an existing claim without a receipt in reconciliation', async () => {
     const fixture = dispatchFixture();
