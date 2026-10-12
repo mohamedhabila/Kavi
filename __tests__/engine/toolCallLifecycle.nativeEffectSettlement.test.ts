@@ -41,6 +41,7 @@ import {
   CAMERA_CLIP_TOOL,
   SCREEN_RECORD_TOOL,
 } from '../../src/engine/tools/native/media/definitions';
+import { REMINDER_TOOL } from '../../src/engine/tools/native/reminders/definitions';
 import { completedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
@@ -146,5 +147,43 @@ describe('native effect settlement', () => {
         .getAllSync<{ status: string }>('SELECT status FROM execution_effects ORDER BY id')
         .map((row) => row.status),
     ).toEqual(['returned', 'returned', 'returned']);
+  });
+
+  // Traced on the GLM 5.3 Flash suite (bench-androidworld-clipboard-share-notify, f6687f45):
+  // a reminder cancel reported its own effect kind, the journal claim for the reminder tool
+  // expected the tool's, and the receipt was rejected; the run stopped for reconciliation.
+  it('settles a reminder cancel as the reminder schedule change it is', async () => {
+    const outcomes = [
+      JSON.stringify({ status: 'reminder_created', reminder: { id: 'r1', title: 'Stretch' } }),
+      JSON.stringify({ status: 'reminder_cancelled', id: 'r1' }),
+    ];
+    mockedExecuteToolInner.mockImplementation(async () => completedToolOutcome(outcomes.shift()!));
+
+    const results = [];
+    for (const [id, args] of [
+      [
+        'call-create',
+        { action: 'create', title: 'Stretch', when: { kind: 'once', delaySeconds: 30 } },
+      ],
+      ['call-cancel', { action: 'cancel', id: 'r1' }],
+    ] as const) {
+      const lifecycle = nativeLifecycle(REMINDER_TOOL, args);
+      const result = await executeToolCallLifecycle({
+        ...lifecycle,
+        tc: { ...lifecycle.tc, id },
+      });
+      if (!('toolMessage' in result)) throw new Error(`${id} was deferred`);
+      results.push(result);
+    }
+
+    expect(results.map((result) => result.toolMessage.isError === true)).toEqual([false, false]);
+    expect(results.map((result) => result.effectReconciliationRequired)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(JSON.parse(results[1]!.toolMessage.content)).toEqual({
+      status: 'reminder_cancelled',
+      id: 'r1',
+    });
   });
 });

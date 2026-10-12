@@ -395,7 +395,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       {
         reminder_created: VERIFIED,
         reminder_updated: VERIFIED,
-        reminder_cancelled: outcome('applied', 'verified', 'reminder.cancel'),
+        reminder_cancelled: VERIFIED,
         listed: outcome('none', 'not_applicable', 'observation.read'),
         rejected: FAILED,
         error: FAILED,
