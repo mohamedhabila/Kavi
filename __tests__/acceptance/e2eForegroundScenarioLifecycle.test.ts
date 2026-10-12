@@ -100,7 +100,6 @@ afterEach(async () => {
 it('rehydrates the production chat store, reopens memory and catches up on the closed turn', async () => {
   addMemoryItem({
     text: 'Profile token RELAUNCH-PROFILE-73',
-    scope: 'conversation',
     conversationId: 'relaunch-conversation',
     now: 20,
   });
@@ -171,7 +170,6 @@ it('creates a fresh product conversation while preserving global memory', () => 
   expect(
     searchMemoryItems({
       query: 'meeting duration',
-      visibility: { conversationId: transition.conversationId },
       limit: 5,
       includeSensitive: false,
     }).map((item) => item.text),

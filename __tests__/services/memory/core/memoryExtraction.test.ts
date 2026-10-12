@@ -20,7 +20,6 @@ import {
 import { readCaptureCursor } from '../../../../src/services/memory/core/memoryCaptureCursor';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-const HOME = { conversationId: 'conv-1' };
 
 const conversation: ExtractionMessage[] = [
   { id: 'u1', role: 'user', content: 'My sister Sara moved to Porto last month.', timestamp: 1 },
@@ -55,9 +54,7 @@ function run(
 }
 
 function memories(query = 'Sara Porto'): string[] {
-  return searchMemoryItems({ query, visibility: HOME, limit: 10, includeSensitive: true }).map(
-    (item) => item.text,
-  );
+  return searchMemoryItems({ query, limit: 10, includeSensitive: true }).map((item) => item.text);
 }
 
 beforeEach(() => {

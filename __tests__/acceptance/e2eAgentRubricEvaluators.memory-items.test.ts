@@ -43,16 +43,6 @@ describe('memory item rubrics', () => {
     expect(passes({ kind: 'memory_item', contains: ['e2e-entity-i1', 'E2E-MEM-43'] })).toBe(false);
   });
 
-  it('checks the scope only when the rubric names one', () => {
-    remember('The plan draft is notes/PLAN-E2E.md', { scope: 'conversation' });
-
-    expect(passes({ kind: 'memory_item', contains: ['PLAN-E2E'] })).toBe(true);
-    expect(passes({ kind: 'memory_item', contains: ['PLAN-E2E'], scope: 'conversation' })).toBe(
-      true,
-    );
-    expect(passes({ kind: 'memory_item', contains: ['PLAN-E2E'], scope: 'global' })).toBe(false);
-  });
-
   it('does not count a memory a correction replaced', () => {
     const old = remember('profile-owner home_city is Rotterdam');
     remember('profile-owner home_city is Utrecht', { replaces: old });

@@ -90,7 +90,7 @@ describe('E2E longitudinal product scenarios', () => {
     const scenario = requireScenario('preference-to-calendar-action');
     expect(scenario.rubrics).toEqual(
       expect.arrayContaining([
-        { kind: 'memory_item', contains: ['profile-owner', '45'], scope: 'global' },
+        { kind: 'memory_item', contains: ['profile-owner', '45'] },
         {
           kind: 'native_fixture_state',
           path: 'calendar.createdEventCount',
@@ -113,7 +113,7 @@ describe('E2E longitudinal product scenarios', () => {
   it('scores corrected memory, verified outcomes, and the reusable failure constraint', () => {
     expect(requireScenario('profile-correction-chitchat').rubrics).toEqual(
       expect.arrayContaining([
-        { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'], scope: 'global' },
+        { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'] },
         {
           kind: 'memory_item_absent',
           contains: ['profile-owner', 'Rotterdam'],
@@ -182,7 +182,6 @@ describe('E2E longitudinal product scenarios', () => {
     expect(scenario.rubrics).toContainEqual({
       kind: 'memory_item',
       contains: ['profile-owner', 'bicycle'],
-      scope: 'global',
     });
   });
 });

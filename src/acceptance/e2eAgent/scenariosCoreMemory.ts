@@ -10,7 +10,7 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     prompt:
       'Remember that subject `e2e-entity-i1` has artifact_token `E2E-MEM-42`, then verify the stored value.',
     rubrics: [
-      { kind: 'memory_item', contains: ['e2e-entity-i1', 'E2E-MEM-42'], scope: 'global' },
+      { kind: 'memory_item', contains: ['e2e-entity-i1', 'E2E-MEM-42'] },
       { kind: 'graph_terminal_success' },
       {
         kind: 'token_budget',
@@ -37,8 +37,8 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 3 },
-      { kind: 'memory_item', contains: ['personal-meeting', 'E2E-MEET-42'], scope: 'global' },
-      { kind: 'memory_item', contains: ['personal-meeting', 'E2E-SNACK-9'], scope: 'global' },
+      { kind: 'memory_item', contains: ['personal-meeting', 'E2E-MEET-42'] },
+      { kind: 'memory_item', contains: ['personal-meeting', 'E2E-SNACK-9'] },
       { kind: 'graph_terminal_success' },
       {
         kind: 'token_budget',
@@ -62,7 +62,7 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      { kind: 'memory_item', contains: ['e2e-pa-1', 'PA-E2E-42'], scope: 'global' },
+      { kind: 'memory_item', contains: ['e2e-pa-1', 'PA-E2E-42'] },
       { kind: 'graph_terminal_success' },
       {
         kind: 'token_budget',

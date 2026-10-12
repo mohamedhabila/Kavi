@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
 // Kavi — Memory items store
 // ---------------------------------------------------------------------------
-// Reads and writes `memory_items`. An item is visible to a request when it is current
-// (not superseded) and global or owned by the request's conversation. Sensitive items (structurally detected personal data, or marked
-// sensitive when saved) are kept out of the automatic prompt and returned only when the
-// caller asks for them; credentials are refused at write time.
+// Reads and writes `memory_items`. Kavi is one conversation, so every current (not
+// superseded) item applies to every request. Sensitive items (structurally detected personal
+// data, or marked sensitive when saved) are kept out of the automatic prompt and returned
+// only when the caller asks for them; credentials are refused at write time.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -20,13 +20,9 @@ import {
 } from './memorySchema';
 import { memoryTextLength } from './memoryText';
 
-export type MemoryItemScope = 'global' | 'conversation';
-
 export interface MemoryItem {
   id: string;
   text: string;
-  scope: MemoryItemScope;
-  conversationId: string | null;
   pinned: boolean;
   sensitive: boolean;
   sourceConversationId: string | null;
@@ -35,19 +31,14 @@ export interface MemoryItem {
   updatedAt: number;
 }
 
-/** Who is asking: conversation-scoped items of other conversations stay invisible. */
-export interface MemoryItemVisibility {
-  conversationId: string;
-}
-
 export interface AddMemoryItemInput {
   text: string;
-  scope?: MemoryItemScope;
+  /** The conversation the memory was saved from, recorded as its source. */
   conversationId: string;
   pinned?: boolean;
   sensitive?: boolean;
   sourceMessageId?: string | null;
-  /** Id of the item this one corrects; an unknown or invisible id is ignored. */
+  /** Id of the item this one corrects; an unknown or superseded id is ignored. */
   replaces?: string | null;
   now: number;
 }
@@ -61,8 +52,6 @@ export type AddMemoryItemResult =
 interface MemoryItemRow {
   id: string;
   text: string;
-  scope: MemoryItemScope;
-  conversation_id: string | null;
   pinned: number;
   sensitive: number;
   source_conversation_id: string | null;
@@ -71,18 +60,15 @@ interface MemoryItemRow {
   updated_at: number;
 }
 
-const ITEM_COLUMNS = `i.id, i.text, i.scope, i.conversation_id, i.pinned, i.sensitive,
+const ITEM_COLUMNS = `i.id, i.text, i.pinned, i.sensitive,
   i.source_conversation_id, i.source_message_id, i.created_at, i.updated_at`;
 
-const VISIBLE = `i.superseded_by IS NULL
-  AND (i.scope = 'global' OR i.conversation_id = ?)`;
+const CURRENT = 'i.superseded_by IS NULL';
 
 function rowToItem(row: MemoryItemRow): MemoryItem {
   return {
     id: row.id,
     text: row.text,
-    scope: row.scope,
-    conversationId: row.conversation_id,
     pinned: row.pinned === 1,
     sensitive: row.sensitive === 1,
     sourceConversationId: row.source_conversation_id,
@@ -98,36 +84,18 @@ function readyDb(): SQLite.SQLiteDatabase {
   return db;
 }
 
-function visibilityParams(visibility: MemoryItemVisibility): [string] {
-  return [visibility.conversationId];
-}
-
-function findVisibleItem(
-  db: SQLite.SQLiteDatabase,
-  id: string,
-  visibility: MemoryItemVisibility,
-): MemoryItem | null {
+function findCurrentItem(db: SQLite.SQLiteDatabase, id: string): MemoryItem | null {
   const row = db.getFirstSync<MemoryItemRow>(
-    `SELECT ${ITEM_COLUMNS} FROM memory_items i WHERE i.id = ? AND ${VISIBLE}`,
+    `SELECT ${ITEM_COLUMNS} FROM memory_items i WHERE i.id = ? AND ${CURRENT}`,
     id,
-    ...visibilityParams(visibility),
   );
   return row ? rowToItem(row) : null;
 }
 
-function findDuplicate(
-  db: SQLite.SQLiteDatabase,
-  text: string,
-  scope: MemoryItemScope,
-  visibility: MemoryItemVisibility,
-): MemoryItem | null {
+function findDuplicate(db: SQLite.SQLiteDatabase, text: string): MemoryItem | null {
   const row = db.getFirstSync<MemoryItemRow>(
-    `SELECT ${ITEM_COLUMNS} FROM memory_items i
-      WHERE i.text = ? AND i.scope = ? AND ${VISIBLE}
-      LIMIT 1`,
+    `SELECT ${ITEM_COLUMNS} FROM memory_items i WHERE i.text = ? AND ${CURRENT} LIMIT 1`,
     text,
-    scope,
-    ...visibilityParams(visibility),
   );
   return row ? rowToItem(row) : null;
 }
@@ -148,9 +116,7 @@ function addMemoryItemInTransaction(
   const detected = classifyStructuredMemoryText(text);
   if (detected === 'restricted') return { status: 'restricted' };
 
-  const scope = input.scope ?? 'global';
-  const visibility = { conversationId: input.conversationId };
-  const duplicate = findDuplicate(db, text, scope, visibility);
+  const duplicate = findDuplicate(db, text);
   if (duplicate) {
     if (!input.pinned || duplicate.pinned) return { status: 'duplicate', item: duplicate };
     db.runSync(
@@ -160,12 +126,10 @@ function addMemoryItemInTransaction(
     );
     return { status: 'duplicate', item: { ...duplicate, pinned: true, updatedAt: input.now } };
   }
-  const replaced = input.replaces ? findVisibleItem(db, input.replaces, visibility) : null;
+  const replaced = input.replaces ? findCurrentItem(db, input.replaces) : null;
   const item: MemoryItem = {
     id: newId('mem'),
     text,
-    scope,
-    conversationId: scope === 'conversation' ? input.conversationId : null,
     pinned: input.pinned ?? replaced?.pinned ?? false,
     sensitive: input.sensitive === true || detected === 'sensitive',
     sourceConversationId: input.conversationId,
@@ -174,13 +138,11 @@ function addMemoryItemInTransaction(
     updatedAt: input.now,
   };
   db.runSync(
-    `INSERT INTO memory_items (id, text, scope, conversation_id, pinned, sensitive,
+    `INSERT INTO memory_items (id, text, pinned, sensitive,
        source_conversation_id, source_message_id, superseded_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     item.id,
     item.text,
-    item.scope,
-    item.conversationId,
     item.pinned ? 1 : 0,
     item.sensitive ? 1 : 0,
     item.sourceConversationId,
@@ -236,11 +198,11 @@ export type MemoryOperation =
  * Applies extraction's operations for one conversation and then `commit` (which advances
  * the extraction cursor), all in one transaction: a crash re-runs the whole window and the
  * window is never applied twice. Operations on pinned memories, which only the user curates,
- * and on memories `visibility` cannot see are skipped rather than failing the window.
+ * and on memories that are gone or superseded are skipped rather than failing the window.
  */
 export function applyMemoryOperations(params: {
   operations: ReadonlyArray<MemoryOperation>;
-  visibility: MemoryItemVisibility;
+  conversationId: string;
   sourceMessageId: string | null;
   now: number;
   commit: (db: SQLite.SQLiteDatabase) => void;
@@ -252,20 +214,19 @@ export function applyMemoryOperations(params: {
       if (operation.op === 'add') {
         const result = addMemoryItemInTransaction(db, {
           text: operation.text,
-          conversationId: params.visibility.conversationId,
+          conversationId: params.conversationId,
           sourceMessageId: params.sourceMessageId,
           now: params.now,
         });
         if (result.status === 'created') applied.added += 1;
         continue;
       }
-      const target = findVisibleItem(db, operation.id, params.visibility);
+      const target = findCurrentItem(db, operation.id);
       if (!target || target.pinned) continue;
       if (operation.op === 'update') {
         const result = addMemoryItemInTransaction(db, {
           text: operation.text,
-          scope: target.scope,
-          conversationId: params.visibility.conversationId,
+          conversationId: params.conversationId,
           sensitive: target.sensitive,
           sourceMessageId: params.sourceMessageId,
           replaces: target.id,
@@ -280,14 +241,13 @@ export function applyMemoryOperations(params: {
     return applied;
   });
   if (counts.added + counts.updated + counts.deleted > 0) {
-    notifyStructuredMemoryChanged(params.visibility.conversationId);
+    notifyStructuredMemoryChanged(params.conversationId);
   }
   return counts;
 }
 
 export function searchMemoryItems(params: {
   query: string;
-  visibility: MemoryItemVisibility;
   limit: number;
   includeSensitive: boolean;
 }): MemoryItem[] {
@@ -298,12 +258,11 @@ export function searchMemoryItems(params: {
        FROM memory_items_fts f
        JOIN memory_items i ON i.rowid = f.rowid
       WHERE memory_items_fts MATCH ?
-        AND ${VISIBLE}
+        AND ${CURRENT}
         AND (? = 1 OR i.sensitive = 0)
       ORDER BY bm25(memory_items_fts), i.updated_at DESC
       LIMIT ?`,
     match,
-    ...visibilityParams(params.visibility),
     params.includeSensitive ? 1 : 0,
     params.limit,
   );
@@ -311,16 +270,14 @@ export function searchMemoryItems(params: {
 }
 
 export function listPinnedMemoryItems(params: {
-  visibility: MemoryItemVisibility;
   limit: number;
   includeSensitive: boolean;
 }): MemoryItem[] {
   const rows = readyDb().getAllSync<MemoryItemRow>(
     `SELECT ${ITEM_COLUMNS} FROM memory_items i
-      WHERE i.pinned = 1 AND ${VISIBLE} AND (? = 1 OR i.sensitive = 0)
+      WHERE i.pinned = 1 AND ${CURRENT} AND (? = 1 OR i.sensitive = 0)
       ORDER BY i.updated_at DESC
       LIMIT ?`,
-    ...visibilityParams(params.visibility),
     params.includeSensitive ? 1 : 0,
     params.limit,
   );
@@ -332,7 +289,7 @@ export function listMemoryItems(params: { limit: number; offset: number }): Memo
   return readyDb()
     .getAllSync<MemoryItemRow>(
       `SELECT ${ITEM_COLUMNS} FROM memory_items i
-        WHERE i.superseded_by IS NULL
+        WHERE ${CURRENT}
         ORDER BY i.updated_at DESC
         LIMIT ? OFFSET ?`,
       params.limit,
@@ -349,12 +306,9 @@ export function getMemoryItem(id: string): MemoryItem | null {
   return row ? rowToItem(row) : null;
 }
 
-/** The item when `visibility` may see it (current and in scope), else null. */
-export function getVisibleMemoryItem(
-  id: string,
-  visibility: MemoryItemVisibility,
-): MemoryItem | null {
-  return findVisibleItem(readyDb(), id, visibility);
+/** The item when it is current (not superseded), else null. */
+export function getCurrentMemoryItem(id: string): MemoryItem | null {
+  return findCurrentItem(readyDb(), id);
 }
 
 /** Deletes the item and everything it superseded. Returns whether anything was deleted. */
@@ -386,7 +340,7 @@ export function deleteMemoryItemsFromConversation(conversationId: string): numbe
     const ids = db
       .getAllSync<{
         id: string;
-      }>('SELECT id FROM memory_items WHERE source_conversation_id = ? OR conversation_id = ?', conversationId, conversationId)
+      }>('SELECT id FROM memory_items WHERE source_conversation_id = ?', conversationId)
       .map((row) => row.id);
     let count = 0;
     for (const id of ids) count += deleteItemChainInTransaction(db, id);

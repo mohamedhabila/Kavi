@@ -34,7 +34,7 @@ export function readSessionMemory(
     policyEpoch,
     authoritySnapshot,
     section: prepareMemoryPromptSection({
-      visibility: { conversationId },
+      conversationId,
       latestUserMessage: userMessages[userMessages.length - 1]?.content ?? '',
       inRequestUserMessageIds: userMessages.map((message) => message.id),
     }),

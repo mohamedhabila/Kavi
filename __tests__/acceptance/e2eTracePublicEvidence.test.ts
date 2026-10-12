@@ -57,7 +57,6 @@ function privateItem(
   return {
     id,
     text,
-    scope: 'global',
     pinned: false,
     sensitive: false,
     supersededBy: null,
@@ -263,7 +262,6 @@ describe('public immutable E2E evidence projection', () => {
       supersededItemCount: 1,
       pinnedItemCount: 1,
       sensitiveItemCount: 1,
-      conversationScopedItemCount: 0,
       indexedTurnCount: 3,
     });
   });

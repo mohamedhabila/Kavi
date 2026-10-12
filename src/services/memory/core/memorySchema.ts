@@ -34,21 +34,16 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
     CREATE TABLE IF NOT EXISTS memory_items (
       id TEXT PRIMARY KEY,
       text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND ${MEMORY_ITEM_TEXT_MAX_CHARS}),
-      scope TEXT NOT NULL CHECK(scope IN ('global', 'conversation')),
-      conversation_id TEXT,
       pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1)),
       sensitive INTEGER NOT NULL DEFAULT 0 CHECK(sensitive IN (0, 1)),
       source_conversation_id TEXT,
       source_message_id TEXT,
       superseded_by TEXT,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      CHECK((scope = 'conversation') = (conversation_id IS NOT NULL))
+      updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_memory_items_current
       ON memory_items(superseded_by, pinned, updated_at);
-    CREATE INDEX IF NOT EXISTS idx_memory_items_conversation
-      ON memory_items(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_memory_items_source_conversation
       ON memory_items(source_conversation_id);
 

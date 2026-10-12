@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // Three flat tools over memory items, the interface LangMem (manage_memory/search_memory),
 // mem0 (add/search/delete) and the ChatGPT memory tool converged on. The model writes one
-// self-contained statement; code supplies provenance, scope ownership and sensitivity.
+// self-contained statement; code supplies provenance and sensitivity.
 // Nothing here rejects a write for how it was phrased: a duplicate is acknowledged, an
 // unknown `replaces` id is ignored, and only credentials are refused.
 // ---------------------------------------------------------------------------
@@ -19,11 +19,9 @@ import { searchMemoryTurns, type MemoryTurn } from './memoryTurnsStore';
 import {
   addMemoryItem,
   forgetMemoryItem,
-  getVisibleMemoryItem,
+  getCurrentMemoryItem,
   searchMemoryItems,
   type MemoryItem,
-  type MemoryItemScope,
-  type MemoryItemVisibility,
 } from './memoryItemsStore';
 
 export const MEMORY_SEARCH_DEFAULT_LIMIT = 8;
@@ -32,7 +30,7 @@ const MEMORY_SEARCH_TURN_LIMIT = 5;
 const MEMORY_SEARCH_TURN_MAX_CHARS = 1_200;
 
 export interface MemoryToolContext {
-  /** Conversation that owns conversation-scoped memories and the request's visibility. */
+  /** The conversation being answered; recorded as a saved memory's source. */
   conversationId: string;
   /** The user message being answered; recorded as the memory's source. */
   sourceMessageId: string | null;
@@ -65,7 +63,6 @@ function presentItem(item: MemoryItem): Record<string, unknown> {
     id: item.id,
     text: item.text,
     date: isoDate(item.updatedAt),
-    scope: item.scope,
     ...(item.pinned ? { pinned: true } : {}),
     ...(item.sensitive ? { sensitive: true } : {}),
   };
@@ -78,20 +75,12 @@ function presentTurn(turn: MemoryTurn): Record<string, unknown> {
   };
 }
 
-function visibilityOf(context: MemoryToolContext): MemoryItemVisibility {
-  return { conversationId: context.conversationId };
-}
-
 export function executeMemoryRemember(
   args: unknown,
   context: MemoryToolContext,
 ): ToolRuntimeOutcome {
   if (!isRecord(args)) return invalidArguments('Pass an object with a content string.');
   const content = typeof args.content === 'string' ? args.content : '';
-  const scope = args.scope ?? 'global';
-  if (scope !== 'global' && scope !== 'conversation') {
-    return invalidArguments('scope must be "global" or "conversation".');
-  }
   const pinned = optionalBoolean(args.pinned);
   const sensitive = optionalBoolean(args.sensitive);
   if (pinned === null || sensitive === null) {
@@ -102,7 +91,6 @@ export function executeMemoryRemember(
 
   const result = addMemoryItem({
     text: content,
-    scope: scope as MemoryItemScope,
     conversationId: context.conversationId,
     ...(pinned !== undefined ? { pinned } : {}),
     ...(sensitive !== undefined ? { sensitive } : {}),
@@ -157,7 +145,6 @@ export function executeMemorySearch(args: unknown, context: MemoryToolContext): 
   // An explicit search is the one place sensitive memories and past rounds are returned.
   const memories = searchMemoryItems({
     query: args.query,
-    visibility: visibilityOf(context),
     limit,
     includeSensitive: true,
   });
@@ -176,14 +163,13 @@ export function executeMemorySearch(args: unknown, context: MemoryToolContext): 
   );
 }
 
-export function executeMemoryForget(args: unknown, context: MemoryToolContext): ToolRuntimeOutcome {
+export function executeMemoryForget(args: unknown): ToolRuntimeOutcome {
   if (!isRecord(args) || typeof args.id !== 'string' || !args.id.trim()) {
     return invalidArguments('Pass an object with the id of the memory to forget.');
   }
   const id = args.id.trim();
-  // An id that is already gone, or belongs to another conversation, leaves nothing to delete.
-  const forgotten =
-    getVisibleMemoryItem(id, visibilityOf(context)) !== null && forgetMemoryItem(id);
+  // An id that is already gone, or was superseded by a correction, leaves nothing to delete.
+  const forgotten = getCurrentMemoryItem(id) !== null && forgetMemoryItem(id);
   return completedToolOutcome(
     JSON.stringify({ ok: true, status: forgotten ? 'forgotten' : 'not_found', id }),
   );

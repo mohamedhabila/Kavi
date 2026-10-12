@@ -59,7 +59,6 @@ describe('memory_remember', () => {
         id: expect.any(String),
         text: 'Prefers window seats',
         date: '2026-09-14',
-        scope: 'global',
       },
     });
     expect(repeat).toMatchObject({ status: 'already_saved', memory: { id: saved.memory.id } });
@@ -83,15 +82,14 @@ describe('memory_remember', () => {
     });
   });
 
-  it('keeps pinned, sensitive and conversation-only memories as asked', () => {
+  it('keeps pinned and sensitive memories as asked', () => {
     const memory = remember({
       content: 'The plan draft is in notes/plan.md',
-      scope: 'conversation',
       pinned: true,
       sensitive: true,
     }).memory;
 
-    expect(memory).toMatchObject({ scope: 'conversation', pinned: true, sensitive: true });
+    expect(memory).toMatchObject({ pinned: true, sensitive: true });
   });
 
   it('never stores credentials', () => {
@@ -106,7 +104,6 @@ describe('memory_remember', () => {
     [{}, 'non-empty'],
     [{ content: '   ' }, 'non-empty'],
     [{ content: 'x'.repeat(MEMORY_ITEM_TEXT_MAX_CHARS + 1) }, `${MEMORY_ITEM_TEXT_MAX_CHARS}`],
-    [{ content: 'ok', scope: 'project' }, 'scope'],
     [{ content: 'ok', pinned: 'yes' }, 'pinned'],
   ])('rejects malformed arguments %j', (args, mentions) => {
     const rejected = remember(args);
@@ -202,7 +199,7 @@ describe('memory_forget', () => {
     const old = remember({ content: 'Sara lives in Lisbon' });
     const current = remember({ content: 'Sara lives in Porto', replaces: old.memory.id });
 
-    expect(result(executeMemoryForget({ id: current.memory.id }, HOME))).toEqual({
+    expect(result(executeMemoryForget({ id: current.memory.id }))).toEqual({
       outcome: 'completed',
       ok: true,
       status: 'forgotten',
@@ -212,14 +209,14 @@ describe('memory_forget', () => {
   });
 
   it('reports a memory that is already gone', () => {
-    expect(result(executeMemoryForget({ id: 'mem_missing' }, HOME))).toMatchObject({
+    expect(result(executeMemoryForget({ id: 'mem_missing' }))).toMatchObject({
       outcome: 'completed',
       status: 'not_found',
     });
   });
 
   it('rejects a call without an id', () => {
-    expect(result(executeMemoryForget({}, HOME))).toMatchObject({
+    expect(result(executeMemoryForget({}))).toMatchObject({
       outcome: 'failed',
       status: 'rejected',
     });

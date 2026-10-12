@@ -24,12 +24,7 @@ import {
   type MemoryCaptureCursor,
 } from './memoryCaptureCursor';
 import { ensureMemoryCoreSchema } from './memorySchema';
-import {
-  applyMemoryOperations,
-  searchMemoryItems,
-  type MemoryItemVisibility,
-  type MemoryOperation,
-} from './memoryItemsStore';
+import { applyMemoryOperations, searchMemoryItems, type MemoryOperation } from './memoryItemsStore';
 import {
   MEMORY_EXTRACTION_MAX_OPERATIONS,
   type MemoryExtractionCall,
@@ -217,10 +212,8 @@ export async function extractConversationMemory(params: {
     return { kind: 'extracted', added: 0, updated: 0, deleted: 0 };
   }
 
-  const visibility: MemoryItemVisibility = { conversationId: params.conversationId };
   const related = searchMemoryItems({
     query: window.userText,
-    visibility,
     limit: RELATED_MEMORY_LIMIT,
     includeSensitive: true,
   });
@@ -250,7 +243,7 @@ export async function extractConversationMemory(params: {
   const now = params.now();
   const counts = applyMemoryOperations({
     operations,
-    visibility,
+    conversationId: params.conversationId,
     sourceMessageId: window.lastUserMessageId,
     now,
     commit: (transactionDb) =>

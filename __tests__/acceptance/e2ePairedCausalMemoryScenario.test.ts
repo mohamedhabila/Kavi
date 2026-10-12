@@ -30,7 +30,7 @@ const MINI_SCENARIO: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 0,
-      requiredItems: [{ contains: ['45'], scope: 'global' }],
+      requiredItems: [{ contains: ['45'] }],
     },
     { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
   ],
@@ -62,7 +62,6 @@ function conditionResult(product: boolean): E2EScenarioResult {
   const item = {
     id: 'private-item-id',
     text: 'Design reviews last 45 minutes',
-    scope: 'global',
     pinned: false,
     sensitive: false,
     supersededBy: null,

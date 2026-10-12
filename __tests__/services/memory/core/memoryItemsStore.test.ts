@@ -9,7 +9,7 @@ import {
   addMemoryItem,
   deleteMemoryItemsFromConversation,
   forgetMemoryItem,
-  getVisibleMemoryItem,
+  getCurrentMemoryItem,
   listPinnedMemoryItems,
   searchMemoryItems,
   setMemoryItemPinned,
@@ -17,16 +17,12 @@ import {
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-const HOME = { conversationId: 'conv-1' };
-
 function remember(text: string, extra: Partial<Parameters<typeof addMemoryItem>[0]> = {}) {
   return addMemoryItem({ text, conversationId: 'conv-1', now: 1_000, ...extra });
 }
 
-function search(query: string, visibility = HOME, includeSensitive = false) {
-  return searchMemoryItems({ query, visibility, limit: 5, includeSensitive }).map(
-    (item) => item.text,
-  );
+function search(query: string, includeSensitive = false) {
+  return searchMemoryItems({ query, limit: 5, includeSensitive }).map((item) => item.text);
 }
 
 beforeEach(() => {
@@ -84,14 +80,14 @@ describe('memory items', () => {
     const email = remember('Sara’s email is sara@example.com');
     expect(email).toMatchObject({ status: 'created', item: { sensitive: true } });
     expect(search('Sara email')).toEqual([]);
-    expect(search('Sara email', HOME, true)).toEqual(['Sara’s email is sara@example.com']);
+    expect(search('Sara email', true)).toEqual(['Sara’s email is sara@example.com']);
   });
 
   it('keeps a memory the user marked sensitive out of automatic recall', () => {
     remember('The building door code is 4417', { sensitive: true });
 
     expect(search('building door code')).toEqual([]);
-    expect(search('building door code', HOME, true)).toEqual(['The building door code is 4417']);
+    expect(search('building door code', true)).toEqual(['The building door code is 4417']);
   });
 
   it('replaces the memory a correction names and ignores an unknown id', () => {
@@ -112,10 +108,9 @@ describe('memory items', () => {
     });
   });
 
-  it('keeps a conversation memory to its conversation', () => {
-    remember('Draft uses the blue palette', { scope: 'conversation' });
+  it('applies a memory to every request, whichever conversation saved it', () => {
+    remember('Draft uses the blue palette', { conversationId: 'conv-2' });
 
-    expect(search('blue palette', { conversationId: 'conv-2' })).toEqual([]);
     expect(search('blue palette')).toEqual(['Draft uses the blue palette']);
   });
 
@@ -124,15 +119,13 @@ describe('memory items', () => {
     remember('Likes tea');
     remember('Phone number +31 6 12345678', { pinned: true });
 
-    expect(listPinnedMemoryItems({ visibility: HOME, limit: 10, includeSensitive: false })).toEqual(
-      [expect.objectContaining({ text: 'The user’s name is Mohamed' })],
-    );
+    expect(listPinnedMemoryItems({ limit: 10, includeSensitive: false })).toEqual([
+      expect.objectContaining({ text: 'The user’s name is Mohamed' }),
+    ]);
     expect(setMemoryItemPinned((name as { item: { id: string } }).item.id, false, 2_000)).toBe(
       true,
     );
-    expect(listPinnedMemoryItems({ visibility: HOME, limit: 10, includeSensitive: false })).toEqual(
-      [],
-    );
+    expect(listPinnedMemoryItems({ limit: 10, includeSensitive: false })).toEqual([]);
   });
 
   it('forgets a memory together with the versions it corrected', () => {
@@ -144,7 +137,7 @@ describe('memory items', () => {
 
     expect(forgetMemoryItem(currentId)).toBe(true);
     expect(search('Lives in')).toEqual([]);
-    expect(getVisibleMemoryItem(currentId, HOME)).toBeNull();
+    expect(getCurrentMemoryItem(currentId)).toBeNull();
     expect(forgetMemoryItem(currentId)).toBe(false);
   });
 
@@ -153,9 +146,7 @@ describe('memory items', () => {
     remember('Global fact from conversation two', { conversationId: 'conv-2' });
 
     expect(deleteMemoryItemsFromConversation('conv-1')).toBe(1);
-    expect(search('Global fact', { conversationId: 'conv-2' })).toEqual([
-      'Global fact from conversation two',
-    ]);
+    expect(search('Global fact')).toEqual(['Global fact from conversation two']);
   });
 
   it('deletes a correction made in a deleted conversation together with what it replaced', () => {

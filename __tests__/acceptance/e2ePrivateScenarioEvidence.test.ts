@@ -57,7 +57,6 @@ function buildPrivateResult(): E2EScenarioResult {
         {
           id: 'private-memory-item',
           text: 'PRIVATE-MEMORY-SENTINEL',
-          scope: 'global',
           pinned: false,
           sensitive: false,
           supersededBy: null,

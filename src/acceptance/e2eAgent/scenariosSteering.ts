@@ -41,7 +41,7 @@ export const STEER_MIDRUN_MEMORY_SCENARIO: E2EScenario = {
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
     { kind: 'graph_audit_observed', auditType: 'STEERING_DELIVERED' },
-    { kind: 'memory_item', contains: [STEER_SUBJECT, STEER_VALUE], scope: 'global' },
+    { kind: 'memory_item', contains: [STEER_SUBJECT, STEER_VALUE] },
     { kind: 'turn_final_response_token', turnIndex: 0, token: 'Porto' },
     { kind: 'turn_final_response_token', turnIndex: 1, token: STEER_VALUE },
     {

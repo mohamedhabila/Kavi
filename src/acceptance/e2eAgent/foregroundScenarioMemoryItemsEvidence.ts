@@ -28,7 +28,6 @@ export type ForegroundScenarioMemoryPromptEvidence = Readonly<{
 export type ForegroundScenarioMemoryItemRecord = Readonly<{
   id: string;
   text: string;
-  scope: 'global' | 'conversation';
   pinned: boolean;
   sensitive: boolean;
   supersededBy: string | null;
@@ -72,7 +71,6 @@ export function completeForegroundScenarioMemoryPromptCapture(input: {
 interface MemoryItemEvidenceRow {
   id: string;
   text: string;
-  scope: 'global' | 'conversation';
   pinned: number;
   sensitive: number;
   superseded_by: string | null;
@@ -88,13 +86,12 @@ export function captureForegroundScenarioMemoryItems(
   ensureMemoryCoreSchema(db);
   const items = db
     .getAllSync<MemoryItemEvidenceRow>(
-      `SELECT id, text, scope, pinned, sensitive, superseded_by, created_at, updated_at
+      `SELECT id, text, pinned, sensitive, superseded_by, created_at, updated_at
          FROM memory_items ORDER BY created_at, id`,
     )
     .map((row) => ({
       id: row.id,
       text: row.text,
-      scope: row.scope,
       pinned: row.pinned === 1,
       sensitive: row.sensitive === 1,
       supersededBy: row.superseded_by,

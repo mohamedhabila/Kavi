@@ -64,9 +64,13 @@ describe('memory prompt log', () => {
   });
 
   it('logs the ids, size and timing of every prompt build, empty ones included', () => {
+    prepareMemoryPromptSection({
+      conversationId: 'conv-2',
+      latestUserMessage: 'nothing stored',
+      inRequestUserMessageIds: [],
+    });
     const stored = addMemoryItem({
       text: 'Sara lives in Porto',
-      scope: 'conversation',
       conversationId: 'conv-1',
       pinned: true,
       now: 1,
@@ -74,13 +78,8 @@ describe('memory prompt log', () => {
     const id = stored.status === 'created' ? stored.item.id : '';
 
     const section = prepareMemoryPromptSection({
-      visibility: { conversationId: 'conv-1' },
+      conversationId: 'conv-1',
       latestUserMessage: 'hello',
-      inRequestUserMessageIds: [],
-    });
-    prepareMemoryPromptSection({
-      visibility: { conversationId: 'conv-2' },
-      latestUserMessage: 'nothing stored',
       inRequestUserMessageIds: [],
     });
 

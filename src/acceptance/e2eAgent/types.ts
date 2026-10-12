@@ -207,7 +207,6 @@ export type E2EWorkspaceSeedFile = {
 export type E2EMemoryItemExpectation = Readonly<{
   contains: ReadonlyArray<string>;
   excludes?: ReadonlyArray<string>;
-  scope?: 'global' | 'conversation';
 }>;
 
 export type E2EMemorySelectionExpectation = Readonly<{

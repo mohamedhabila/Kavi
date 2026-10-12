@@ -39,7 +39,6 @@ const ADD_SARA = JSON.stringify({
 function stored(): string[] {
   return searchMemoryItems({
     query: 'Sara Porto',
-    visibility: { conversationId: 'conv-1' },
     limit: 5,
     includeSensitive: true,
   }).map((item) => item.text);

@@ -17,12 +17,7 @@
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 import { recordMemoryPromptBuild } from './memoryPromptLog';
 import { searchMemoryTurns, type MemoryTurn } from './memoryTurnsStore';
-import {
-  listPinnedMemoryItems,
-  searchMemoryItems,
-  type MemoryItem,
-  type MemoryItemVisibility,
-} from './memoryItemsStore';
+import { listPinnedMemoryItems, searchMemoryItems, type MemoryItem } from './memoryItemsStore';
 
 export const MEMORY_PROMPT_PINNED_LIMIT = 20;
 export const MEMORY_PROMPT_RELEVANT_LIMIT = 6;
@@ -57,7 +52,7 @@ export interface MemoryPromptSection {
 }
 
 interface MemoryPromptRequest {
-  visibility: MemoryItemVisibility;
+  conversationId: string;
   latestUserMessage: string;
   /** User messages the request already carries: the rounds they opened are not recalled. */
   inRequestUserMessageIds: ReadonlyArray<string>;
@@ -66,14 +61,12 @@ interface MemoryPromptRequest {
 /** The memory section for a request, or null when nothing applies. */
 export function buildMemoryPromptSection(params: MemoryPromptRequest): MemoryPromptSection | null {
   const pinned = listPinnedMemoryItems({
-    visibility: params.visibility,
     limit: MEMORY_PROMPT_PINNED_LIMIT,
     includeSensitive: false,
   });
   const pinnedIds = new Set(pinned.map((item) => item.id));
   const relevant = searchMemoryItems({
     query: params.latestUserMessage,
-    visibility: params.visibility,
     limit: MEMORY_PROMPT_RELEVANT_LIMIT + pinned.length,
     includeSensitive: false,
   })
@@ -119,7 +112,7 @@ export function prepareMemoryPromptSection(
   const startedAt = Date.now();
   const section = buildMemoryPromptSection(params);
   recordMemoryPromptBuild({
-    conversationId: params.visibility.conversationId,
+    conversationId: params.conversationId,
     at: startedAt,
     itemIds: section?.itemIds ?? [],
     turnIds: section?.turnIds ?? [],

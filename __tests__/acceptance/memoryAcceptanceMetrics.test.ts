@@ -67,7 +67,7 @@ async function closeTurn(conversationId: string, user: string, reply: string): P
 function promptFor(conversationId: string, message: string): string {
   return (
     prepareMemoryPromptSection({
-      visibility: { conversationId },
+      conversationId,
       latestUserMessage: message,
       inRequestUserMessageIds: [],
     })?.text ?? ''
@@ -85,7 +85,7 @@ function tool(conversationId: string) {
   return {
     remember: (args: Record<string, unknown>) => parse(executeMemoryRemember(args, context)),
     search: (query: string) => parse(executeMemorySearch({ query }, context)),
-    forget: (id: string) => parse(executeMemoryForget({ id }, context)),
+    forget: (id: string) => parse(executeMemoryForget({ id })),
   };
 }
 
@@ -123,7 +123,7 @@ describe('memory acceptance', () => {
 
     const later = startConversation();
     const section = prepareMemoryPromptSection({
-      visibility: { conversationId: later },
+      conversationId: later,
       latestUserMessage: 'What was that Lisbon weekend plan again?',
       inRequestUserMessageIds: [],
     });

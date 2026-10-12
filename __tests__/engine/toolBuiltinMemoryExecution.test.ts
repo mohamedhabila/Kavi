@@ -112,7 +112,11 @@ describe('memory tool execution', () => {
     expect(found.memories.map((memory: { id: string }) => memory.id)).toEqual([saved.memory.id]);
   });
 
-  it('does not let another conversation see or forget a conversation-only memory', async () => {
+  // Traced on the GLM 5.3 Flash suite (direct-locomo-temporal-conversation-memory and
+  // multi-turn-memory-preference): the model saved the user's facts with scope
+  // "conversation", so they were held back from every later request. Kavi is one
+  // conversation; a memory applies everywhere, whatever extra argument the model sends.
+  it('finds and forgets a memory from any conversation, even one saved with a scope', async () => {
     const saved = await json(
       run(
         'memory_remember',
@@ -128,9 +132,13 @@ describe('memory tool execution', () => {
       run('memory_forget', { id: saved.memory.id }, { conversationId: 'thread-b' }),
     );
 
-    expect(elsewhere.memories).toEqual([]);
-    expect(forgotten).toMatchObject({ outcome: 'completed', status: 'not_found' });
-    expect(getMemoryItem(saved.memory.id)).not.toBeNull();
+    expect(saved).toMatchObject({ outcome: 'completed', status: 'saved' });
+    expect(saved.memory).not.toHaveProperty('scope');
+    expect(elsewhere.memories.map((memory: { id: string }) => memory.id)).toEqual([
+      saved.memory.id,
+    ]);
+    expect(forgotten).toMatchObject({ outcome: 'completed', status: 'forgotten' });
+    expect(getMemoryItem(saved.memory.id)).toBeNull();
   });
 
   it('refuses to remember or search while memory is off, but still forgets', async () => {

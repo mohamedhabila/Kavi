@@ -26,41 +26,34 @@ function isCanonicalTokenList(tokens: unknown): tokens is ReadonlyArray<string> 
   );
 }
 
-const EXPECTATION_KEYS = new Set(['contains', 'excludes', 'scope']);
+const EXPECTATION_KEYS = new Set(['contains', 'excludes']);
 
 export function isCanonicalE2EMemoryItemExpectation(
   value: unknown,
 ): value is E2EMemoryItemExpectation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   if (!Object.keys(value).every((key) => EXPECTATION_KEYS.has(key))) return false;
-  const { contains, excludes, scope } = value as {
-    contains?: unknown;
-    excludes?: unknown;
-    scope?: unknown;
-  };
+  const { contains, excludes } = value as { contains?: unknown; excludes?: unknown };
   return (
-    isCanonicalTokenList(contains) &&
-    (excludes === undefined || isCanonicalTokenList(excludes)) &&
-    (scope === undefined || scope === 'global' || scope === 'conversation')
+    isCanonicalTokenList(contains) && (excludes === undefined || isCanonicalTokenList(excludes))
   );
 }
 
-/** The item's text holds every expected token and no excluded one, in the named scope. */
+/** The item's text holds every expected token and no excluded one. */
 export function memoryItemMatches(
-  item: Pick<ForegroundScenarioMemoryItemRecord, 'text' | 'scope'>,
+  item: Pick<ForegroundScenarioMemoryItemRecord, 'text'>,
   expectation: E2EMemoryItemExpectation,
 ): boolean {
   const text = normalized(item.text);
   return (
     expectation.contains.every((token) => text.includes(normalized(token))) &&
-    !(expectation.excludes ?? []).some((token) => text.includes(normalized(token))) &&
-    (expectation.scope === undefined || item.scope === expectation.scope)
+    !(expectation.excludes ?? []).some((token) => text.includes(normalized(token)))
   );
 }
 
 export function describeMemoryItemExpectation(expectation: E2EMemoryItemExpectation): string {
   const excluded = expectation.excludes?.length ? ` not [${expectation.excludes.join(', ')}]` : '';
-  return `${expectation.scope ?? 'any'}:[${expectation.contains.join(', ')}]${excluded}`;
+  return `[${expectation.contains.join(', ')}]${excluded}`;
 }
 
 export function evaluateE2EMemoryItemRubric(

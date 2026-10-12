@@ -270,7 +270,7 @@ describe('E2E benchmark structural completion criteria', () => {
       { kind: 'native_fixture_state', path: 'sms.opened' },
     ]);
     expectScenarioRubrics(E2E_BENCHMARK_SCENARIOS, 'bench-knowu-personalized-contact-memory', [
-      { kind: 'memory_item', contains: ['knowu-user', 'Avery'], scope: 'global' },
+      { kind: 'memory_item', contains: ['knowu-user', 'Avery'] },
       { kind: 'native_fixture_state', path: 'contacts.resultCount' },
       { kind: 'native_fixture_state', path: 'sms.opened' },
     ]);
@@ -345,7 +345,6 @@ describe('E2E benchmark structural completion criteria', () => {
         expect.objectContaining({
           kind: 'memory_item',
           contains: ['direct-longmem-user', 'Avery'],
-          scope: 'global',
         }),
         expect.objectContaining({ kind: 'native_fixture_state', path: 'contacts.resultCount' }),
         expect.objectContaining({ kind: 'native_fixture_state', path: 'sms.opened' }),

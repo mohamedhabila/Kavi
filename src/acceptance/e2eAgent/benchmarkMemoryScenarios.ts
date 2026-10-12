@@ -46,7 +46,7 @@ export const BENCH_TOOL_DESCRIBE_THEN_USE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_item', contains: ['e2e-describe-1', 'DESCRIBE-E2E-9'], scope: 'global' },
+    { kind: 'memory_item', contains: ['e2e-describe-1', 'DESCRIBE-E2E-9'] },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -75,8 +75,8 @@ export const BENCH_MEMORY_STATE_3TURN_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['e2e-state-a', 'COLOR-E2E-A'], scope: 'global' },
-    { kind: 'memory_item', contains: ['e2e-state-b', 'COLOR-E2E-B'], scope: 'global' },
+    { kind: 'memory_item', contains: ['e2e-state-a', 'COLOR-E2E-A'] },
+    { kind: 'memory_item', contains: ['e2e-state-b', 'COLOR-E2E-B'] },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -94,7 +94,7 @@ export const BENCH_BFCL_SEQUENTIAL_MEMORY_CHAIN: E2EScenario = {
   prompt:
     'Remember that subject `bfcl-seq-1` has chain_token `BFCL-SEQ-E2E-9`, then verify that memory.',
   rubrics: [
-    { kind: 'memory_item', contains: ['bfcl-seq-1', 'BFCL-SEQ-E2E-9'], scope: 'global' },
+    { kind: 'memory_item', contains: ['bfcl-seq-1', 'BFCL-SEQ-E2E-9'] },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -122,7 +122,7 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['longmem-entity', 'LONGMEM-E2E-42'], scope: 'global' },
+    { kind: 'memory_item', contains: ['longmem-entity', 'LONGMEM-E2E-42'] },
     {
       kind: 'turn_memory_answer',
       turnIndex: 2,
@@ -131,7 +131,7 @@ export const BENCH_LONGMEM_DELAYED_RECALL: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 2,
-      requiredItems: [{ contains: ['longmem-entity', 'LONGMEM-E2E-42'], scope: 'global' }],
+      requiredItems: [{ contains: ['longmem-entity', 'LONGMEM-E2E-42'] }],
     },
     { kind: 'memory_turns_indexed', min: 1 },
     { kind: 'graph_terminal_success' },
@@ -162,8 +162,8 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['longmem-dual', 'LONGMEM-DUAL-A'], scope: 'global' },
-    { kind: 'memory_item', contains: ['longmem-dual', 'LONGMEM-DUAL-B'], scope: 'global' },
+    { kind: 'memory_item', contains: ['longmem-dual', 'LONGMEM-DUAL-A'] },
+    { kind: 'memory_item', contains: ['longmem-dual', 'LONGMEM-DUAL-B'] },
     {
       kind: 'turn_memory_answer',
       turnIndex: 2,
@@ -176,8 +176,8 @@ export const BENCH_LONGMEM_DUAL_FACT_RECALL: E2EScenario = {
       kind: 'turn_memory_selection',
       turnIndex: 2,
       requiredItems: [
-        { contains: ['longmem-dual', 'LONGMEM-DUAL-A'], scope: 'global' },
-        { contains: ['longmem-dual', 'LONGMEM-DUAL-B'], scope: 'global' },
+        { contains: ['longmem-dual', 'LONGMEM-DUAL-A'] },
+        { contains: ['longmem-dual', 'LONGMEM-DUAL-B'] },
       ],
     },
     { kind: 'memory_turns_indexed', min: 1 },
@@ -212,7 +212,7 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['longmem-update-user', 'STATION-NEW-E2E'], scope: 'global' },
+    { kind: 'memory_item', contains: ['longmem-update-user', 'STATION-NEW-E2E'] },
     {
       kind: 'memory_item_absent',
       contains: ['longmem-update-user', 'STATION-OLD-E2E'],
@@ -230,7 +230,7 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
     {
       kind: 'turn_memory_selection',
       turnIndex: 2,
-      requiredItems: [{ contains: ['longmem-update-user', 'STATION-NEW-E2E'], scope: 'global' }],
+      requiredItems: [{ contains: ['longmem-update-user', 'STATION-NEW-E2E'] }],
       forbiddenItems: [
         { contains: ['longmem-update-user', 'STATION-OLD-E2E'], excludes: ['STATION-NEW-E2E'] },
       ],
@@ -262,7 +262,7 @@ export const BENCH_LONGMEM_ABSTENTION_EMPTY_RECALL: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_item', contains: ['longmem-known-user', 'KNOWN-CODE-E2E'], scope: 'global' },
+    { kind: 'memory_item', contains: ['longmem-known-user', 'KNOWN-CODE-E2E'] },
     {
       kind: 'turn_memory_answer',
       turnIndex: 1,
@@ -299,7 +299,7 @@ export const BENCH_KNOWU_PERSONALIZED_CONTACT_MEMORY: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['knowu-user', 'Avery'], scope: 'global' },
+    { kind: 'memory_item', contains: ['knowu-user', 'Avery'] },
     {
       kind: 'native_fixture_state',
       path: 'contacts.resultCount',

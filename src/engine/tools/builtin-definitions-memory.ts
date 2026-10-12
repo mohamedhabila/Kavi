@@ -5,7 +5,7 @@ import { MEMORY_ITEM_TEXT_MAX_CHARS } from '../../services/memory/core/memorySch
 export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
   name: 'memory_remember',
   description:
-    'Save something to long-term memory so later conversations can use it: a fact, preference, plan, decision or detail about a person that the user shares or asks you to keep. ' +
+    'Save something to long-term memory so it can be used later: a fact, preference, plan, decision or detail about a person that the user shares or asks you to keep. ' +
     'Write one self-contained statement in the user\'s language that names who or what it is about, for example "Sara, the user\'s sister, lives in Porto". ' +
     'When it corrects or updates a memory shown under Memory or returned by memory_search, pass that memory id as replaces. ' +
     'Passwords, API keys and access tokens are never stored.',
@@ -20,12 +20,6 @@ export const MEMORY_REMEMBER_TOOL: ToolDefinition = {
       replaces: {
         type: 'string',
         description: 'Id of the memory this statement corrects or updates.',
-      },
-      scope: {
-        type: 'string',
-        enum: ['global', 'conversation'],
-        description:
-          'global (default): available in every conversation. conversation: only in this one.',
       },
       pinned: {
         type: 'boolean',

@@ -49,15 +49,13 @@ function projectMemoryFinalEvidence(value) {
     'supersededItemCount',
     'pinnedItemCount',
     'sensitiveItemCount',
-    'conversationScopedItemCount',
     'indexedTurnCount',
   ]);
   if (
     !output ||
     output.currentItemCount + output.supersededItemCount !== output.itemCount ||
     output.pinnedItemCount > output.currentItemCount ||
-    output.sensitiveItemCount > output.currentItemCount ||
-    output.conversationScopedItemCount > output.currentItemCount
+    output.sensitiveItemCount > output.currentItemCount
   ) {
     return null;
   }

@@ -81,7 +81,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
-      { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'], scope: 'global' },
+      { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'] },
       {
         kind: 'memory_item_absent',
         contains: ['profile-owner', 'Rotterdam'],
@@ -116,7 +116,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       { kind: 'min_user_turns', min: 2 },
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
-      { kind: 'memory_item', contains: ['profile-owner', '45'], scope: 'global' },
+      { kind: 'memory_item', contains: ['profile-owner', '45'] },
       {
         kind: 'native_fixture_state',
         path: 'calendar.createdEventCount',
@@ -248,7 +248,7 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
       ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
       ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
       { kind: 'turn_lifecycle_boundary', turnIndex: 1, boundary: 'app_relaunch' },
-      { kind: 'memory_item', contains: ['profile-owner', 'bicycle'], scope: 'global' },
+      { kind: 'memory_item', contains: ['profile-owner', 'bicycle'] },
       {
         kind: 'token_budget',
         maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS['relaunch-profile-continuity'],

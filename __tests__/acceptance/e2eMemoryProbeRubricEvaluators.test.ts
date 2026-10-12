@@ -11,7 +11,6 @@ function item(
   return {
     id,
     text,
-    scope: 'conversation',
     pinned: false,
     sensitive: false,
     supersededBy: null,
@@ -125,7 +124,7 @@ describe('turn-scoped memory probe rubrics', () => {
     ).toMatchObject({ passed: false, detail: 'turn 2 did not select a required memory item' });
   });
 
-  it('requires the selected item to hold every token, in the named scope', () => {
+  it('requires the selected item to hold every token', () => {
     const evidence = result({
       answer: 'ACCESS-CURRENT',
       items: [CURRENT, item('other', 'other-subject access_code is ACCESS-OTHER')],
@@ -136,16 +135,9 @@ describe('turn-scoped memory probe rubrics', () => {
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',
         turnIndex: 2,
-        requiredItems: [{ contains: ['MEMORY-SUBJECT', 'access-current'], scope: 'conversation' }],
+        requiredItems: [{ contains: ['MEMORY-SUBJECT', 'access-current'] }],
       }),
     ).toMatchObject({ passed: true });
-    expect(
-      evaluateE2ERubric(evidence, {
-        kind: 'turn_memory_selection',
-        turnIndex: 2,
-        requiredItems: [{ contains: ['memory-subject', 'ACCESS-CURRENT'], scope: 'global' }],
-      }),
-    ).toMatchObject({ passed: false });
     expect(
       evaluateE2ERubric(evidence, {
         kind: 'turn_memory_selection',

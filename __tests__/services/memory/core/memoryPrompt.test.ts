@@ -13,7 +13,7 @@ import {
 } from '../../../../src/services/memory/core/memoryPrompt';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
-const HOME = { conversationId: 'conv-1' };
+const HOME = 'conv-1';
 const DAY = Date.UTC(2026, 8, 14);
 
 function remember(text: string, extra: Partial<Parameters<typeof addMemoryItem>[0]> = {}): string {
@@ -39,7 +39,7 @@ describe('memory prompt section', () => {
     remember('Prefers window seats');
 
     const section = buildMemoryPromptSection({
-      visibility: HOME,
+      conversationId: HOME,
       latestUserMessage: 'Book a visit to my sister Sara',
       inRequestUserMessageIds: [],
     });
@@ -69,7 +69,7 @@ describe('memory prompt section', () => {
     });
 
     const section = buildMemoryPromptSection({
-      visibility: HOME,
+      conversationId: HOME,
       latestUserMessage: 'What was the Lisbon weekend plan?',
       inRequestUserMessageIds: ['u-now'],
     });
@@ -98,7 +98,7 @@ describe('memory prompt section', () => {
     });
 
     const section = buildMemoryPromptSection({
-      visibility: HOME,
+      conversationId: HOME,
       latestUserMessage: 'Which cabin door do I use?',
       inRequestUserMessageIds: ['u-recent', 'u-latest'],
     });
@@ -119,7 +119,7 @@ describe('memory prompt section', () => {
 
     expect(
       buildMemoryPromptSection({
-        visibility: HOME,
+        conversationId: HOME,
         latestUserMessage: 'Call Sara’s phone',
         inRequestUserMessageIds: [],
       }),
@@ -131,7 +131,7 @@ describe('memory prompt section', () => {
 
     expect(
       buildMemoryPromptSection({
-        visibility: HOME,
+        conversationId: HOME,
         latestUserMessage: 'hi',
         inRequestUserMessageIds: [],
       }),
@@ -144,7 +144,7 @@ describe('memory prompt section', () => {
     }
 
     const section = buildMemoryPromptSection({
-      visibility: HOME,
+      conversationId: HOME,
       latestUserMessage: 'anything',
       inRequestUserMessageIds: [],
     });

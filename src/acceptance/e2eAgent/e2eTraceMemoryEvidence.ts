@@ -19,7 +19,6 @@ export type E2ERedactedMemoryFinalEvidence = {
   supersededItemCount: number;
   pinnedItemCount: number;
   sensitiveItemCount: number;
-  conversationScopedItemCount: number;
   indexedTurnCount: number;
 };
 
@@ -47,7 +46,6 @@ export function buildMemoryFinalEvidence(
     supersededItemCount: state.items.length - current.length,
     pinnedItemCount: current.filter((item) => item.pinned).length,
     sensitiveItemCount: current.filter((item) => item.sensitive).length,
-    conversationScopedItemCount: current.filter((item) => item.scope === 'conversation').length,
     indexedTurnCount: state.indexedTurnCount,
   };
 }

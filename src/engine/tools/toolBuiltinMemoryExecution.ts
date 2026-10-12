@@ -35,7 +35,7 @@ export async function executeBuiltinMemoryTool(
     now: Date.now(),
   };
   // Turning memory off never stops the user from deleting what was already stored.
-  if (name === 'memory_forget') return executeMemoryForget(args, memoryContext);
+  if (name === 'memory_forget') return executeMemoryForget(args);
   if (useSettingsStore.getState().disableLongTermMemory) {
     return failedToolOutcome(buildMemoryDisabledToolResult());
   }

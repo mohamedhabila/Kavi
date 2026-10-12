@@ -60,7 +60,7 @@ export const DIRECT_BFCL_V4_PARALLEL_RELEVANCE: E2EScenario = {
       path: 'artifacts/bfcl-direct-output.txt',
       contains: 'BFCL-DIRECT-A|BFCL-DIRECT-B',
     },
-    { kind: 'memory_item', contains: ['bfcl-direct', 'BFCL-DIRECT-CHECK-42'], scope: 'global' },
+    { kind: 'memory_item', contains: ['bfcl-direct', 'BFCL-DIRECT-CHECK-42'] },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
@@ -223,7 +223,7 @@ export const DIRECT_LONGMEMEVAL_V2_MOBILE_PREFERENCE_UPDATE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 3 },
-    { kind: 'memory_item', contains: ['direct-longmem-user', 'Avery'], scope: 'global' },
+    { kind: 'memory_item', contains: ['direct-longmem-user', 'Avery'] },
     {
       kind: 'memory_item_absent',
       contains: ['direct-longmem-user', 'Morgan'],
@@ -278,14 +278,14 @@ export const DIRECT_LOCOMO_TEMPORAL_CONVERSATION_MEMORY: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 7 },
-    { kind: 'memory_item', contains: ['locomo-user', 'ROTTERDAM-E2E'], scope: 'global' },
+    { kind: 'memory_item', contains: ['locomo-user', 'ROTTERDAM-E2E'] },
     {
       kind: 'memory_item_absent',
       contains: ['locomo-user', 'AMSTERDAM-E2E'],
       excludes: ['ROTTERDAM-E2E'],
     },
-    { kind: 'memory_item', contains: ['locomo-user', 'CANAL-E2E'], scope: 'global' },
-    { kind: 'memory_item', contains: ['locomo-friend', 'JASMINE-E2E'], scope: 'global' },
+    { kind: 'memory_item', contains: ['locomo-user', 'CANAL-E2E'] },
+    { kind: 'memory_item', contains: ['locomo-friend', 'JASMINE-E2E'] },
     {
       kind: 'workspace_file',
       path: 'artifacts/locomo-temporal-summary.txt',
@@ -356,15 +356,15 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 9 },
-    { kind: 'memory_item', contains: ['beam-user', 'BEAM-ROUTE-A'], scope: 'global' },
-    { kind: 'memory_item', contains: ['beam-user', 'BEAM-MEAL-NEW'], scope: 'global' },
+    { kind: 'memory_item', contains: ['beam-user', 'BEAM-ROUTE-A'] },
+    { kind: 'memory_item', contains: ['beam-user', 'BEAM-MEAL-NEW'] },
     {
       kind: 'memory_item_absent',
       contains: ['beam-user', 'BEAM-MEAL-OLD'],
       excludes: ['BEAM-MEAL-NEW'],
     },
-    { kind: 'memory_item', contains: ['beam-user', 'BEAM-WINDOW-9'], scope: 'global' },
-    { kind: 'memory_item', contains: ['beam-team', 'BEAM-CHANNEL-7'], scope: 'global' },
+    { kind: 'memory_item', contains: ['beam-user', 'BEAM-WINDOW-9'] },
+    { kind: 'memory_item', contains: ['beam-team', 'BEAM-CHANNEL-7'] },
     {
       kind: 'turn_memory_answer',
       turnIndex: 7,
@@ -378,10 +378,10 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
       kind: 'turn_memory_selection',
       turnIndex: 7,
       requiredItems: [
-        { contains: ['beam-user', 'BEAM-ROUTE-A'], scope: 'global' },
-        { contains: ['beam-user', 'BEAM-MEAL-NEW'], scope: 'global' },
-        { contains: ['beam-user', 'BEAM-WINDOW-9'], scope: 'global' },
-        { contains: ['beam-team', 'BEAM-CHANNEL-7'], scope: 'global' },
+        { contains: ['beam-user', 'BEAM-ROUTE-A'] },
+        { contains: ['beam-user', 'BEAM-MEAL-NEW'] },
+        { contains: ['beam-user', 'BEAM-WINDOW-9'] },
+        { contains: ['beam-team', 'BEAM-CHANNEL-7'] },
       ],
       forbiddenItems: [{ contains: ['beam-user', 'BEAM-MEAL-OLD'], excludes: ['BEAM-MEAL-NEW'] }],
     },
@@ -451,18 +451,14 @@ export const DIRECT_LONGMEMEVAL_V2_EXPERIENCE_RUNBOOK: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 5 },
-    { kind: 'memory_item', contains: ['expense-app', 'TEAM-EXPENSE-E2E'], scope: 'global' },
-    { kind: 'memory_item', contains: ['expense-app', 'NEW-SUBMIT-PATH-E2E'], scope: 'global' },
+    { kind: 'memory_item', contains: ['expense-app', 'TEAM-EXPENSE-E2E'] },
+    { kind: 'memory_item', contains: ['expense-app', 'NEW-SUBMIT-PATH-E2E'] },
     {
       kind: 'memory_item_absent',
       contains: ['expense-app', 'OLD-SUBMIT-PATH-E2E'],
       excludes: ['NEW-SUBMIT-PATH-E2E'],
     },
-    {
-      kind: 'memory_item',
-      contains: ['expense-app', 'ATTACHMENT-BEFORE-SUBMIT-E2E'],
-      scope: 'global',
-    },
+    { kind: 'memory_item', contains: ['expense-app', 'ATTACHMENT-BEFORE-SUBMIT-E2E'] },
     {
       kind: 'workspace_file',
       path: 'artifacts/expense-runbook.txt',
@@ -518,7 +514,7 @@ export const DIRECT_MOBILEWORLD_LONG_HORIZON_PERSONALIZATION: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 5 },
-    { kind: 'memory_item', contains: ['mobileworld-user', 'Avery'], scope: 'global' },
+    { kind: 'memory_item', contains: ['mobileworld-user', 'Avery'] },
     { kind: 'memory_item_absent', contains: ['mobileworld-user', 'Morgan'], excludes: ['Avery'] },
     { kind: 'native_fixture_state', path: 'contacts.resultCount', expectedValue: '1' },
     { kind: 'native_fixture_state', path: 'sms.opened', expectedValue: 'true' },
