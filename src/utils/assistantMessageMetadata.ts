@@ -5,7 +5,6 @@ import {
   Message,
 } from '../types/message';
 
-const MEMORY_RETRIEVAL_EVENT_ID_PATTERN = /^retrieval_event_[A-Za-z0-9][A-Za-z0-9._:-]{0,111}$/u;
 const ASSISTANT_FINISH_REASON_PATTERN = /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/u;
 
 /** Provider protocol dispositions that terminate a text response successfully. */
@@ -100,14 +99,6 @@ const CODE_INCOMPLETE_FINISH_REASONS = new Set([
   'terminal_review_pending',
   'tool_effect_not_claimed',
   'tool_effect_reconciliation_required',
-]);
-const ATTRIBUTION_PRESERVING_FINISH_REASONS = new Set([
-  'terminal_review_pending',
-  'response_failed',
-  'graph_finalized',
-  'synthesized_from_evidence',
-  'graph_expected_output',
-  'fallback_from_evidence',
 ]);
 const SETTLED_INCOMPLETE_FINISH_REASONS = new Set([
   'app_restarted',
@@ -207,10 +198,6 @@ export function isValidAssistantMessageMetadata(
   );
 }
 
-export function isMemoryRetrievalEventId(value: unknown): value is string {
-  return typeof value === 'string' && MEMORY_RETRIEVAL_EVENT_ID_PATTERN.test(value);
-}
-
 export function buildAssistantMessageMetadata(
   kind: AssistantMessageKind,
   completion?: AssistantCompletionMetadata,
@@ -233,26 +220,6 @@ export function buildAssistantMessageMetadata(
     };
   }
   return candidate;
-}
-
-export function mergeAssistantMessageMetadata(
-  current: AssistantMessageMetadata | undefined,
-  next: AssistantMessageMetadata | undefined,
-): AssistantMessageMetadata | undefined {
-  if (
-    !next ||
-    next.memoryRetrievalEventId !== undefined ||
-    !current?.memoryRetrievalEventId ||
-    !next.finishReason ||
-    !ATTRIBUTION_PRESERVING_FINISH_REASONS.has(next.finishReason)
-  ) {
-    return next;
-  }
-
-  return {
-    ...next,
-    memoryRetrievalEventId: current.memoryRetrievalEventId,
-  };
 }
 
 export function isFinalAssistantMessage(message: Message): boolean {

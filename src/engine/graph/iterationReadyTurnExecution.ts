@@ -105,7 +105,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
   let contextWindow = 0;
   let memoryPolicyBinding: ModelTurnMemoryPolicyBinding =
     POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING;
-  let memoryRetrievalEventId: string | undefined;
   let requestMaxTokens = params.modelTurnPreparation.requestMaxTokens;
 
   try {
@@ -157,8 +156,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
     fullContent = modelTurnResult.fullContent;
     memoryPolicyBinding = modelTurnResult.memoryPolicyBinding;
     runtime.lastModelTurnMemoryPolicyBinding = modelTurnResult.memoryPolicyBinding;
-    memoryRetrievalEventId = modelTurnResult.memoryRetrievalEventId;
-    runtime.lastModelTurnMemoryRetrievalEventId = memoryRetrievalEventId;
     reasoning = modelTurnResult.reasoning;
     providerReplay = modelTurnResult.providerReplay;
     completion = modelTurnResult.completion;
@@ -246,7 +243,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
       runtime,
       fullContent,
       memoryPolicyBinding,
-      memoryRetrievalEventId,
       reasoning,
       providerReplay,
       completion,
@@ -258,7 +254,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
           iterationParams,
           modelTurnPreparation: params.modelTurnPreparation,
           runtime,
-          memoryRetrievalEventId,
           ...args,
         }),
     });

@@ -14,7 +14,6 @@ import {
   assertModelTurnMemoryPolicyBindingCurrent,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
-import { resolveModelTurnMemoryRetrievalEventId } from './modelTurnMemoryAttribution';
 export type { PendingAgentToolCall } from './modelTurnExecutionTypes';
 
 const MAX_INCOMPLETE_TOOL_CALL_EMISSION_RETRIES = 2;
@@ -32,7 +31,6 @@ export async function executeAgentControlGraphModelTurn(
   let workingMessages = params.workingMessages;
   let contextWindow = 0;
   let memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  const memoryRetrievalEventId = resolveModelTurnMemoryRetrievalEventId(params.livingMemory);
   let providerOverflowRetryCount = 0;
   let toolCallEmissionRetryCount = 0;
   attemptLoop: for (;;) {
@@ -113,7 +111,6 @@ export async function executeAgentControlGraphModelTurn(
       contextWindow,
       fullContent,
       memoryPolicyBinding,
-      ...(memoryRetrievalEventId ? { memoryRetrievalEventId } : {}),
       pendingToolCalls,
       providerReplay,
       reasoning,

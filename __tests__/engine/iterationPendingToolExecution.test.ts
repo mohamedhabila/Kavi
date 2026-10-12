@@ -1,7 +1,6 @@
 import { executePreparedAgentControlGraphPendingToolTurn } from '../../src/engine/graph/iterationPendingToolExecution';
 import type { ModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeAgentControlGraphToolTurn } from '../../src/engine/graph/toolTurnExecution';
-import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageMetadata';
 
 jest.mock('../../src/engine/graph/toolTurnExecution', () => ({
   executeAgentControlGraphToolTurn: jest.fn(),
@@ -123,40 +122,6 @@ describe('iterationPendingToolExecution', () => {
 
     const toolFilter = mockedExecuteAgentControlGraphToolTurn.mock.calls[0]?.[0]?.toolFilter;
     expect(toolFilter).toBe(runtimeToolFilter);
-  });
-
-  it('delivers tool-terminal attribution from the exact initiating model turn', async () => {
-    const params = createParams({
-      memoryRetrievalEventId: 'retrieval_event_original_1',
-    });
-    mockedExecuteAgentControlGraphToolTurn.mockImplementationOnce(async (input) => {
-      await input.finishWithGraphTerminalEvent({
-        graphEvent: { type: 'BLOCKED', reason: 'test_blocked' },
-        content: 'تعذر الإكمال',
-        assistantMetadata: buildAssistantMessageMetadata('final', {
-          completionStatus: 'incomplete',
-          finishReason: 'response_failed',
-        }),
-        sessionEndReason: 'test_blocked',
-      });
-      return {
-        status: 'finalized',
-        lastPendingAsyncSignature: '',
-        warningInjectedThisRound: false,
-        workingMessages: [],
-      };
-    });
-
-    await executePreparedAgentControlGraphPendingToolTurn(params);
-
-    expect(params.iterationParams.graph.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        assistantMetadata: expect.objectContaining({
-          memoryRetrievalEventId: 'retrieval_event_original_1',
-        }),
-        beforeAssistantDelivery: expect.any(Function),
-      }),
-    );
   });
 
   it('passes the prepared selected tool surface into tool execution', async () => {

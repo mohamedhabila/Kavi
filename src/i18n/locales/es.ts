@@ -342,11 +342,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     retryMessage: 'Reintentar mensaje',
     continueTask: 'Continuar',
     continueTaskMessage: 'Por favor, continúa con la tarea desde donde te detuviste.',
-    memoryFeedbackPrompt: '¿Te ayudó el contexto recordado?',
-    memoryFeedbackHelpful: 'Útil',
-    memoryFeedbackWrong: 'Incorrecto',
-    memoryFeedbackIrrelevant: 'No relevante',
-    memoryFeedbackFailed: 'No se pudo guardar la valoración de memoria.',
     attachmentWorkspaceImportFailed:
       'No se pudieron agregar los archivos adjuntos al espacio de trabajo. Intentalo de nuevo.',
     steeringQueueFull:

@@ -81,7 +81,6 @@ export interface ExecuteAgentControlGraphModelTurnResult {
   contextWindow: number;
   fullContent: string;
   memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  memoryRetrievalEventId?: string;
   pendingToolCalls: PendingAgentToolCall[];
   providerReplay?: MessageProviderReplay;
   reasoning: string;

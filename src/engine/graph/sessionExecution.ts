@@ -19,7 +19,6 @@ import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
   isMemoryPromptEpochExpiredError,
 } from '../authority/modelTurnMemoryPolicyBinding';
-import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { buildRunStoppedMessage } from './runStoppedMessage';
@@ -63,13 +62,10 @@ export async function executeAgentControlGraphSession(
         reason: 'max_iterations',
       },
       content: buildRunStoppedMessage('step_limit', params.graph.getGraphSnapshot()?.plan),
-      assistantMetadata: attachModelTurnMemoryAttribution(
-        buildAssistantMessageMetadata('final', {
-          completionStatus: 'complete',
-          finishReason: 'max_iterations',
-        }),
-        runtime.lastModelTurnMemoryRetrievalEventId,
-      ),
+      assistantMetadata: buildAssistantMessageMetadata('final', {
+        completionStatus: 'complete',
+        finishReason: 'max_iterations',
+      }),
       beforeAssistantDelivery: () =>
         assertModelTurnMemoryPolicyBindingDurablyCurrent(maxIterationMemoryPolicyBinding),
       sessionEndReason: 'max_iterations',

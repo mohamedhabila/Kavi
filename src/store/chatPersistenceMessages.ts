@@ -27,10 +27,7 @@ import {
 } from './chatPersistencePrimitives';
 import { compactPersistedToolContent } from './persistedToolContent';
 import { sanitizeToolEffectReceipts } from '../utils/toolEffectReceipt';
-import {
-  isMemoryRetrievalEventId,
-  isValidAssistantMessageMetadata,
-} from '../utils/assistantMessageMetadata';
+import { isValidAssistantMessageMetadata } from '../utils/assistantMessageMetadata';
 
 function sanitizeAssistantMetadata(
   metadata: Message['assistantMetadata'],
@@ -51,9 +48,6 @@ function sanitizeAssistantMetadata(
     completionStatus: metadata.completionStatus,
     finishReason,
     ...(terminalReason ? { terminalReason } : {}),
-    ...(isMemoryRetrievalEventId(metadata.memoryRetrievalEventId)
-      ? { memoryRetrievalEventId: metadata.memoryRetrievalEventId }
-      : {}),
   };
 }
 

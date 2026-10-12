@@ -17,7 +17,6 @@ import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
   type ModelTurnMemoryPolicyBinding,
 } from '../authority/modelTurnMemoryPolicyBinding';
-import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 
 export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
@@ -25,7 +24,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   runtime: AgentControlGraphIterationRuntimeState;
   fullContent: string;
   memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  memoryRetrievalEventId?: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
@@ -97,10 +95,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
         assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
         return params.iterationParams.graph.finishWithGraphFinalCandidateEvent({
           ...finalParams,
-          assistantMetadata: attachModelTurnMemoryAttribution(
-            finalParams.assistantMetadata,
-            params.memoryRetrievalEventId,
-          ),
           beforeAssistantDelivery: () =>
             assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
         });
@@ -109,10 +103,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
         assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
         return params.iterationParams.graph.finishWithGraphTerminalEvent({
           ...terminalParams,
-          assistantMetadata: attachModelTurnMemoryAttribution(
-            terminalParams.assistantMetadata,
-            params.memoryRetrievalEventId,
-          ),
           beforeAssistantDelivery: () =>
             assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
         });

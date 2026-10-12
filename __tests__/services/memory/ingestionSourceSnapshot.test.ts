@@ -92,7 +92,6 @@ function sourceMessages(): Message[] {
         completionStatus: 'complete',
         finishReason: 'stop',
         terminalReason: 'completed',
-        memoryRetrievalEventId: 'retrieval_event_private_trace',
       },
       providerReplay: {
         anthropicBlocks: [{ private: 'anthropic-replay-secret' }],
@@ -187,7 +186,6 @@ describe('ingestion source snapshot codec', () => {
       'effect-receipt-secret',
       'anthropic-replay-secret',
       'sub-agent-snapshot-secret',
-      'retrieval_event_private_trace',
       'user-side memory annotation',
       'final answer reasoning',
       'Writing plan',

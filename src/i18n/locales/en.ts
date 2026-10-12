@@ -334,11 +334,6 @@ export const en: TranslationMap = {
     retryMessage: 'Retry message',
     continueTask: 'Continue',
     continueTaskMessage: 'Please continue with the task from where you stopped.',
-    memoryFeedbackPrompt: 'Did the remembered context help?',
-    memoryFeedbackHelpful: 'Helpful',
-    memoryFeedbackWrong: 'Wrong',
-    memoryFeedbackIrrelevant: 'Not relevant',
-    memoryFeedbackFailed: 'Unable to save memory feedback right now.',
     attachmentWorkspaceImportFailed: 'Unable to add attached files to the workspace. Try again.',
     steeringQueueFull:
       'Too many messages are waiting for the assistant. Try again after it reads them.',

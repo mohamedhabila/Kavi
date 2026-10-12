@@ -3,7 +3,6 @@ import type { AssistantMessageMetadata, Message } from '../../types/message';
 import {
   buildAssistantMessageMetadata,
   hasCompleteFinalAssistantMetadata,
-  mergeAssistantMessageMetadata,
 } from '../../utils/assistantMessageMetadata';
 import { generateId } from '../../utils/id';
 import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
@@ -333,10 +332,7 @@ export function applyForegroundModelRecoveryPlan(
       ...message,
       ...(plan.shouldInsertInterruptionText ? { content: INTERRUPTED_RESPONSE_TEXT } : {}),
       ...(toolCalls ? { toolCalls } : {}),
-      assistantMetadata: mergeAssistantMessageMetadata(
-        message.assistantMetadata,
-        plan.interruptedAssistantMetadata,
-      ),
+      assistantMetadata: plan.interruptedAssistantMetadata,
     };
   });
   if (plan.status !== 'failed') {

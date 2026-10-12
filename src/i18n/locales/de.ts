@@ -332,11 +332,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     retryMessage: 'Nachricht erneut senden',
     continueTask: 'Fortfahren',
     continueTaskMessage: 'Bitte machen Sie mit der Aufgabe dort weiter, wo Sie aufgehört haben.',
-    memoryFeedbackPrompt: 'Hat der gemerkte Kontext geholfen?',
-    memoryFeedbackHelpful: 'Hilfreich',
-    memoryFeedbackWrong: 'Falsch',
-    memoryFeedbackIrrelevant: 'Nicht relevant',
-    memoryFeedbackFailed: 'Das Feedback zur Erinnerung konnte nicht gespeichert werden.',
     attachmentWorkspaceImportFailed:
       'Die angehängten Dateien konnten nicht zum Workspace hinzugefügt werden. Bitte erneut versuchen.',
     steeringQueueFull:

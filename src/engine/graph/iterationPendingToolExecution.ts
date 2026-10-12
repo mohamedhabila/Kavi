@@ -10,7 +10,6 @@ import type { PreparedAgentControlGraphModelTurnReady } from './prepareAgentCont
 import { executeAgentControlGraphToolTurn } from './toolTurnExecution';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import { assertModelTurnMemoryPolicyBindingDurablyCurrent } from '../authority/modelTurnMemoryPolicyBinding';
-import { attachModelTurnMemoryAttribution } from './modelTurnMemoryAttribution';
 
 export async function executePreparedAgentControlGraphPendingToolTurn(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
@@ -18,7 +17,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
   runtime: AgentControlGraphIterationRuntimeState;
   contextWindow: number;
   memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  memoryRetrievalEventId?: string;
   turnAssistantContent: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
@@ -79,10 +77,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
       assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
       return params.iterationParams.graph.finishWithGraphTerminalEvent({
         ...terminalParams,
-        assistantMetadata: attachModelTurnMemoryAttribution(
-          terminalParams.assistantMetadata,
-          params.memoryRetrievalEventId,
-        ),
         beforeAssistantDelivery: () =>
           assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
       });
@@ -91,10 +85,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
       assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
       return params.iterationParams.graph.finishWaitingForUserInput({
         ...waitingParams,
-        assistantMetadata: attachModelTurnMemoryAttribution(
-          waitingParams.assistantMetadata,
-          params.memoryRetrievalEventId,
-        ),
         beforeAssistantDelivery: () =>
           assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
       });

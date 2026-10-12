@@ -5,16 +5,8 @@ import { shareConversationWorkspaceFile } from '../../services/share/localShare'
 import type { Attachment } from '../../types/attachment';
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
-import { hasCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 import { CHAT_SOURCE_MESSAGE_PAGE_SIZE } from '../chatScreenDisplayState';
-import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import { resolveConversationWorkspaceReadScope } from '../../services/conversationWorkspace/fallbacks';
-import {
-  readExplicitMemoryRetrievalFeedback,
-  recordExplicitMemoryRetrievalFeedback,
-  type MemoryRetrievalFeedbackChoice,
-  type MemoryRetrievalFeedbackTarget,
-} from '../../services/memory/retrievalOutcomeStore';
 
 type TranslationFn = (key: string, params?: Record<string, string | number>) => string;
 
@@ -42,15 +34,6 @@ type UseChatScreenUiCallbacksParams = {
 
 export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams): {
   handleEdit: (messageId: string, content: string) => void;
-  handleLoadMemoryFeedback: (
-    messageId: string,
-    eventId: string,
-  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
-  handleMemoryFeedback: (
-    messageId: string,
-    eventId: string,
-    outcome: MemoryRetrievalFeedbackChoice,
-  ) => Promise<MemoryRetrievalFeedbackChoice>;
   handleOpenSubAgentDetails: (snapshot: SubAgentSnapshot) => void;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleShowEarlierMessages: () => void;
@@ -172,68 +155,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     [setSelectedSubAgentSnapshot],
   );
 
-  const resolveMemoryFeedbackTarget = useCallback(
-    (messageId: string, eventId: string): MemoryRetrievalFeedbackTarget | null => {
-      if (!activeConversationId || activeConversation?.id !== activeConversationId) {
-        return null;
-      }
-      const message = activeConversation.messages.find((candidate) => candidate.id === messageId);
-      if (
-        !message ||
-        !hasCompleteFinalAssistantMetadata(message) ||
-        message.assistantMetadata.memoryRetrievalEventId !== eventId
-      ) {
-        return null;
-      }
-      try {
-        const workspaceTarget = resolveConversationWorkspaceTarget({
-          conversationId: activeConversationId,
-          conversations,
-        });
-        return {
-          retrievalEventId: eventId,
-          memoryConversationId: workspaceTarget.workspaceConversationId,
-          sourceThreadId: activeConversationId,
-          assistantMessageId: messageId,
-        };
-      } catch {
-        return null;
-      }
-    },
-    [activeConversation, activeConversationId, conversations],
-  );
-
-  const handleLoadMemoryFeedback = useCallback(
-    async (messageId: string, eventId: string) => {
-      const target = resolveMemoryFeedbackTarget(messageId, eventId);
-      if (!target) return null;
-      const result = await readExplicitMemoryRetrievalFeedback(target);
-      return result.status === 'found' ? result.outcome : null;
-    },
-    [resolveMemoryFeedbackTarget],
-  );
-
-  const handleMemoryFeedback = useCallback(
-    async (
-      messageId: string,
-      eventId: string,
-      outcome: MemoryRetrievalFeedbackChoice,
-    ): Promise<MemoryRetrievalFeedbackChoice> => {
-      const target = resolveMemoryFeedbackTarget(messageId, eventId);
-      if (!target) throw new Error('memory_retrieval_feedback_target_invalid');
-      const result = await recordExplicitMemoryRetrievalFeedback({ target, outcome });
-      if (
-        result.status !== 'recorded' &&
-        result.status !== 'updated' &&
-        result.status !== 'unchanged'
-      ) {
-        throw new Error('memory_retrieval_feedback_not_recorded');
-      }
-      return result.outcome;
-    },
-    [resolveMemoryFeedbackTarget],
-  );
-
   const { hiddenSourceMessageCount, loadEarlierArchivedMessages } = params;
   const handleShowEarlierMessages = useCallback(() => {
     if (hiddenSourceMessageCount === 0) {
@@ -245,8 +166,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
 
   return {
     handleEdit,
-    handleLoadMemoryFeedback,
-    handleMemoryFeedback,
     handleOpenSubAgentDetails,
     handleShareWorkspaceFile,
     handleShowEarlierMessages,

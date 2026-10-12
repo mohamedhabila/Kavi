@@ -8,7 +8,6 @@ import {
   extractToolCallAttachments,
   mergeAttachmentLists,
 } from '../utils/messageAttachments';
-import { mergeAssistantMessageMetadata } from '../utils/assistantMessageMetadata';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import {
   areAssistantMessageMetadataEqual,
@@ -195,15 +194,10 @@ export function createMessageStoreActions(
           state.conversations,
           conversationId,
           messageId,
-          (message) => {
-            const nextMetadata = mergeAssistantMessageMetadata(
-              message.assistantMetadata,
-              assistantMetadata,
-            );
-            return areAssistantMessageMetadataEqual(message.assistantMetadata, nextMetadata)
+          (message) =>
+            areAssistantMessageMetadataEqual(message.assistantMetadata, assistantMetadata)
               ? message
-              : { ...message, assistantMetadata: nextMetadata };
-          },
+              : { ...message, assistantMetadata },
         );
         return conversations ? { conversations } : state;
       }),

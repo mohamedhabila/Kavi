@@ -30,9 +30,6 @@ import { shareTextExport } from '../../services/share/localShare';
 import { createAssistantBubbleStyles } from './AssistantBubble.styles';
 import { useAssistantBubbleEffects } from './useAssistantBubbleEffects';
 import { AssistantBubbleActions } from './AssistantBubbleActions';
-import { AssistantMemoryFeedback } from './AssistantMemoryFeedback';
-import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
-import { isMemoryRetrievalEventId } from '../../utils/assistantMessageMetadata';
 import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 interface AssistantBubbleProps {
@@ -47,16 +44,6 @@ interface AssistantBubbleProps {
   onViewFile?: (path: string) => void;
   onShareWorkspaceFile?: (attachment: Attachment) => void;
   onOpenSubAgentDetails?: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
-  memoryFeedbackMessageId?: string | null;
-  onLoadMemoryFeedback?: (
-    messageId: string,
-    eventId: string,
-  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
-  onMemoryFeedback?: (
-    messageId: string,
-    eventId: string,
-    outcome: MemoryRetrievalFeedbackChoice,
-  ) => Promise<MemoryRetrievalFeedbackChoice>;
   retryMessageId?: string;
 }
 
@@ -73,9 +60,6 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
     onViewFile,
     onShareWorkspaceFile,
     onOpenSubAgentDetails,
-    memoryFeedbackMessageId,
-    onLoadMemoryFeedback,
-    onMemoryFeedback,
     retryMessageId,
   }) => {
     const { colors } = useAppTheme();
@@ -127,17 +111,6 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
       effectId: message.effectId,
       styles,
     });
-    const candidateMemoryRetrievalEventId =
-      message.assistantMetadata?.kind === 'final' &&
-      message.assistantMetadata.completionStatus === 'complete'
-        ? message.assistantMetadata.memoryRetrievalEventId
-        : undefined;
-    const memoryRetrievalEventId = isMemoryRetrievalEventId(candidateMemoryRetrievalEventId)
-      ? candidateMemoryRetrievalEventId
-      : undefined;
-    const exactMemoryFeedbackMessageId =
-      memoryFeedbackMessageId === undefined ? message.id : memoryFeedbackMessageId;
-
     const handleShare = async () => {
       try {
         await shareTextExport({
@@ -357,16 +330,6 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
               styles={styles}
               t={t}
             />
-            {memoryRetrievalEventId && exactMemoryFeedbackMessageId && onMemoryFeedback ? (
-              <AssistantMemoryFeedback
-                eventId={memoryRetrievalEventId}
-                messageId={exactMemoryFeedbackMessageId}
-                onLoad={onLoadMemoryFeedback}
-                onSubmit={onMemoryFeedback}
-                styles={styles}
-                t={t}
-              />
-            ) : null}
           </>
         ) : null}
       </View>

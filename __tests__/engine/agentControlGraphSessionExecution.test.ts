@@ -144,7 +144,6 @@ describe('agentControlGraphSessionExecution', () => {
 
   it('finalizes with the max-iterations summary when iterations keep continuing', async () => {
     const params = createParams({ maxToolIterations: 1 });
-    params.initialRuntime.lastModelTurnMemoryRetrievalEventId = 'retrieval_event_max_iteration_1';
     mockedExecuteAgentControlGraphIteration.mockResolvedValue({
       status: 'continued',
       runtime: params.initialRuntime,
@@ -160,9 +159,6 @@ describe('agentControlGraphSessionExecution', () => {
           type: 'FINALIZED',
           reason: 'max_iterations',
         },
-        assistantMetadata: expect.objectContaining({
-          memoryRetrievalEventId: 'retrieval_event_max_iteration_1',
-        }),
         sessionEndReason: 'max_iterations',
       }),
     );

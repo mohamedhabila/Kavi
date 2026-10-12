@@ -323,11 +323,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     retryMessage: 'メッセージを再試行',
     continueTask: '続ける',
     continueTaskMessage: '止まったところからタスクを続けてください。',
-    memoryFeedbackPrompt: '記憶していた内容は役に立ちましたか？',
-    memoryFeedbackHelpful: '役に立った',
-    memoryFeedbackWrong: '間違っている',
-    memoryFeedbackIrrelevant: '関係ない',
-    memoryFeedbackFailed: 'メモリへの評価を保存できませんでした。',
     attachmentWorkspaceImportFailed:
       '添付ファイルをワークスペースに追加できませんでした。もう一度お試しください。',
     steeringQueueFull:

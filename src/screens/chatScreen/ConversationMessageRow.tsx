@@ -5,21 +5,11 @@ import type { Attachment } from '../../types/attachment';
 import type { Message } from '../../types/message';
 import type { ResolvedDisplayMessageItem } from '../chatScreenDisplayState';
 import type { createStyles } from '../ChatScreen.styles';
-import type { MemoryRetrievalFeedbackChoice } from '../../services/memory/retrievalOutcomeStore';
 
 type ConversationMessageRowProps = {
   item: ResolvedDisplayMessageItem;
   onEdit: (messageId: string, content: string) => void;
   onOpenSubAgentDetails: (snapshot: NonNullable<Message['subAgentEvent']>['snapshot']) => void;
-  onLoadMemoryFeedback: (
-    messageId: string,
-    eventId: string,
-  ) => Promise<MemoryRetrievalFeedbackChoice | null>;
-  onMemoryFeedback: (
-    messageId: string,
-    eventId: string,
-    outcome: MemoryRetrievalFeedbackChoice,
-  ) => Promise<MemoryRetrievalFeedbackChoice>;
   onRetry: (messageId: string) => void;
   onShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   onViewCanvas: () => void;
@@ -39,16 +29,6 @@ type ConversationMessageRowProps = {
 export const ConversationMessageRow = memo(function ConversationMessageRow(
   props: ConversationMessageRowProps,
 ) {
-  const memoryRetrievalEventId =
-    props.item.resolvedMessage.assistantMetadata?.memoryRetrievalEventId;
-  const memoryFeedbackMessageId = memoryRetrievalEventId
-    ? ([...(props.item.resolvedResponseSegments ?? [])]
-        .reverse()
-        .find(
-          (segment) => segment.assistantMetadata?.memoryRetrievalEventId === memoryRetrievalEventId,
-        )?.messageId ?? null)
-    : null;
-
   return (
     <View>
       {props.temporalMarkerText ? (
@@ -88,9 +68,6 @@ export const ConversationMessageRow = memo(function ConversationMessageRow(
         onViewFile={props.onViewFiles}
         onShareWorkspaceFile={props.onShareWorkspaceFile}
         onOpenSubAgentDetails={props.onOpenSubAgentDetails}
-        memoryFeedbackMessageId={props.readOnly ? undefined : memoryFeedbackMessageId}
-        onLoadMemoryFeedback={props.onLoadMemoryFeedback}
-        onMemoryFeedback={props.onMemoryFeedback}
         retryMessageId={props.item.retryMessageId}
       />
     </View>

@@ -69,7 +69,6 @@ export interface AgentControlGraphIterationRuntimeState {
   lastPendingAsyncSignature: string;
   llm: LlmService;
   lastModelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
-  lastModelTurnMemoryRetrievalEventId?: string;
   /**
    * Set once a foreground run has forced its one budget-checkpoint text turn (from
    * either the iteration/wall-clock ceiling or a model-turn inactivity timeout), so
