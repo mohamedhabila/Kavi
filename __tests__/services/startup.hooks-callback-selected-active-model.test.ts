@@ -1,7 +1,3 @@
-jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
-  removeRetiredMemoryArtifacts: jest.fn(),
-}));
-
 const mockRegisterBuiltInServiceSkills = jest.fn();
 const mockActivateEnabledSkills = jest.fn();
 const mockSetSchedulerExecutor = jest.fn();

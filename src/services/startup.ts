@@ -40,7 +40,6 @@ import { unrefTimerIfSupported } from '../utils/timers';
 import { catchUpMemoryCapture } from './memory/core/memoryCapture';
 import { hydrateTokenCalibrationFromStorage } from './usage/tracker';
 import { initializeMemoryPolicyObservation } from './memory/policy';
-import { removeRetiredMemoryArtifacts } from './memory/retiredMemoryCleanup';
 import {
   providerRequiresApiKey,
   resolveConversationModel,
@@ -249,20 +248,7 @@ function initializeDeferredStartupServices(): void {
   });
 }
 
-let retiredMemoryCleanupComplete = false;
-
-function removeRetiredMemoryArtifactsUntilComplete(): void {
-  if (retiredMemoryCleanupComplete) return;
-  try {
-    removeRetiredMemoryArtifacts();
-    retiredMemoryCleanupComplete = true;
-  } catch (error) {
-    console.warn('[startup] retired memory cleanup failed:', error);
-  }
-}
-
 export function initializeServices(): void {
-  removeRetiredMemoryArtifactsUntilComplete();
   if (initialized) return;
   initialized = true;
 

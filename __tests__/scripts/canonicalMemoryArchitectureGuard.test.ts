@@ -23,7 +23,7 @@ describe('canonical memory architecture guard', () => {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  it('allows only the deletion-only retired artifact cleanup references', () => {
+  it('rejects every retired table, directory and file-system reference', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',
@@ -38,10 +38,18 @@ describe('canonical memory architecture guard', () => {
       ].join('\n'),
     );
 
-    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('uses file-backed memory persistence dependency'),
+        expect.stringContaining('uses retired Markdown memory directories'),
+        expect.stringContaining('uses retired chunk table'),
+        expect.stringContaining('uses retired product-experience table'),
+        expect.stringContaining('uses retired verified-procedure table'),
+      ]),
+    );
   });
 
-  it('rejects a retired table read hidden in the cleanup module', () => {
+  it('rejects a retired table read', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',
@@ -53,7 +61,7 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
-  it('rejects arbitrary retired directory use hidden in the cleanup module', () => {
+  it('rejects retired directory use', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',
@@ -108,14 +116,7 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
-  it('allows only the one-way product-experience table drop and rejects restoration', () => {
-    writeProjectFile(
-      projectRoot,
-      'src/services/memory/retiredMemoryArtifacts.ts',
-      "const RETIRED_MEMORY_TABLES = [\n  'memory_product_experience_observations',\n];\n",
-    );
-    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
-
+  it('rejects restoring the product-experience store', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/productExperienceObservationStore.ts',
@@ -129,7 +130,7 @@ describe('canonical memory architecture guard', () => {
     );
   });
 
-  it('rejects a verified-procedure table outside the retired table list', () => {
+  it('rejects restoring the verified-procedure store', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',

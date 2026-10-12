@@ -36,7 +36,6 @@ const mockCatchUpMemoryCapture = jest.fn();
 const mockInitializeDurableRecoveryLifecycle = jest.fn();
 const mockReconcileDurableRecoveryLifecycle = jest.fn().mockResolvedValue(undefined);
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
-const mockRemoveRetiredMemoryArtifacts = jest.fn();
 let mockSettingsHydrated = true;
 let mockChatHydrated = true;
 const mockSettingsHydrationListeners = new Set<() => void>();
@@ -123,9 +122,6 @@ jest.mock('../../src/services/events/bus', () => ({
 }));
 jest.mock('../../src/services/memory/core/memoryCapture', () => ({
   catchUpMemoryCapture: (...args: any[]) => mockCatchUpMemoryCapture(...args),
-}));
-jest.mock('../../src/services/memory/retiredMemoryCleanup', () => ({
-  removeRetiredMemoryArtifacts: (...args: any[]) => mockRemoveRetiredMemoryArtifacts(...args),
 }));
 jest.mock('../../src/services/executionJournal/durableRecoveryLifecycle', () => ({
   initializeDurableRecoveryLifecycle: (...args: any[]) =>
@@ -367,7 +363,6 @@ describe('initializeServices', () => {
     initializeServices();
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
-    expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(1);
     expect(mockInitializeNotifications).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(mockConnectAll).toHaveBeenCalledWith([
@@ -482,21 +477,6 @@ describe('initializeServices', () => {
     expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
     expect(mockActivateEnabledSkills).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
-  });
-  it('retries retired memory cleanup without reinitializing services', async () => {
-    const cleanupError = new Error('directory busy');
-    mockRemoveRetiredMemoryArtifacts.mockImplementationOnce(() => {
-      throw cleanupError;
-    });
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { initializeServices } = require('../../src/services/startup');
-    initializeServices();
-    initializeServices();
-    expect(mockRemoveRetiredMemoryArtifacts).toHaveBeenCalledTimes(2);
-    expect(mockRegisterBuiltInServiceSkills).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(mockStartScheduler).toHaveBeenCalledTimes(1));
-    expect(warnSpy).toHaveBeenCalledWith('[startup] retired memory cleanup failed:', cleanupError);
-    warnSpy.mockRestore();
   });
   it('passes an executor with execute function', () => {
     const { initializeServices } = require('../../src/services/startup');

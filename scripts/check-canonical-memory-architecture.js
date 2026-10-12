@@ -6,13 +6,7 @@ const { fail, findRipgrepLines, finishCheck } = require('./lib/ripgrepCheck');
 
 const label = 'check-canonical-memory-architecture';
 const defaultProjectRoot = path.resolve(__dirname, '..');
-const retiredArtifactCleanupPath = 'src/services/memory/retiredMemoryArtifacts.ts';
 const memoryServiceRoot = 'src/services/memory/';
-
-// A retired table may appear only as one entry of the deletion-only cleanup's table list.
-function isRetiredTableListEntry({ filePath, content }) {
-  return filePath === retiredArtifactCleanupPath && /^'memory_[a-z_]+',$/u.test(content);
-}
 
 // These modules own the low-level fact primitives themselves. Every product and
 // acceptance writer must use a contribution-backed mutation boundary.
@@ -59,7 +53,6 @@ const bannedPatterns = [
   {
     label: 'retired product-experience table',
     pattern: String.raw`\bmemory_product_experience_observations\b`,
-    allowedMatch: isRetiredTableListEntry,
   },
   {
     label: 'retired single-effect experience API',
@@ -68,20 +61,14 @@ const bannedPatterns = [
   {
     label: 'retired chunk table',
     pattern: String.raw`\bmemory_chunks\b`,
-    allowedMatch: isRetiredTableListEntry,
   },
   {
     label: 'retired verified-procedure table',
     pattern: String.raw`\bmemory_verified_procedure_[a-z_]+\b`,
-    allowedMatch: isRetiredTableListEntry,
   },
   {
     label: 'retired Markdown memory directories',
     pattern: String.raw`['"](?:global-memory|conversation-memory)['"]`,
-    allowedMatch: ({ filePath, content }) =>
-      filePath === retiredArtifactCleanupPath &&
-      content ===
-        "const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;",
   },
   {
     label: 'retired Markdown memory file',
@@ -91,9 +78,6 @@ const bannedPatterns = [
     label: 'file-backed memory persistence dependency',
     pattern: String.raw`['"](?:expo-file-system(?:/legacy)?|@react-native-async-storage/async-storage|react-native-fs|node:fs|fs)['"]`,
     includeMatch: ({ filePath }) => filePath.startsWith(memoryServiceRoot),
-    allowedMatch: ({ filePath, content }) =>
-      filePath === retiredArtifactCleanupPath &&
-      content === "import { Directory, Paths } from 'expo-file-system';",
   },
   {
     label: 'retired file-store API',
