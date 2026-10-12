@@ -14,11 +14,6 @@ import {
   hasSeedUserInstruction,
   normalizeSubAgentPrompt,
 } from './sessionContextMessages';
-import {
-  renderSubAgentMemoryBundle,
-  sanitizeSubAgentMemoryBundle,
-  sanitizeSubAgentMemorySelectionScope,
-} from '../workerMemoryBundle';
 
 export { MAX_SPAWN_DEPTH };
 export const OUTPUT_TRUNCATION = FINALIZATION_OUTPUT_TRUNCATION;
@@ -97,14 +92,10 @@ export function cloneSubAgentConfig(config: SubAgentConfig): SubAgentConfig {
   const hasExplicitToolsConfig = hasExplicitToolConfiguration(config.tools);
   const prompt = normalizeSubAgentPrompt(config.prompt) || '';
   const workstreamId = config.workstreamId?.trim() || undefined;
-  const memorySelectionScope = sanitizeSubAgentMemorySelectionScope(config.memorySelectionScope);
-  const memoryBundle = sanitizeSubAgentMemoryBundle(config.memoryBundle);
   return {
     ...config,
     prompt,
     ...(workstreamId ? { workstreamId } : {}),
-    ...(memorySelectionScope ? { memorySelectionScope } : { memorySelectionScope: undefined }),
-    ...(memoryBundle ? { memoryBundle } : { memoryBundle: undefined }),
     ...(hasExplicitToolsConfig
       ? { tools: normalizedTools ?? [] }
       : normalizedTools
@@ -149,7 +140,7 @@ export function buildInitialSubAgentMessages(config: SubAgentConfig): Message[] 
 }
 
 export function buildSubAgentSystemPrompt(
-  config: Pick<SubAgentConfig, 'systemPrompt' | 'memoryBundle'>,
+  config: Pick<SubAgentConfig, 'systemPrompt'>,
   depth: number,
 ): string {
   const workerContract = `## Worker Contract
@@ -166,19 +157,16 @@ export function buildSubAgentSystemPrompt(
 - If the prompt or Expected output asks for an exact answer, return that exact answer and skip the report.
 - Otherwise finish with a concise report: outcome, key verified findings, artifacts/actions, and any blocker.
 - If interrupted, timed out, or cancelled, preserve the most useful verified findings in visible text.`;
-  const memoryContext = renderSubAgentMemoryBundle(config.memoryBundle);
 
   const rawSystemPrompt = config.systemPrompt?.trim();
   if (rawSystemPrompt) {
     return `${truncateGraphemesTo(rawSystemPrompt, 50_000)}
 
-${memoryContext ? `${memoryContext}\n\n` : ''}
 ${workerContract}`;
   }
 
   return `You are a sub-agent (depth ${depth + 1}/${MAX_SPAWN_DEPTH}). Complete the task and return the result.
 
-${memoryContext ? `${memoryContext}\n\n` : ''}
 ${workerContract}`;
 }
 

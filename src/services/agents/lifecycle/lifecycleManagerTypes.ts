@@ -56,5 +56,4 @@ export type SubAgentLifecycleManagerParams<TAgent extends SubAgentSnapshot> = {
   maxToolResultPreviewChars: number;
   terminalSubAgentRetentionMs: number;
   recoverInterruptedAgent?: (agent: TAgent) => Promise<boolean>;
-  reconcileOutcome?: (agent: TAgent) => Promise<boolean>;
 };

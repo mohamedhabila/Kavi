@@ -87,45 +87,16 @@ describe('spawnSubAgent with custom systemPrompt', () => {
     expect(capturedOrchestratorOptions.systemPrompt).toContain('depth');
   });
 
-  it('injects only the sealed task-scoped memory bundle and isolates runtime memory', async () => {
+  it('runs the worker in its own memory scope over the parent workspace', async () => {
     await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
         workspaceConversationId: 'parent-files',
         prompt: 'Use the relevant preference',
-        memoryBundle: {
-          version: 1,
-          source: {
-            memoryOwnerId: 'owner-1',
-            memoryConversationId: 'parent-memory',
-            sourceThreadId: 'conv-1',
-            personaId: 'super-agent',
-            taskId: null,
-          },
-          createdAt: 1,
-          facts: [
-            {
-              factId: 'fact-1',
-              subjectId: 'user',
-              predicate: 'seat_preference',
-              objectText: 'aisle',
-              memoryKind: 'semantic_fact',
-              sourceAuthority: 'grounded_user',
-              sourceMessageId: 'message-1',
-              sourceRunId: null,
-              validAt: 1,
-            },
-          ],
-          episodes: [],
-        },
       },
       mockProvider,
     );
 
-    expect(capturedOrchestratorOptions.systemPrompt).toContain(
-      'BEGIN_UNTRUSTED_WORKER_MEMORY_DATA',
-    );
-    expect(capturedOrchestratorOptions.systemPrompt).toContain('seat_preference');
     expect(capturedOrchestratorOptions.memoryConversationId).toMatch(/^sub-/);
     expect(capturedOrchestratorOptions.workspaceConversationId).toBe('parent-files');
   });
@@ -162,7 +133,24 @@ describe('spawnSubAgent with name', () => {
 });
 
 describe('spawnSubAgent with tools whitelist', () => {
-  it('rejects direct memory tools because parent evidence must be preselected', async () => {
+  it('drops requested memory tools and launches the worker with the rest', async () => {
+    const result = await spawnSubAgent(
+      {
+        parentConversationId: 'conv-1',
+        prompt: 'Look up the notes and summarize them',
+        tools: ['memory_search', 'read_file'],
+      },
+      mockProvider,
+    );
+
+    expect(result.status).not.toBe('error');
+    const filter = capturedOrchestratorOptions.toolFilter!;
+    expect(filter('read_file')).toBe(true);
+    expect(filter('memory_search')).toBe(false);
+    expect(filter('web_search')).toBe(false);
+  });
+
+  it('launches a worker that asked only for memory tools with no tools at all', async () => {
     const result = await spawnSubAgent(
       {
         parentConversationId: 'conv-1',
@@ -172,8 +160,8 @@ describe('spawnSubAgent with tools whitelist', () => {
       mockProvider,
     );
 
-    expect(result.status).toBe('error');
-    expect(result.error).toContain('task-scoped evidence bundle');
+    expect(result.status).not.toBe('error');
+    expect(capturedOrchestratorOptions.disableTooling).toBe(true);
   });
 
   it('creates a toolFilter that allows only whitelisted tools', async () => {

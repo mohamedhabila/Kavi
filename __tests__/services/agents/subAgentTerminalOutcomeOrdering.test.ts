@@ -1,11 +1,3 @@
-const mockCreatePending = jest.fn();
-const mockReconcile = jest.fn();
-
-jest.mock('../../../src/services/agents/subAgentOutcomeReconciliation', () => ({
-  createPendingSubAgentOutcomeReconciliation: (...args: unknown[]) => mockCreatePending(...args),
-  reconcileSubAgentOutcomeMemory: (...args: unknown[]) => mockReconcile(...args),
-}));
-
 import type { SubAgentConfig, SubAgentSnapshot } from '../../../src/types/subAgent';
 import type { PersistRegistryBestEffortOutcome } from '../../../src/services/agents/lifecycle/sessionContext';
 import {
@@ -41,20 +33,6 @@ function makeConfig(): SubAgentConfig {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockCreatePending.mockImplementation((updatedAt: number) => ({
-    status: 'pending',
-    code: 'pending',
-    attemptCount: 0,
-    updatedAt,
-  }));
-  mockReconcile.mockResolvedValue({
-    status: 'completed',
-    code: 'recorded_verified',
-    attemptCount: 1,
-    updatedAt: 10,
-    completedAt: 10,
-    factIds: ['fact-1'],
-  });
 });
 
 function commonParams(agent: SubAgentSnapshot, order: string[]) {
@@ -80,7 +58,7 @@ function commonParams(agent: SubAgentSnapshot, order: string[]) {
     signalTerminal: jest.fn(() => order.push('signal-terminal')),
     scheduleSessionContextCheckpoint: jest.fn(),
     persistRegistryBestEffort: jest.fn(async (): Promise<PersistRegistryBestEffortOutcome> => {
-      order.push(`persist:${agent.outcomeReconciliation?.status ?? 'missing'}`);
+      order.push(`persist:${agent.status}`);
       return { status: 'persisted' as const };
     }),
     scheduleSessionContextEvictionWhenDurable: jest.fn(),
@@ -88,48 +66,19 @@ function commonParams(agent: SubAgentSnapshot, order: string[]) {
 }
 
 describe('terminal worker outcome ordering', () => {
-  it('persists the pending receipt before recording a completed worker outcome', async () => {
+  it('persists a completed worker once before signaling its terminal event', async () => {
     const order: string[] = [];
     const agent = makeAgent();
-    mockReconcile.mockImplementation(async () => {
-      order.push('reconcile');
-      return {
-        status: 'completed',
-        code: 'recorded_verified',
-        attemptCount: 1,
-        updatedAt: 10,
-        completedAt: 10,
-        factIds: ['fact-1'],
-      };
-    });
 
     await finalizeCompletedSubAgentRun(commonParams(agent, order));
 
-    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
+    expect(order).toEqual(['persist:completed', 'signal-terminal']);
     expect(agent.terminationCause).toBe('completed');
-    expect(mockReconcile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agent,
-        config: expect.objectContaining({ workstreamId: 'task-1' }),
-        messages: [],
-      }),
-    );
   });
 
-  it('uses the same persisted receipt boundary for failed worker outcomes', async () => {
+  it('persists a failed worker once before signaling its terminal event', async () => {
     const order: string[] = [];
     const agent = makeAgent();
-    mockReconcile.mockImplementation(async () => {
-      order.push('reconcile');
-      return {
-        status: 'completed',
-        code: 'recorded_candidate',
-        attemptCount: 1,
-        updatedAt: 10,
-        completedAt: 10,
-        factIds: ['fact-1'],
-      };
-    });
 
     await finalizeFailedSubAgentRun({
       ...commonParams(agent, order),
@@ -139,7 +88,7 @@ describe('terminal worker outcome ordering', () => {
       completionState: 'blocked',
     });
 
-    expect(order).toEqual(['persist:pending', 'reconcile', 'persist:completed', 'signal-terminal']);
+    expect(order).toEqual(['persist:error', 'signal-terminal']);
     expect(agent.status).toBe('error');
     expect(agent.terminationCause).toBe('internal_failure');
   });

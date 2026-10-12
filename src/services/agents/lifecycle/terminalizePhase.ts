@@ -11,10 +11,6 @@ import { cloneAttachments } from '../../../utils/messageAttachments';
 import { exceedsGraphemeLength, truncateGraphemesTo } from '../../../utils/graphemes';
 import type { PersistRegistryBestEffortOutcome, SessionContextStoreParams } from './sessionContext';
 import type { TerminalAnnouncement } from './phases';
-import {
-  createPendingSubAgentOutcomeReconciliation,
-  reconcileSubAgentOutcomeMemory,
-} from '../subAgentOutcomeReconciliation';
 
 function truncateSubAgentOutput(output: string, outputTruncation: number): string {
   return exceedsGraphemeLength(output, outputTruncation)
@@ -126,7 +122,6 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
   params.subAgent.completionState = params.completionState;
   params.subAgent.toolsUsed = uniqueToolsUsed;
   params.subAgent.iterations = params.iterations;
-  params.subAgent.outcomeReconciliation = createPendingSubAgentOutcomeReconciliation(updatedAt);
   params.subAgent.launchState = 'terminal';
   params.subAgent.modelResponsePendingSince = undefined;
   params.subAgent.currentActivity = undefined;
@@ -147,16 +142,6 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
     persistRegistryBestEffort: params.persistRegistryBestEffort,
     scheduleSessionContextEvictionWhenDurable: params.scheduleSessionContextEvictionWhenDurable,
   });
-
-  params.subAgent.outcomeReconciliation = await reconcileSubAgentOutcomeMemory({
-    agent: params.subAgent,
-    config: params.config,
-    messages: params.transcriptMessages,
-    now: updatedAt,
-  });
-  await params.persistRegistryBestEffort(
-    'Persisting completed worker outcome reconciliation failed',
-  );
 
   params.signalTerminal(params.subAgent, 'completed', {
     announce: params.shouldAnnounce,
@@ -225,7 +210,6 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
   params.subAgent.completionState = params.completionState;
   params.subAgent.toolsUsed = uniqueToolsUsed;
   params.subAgent.iterations = params.iterations;
-  params.subAgent.outcomeReconciliation = createPendingSubAgentOutcomeReconciliation(updatedAt);
   params.subAgent.launchState = 'terminal';
   params.subAgent.modelResponsePendingSince = undefined;
   params.subAgent.currentActivity = params.normalizePreviewText(
@@ -250,16 +234,6 @@ export async function finalizeFailedSubAgentRun<TAgent extends SubAgentSnapshot>
     persistRegistryBestEffort: params.persistRegistryBestEffort,
     scheduleSessionContextEvictionWhenDurable: params.scheduleSessionContextEvictionWhenDurable,
   });
-
-  params.subAgent.outcomeReconciliation = await reconcileSubAgentOutcomeMemory({
-    agent: params.subAgent,
-    config: params.config,
-    messages: params.transcriptMessages,
-    now: updatedAt,
-  });
-  await params.persistRegistryBestEffort(
-    'Persisting terminal worker outcome reconciliation failed',
-  );
 
   params.signalTerminal(
     params.subAgent,

@@ -95,15 +95,6 @@ jest.mock('../../src/services/voice/voice', () => ({
   transcribeAudio: jest.fn().mockResolvedValue({ text: 'hello', language: 'en', duration: 2 }),
 }));
 
-const mockBuildLeastPrivilegeWorkerMemoryBundle = jest.fn().mockResolvedValue(undefined);
-
-jest.mock('../../src/services/agents/workerMemoryBundle', () => ({
-  buildLeastPrivilegeWorkerMemoryBundle: (...args: unknown[]) =>
-    mockBuildLeastPrivilegeWorkerMemoryBundle(...args),
-  sanitizeSubAgentMemorySelectionScope: (value: unknown) =>
-    value && typeof value === 'object' ? value : undefined,
-}));
-
 // Mock expo-image-picker
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn().mockResolvedValue({
@@ -175,8 +166,6 @@ beforeEach(() => {
   mockSettingsState.linkUnderstandingEnabled = true;
   mockSettingsState.mediaUnderstandingEnabled = true;
   mockSettingsState.disableLongTermMemory = false;
-  mockBuildLeastPrivilegeWorkerMemoryBundle.mockReset();
-  mockBuildLeastPrivilegeWorkerMemoryBundle.mockResolvedValue(undefined);
   mockHydrateProviderForRequest.mockReset();
   mockHydrateProviderForRequest.mockImplementation(async (provider) => provider);
 
@@ -199,5 +188,4 @@ export {
   mockChatStoreState,
   mockSettingsState,
   mockHydrateProviderForRequest,
-  mockBuildLeastPrivilegeWorkerMemoryBundle,
 };

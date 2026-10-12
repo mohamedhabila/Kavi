@@ -5,7 +5,6 @@
 import {
   executeSessionSend,
   MOCK_PROVIDER,
-  mockBuildLeastPrivilegeWorkerMemoryBundle,
   mockChatStoreState,
 } from '../../helpers/builtinExecutorHarness';
 import {
@@ -80,12 +79,6 @@ describe('Builtin Tool Executor', () => {
           sandboxPolicy: 'safe-only',
           workstreamId: 'workstream-2',
           name: 'Research Worker',
-          memorySelectionScope: {
-            memoryConversationId: 'conv-1',
-            sourceThreadId: 'conv-1',
-            personaId: 'persona-1',
-            taskId: 'workstream-2',
-          },
         },
         provider: MOCK_PROVIDER,
         conversationSummary: 'Previous answer',
@@ -112,28 +105,6 @@ describe('Builtin Tool Executor', () => {
         ],
       });
       mockChatStoreState.conversations = [{ id: 'conv-1', personaId: 'persona-1', messages: [] }];
-      const refreshedMemoryBundle = {
-        version: 1,
-        source: {
-          memoryOwnerId: 'owner-1',
-          memoryConversationId: 'conv-1',
-          sourceThreadId: 'conv-1',
-          personaId: 'persona-1',
-          taskId: 'workstream-2',
-        },
-        createdAt: 3,
-        facts: [],
-        episodes: [
-          {
-            episodeId: 'episode-1',
-            lane: 'current_thread',
-            summary: 'Follow-up evidence',
-            sourceEndMessageId: 'message-1',
-            endedAt: 2,
-          },
-        ],
-      };
-      mockBuildLeastPrivilegeWorkerMemoryBundle.mockResolvedValueOnce(refreshedMemoryBundle);
       launchSubAgent.mockResolvedValueOnce({
         sessionId: 'new-123',
         status: 'running',
@@ -150,14 +121,6 @@ describe('Builtin Tool Executor', () => {
       expect(parsed.workstreamId).toBe('workstream-2');
       expect(parsed.guidance).toContain('detached from this turn');
       expect(parsed.guidance).toContain('may suspend background execution');
-      expect(mockBuildLeastPrivilegeWorkerMemoryBundle).toHaveBeenCalledWith({
-        enabled: true,
-        query: 'Original task\nTell me more',
-        memoryConversationId: 'conv-1',
-        sourceThreadId: 'conv-1',
-        personaId: 'persona-1',
-        taskId: 'workstream-2',
-      });
       expect(launchSubAgent).toHaveBeenCalledWith(
         expect.objectContaining({
           parentConversationId: 'conv-1',
@@ -167,13 +130,6 @@ describe('Builtin Tool Executor', () => {
           tools: ['read_file'],
           sandboxPolicy: 'safe-only',
           workstreamId: 'workstream-2',
-          memorySelectionScope: {
-            memoryConversationId: 'conv-1',
-            sourceThreadId: 'conv-1',
-            personaId: 'persona-1',
-            taskId: 'workstream-2',
-          },
-          memoryBundle: refreshedMemoryBundle,
           name: 'Research Worker',
           initialMessages: expect.arrayContaining([
             expect.objectContaining({

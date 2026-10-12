@@ -38,10 +38,6 @@ import {
 import { normalizeRequiredSessionText } from './builtin-session-prompt';
 import { resolveOptionalExactDurableScopeId } from '../../utils/durableScopeIdentity';
 import {
-  buildLeastPrivilegeWorkerMemoryBundle,
-  sanitizeSubAgentMemorySelectionScope,
-} from '../../services/agents/workerMemoryBundle';
-import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
@@ -163,20 +159,6 @@ export async function executeSessionSend(
     );
     const followUpDepth = resolveFollowUpSessionDepth(agent, previousContext);
     const workstreamId = previousContext?.config.workstreamId ?? agent.workstreamId;
-    const storedMemorySelectionScope = sanitizeSubAgentMemorySelectionScope(
-      previousContext?.config.memorySelectionScope,
-    );
-    const memorySelectionScope =
-      parentConversationId && storedMemorySelectionScope?.sourceThreadId === parentConversationId
-        ? { ...storedMemorySelectionScope, taskId: workstreamId ?? null }
-        : undefined;
-    const memoryBundle = memorySelectionScope
-      ? await buildLeastPrivilegeWorkerMemoryBundle({
-          enabled: !settings.disableLongTermMemory,
-          query: [previousContext?.config.prompt, message].filter(Boolean).join('\n'),
-          ...memorySelectionScope,
-        })
-      : undefined;
     const followUpConfig = buildFollowUpSubAgentConfig({
       parentConversationId,
       workspaceConversationId: workspaceTarget?.workspaceConversationId,
@@ -195,8 +177,6 @@ export async function executeSessionSend(
       name: previousContext?.config.name || agent.name,
       tools: previousContext?.config.tools,
       sandboxPolicy: previousContext?.config.sandboxPolicy || agent.sandboxPolicy,
-      memorySelectionScope,
-      memoryBundle,
       linkUnderstandingEnabled:
         previousContext?.config.linkUnderstandingEnabled ?? settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled:

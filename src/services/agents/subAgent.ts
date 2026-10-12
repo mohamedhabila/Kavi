@@ -48,7 +48,6 @@ import {
 import { createSubAgentLaunchApi } from './subAgentLaunchApi';
 import { createSubAgentManagementApi } from './subAgentManagementApi';
 import { runPreparedSubAgentSession } from './lifecycle/runPhase';
-import { reconcileSubAgentOutcomeMemory } from './subAgentOutcomeReconciliation';
 import {
   assertProviderReadyForRequest,
   bindProviderToModel,
@@ -216,18 +215,6 @@ const subAgentLifecycleManager = createSubAgentLifecycleManager<ActiveSubAgent>(
   maxToolResultPreviewChars: MAX_TOOL_RESULT_PREVIEW_CHARS,
   terminalSubAgentRetentionMs: TERMINAL_SUB_AGENT_RETENTION_MS,
   recoverInterruptedAgent: (agent) => recoverInterruptedSubAgentAfterRestart(agent),
-  reconcileOutcome: async (agent) => {
-    const prior = agent.outcomeReconciliation;
-    const context = sessionContextManager.getSessionContext(agent.sessionId);
-    const next = await reconcileSubAgentOutcomeMemory({
-      agent,
-      config: context?.config,
-      messages: context?.messages,
-    });
-    agent.outcomeReconciliation = next;
-    agent.updatedAt = Math.max(agent.updatedAt, next.updatedAt);
-    return JSON.stringify(prior) !== JSON.stringify(next);
-  },
 });
 
 // ── Sandbox filter ───────────────────────────────────────────────────────

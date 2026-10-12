@@ -34,7 +34,7 @@ type RegistryPersistenceManagerParams<TAgent extends RegistryAgentSnapshot> = {
   hydratePersistedAgentSnapshot: (agent: TAgent) => TAgent;
   cloneSubAgentConfig: (config: SubAgentConfig) => SubAgentConfig;
   buildSubAgentSystemPrompt: (
-    config: Pick<SubAgentConfig, 'systemPrompt' | 'memoryBundle' | 'agentRunId' | 'workstreamId'>,
+    config: Pick<SubAgentConfig, 'systemPrompt' | 'agentRunId' | 'workstreamId'>,
     depth: number,
   ) => string;
   buildInitialSubAgentMessages: (config: SubAgentConfig) => Message[];

@@ -483,23 +483,6 @@ export function createSubAgentLifecycleManager<TAgent extends SubAgentSnapshot>(
 
   async function initSubAgentRegistry(conversations?: Conversation[]): Promise<void> {
     await detectOrphans(conversations);
-    let reconciledOutcome = false;
-    if (params.reconcileOutcome) {
-      for (const agent of params.activeSubAgents.values()) {
-        if (!agent.outcomeReconciliation) continue;
-        try {
-          reconciledOutcome = (await params.reconcileOutcome(agent)) || reconciledOutcome;
-        } catch (error) {
-          params.logger.devWarn(
-            'pending worker outcome reconciliation failed:',
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-      }
-    }
-    if (reconciledOutcome) {
-      await params.registryPersistenceManager.persistRegistryNow();
-    }
     cleanupSubAgents();
   }
 

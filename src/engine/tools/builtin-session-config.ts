@@ -80,8 +80,6 @@ export function buildSpawnSubAgentConfig(args: {
   workstreamId?: string;
   sanitizedName?: string;
   workerTools?: string[];
-  memorySelectionScope?: SubAgentConfig['memorySelectionScope'];
-  memoryBundle?: SubAgentConfig['memoryBundle'];
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
 }): SubAgentConfig {
@@ -102,8 +100,6 @@ export function buildSpawnSubAgentConfig(args: {
     ...(args.workstreamId ? { workstreamId: args.workstreamId } : {}),
     name: args.sanitizedName,
     tools: args.workerTools,
-    memorySelectionScope: args.memorySelectionScope,
-    memoryBundle: args.memoryBundle,
     linkUnderstandingEnabled: args.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: args.mediaUnderstandingEnabled,
   };
@@ -165,8 +161,6 @@ export function buildFollowUpSubAgentConfig(args: {
   name?: string;
   tools?: string[];
   sandboxPolicy?: 'full' | 'safe-only' | 'inherit';
-  memorySelectionScope?: SubAgentConfig['memorySelectionScope'];
-  memoryBundle?: SubAgentConfig['memoryBundle'];
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
 }): SubAgentConfig {
@@ -189,8 +183,6 @@ export function buildFollowUpSubAgentConfig(args: {
     name: args.name,
     tools: args.tools,
     sandboxPolicy: args.sandboxPolicy,
-    memorySelectionScope: args.memorySelectionScope,
-    memoryBundle: args.memoryBundle,
     linkUnderstandingEnabled: args.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: args.mediaUnderstandingEnabled,
   };

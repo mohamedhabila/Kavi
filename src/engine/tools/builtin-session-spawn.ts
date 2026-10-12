@@ -41,11 +41,6 @@ import {
   resolveOptionalExactDurableScopeId,
 } from '../../utils/durableScopeIdentity';
 import {
-  resolveCodeOwnedMemoryConversationId,
-  resolveCodeOwnedMemoryPersonaId,
-} from '../../services/memory/memoryScopeIdentity';
-import { buildLeastPrivilegeWorkerMemoryBundle } from '../../services/agents/workerMemoryBundle';
-import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
@@ -176,21 +171,6 @@ export async function executeSessionSpawn(
       currentSession?.sessionId || (currentSessionContext ? conversationId : undefined);
     // The worker gets the handoff as written; its system prompt carries the Worker Contract.
     const workerPrompt = prompt;
-    const memorySelectionScope = {
-      memoryConversationId: resolveCodeOwnedMemoryConversationId(
-        executionContext?.memoryConversationId,
-        parentConversationId,
-      ),
-      sourceThreadId: parentConversationId,
-      personaId: resolveCodeOwnedMemoryPersonaId(activeConversation?.personaId),
-      taskId: spawnGate.workstreamId ?? null,
-    };
-    const memoryBundle = await buildLeastPrivilegeWorkerMemoryBundle({
-      enabled: !settings.disableLongTermMemory,
-      query: prompt,
-      ...memorySelectionScope,
-    });
-
     const workerTools = sanitizedWorkerTools ? [...sanitizedWorkerTools] : undefined;
     const anchoredWorkspaceInputs: DelegatedWorkspaceInput[] = (
       activeRun?.workflowTaskAnchor?.attachments ?? []
@@ -222,8 +202,6 @@ export async function executeSessionSpawn(
       workstreamId: spawnGate.workstreamId,
       sanitizedName,
       workerTools,
-      memorySelectionScope,
-      memoryBundle,
       linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
     });

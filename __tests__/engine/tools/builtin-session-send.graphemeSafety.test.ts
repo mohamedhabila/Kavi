@@ -33,10 +33,6 @@ jest.mock('../../../src/services/llm/support/providerSupport', () => ({
   hydrateProviderForRequest: jest.fn(async (provider: unknown) => provider),
 }));
 
-jest.mock('../../../src/services/agents/workerMemoryBundle', () => ({
-  buildLeastPrivilegeWorkerMemoryBundle: jest.fn(),
-  sanitizeSubAgentMemorySelectionScope: jest.fn().mockReturnValue(undefined),
-}));
 
 import { executeSessionSend } from '../../../src/engine/tools/builtin-session-send';
 import {

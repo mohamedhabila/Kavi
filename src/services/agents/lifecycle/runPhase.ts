@@ -29,7 +29,16 @@ import {
   requireExactDurableScopeId,
   resolveOptionalExactDurableScopeId,
 } from '../../../utils/durableScopeIdentity';
-import { isWorkerMemoryToolName } from '../workerMemoryBundle';
+import { BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS } from '../../../engine/tools/builtin-definitions-memory';
+
+const MEMORY_TOOL_NAMES: ReadonlySet<string> = new Set(
+  BUILTIN_MEMORY_REGISTERED_TOOL_DEFINITIONS.map((tool) => tool.name),
+);
+
+/** Workers see memory in their prompt but have no memory tools: only the conversation changes memory. */
+function isWorkerMemoryToolName(value: string): boolean {
+  return MEMORY_TOOL_NAMES.has(value.trim().toLowerCase());
+}
 
 export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot>(
   params: RunPreparedSubAgentSessionParams<TAgent>,
@@ -50,15 +59,12 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
     explicitToolSurfaceToolNames,
     toolFilter,
   } = resolveSubAgentToolAccess({
-    tools: params.config.tools,
+    // A requested memory tool is dropped, not refused: the worker runs with the rest.
+    tools: params.config.tools?.filter((toolName) => !isWorkerMemoryToolName(toolName)),
     sandboxPolicy,
   });
-  const configuredMemoryTool = params.config.tools?.find(isWorkerMemoryToolName);
   const workerToolFilter = (toolName: string): boolean =>
     !isWorkerMemoryToolName(toolName) && (toolFilter ? toolFilter(toolName) : true);
-  const workerToolSelectionRejectedMessage = configuredMemoryTool
-    ? `Worker memory tool "${configuredMemoryTool}" is unavailable. Parent memory is provided only through a task-scoped evidence bundle.`
-    : explicitToolSelectionRejectedMessage;
   const workspaceConversationId =
     resolveOptionalExactDurableScopeId(
       params.config.workspaceConversationId,
@@ -94,7 +100,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
   let failureCause: Extract<
     SubAgentTerminationCause,
     'tool_failure' | 'internal_failure' | 'unknown'
-  > = workerToolSelectionRejectedMessage ? 'tool_failure' : 'unknown';
+  > = explicitToolSelectionRejectedMessage ? 'tool_failure' : 'unknown';
   const systemPrompt = buildSubAgentSystemPrompt(params.config, depth);
   const { transcriptToolCalls, checkpointSessionContext, persistSessionContextNow, trackToolCall } =
     createSubAgentExecutionSession({
@@ -220,7 +226,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       toolFilter: workerToolFilter,
       linkUnderstandingEnabled: params.config.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: params.config.mediaUnderstandingEnabled,
-      explicitToolSelectionRejectedMessage: workerToolSelectionRejectedMessage,
+      explicitToolSelectionRejectedMessage,
       taskId: params.config.workstreamId,
       subAgent,
       config: params.config,
