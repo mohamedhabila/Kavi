@@ -75,6 +75,32 @@ describe('session memory read', () => {
     expect(read.section?.text).toContain('Plan my Porto trip to visit Sara');
   });
 
+  it('recalls this conversation’s earlier rounds only once the request no longer carries them', () => {
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-archived',
+      userText: 'The cabin entrance is the blue door on the left',
+      replyText: 'Noted.',
+      at: 0,
+    });
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-carried',
+      userText: 'Is the cabin entrance the blue door?',
+      replyText: 'Yes, on the left.',
+      at: 1,
+    });
+
+    const read = readSessionMemory('conv-1', [
+      userMessage('u-carried', 'Is the cabin entrance the blue door?', 2),
+      { id: 'a-carried', role: 'assistant', content: 'Yes, on the left.', timestamp: 3 },
+      userMessage('u-latest', 'Which cabin entrance do I use?', 4),
+    ]);
+
+    if (read.status !== 'read') throw new Error('memory was not read');
+    expect(read.section?.turnIds).toEqual(['u-archived']);
+  });
+
   it('reads nothing while memory is off', () => {
     mockMemoryOn = false;
     addMemoryItem({

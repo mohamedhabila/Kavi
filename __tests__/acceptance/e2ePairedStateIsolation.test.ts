@@ -71,7 +71,12 @@ describe('paired E2E state isolation', () => {
       JSON.parse(
         executeMemoryRemember(
           { content: 'The user’s preferred label is PRIVATE-MEMORY' },
-          { conversationId: 'state-isolation', sourceMessageId: 'state-isolation-user', now: 1 },
+          {
+            conversationId: 'state-isolation',
+            sourceMessageId: 'state-isolation-user',
+            inRequestUserMessageIds: [],
+            now: 1,
+          },
         ).content,
       ),
     ).toMatchObject({ ok: true });
@@ -110,7 +115,12 @@ describe('paired E2E state isolation', () => {
       JSON.parse(
         executeMemoryRemember(
           { content: 'The user’s preferred label is MUST-NOT-CROSS-CONDITIONS' },
-          { conversationId: 'paired-isolation', sourceMessageId: 'paired-isolation-user', now: 1 },
+          {
+            conversationId: 'paired-isolation',
+            sourceMessageId: 'paired-isolation-user',
+            inRequestUserMessageIds: [],
+            now: 1,
+          },
         ).content,
       ),
     ).toMatchObject({ ok: true });

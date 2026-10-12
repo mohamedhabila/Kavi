@@ -14,7 +14,12 @@ import { buildE2ERubricResult } from '../helpers/e2eRubricResult';
 function remember(content: string, extra: Record<string, unknown> = {}): string {
   const outcome = executeMemoryRemember(
     { content, ...extra },
-    { conversationId: 'conv-memory', sourceMessageId: 'user-1', now: 1_000 },
+    {
+      conversationId: 'conv-memory',
+      sourceMessageId: 'user-1',
+      inRequestUserMessageIds: [],
+      now: 1_000,
+    },
   );
   return JSON.parse(outcome.content).memory.id as string;
 }

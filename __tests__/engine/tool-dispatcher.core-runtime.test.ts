@@ -52,7 +52,12 @@ describe('executeToolInner — raw core tools routing', () => {
     expect(result).toEqual({ status: 'completed', content: JSON.stringify({ status: 'ok' }) });
     expect(builtinMod.executeMemorySearch).toHaveBeenCalledWith(
       { query: 'state' },
-      { conversationId: CONV_ID, sourceMessageId: null, now: expect.any(Number) },
+      {
+        conversationId: CONV_ID,
+        sourceMessageId: null,
+        inRequestUserMessageIds: [],
+        now: expect.any(Number),
+      },
     );
   });
 

@@ -28,13 +28,16 @@ export function readSessionMemory(
   if (captureMemoryReadEpoch() === null) return { status: 'off', policyEpoch };
   const authoritySnapshot = captureMemoryAuthoritySnapshot();
   if (!authoritySnapshot) return { status: 'unavailable', policyEpoch };
-  const latestUserMessage =
-    [...messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+  const userMessages = messages.filter((message) => message.role === 'user');
   return {
     status: 'read',
     policyEpoch,
     authoritySnapshot,
-    section: prepareMemoryPromptSection({ visibility: { conversationId }, latestUserMessage }),
+    section: prepareMemoryPromptSection({
+      visibility: { conversationId },
+      latestUserMessage: userMessages[userMessages.length - 1]?.content ?? '',
+      inRequestUserMessageIds: userMessages.map((message) => message.id),
+    }),
   };
 }
 

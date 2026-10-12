@@ -41,6 +41,7 @@ describe('memory prompt section', () => {
     const section = buildMemoryPromptSection({
       visibility: HOME,
       latestUserMessage: 'Book a visit to my sister Sara',
+      inRequestUserMessageIds: [],
     });
 
     expect(section?.itemIds).toEqual([name, sister]);
@@ -51,7 +52,7 @@ describe('memory prompt section', () => {
     expect(section?.text).not.toContain('window seats');
   });
 
-  it('recalls matching rounds of other conversations, dated', () => {
+  it('recalls matching rounds the request does not carry, dated', () => {
     indexMemoryTurn({
       conversationId: 'conv-old',
       userMessageId: 'u-old',
@@ -70,13 +71,40 @@ describe('memory prompt section', () => {
     const section = buildMemoryPromptSection({
       visibility: HOME,
       latestUserMessage: 'What was the Lisbon weekend plan?',
+      inRequestUserMessageIds: ['u-now'],
     });
 
-    expect(section?.text).toContain('## Earlier conversations');
+    expect(section?.text).toContain('## Earlier exchanges');
     expect(section?.text).toContain(
       '- (2026-09-14) User: Plan a weekend in Lisbon with my partner\nAssistant: Day one: Alfama and Belém.',
     );
     expect(section?.text).not.toContain('Lisbon again?');
+  });
+
+  it('recalls a round from earlier in this conversation once the request no longer carries it', () => {
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-archived',
+      userText: 'The cabin entrance is the blue door on the left',
+      replyText: 'Noted: blue door on the left.',
+      at: DAY,
+    });
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-recent',
+      userText: 'Which cabin door was it, the blue one?',
+      replyText: 'The blue door on the left.',
+      at: DAY + 1,
+    });
+
+    const section = buildMemoryPromptSection({
+      visibility: HOME,
+      latestUserMessage: 'Which cabin door do I use?',
+      inRequestUserMessageIds: ['u-recent', 'u-latest'],
+    });
+
+    expect(section?.turnIds).toEqual(['u-archived']);
+    expect(section?.text).toContain('The cabin entrance is the blue door on the left');
   });
 
   it('leaves sensitive memories and past rounds out even when they match', () => {
@@ -90,14 +118,24 @@ describe('memory prompt section', () => {
     });
 
     expect(
-      buildMemoryPromptSection({ visibility: HOME, latestUserMessage: 'Call Sara’s phone' }),
+      buildMemoryPromptSection({
+        visibility: HOME,
+        latestUserMessage: 'Call Sara’s phone',
+        inRequestUserMessageIds: [],
+      }),
     ).toBeNull();
   });
 
   it('is absent when nothing is pinned or relevant', () => {
     remember('Prefers window seats');
 
-    expect(buildMemoryPromptSection({ visibility: HOME, latestUserMessage: 'hi' })).toBeNull();
+    expect(
+      buildMemoryPromptSection({
+        visibility: HOME,
+        latestUserMessage: 'hi',
+        inRequestUserMessageIds: [],
+      }),
+    ).toBeNull();
   });
 
   it('stays within its size budget', () => {
@@ -105,7 +143,11 @@ describe('memory prompt section', () => {
       remember(`Pinned note ${index} ${'x'.repeat(1_500)}`, { pinned: true });
     }
 
-    const section = buildMemoryPromptSection({ visibility: HOME, latestUserMessage: 'anything' });
+    const section = buildMemoryPromptSection({
+      visibility: HOME,
+      latestUserMessage: 'anything',
+      inRequestUserMessageIds: [],
+    });
 
     expect(section!.text.length).toBeLessThanOrEqual(MEMORY_PROMPT_MAX_CHARS);
     expect(section!.itemIds.length).toBeGreaterThan(0);

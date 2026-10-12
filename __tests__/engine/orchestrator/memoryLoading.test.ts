@@ -44,6 +44,7 @@ describe('Orchestrator', () => {
       expect(prepareMemoryPromptSection).toHaveBeenCalledWith({
         visibility: { conversationId: 'conv1' },
         latestUserMessage: 'Hello',
+        inRequestUserMessageIds: ['msg1'],
       });
       const apiMessages = mockStreamMessage.mock.calls[0]?.[0] as Array<{
         role: string;

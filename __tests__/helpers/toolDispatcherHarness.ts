@@ -578,6 +578,7 @@ export function setupToolDispatcherHarness(): ToolDispatcherHarness {
     conversations: [
       {
         id: CONV_ID,
+        messages: [],
         activeAgentRunId: 'run-1',
         agentRuns: [{ id: 'run-1', evidence: [] }],
       },

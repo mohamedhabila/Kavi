@@ -119,14 +119,14 @@ export function indexClosedTurn(params: {
 }
 
 /**
- * Past turns matching `query`, best first. `excludeConversationId` skips one conversation;
- * sensitive turns are returned only with `includeSensitive`.
+ * Past turns matching `query`, best first. `excludeUserMessageIds` leaves out the rounds those
+ * user messages opened; sensitive turns are returned only with `includeSensitive`.
  */
 export function searchMemoryTurns(params: {
   query: string;
   limit: number;
   includeSensitive: boolean;
-  excludeConversationId?: string;
+  excludeUserMessageIds?: ReadonlyArray<string>;
 }): MemoryTurn[] {
   const match = buildMemoryMatchExpression(params.query);
   if (!match || params.limit <= 0) return [];
@@ -136,13 +136,12 @@ export function searchMemoryTurns(params: {
          FROM memory_turns_fts f
          JOIN memory_turns t ON t.rowid = f.rowid
         WHERE memory_turns_fts MATCH ?
-          AND (? IS NULL OR t.conversation_id <> ?)
+          AND t.user_message_id NOT IN (SELECT value FROM json_each(?))
           AND (? = 1 OR t.sensitive = 0)
         ORDER BY bm25(memory_turns_fts), t.at DESC
         LIMIT ?`,
       match,
-      params.excludeConversationId ?? null,
-      params.excludeConversationId ?? null,
+      JSON.stringify(params.excludeUserMessageIds ?? []),
       params.includeSensitive ? 1 : 0,
       params.limit,
     )

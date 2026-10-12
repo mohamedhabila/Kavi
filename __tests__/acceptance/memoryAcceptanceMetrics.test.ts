@@ -69,12 +69,18 @@ function promptFor(conversationId: string, message: string): string {
     prepareMemoryPromptSection({
       visibility: { conversationId },
       latestUserMessage: message,
+      inRequestUserMessageIds: [],
     })?.text ?? ''
   );
 }
 
 function tool(conversationId: string) {
-  const context = { conversationId, sourceMessageId: null, now: ++clock };
+  const context = {
+    conversationId,
+    sourceMessageId: null,
+    inRequestUserMessageIds: [],
+    now: ++clock,
+  };
   const parse = (outcome: { content: string }) => JSON.parse(outcome.content);
   return {
     remember: (args: Record<string, unknown>) => parse(executeMemoryRemember(args, context)),
@@ -119,6 +125,7 @@ describe('memory acceptance', () => {
     const section = prepareMemoryPromptSection({
       visibility: { conversationId: later },
       latestUserMessage: 'What was that Lisbon weekend plan again?',
+      inRequestUserMessageIds: [],
     });
     expect(section?.turnIds).toEqual([userId]);
     expect(section?.text).toContain('Alfama');

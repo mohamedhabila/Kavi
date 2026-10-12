@@ -7,9 +7,11 @@
 //   outdated, and its id, so the model can correct one (memory_remember with `replaces`) or
 //   delete it (memory_forget). Sensitive memories are left out; the model reaches them with
 //   memory_search when the user asks.
-// - Earlier conversations: the past rounds from other conversations that best match the
-//   request, dated, so "what did we plan last week" works without any extraction. Sensitive
-//   past turns are left out the same way.
+// - Earlier exchanges: the past rounds that best match the request and are not among its
+//   messages, dated, so "what did we plan last week" works without any extraction. They come
+//   from other conversations and from earlier in this one, once its rounds have left the
+//   messages the request carries (Kavi is one long conversation). Sensitive past turns are
+//   left out the same way.
 // ---------------------------------------------------------------------------
 
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
@@ -32,7 +34,7 @@ export const MEMORY_PROMPT_MAX_CHARS = 10_000;
 const MEMORY_SECTION_HEADER = `## Memory
 What the user asked you to remember and what you learned in earlier conversations. Use it when it helps; it may be outdated. When the user corrects something here, save the correction with memory_remember and pass the old memory's id as replaces.`;
 
-const TURNS_SECTION_HEADER = `## Earlier conversations
+const TURNS_SECTION_HEADER = `## Earlier exchanges
 Past exchanges that may relate to this request.`;
 
 function isoDate(at: number): string {
@@ -54,11 +56,15 @@ export interface MemoryPromptSection {
   turnIds: string[];
 }
 
-/** The memory section for a request, or null when nothing applies. */
-export function buildMemoryPromptSection(params: {
+interface MemoryPromptRequest {
   visibility: MemoryItemVisibility;
   latestUserMessage: string;
-}): MemoryPromptSection | null {
+  /** User messages the request already carries: the rounds they opened are not recalled. */
+  inRequestUserMessageIds: ReadonlyArray<string>;
+}
+
+/** The memory section for a request, or null when nothing applies. */
+export function buildMemoryPromptSection(params: MemoryPromptRequest): MemoryPromptSection | null {
   const pinned = listPinnedMemoryItems({
     visibility: params.visibility,
     limit: MEMORY_PROMPT_PINNED_LIMIT,
@@ -90,7 +96,7 @@ export function buildMemoryPromptSection(params: {
     query: params.latestUserMessage,
     limit: MEMORY_PROMPT_TURN_LIMIT,
     includeSensitive: false,
-    excludeConversationId: params.visibility.conversationId,
+    excludeUserMessageIds: params.inRequestUserMessageIds,
   })) {
     const line = renderTurn(turn);
     if (size + line.length + 1 > MEMORY_PROMPT_MAX_CHARS) break;
@@ -107,10 +113,9 @@ export function buildMemoryPromptSection(params: {
 }
 
 /** Builds the section for a request and records what it held and how long it took. */
-export function prepareMemoryPromptSection(params: {
-  visibility: MemoryItemVisibility;
-  latestUserMessage: string;
-}): MemoryPromptSection | null {
+export function prepareMemoryPromptSection(
+  params: MemoryPromptRequest,
+): MemoryPromptSection | null {
   const startedAt = Date.now();
   const section = buildMemoryPromptSection(params);
   recordMemoryPromptBuild({

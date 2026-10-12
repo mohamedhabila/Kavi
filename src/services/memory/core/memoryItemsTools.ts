@@ -36,6 +36,8 @@ export interface MemoryToolContext {
   conversationId: string;
   /** The user message being answered; recorded as the memory's source. */
   sourceMessageId: string | null;
+  /** User messages the request already carries: a search does not return their rounds. */
+  inRequestUserMessageIds: ReadonlyArray<string>;
   now: number;
 }
 
@@ -163,6 +165,7 @@ export function executeMemorySearch(args: unknown, context: MemoryToolContext): 
     query: args.query,
     limit: MEMORY_SEARCH_TURN_LIMIT,
     includeSensitive: true,
+    excludeUserMessageIds: context.inRequestUserMessageIds,
   });
   return completedToolOutcome(
     JSON.stringify({

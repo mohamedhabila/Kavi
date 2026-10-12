@@ -63,17 +63,18 @@ describe('past turns', () => {
     ]);
   });
 
-  it('can leave the current conversation out', () => {
+  it('leaves out the rounds opened by the given user messages', () => {
     turn('conv-1', 'u1', 'Lisbon trip ideas', 'Sintra and Belém.');
+    turn('conv-1', 'u2', 'Lisbon trip budget', 'About 600 euros.');
 
     expect(
       searchMemoryTurns({
         query: 'Lisbon trip',
         limit: 3,
         includeSensitive: false,
-        excludeConversationId: 'conv-1',
-      }),
-    ).toEqual([]);
+        excludeUserMessageIds: ['u2'],
+      }).map((found) => found.userMessageId),
+    ).toEqual(['u1']);
   });
 
   it('re-indexes a round when its reply changes', () => {

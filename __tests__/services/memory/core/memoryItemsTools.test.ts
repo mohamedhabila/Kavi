@@ -21,7 +21,12 @@ import type { ToolRuntimeOutcome } from '../../../../src/types/toolRuntimeOutcom
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const DAY = Date.UTC(2026, 8, 14);
-const HOME: MemoryToolContext = { conversationId: 'conv-1', sourceMessageId: 'u1', now: DAY };
+const HOME: MemoryToolContext = {
+  conversationId: 'conv-1',
+  sourceMessageId: 'u1',
+  inRequestUserMessageIds: [],
+  now: DAY,
+};
 
 function result(outcome: ToolRuntimeOutcome): any {
   return { outcome: outcome.status, ...JSON.parse(outcome.content) };
@@ -136,6 +141,34 @@ describe('memory_search', () => {
         date: '2026-09-14',
         text: 'User: Call Sara tomorrow about Porto\nAssistant: Reminder set.',
       },
+    ]);
+  });
+
+  it('leaves out the rounds the request already carries', () => {
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-earlier',
+      userText: 'Book the Porto ferry for Sara',
+      replyText: 'Booked.',
+      at: DAY,
+    });
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-in-request',
+      userText: 'Did you book the Porto ferry?',
+      replyText: 'Yes.',
+      at: DAY,
+    });
+
+    const found = result(
+      executeMemorySearch(
+        { query: 'Porto ferry' },
+        { ...HOME, inRequestUserMessageIds: ['u-in-request'] },
+      ),
+    );
+
+    expect(found.earlierConversations).toEqual([
+      { date: '2026-09-14', text: 'User: Book the Porto ferry for Sara\nAssistant: Booked.' },
     ]);
   });
 

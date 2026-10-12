@@ -76,10 +76,12 @@ describe('memory prompt log', () => {
     const section = prepareMemoryPromptSection({
       visibility: { conversationId: 'conv-1' },
       latestUserMessage: 'hello',
+      inRequestUserMessageIds: [],
     });
     prepareMemoryPromptSection({
       visibility: { conversationId: 'conv-2' },
       latestUserMessage: 'nothing stored',
+      inRequestUserMessageIds: [],
     });
 
     expect(listMemoryPromptBuilds({ conversationId: 'conv-1' })).toEqual([
