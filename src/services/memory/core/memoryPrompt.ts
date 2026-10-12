@@ -21,7 +21,13 @@ import { listPinnedMemoryItems, searchMemoryItems, type MemoryItem } from './mem
 
 export const MEMORY_PROMPT_PINNED_LIMIT = 20;
 export const MEMORY_PROMPT_RELEVANT_LIMIT = 6;
-export const MEMORY_PROMPT_TURN_LIMIT = 3;
+/**
+ * Past rounds shown per request. Measured on LongMemEval's 500 oracle questions: with 3, a
+ * question whose answer spans several earlier conversations had every one of them shown 62%
+ * of the time and the answer text was visible 79% of the time; with 8, 91% and 90%, for
+ * about 3.3k more characters (still under MEMORY_PROMPT_MAX_CHARS).
+ */
+export const MEMORY_PROMPT_TURN_LIMIT = 8;
 const MEMORY_PROMPT_TURN_MAX_CHARS = 800;
 /** About 2.5k tokens: past that, small readers lose accuracy (LongMemEval, Llama-3.1-8B). */
 export const MEMORY_PROMPT_MAX_CHARS = 10_000;
