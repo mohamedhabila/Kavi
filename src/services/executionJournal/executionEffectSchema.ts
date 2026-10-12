@@ -9,10 +9,6 @@ function sqlEnum(values: readonly string[]): string {
   return values.map((value) => `'${value}'`).join(', ');
 }
 
-const EXECUTION_EFFECT_STATUSES_V11 = EXECUTION_EFFECT_STATUSES.filter(
-  (status) => status !== 'returned',
-);
-
 const idCheck = (column: string): string =>
   `length(${column}) BETWEEN 1 AND 200 AND ${column} = trim(${column})`;
 const digestCheck = (column: string): string =>
@@ -62,27 +58,3 @@ export const CREATE_EXECUTION_EFFECTS = `
       REFERENCES execution_checkpoints(run_id, id) ON DELETE CASCADE
   ) STRICT
 `;
-
-export const CREATE_EXECUTION_EFFECTS_V11 = CREATE_EXECUTION_EFFECTS.replace(
-  `status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES)})`,
-  `status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES_V11)})`,
-).replace(
-  `status IN ('returned', 'applied', 'verified', 'failed', 'cancelled')`,
-  `status IN ('applied', 'verified', 'failed', 'cancelled')`,
-);
-
-export const CREATE_EXECUTION_EFFECTS_V8 = CREATE_EXECUTION_EFFECTS_V11.replace(
-  `    model_authority_valid_until INTEGER CHECK (
-      model_authority_valid_until IS NULL OR model_authority_valid_until >= 0
-    ),
-`,
-  '',
-);
-
-export const CREATE_EXECUTION_EFFECTS_V7 = CREATE_EXECUTION_EFFECTS_V8.replace(
-  `    tool_contract_identity_digest TEXT CHECK (
-      tool_contract_identity_digest IS NULL OR (${digestCheck('tool_contract_identity_digest')})
-    ),
-`,
-  '',
-);

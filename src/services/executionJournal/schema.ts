@@ -1,27 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import {
-  CREATE_EXECUTION_EFFECTS,
-  CREATE_EXECUTION_EFFECTS_V11,
-  CREATE_EXECUTION_EFFECTS_V8,
-} from './executionEffectSchema';
-import {
-  CREATE_EXECUTION_EFFECT_RECEIPTS,
-  CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD,
-} from './effectReceiptSchema';
-import {
-  CREATE_EXECUTION_EXTERNAL_HANDLES,
-  SCHEMA_OBJECT_SQL,
-  TABLE_NAMES,
-  TRIGGER_NAMES,
-  V10_SCHEMA_OBJECT_SQL,
-  V11_SCHEMA_OBJECT_SQL,
-  V7_SCHEMA_OBJECT_SQL,
-  V8_SCHEMA_OBJECT_SQL,
-  V9_SCHEMA_OBJECT_SQL,
-  V9_TABLE_NAMES,
-  V9_TRIGGER_NAMES,
-} from './schemaDefinitions';
-import { qualifyExecutionExternalHandleLocator } from './externalLocators';
+import { SCHEMA_OBJECT_SQL, TABLE_NAMES, TRIGGER_NAMES } from './schemaDefinitions';
 
 /** Keep synchronous native lock contention bounded on the mobile JS thread. */
 export const EXECUTION_JOURNAL_BUSY_TIMEOUT_MS = 100;
@@ -56,17 +34,12 @@ function normalizeSql(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
-function assertExactSchemaObjects(
-  database: SQLite.SQLiteDatabase,
-  expectedSchemaObjects: ReadonlyMap<string, string>,
-  errorPrefix: string,
-  expectedTableNames: readonly string[] = TABLE_NAMES,
-  expectedTriggerNames: readonly string[] = TRIGGER_NAMES,
-): void {
-  const actualTables = userTableNames(database);
-  const expectedTables = [...expectedTableNames].sort();
-  if (JSON.stringify(actualTables) !== JSON.stringify(expectedTables)) {
-    throw new Error(`${errorPrefix}_table_mismatch`);
+/** The journal must hold exactly the current schema's tables, indexes and triggers. */
+function assertExactSchema(database: SQLite.SQLiteDatabase): void {
+  const tableNames: readonly string[] = TABLE_NAMES;
+  const triggerNames: readonly string[] = TRIGGER_NAMES;
+  if (JSON.stringify(userTableNames(database)) !== JSON.stringify([...tableNames].sort())) {
+    throw new Error('execution_journal_schema_table_mismatch');
   }
 
   const actualObjects = database
@@ -78,386 +51,60 @@ function assertExactSchemaObjects(
     )
     .map((row) => `${row.type}:${row.name}`)
     .sort();
-  const expectedObjects = [...expectedSchemaObjects.keys()]
+  const expectedObjects = [...SCHEMA_OBJECT_SQL.keys()]
     .map((name) => {
-      const type = expectedTableNames.includes(name)
+      const type = tableNames.includes(name)
         ? 'table'
-        : expectedTriggerNames.includes(name)
+        : triggerNames.includes(name)
           ? 'trigger'
           : 'index';
       return `${type}:${name}`;
     })
     .sort();
   if (JSON.stringify(actualObjects) !== JSON.stringify(expectedObjects)) {
-    throw new Error(`${errorPrefix}_object_set_mismatch`);
+    throw new Error('execution_journal_schema_object_set_mismatch');
   }
 
-  for (const [name, expectedSql] of expectedSchemaObjects) {
+  for (const [name, expectedSql] of SCHEMA_OBJECT_SQL) {
     const row = database.getFirstSync<{ sql: string | null }>(
       `SELECT sql FROM sqlite_master
        WHERE name = ? AND type IN ('table', 'index', 'trigger')`,
       name,
     );
     if (!row?.sql || normalizeSql(row.sql) !== normalizeSql(expectedSql)) {
-      throw new Error(`${errorPrefix}_object_mismatch:${name}`);
+      throw new Error(`execution_journal_schema_object_mismatch:${name}`);
     }
   }
 }
 
-function assertNoForeignKeyViolations(database: SQLite.SQLiteDatabase, errorCode: string): void {
-  if (database.getAllSync('PRAGMA foreign_key_check').length > 0) {
-    throw new Error(errorCode);
-  }
-}
-
-function assertExactSchema(database: SQLite.SQLiteDatabase): void {
-  assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
-
-  const foreignKeysEnabled = pragmaNumber(database, 'foreign_keys');
-  if (foreignKeysEnabled !== 1) {
-    throw new Error('execution_journal_foreign_keys_disabled');
-  }
-  assertNoForeignKeyViolations(database, 'execution_journal_foreign_key_mismatch');
-}
-
-function createFreshSchema(database: SQLite.SQLiteDatabase): void {
-  database.execSync('BEGIN IMMEDIATE');
-  try {
-    for (const sql of SCHEMA_OBJECT_SQL.values()) {
-      database.execSync(sql);
-    }
-    database.execSync(`PRAGMA application_id = ${EXECUTION_JOURNAL_APPLICATION_ID}`);
-    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    database.execSync('COMMIT');
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the original schema error.
-    }
-    throw error;
-  }
-}
-
-function migrateV7ToV8(database: SQLite.SQLiteDatabase): void {
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
-  }
-  assertExactSchemaObjects(
-    database,
-    V7_SCHEMA_OBJECT_SQL,
-    'execution_journal_v7_schema',
-    V9_TABLE_NAMES,
-    V9_TRIGGER_NAMES,
-  );
-  assertNoForeignKeyViolations(database, 'execution_journal_v7_foreign_key_mismatch');
-
-  const temporaryTable = 'execution_effects_v8';
-  const createTemporaryTable = CREATE_EXECUTION_EFFECTS_V8.replace(
-    'CREATE TABLE execution_effects',
-    `CREATE TABLE ${temporaryTable}`,
-  );
+/**
+ * The journal records this install's executions. Fresh installs create it; a journal written
+ * by another schema version is dropped and created again rather than migrated (pre-release:
+ * there are no users' journals to carry forward).
+ */
+function recreateSchema(database: SQLite.SQLiteDatabase): void {
   database.execSync('PRAGMA foreign_keys = OFF');
-  database.execSync('PRAGMA legacy_alter_table = ON');
   try {
     database.execSync('BEGIN IMMEDIATE');
-    database.execSync(createTemporaryTable);
-    database.execSync(
-      `INSERT INTO ${temporaryTable} (
-         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-         tool_contract_identity_digest, effect_class, idempotency_class,
-         idempotency_key_digest, request_digest, outcome_digest, status,
-         retry_policy, attempt, created_at, started_at, completed_at, updated_at
-       )
-       SELECT id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-              NULL, effect_class, idempotency_class, idempotency_key_digest,
-              request_digest, outcome_digest, status, retry_policy, attempt,
-              created_at, started_at, completed_at, updated_at
-         FROM execution_effects`,
-    );
-    database.execSync('DROP TABLE execution_effects');
-    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_effects`);
-    for (const name of [
-      'idx_execution_effects_run_status',
-      'idx_execution_effects_status_run',
-      'ux_execution_effects_idempotency_key',
-    ]) {
-      const sql = SCHEMA_OBJECT_SQL.get(name);
-      if (!sql) throw new Error(`execution_journal_v8_index_missing:${name}`);
-      database.execSync(sql);
-    }
-    assertExactSchemaObjects(
-      database,
-      V8_SCHEMA_OBJECT_SQL,
-      'execution_journal_v8_schema',
-      V9_TABLE_NAMES,
-      V9_TRIGGER_NAMES,
-    );
-    assertNoForeignKeyViolations(database, 'execution_journal_v8_foreign_key_mismatch');
-    database.execSync('PRAGMA user_version = 8');
-    database.execSync('COMMIT');
-  } catch (error) {
     try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the migration error.
+      for (const name of userTableNames(database)) {
+        database.execSync(`DROP TABLE "${name}"`);
+      }
+      for (const sql of SCHEMA_OBJECT_SQL.values()) {
+        database.execSync(sql);
+      }
+      database.execSync(`PRAGMA application_id = ${EXECUTION_JOURNAL_APPLICATION_ID}`);
+      database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
+      database.execSync('COMMIT');
+    } catch (error) {
+      try {
+        database.execSync('ROLLBACK');
+      } catch {
+        // Preserve the original schema error.
+      }
+      throw error;
     }
-    throw error;
   } finally {
-    database.execSync('PRAGMA legacy_alter_table = OFF');
-    database.execSync('PRAGMA foreign_keys = ON');
-  }
-}
-
-function migrateV8ToV9(database: SQLite.SQLiteDatabase): void {
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
-  }
-  assertExactSchemaObjects(
-    database,
-    V8_SCHEMA_OBJECT_SQL,
-    'execution_journal_v8_schema',
-    V9_TABLE_NAMES,
-    V9_TRIGGER_NAMES,
-  );
-  assertNoForeignKeyViolations(database, 'execution_journal_v8_foreign_key_mismatch');
-
-  const temporaryTable = 'execution_effects_v9';
-  const createTemporaryTable = CREATE_EXECUTION_EFFECTS_V11.replace(
-    'CREATE TABLE execution_effects',
-    `CREATE TABLE ${temporaryTable}`,
-  );
-  database.execSync('PRAGMA foreign_keys = OFF');
-  database.execSync('PRAGMA legacy_alter_table = ON');
-  try {
-    database.execSync('BEGIN IMMEDIATE');
-    database.execSync(createTemporaryTable);
-    database.execSync(
-      `INSERT INTO ${temporaryTable} (
-         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-         tool_contract_identity_digest, effect_class, idempotency_class,
-         idempotency_key_digest, request_digest, model_authority_valid_until,
-         outcome_digest, status, retry_policy, attempt, created_at, started_at,
-         completed_at, updated_at
-       )
-       SELECT id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-              tool_contract_identity_digest, effect_class, idempotency_class,
-              idempotency_key_digest, request_digest, NULL, outcome_digest,
-              status, retry_policy, attempt, created_at, started_at,
-              completed_at, updated_at
-         FROM execution_effects`,
-    );
-    database.execSync('DROP TABLE execution_effects');
-    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_effects`);
-    for (const name of [
-      'idx_execution_effects_run_status',
-      'idx_execution_effects_status_run',
-      'ux_execution_effects_idempotency_key',
-    ]) {
-      const sql = SCHEMA_OBJECT_SQL.get(name);
-      if (!sql) throw new Error(`execution_journal_v9_index_missing:${name}`);
-      database.execSync(sql);
-    }
-    assertExactSchemaObjects(
-      database,
-      V9_SCHEMA_OBJECT_SQL,
-      'execution_journal_v9_schema',
-      V9_TABLE_NAMES,
-      V9_TRIGGER_NAMES,
-    );
-    assertNoForeignKeyViolations(database, 'execution_journal_v9_foreign_key_mismatch');
-    database.execSync('PRAGMA user_version = 9');
-    database.execSync('COMMIT');
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the migration error.
-    }
-    throw error;
-  } finally {
-    database.execSync('PRAGMA legacy_alter_table = OFF');
-    database.execSync('PRAGMA foreign_keys = ON');
-  }
-}
-
-function migrateV9ToV10(database: SQLite.SQLiteDatabase): void {
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
-  }
-  assertExactSchemaObjects(
-    database,
-    V9_SCHEMA_OBJECT_SQL,
-    'execution_journal_v9_schema',
-    V9_TABLE_NAMES,
-    V9_TRIGGER_NAMES,
-  );
-  assertNoForeignKeyViolations(database, 'execution_journal_v9_foreign_key_mismatch');
-
-  database.execSync('BEGIN IMMEDIATE');
-  try {
-    database.execSync(CREATE_EXECUTION_EFFECT_RECEIPTS);
-    database.execSync(CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD);
-    database.execSync('PRAGMA user_version = 10');
-    assertExactSchemaObjects(database, V10_SCHEMA_OBJECT_SQL, 'execution_journal_v10_schema');
-    assertNoForeignKeyViolations(database, 'execution_journal_v10_foreign_key_mismatch');
-    database.execSync('COMMIT');
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the original migration error.
-    }
-    throw error;
-  }
-}
-
-function migrateV10ExternalHandleLocator(row: Record<string, unknown>): string {
-  const shared = {
-    version: row.locator_version,
-    kind: row.handle_kind,
-    workflowRunId: row.workflow_run_id,
-    credentialRef: row.credential_ref,
-  };
-  const candidate =
-    row.handle_kind === 'expo_workflow_run'
-      ? { ...shared, projectId: row.expo_project_id }
-      : row.handle_kind === 'github_workflow_run'
-        ? { ...shared, repository: row.github_repository }
-        : null;
-  const locator = qualifyExecutionExternalHandleLocator(candidate);
-  if (!locator) {
-    throw new Error('execution_journal_v10_external_handle_locator_invalid');
-  }
-  return JSON.stringify(locator);
-}
-
-function migrateV10ToV11(database: SQLite.SQLiteDatabase): void {
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
-  }
-  assertExactSchemaObjects(database, V10_SCHEMA_OBJECT_SQL, 'execution_journal_v10_schema');
-  assertNoForeignKeyViolations(database, 'execution_journal_v10_foreign_key_mismatch');
-
-  const rows = database.getAllSync<Record<string, unknown>>(
-    'SELECT * FROM execution_external_handles ORDER BY id',
-  );
-  const temporaryTable = 'execution_external_handles_v11';
-  const createTemporaryTable = CREATE_EXECUTION_EXTERNAL_HANDLES.replace(
-    'CREATE TABLE execution_external_handles',
-    `CREATE TABLE ${temporaryTable}`,
-  );
-  database.execSync('PRAGMA foreign_keys = OFF');
-  database.execSync('PRAGMA legacy_alter_table = ON');
-  try {
-    database.execSync('BEGIN IMMEDIATE');
-    database.execSync(createTemporaryTable);
-    for (const row of rows) {
-      database.runSync(
-        `INSERT INTO ${temporaryTable} (
-           id, run_id, effect_id, handle_kind, locator_version, locator_json,
-           source_tool_name_digest, status, created_at, updated_at,
-           last_attempted_at, last_verified_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        row.id as SQLite.SQLiteBindValue,
-        row.run_id as SQLite.SQLiteBindValue,
-        row.effect_id as SQLite.SQLiteBindValue,
-        row.handle_kind as SQLite.SQLiteBindValue,
-        row.locator_version as SQLite.SQLiteBindValue,
-        migrateV10ExternalHandleLocator(row),
-        row.source_tool_name_digest as SQLite.SQLiteBindValue,
-        row.status as SQLite.SQLiteBindValue,
-        row.created_at as SQLite.SQLiteBindValue,
-        row.updated_at as SQLite.SQLiteBindValue,
-        row.last_attempted_at as SQLite.SQLiteBindValue,
-        row.last_verified_at as SQLite.SQLiteBindValue,
-      );
-    }
-    database.execSync('DROP TABLE execution_external_handles');
-    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_external_handles`);
-    for (const name of [
-      'ux_execution_external_handles_locator',
-      'ux_execution_external_handles_unresolved_mobile_run',
-      'idx_execution_external_handles_status_run',
-      'idx_execution_external_handles_run_status',
-    ]) {
-      const sql = SCHEMA_OBJECT_SQL.get(name);
-      if (!sql) throw new Error(`execution_journal_v11_index_missing:${name}`);
-      database.execSync(sql);
-    }
-    database.execSync('PRAGMA user_version = 11');
-    assertExactSchemaObjects(database, V11_SCHEMA_OBJECT_SQL, 'execution_journal_v11_schema');
-    assertNoForeignKeyViolations(database, 'execution_journal_v11_foreign_key_mismatch');
-    database.execSync('COMMIT');
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the migration error.
-    }
-    throw error;
-  } finally {
-    database.execSync('PRAGMA legacy_alter_table = OFF');
-    database.execSync('PRAGMA foreign_keys = ON');
-  }
-}
-
-function migrateV11ToV12(database: SQLite.SQLiteDatabase): void {
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
-  }
-  assertExactSchemaObjects(database, V11_SCHEMA_OBJECT_SQL, 'execution_journal_v11_schema');
-  assertNoForeignKeyViolations(database, 'execution_journal_v11_foreign_key_mismatch');
-
-  const temporaryTable = 'execution_effects_v12';
-  const createTemporaryTable = CREATE_EXECUTION_EFFECTS.replace(
-    'CREATE TABLE execution_effects',
-    `CREATE TABLE ${temporaryTable}`,
-  );
-  database.execSync('PRAGMA foreign_keys = OFF');
-  database.execSync('PRAGMA legacy_alter_table = ON');
-  try {
-    database.execSync('BEGIN IMMEDIATE');
-    database.execSync(createTemporaryTable);
-    database.execSync(
-      `INSERT INTO ${temporaryTable} (
-         id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-         tool_contract_identity_digest, effect_class, idempotency_class,
-         idempotency_key_digest, request_digest, model_authority_valid_until,
-         outcome_digest, status, retry_policy, attempt, created_at, started_at,
-         completed_at, updated_at
-       )
-       SELECT id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
-              tool_contract_identity_digest, effect_class, idempotency_class,
-              idempotency_key_digest, request_digest, model_authority_valid_until,
-              outcome_digest, status, retry_policy, attempt, created_at, started_at,
-              completed_at, updated_at
-         FROM execution_effects`,
-    );
-    database.execSync('DROP TABLE execution_effects');
-    database.execSync(`ALTER TABLE ${temporaryTable} RENAME TO execution_effects`);
-    for (const name of [
-      'idx_execution_effects_run_status',
-      'idx_execution_effects_status_run',
-      'ux_execution_effects_idempotency_key',
-    ]) {
-      const sql = SCHEMA_OBJECT_SQL.get(name);
-      if (!sql) throw new Error(`execution_journal_v12_index_missing:${name}`);
-      database.execSync(sql);
-    }
-    database.execSync(`PRAGMA user_version = ${EXECUTION_JOURNAL_SCHEMA_VERSION}`);
-    assertExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 'execution_journal_schema');
-    assertNoForeignKeyViolations(database, 'execution_journal_v12_foreign_key_mismatch');
-    database.execSync('COMMIT');
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-    } catch {
-      // Preserve the original migration error.
-    }
-    throw error;
-  } finally {
-    database.execSync('PRAGMA legacy_alter_table = OFF');
     database.execSync('PRAGMA foreign_keys = ON');
   }
 }
@@ -466,40 +113,17 @@ export function ensureExecutionJournalSchema(database: SQLite.SQLiteDatabase): v
   database.execSync('PRAGMA foreign_keys = ON');
   database.execSync(`PRAGMA busy_timeout = ${EXECUTION_JOURNAL_BUSY_TIMEOUT_MS}`);
 
-  let version = pragmaNumber(database, 'user_version');
-  const applicationId = pragmaNumber(database, 'application_id');
-  if (version === 0) {
-    if (applicationId !== 0 || userTableNames(database).length > 0) {
-      throw new Error('execution_journal_unversioned_schema');
-    }
-    createFreshSchema(database);
-    version = EXECUTION_JOURNAL_SCHEMA_VERSION;
-  } else if (version === 7) {
-    migrateV7ToV8(database);
-    version = 8;
-  }
-  if (version === 8) {
-    migrateV8ToV9(database);
-    version = 9;
-  }
-  if (version === 9) {
-    migrateV9ToV10(database);
-    version = 10;
-  }
-  if (version === 10) {
-    migrateV10ToV11(database);
-    version = 11;
-  }
-  if (version === 11) {
-    migrateV11ToV12(database);
-    version = EXECUTION_JOURNAL_SCHEMA_VERSION;
-  }
-  if (version !== EXECUTION_JOURNAL_SCHEMA_VERSION) {
-    throw new Error(`execution_journal_unsupported_schema_version:${version}`);
-  }
-
-  if (pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID) {
-    throw new Error('execution_journal_application_id_mismatch');
+  if (
+    pragmaNumber(database, 'user_version') !== EXECUTION_JOURNAL_SCHEMA_VERSION ||
+    pragmaNumber(database, 'application_id') !== EXECUTION_JOURNAL_APPLICATION_ID
+  ) {
+    recreateSchema(database);
   }
   assertExactSchema(database);
+  if (pragmaNumber(database, 'foreign_keys') !== 1) {
+    throw new Error('execution_journal_foreign_keys_disabled');
+  }
+  if (database.getAllSync('PRAGMA foreign_key_check').length > 0) {
+    throw new Error('execution_journal_foreign_key_mismatch');
+  }
 }

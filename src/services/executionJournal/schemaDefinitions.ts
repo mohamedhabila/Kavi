@@ -23,12 +23,7 @@ import {
   EXECUTION_RECOVERY_DISPATCH_STATES,
   EXECUTION_RECOVERY_RECEIPT_REASONS,
 } from './recoveryCoordinatorTypes';
-import {
-  CREATE_EXECUTION_EFFECTS,
-  CREATE_EXECUTION_EFFECTS_V11,
-  CREATE_EXECUTION_EFFECTS_V7,
-  CREATE_EXECUTION_EFFECTS_V8,
-} from './executionEffectSchema';
+import { CREATE_EXECUTION_EFFECTS } from './executionEffectSchema';
 import {
   CREATE_EXECUTION_EFFECT_RECEIPTS,
   CREATE_EXECUTION_EFFECT_RECEIPT_UPDATE_GUARD,
@@ -96,46 +91,6 @@ const CREATE_EXECUTION_CHECKPOINTS = `
     UNIQUE (run_id, sequence),
     UNIQUE (run_id, id),
     FOREIGN KEY (run_id) REFERENCES execution_runs(id) ON DELETE CASCADE
-  ) STRICT
-`;
-
-const V10_EXECUTION_EXTERNAL_HANDLE_KINDS = ['expo_workflow_run', 'github_workflow_run'] as const;
-
-export const CREATE_EXECUTION_EXTERNAL_HANDLES_V10 = `
-  CREATE TABLE execution_external_handles (
-    id TEXT PRIMARY KEY CHECK (${ID_CHECK('id')}),
-    run_id TEXT NOT NULL CHECK (${ID_CHECK('run_id')}),
-    effect_id TEXT NOT NULL CHECK (${ID_CHECK('effect_id')}),
-    handle_kind TEXT NOT NULL CHECK (handle_kind IN (${sqlEnum(V10_EXECUTION_EXTERNAL_HANDLE_KINDS)})),
-    locator_version INTEGER NOT NULL CHECK (locator_version = 1),
-    expo_project_id TEXT CHECK (expo_project_id IS NULL OR (${ID_CHECK('expo_project_id')})),
-    github_repository TEXT CHECK (github_repository IS NULL OR (${ID_CHECK('github_repository')})),
-    workflow_run_id TEXT NOT NULL CHECK (${ID_CHECK('workflow_run_id')}),
-    credential_ref TEXT NOT NULL CHECK (${ID_CHECK('credential_ref')}),
-    source_tool_name_digest TEXT NOT NULL CHECK (${DIGEST_CHECK('source_tool_name_digest')}),
-    status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EXTERNAL_HANDLE_STATUSES)})),
-    created_at INTEGER NOT NULL CHECK (created_at >= 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at >= created_at),
-    last_attempted_at INTEGER NOT NULL CHECK (
-      last_attempted_at >= created_at AND last_attempted_at <= updated_at
-    ),
-    last_verified_at INTEGER CHECK (
-      last_verified_at IS NULL
-      OR (last_verified_at >= created_at AND last_verified_at <= updated_at)
-    ),
-    CHECK (
-      (handle_kind = 'expo_workflow_run'
-        AND expo_project_id IS NOT NULL
-        AND github_repository IS NULL)
-      OR
-      (handle_kind = 'github_workflow_run'
-        AND expo_project_id IS NULL
-        AND github_repository IS NOT NULL
-        AND github_repository = lower(github_repository))
-    ),
-    UNIQUE (run_id, id),
-    FOREIGN KEY (run_id, effect_id)
-      REFERENCES execution_effects(run_id, id) ON DELETE CASCADE
   ) STRICT
 `;
 
@@ -403,37 +358,7 @@ export const SCHEMA_OBJECT_SQL = new Map<string, string>([
   ],
 ]);
 
-export const V11_SCHEMA_OBJECT_SQL = new Map(SCHEMA_OBJECT_SQL);
-V11_SCHEMA_OBJECT_SQL.set('execution_effects', CREATE_EXECUTION_EFFECTS_V11);
-
-export const V10_SCHEMA_OBJECT_SQL = new Map(V11_SCHEMA_OBJECT_SQL);
-V10_SCHEMA_OBJECT_SQL.set('execution_external_handles', CREATE_EXECUTION_EXTERNAL_HANDLES_V10);
-V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_locator');
-V10_SCHEMA_OBJECT_SQL.delete('ux_execution_external_handles_unresolved_mobile_run');
-V10_SCHEMA_OBJECT_SQL.set(
-  'ux_execution_external_handles_expo_locator',
-  `CREATE UNIQUE INDEX ux_execution_external_handles_expo_locator
-     ON execution_external_handles(run_id, expo_project_id, workflow_run_id)
-     WHERE handle_kind = 'expo_workflow_run'`,
-);
-V10_SCHEMA_OBJECT_SQL.set(
-  'ux_execution_external_handles_github_locator',
-  `CREATE UNIQUE INDEX ux_execution_external_handles_github_locator
-     ON execution_external_handles(run_id, github_repository, workflow_run_id)
-     WHERE handle_kind = 'github_workflow_run'`,
-);
-
-export const V9_SCHEMA_OBJECT_SQL = new Map(V10_SCHEMA_OBJECT_SQL);
-V9_SCHEMA_OBJECT_SQL.delete('execution_effect_receipts');
-V9_SCHEMA_OBJECT_SQL.delete('trg_execution_effect_receipts_immutable');
-
-export const V7_SCHEMA_OBJECT_SQL = new Map(V9_SCHEMA_OBJECT_SQL);
-V7_SCHEMA_OBJECT_SQL.set('execution_effects', CREATE_EXECUTION_EFFECTS_V7);
-
-export const V8_SCHEMA_OBJECT_SQL = new Map(V9_SCHEMA_OBJECT_SQL);
-V8_SCHEMA_OBJECT_SQL.set('execution_effects', CREATE_EXECUTION_EFFECTS_V8);
-
-export const V9_TABLE_NAMES = [
+export const TABLE_NAMES = [
   'execution_runs',
   'execution_checkpoints',
   'execution_effects',
@@ -442,16 +367,11 @@ export const V9_TABLE_NAMES = [
   'execution_recovery_controls',
   'execution_recovery_attention',
   'execution_recovery_dispatches',
-] as const;
-
-export const TABLE_NAMES = [...V9_TABLE_NAMES, 'execution_effect_receipts'] as const;
-
-export const V9_TRIGGER_NAMES = [
-  'trg_execution_runs_protect_unresolved_delete',
-  'trg_execution_recovery_dispatches_protect_receipt',
+  'execution_effect_receipts',
 ] as const;
 
 export const TRIGGER_NAMES = [
-  ...V9_TRIGGER_NAMES,
+  'trg_execution_runs_protect_unresolved_delete',
+  'trg_execution_recovery_dispatches_protect_receipt',
   'trg_execution_effect_receipts_immutable',
 ] as const;
