@@ -247,6 +247,46 @@ describe('resolveForegroundTerminalMemorySource', () => {
     ).toBe(current);
   });
 
+  it('skips an untracked reply that is not one closed final ending its turn', () => {
+    const user: Message = { id: 'user-current', role: 'user', content: 'Current', timestamp: 3 };
+    const current = finalAssistant('assistant-current', 4);
+    const resolve = (messages: Message[], id = current.id) =>
+      resolveForegroundTerminalMemorySource({
+        conversation: conversation({ mode: 'chitchat', messages }),
+        currentAssistantMessageId: id,
+        status: 'succeeded',
+      });
+
+    expect(resolve([user, current, { ...current, timestamp: 5 }])).toBeUndefined();
+    expect(resolve([user, current], user.id)).toBeUndefined();
+    expect(resolve([user, current, finalAssistant('assistant-later', 5)])).toBeUndefined();
+    expect(
+      resolve([
+        user,
+        current,
+        { id: 'tool-later', role: 'tool', content: '{}', timestamp: 5, toolCallId: 'call-1' },
+      ]),
+    ).toBeUndefined();
+    expect(
+      resolve([
+        user,
+        current,
+        { id: 'user-next', role: 'user', content: 'Next', timestamp: 6 },
+        finalAssistant('assistant-next', 7),
+      ]),
+    ).toBe(current);
+    expect(
+      resolve([
+        user,
+        current,
+        {
+          ...finalAssistant('sub-agent-event', 5),
+          subAgentEvent: { type: 'sub-agent' } as NonNullable<Message['subAgentEvent']>,
+        },
+      ]),
+    ).toBe(current);
+  });
+
   it('supports an untracked agentic turn without requiring a synthetic run', () => {
     const current = finalAssistant('assistant-current', 4);
     const value = conversation({

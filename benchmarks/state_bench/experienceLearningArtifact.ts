@@ -1,6 +1,6 @@
 import { isExactDurableScopeId } from '../../src/utils/durableScopeIdentity';
 import { exceedsGraphemeLength } from '../../src/utils/graphemes';
-import { isExactMemoryProvenanceId } from '../../src/services/memory/memoryProvenanceIdentity';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 import {
   evaluateExperienceLearning,
   type ExperienceAttemptAuthority,

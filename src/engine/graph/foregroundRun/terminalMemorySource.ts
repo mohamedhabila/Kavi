@@ -5,7 +5,7 @@ import {
   buildAgentRunMessageScope,
   getLatestAssistantProjectionFinalResponse,
 } from '../../../services/agents/lifecycle/agentRunStateMachine';
-import { resolveClosedTurnEndingAt } from '../../../services/memory/closedTurn';
+import { hasTerminalAssistantCompletionMetadata } from '../../../utils/assistantMessageMetadata';
 import type { ForegroundRunTerminalStatus } from './terminalLifecycle';
 
 type TerminalMemoryConversation = Pick<Conversation, 'agentRuns' | 'messages'>;
@@ -45,17 +45,31 @@ function resolveAgenticTerminalMemorySource(params: {
   throw new Error('foreground_terminal_memory_agent_final_unavailable');
 }
 
+/**
+ * The reply `replyId` names when it is the one closed final of its turn: no later assistant
+ * output or tool result before the next user message (a sub-agent's event may follow).
+ * Never an older final instead.
+ */
+function findClosedReply(messages: ReadonlyArray<Message>, replyId: string): Message | undefined {
+  const matches = messages.filter((message) => message.id === replyId);
+  const reply = matches.length === 1 ? matches[0]! : undefined;
+  if (reply?.role !== 'assistant' || !hasTerminalAssistantCompletionMetadata(reply)) {
+    return undefined;
+  }
+  for (const later of messages.slice(messages.indexOf(reply) + 1)) {
+    if (later.role === 'user') break;
+    if (later.role === 'assistant' && later.subAgentEvent) continue;
+    if (later.role === 'assistant' || later.role === 'tool') return undefined;
+  }
+  return reply;
+}
+
 function resolveUntrackedTerminalMemorySource(params: {
   conversation: TerminalMemoryConversation;
   currentAssistantMessageId: string;
   status: Exclude<ForegroundRunTerminalStatus, 'cancelled'>;
 }): Message | undefined {
-  const closedTurn = resolveClosedTurnEndingAt(
-    params.conversation.messages,
-    params.currentAssistantMessageId,
-  );
-  if (closedTurn.status === 'resolved') return closedTurn.assistant;
-  return undefined;
+  return findClosedReply(params.conversation.messages, params.currentAssistantMessageId);
 }
 
 /** Select the exact terminal assistant source without falling back to an older final. */

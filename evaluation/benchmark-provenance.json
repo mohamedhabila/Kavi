@@ -23,7 +23,7 @@
         "integrationKind": "upstream_agent_learning_hook",
         "roots": ["benchmarks/state_bench"],
         "sourceDigestAlgorithm": "sha256_versionable_path_nul_bytes_nul_v2",
-        "sourceSha256": "018b30439142d2e4364c7fee3bed31c880c476f244ae7949b9ed45bcea35cda7",
+        "sourceSha256": "2da8cf745df5086de14ae1694e3aa7abd7fe879ad526972436b14b9fd7f65f7a",
         "modifiesUpstream": true
       },
       "upstream": {

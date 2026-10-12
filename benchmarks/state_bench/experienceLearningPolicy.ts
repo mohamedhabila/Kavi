@@ -1,5 +1,5 @@
 import { isExactDurableScopeId } from '../../src/utils/durableScopeIdentity';
-import { isExactMemoryProvenanceId } from '../../src/services/memory/memoryProvenanceIdentity';
+import { isExactMemoryProvenanceId } from './memoryProvenanceIdentity';
 
 export type ExperienceAttemptOutcome = 'success' | 'failure';
 export type ExperienceAttemptAuthority = 'tool_observed' | 'verified' | 'assistant_inferred';
