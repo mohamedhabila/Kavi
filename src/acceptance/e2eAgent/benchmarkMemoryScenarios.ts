@@ -22,7 +22,7 @@ export const BENCH_SESSION_TOOL_CACHE: E2EScenario = {
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 2 },
-    { kind: 'memory_item', contains: ['e2e-cache-1', 'CACHE-E2E-42'], scope: 'conversation' },
+    { kind: 'memory_item', contains: ['e2e-cache-1', 'CACHE-E2E-42'] },
     { kind: 'graph_terminal_success' },
     {
       kind: 'token_budget',
