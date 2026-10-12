@@ -508,16 +508,10 @@ describe('strict row decoders', () => {
     expect(() => decodeExecutionRunRow({ ...run, retry_count: 1.5 })).toThrow();
     expect(() => decodeExecutionRunRow({ ...run, updated_at: 1 })).toThrow();
     expect(() => decodeExecutionCheckpointRow({ ...checkpoint, sequence: -1 })).toThrow();
-    const {
-      model_authority_valid_until: _discardedModelAuthorityDeadline,
-      ...legacyEffectWithoutDeadline
-    } = effect;
-    expect(() => decodeExecutionEffectRow(legacyEffectWithoutDeadline)).toThrow(
+    const { outcome_digest: _discardedOutcomeDigest, ...effectWithoutOutcomeDigest } = effect;
+    expect(() => decodeExecutionEffectRow(effectWithoutOutcomeDigest)).toThrow(
       'execution_journal_malformed_row:effect:columns',
     );
-    expect(() =>
-      decodeExecutionEffectRow({ ...effect, model_authority_valid_until: 10.5 }),
-    ).toThrow('execution_journal_malformed_row:effect.model_authority_valid_until');
     expect(() =>
       decodeExecutionEffectRow({
         ...effect,

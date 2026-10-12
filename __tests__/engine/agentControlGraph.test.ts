@@ -44,33 +44,6 @@ describe('agent control graph', () => {
     expect(getAgentControlGraphModelTurnBlocker(snapshot)).toBeUndefined();
   });
 
-  it('clears an uncommitted tool boundary when model memory authority is invalidated', () => {
-    const awaitingTools = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
-      { type: 'MODEL_TURN_STARTED', iteration: 1 },
-      {
-        type: 'MODEL_TURN_COMPLETED',
-        iteration: 1,
-        toolCalls: [{ id: 'stale-call', name: 'archivo_書込' }],
-      },
-    ]);
-    expect(awaitingTools.status).toBe('awaiting_tool_results');
-
-    const invalidated = reduceAgentControlGraph(awaitingTools, [
-      {
-        type: 'MODEL_TURN_INVALIDATED',
-        iteration: 1,
-        reason: 'memory_authority_changed',
-      },
-    ]);
-
-    expect(invalidated.status).toBe('ready');
-    expect(invalidated.expectedToolCalls).toEqual([]);
-    expect(invalidated.observedToolResults).toEqual([]);
-    expect(invalidated.audit.at(-1)).toEqual(
-      expect.objectContaining({ type: 'MODEL_TURN_INVALIDATED' }),
-    );
-  });
-
   it('allows terminal finalization to close an intentionally abandoned tool boundary', () => {
     const waitingForTool = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
       { type: 'MODEL_TURN_STARTED', iteration: 1 },

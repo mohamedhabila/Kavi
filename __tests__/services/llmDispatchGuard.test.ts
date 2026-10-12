@@ -4,8 +4,6 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { finalizeProviderConfig } from '../../src/constants/api';
-import { buildModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
-import { buildModelTurnMemoryPolicyDispatchGuard } from '../../src/engine/graph/modelTurn/memoryPromptDispatchFence';
 import { sendLlmMessage } from '../../src/services/llm/messageService';
 import { streamLlmMessage } from '../../src/services/llm/streamService';
 import { closeMemoryDb } from '../../src/services/memory/database';
@@ -13,7 +11,6 @@ import { initializeMemoryPolicyObservation } from '../../src/services/memory/pol
 import { resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
-import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
 const mockSendLocalLlmMessage = jest.fn();
 const mockStreamLocalLlmMessage = jest.fn();
@@ -158,33 +155,6 @@ describe('LLM provider dispatch guard', () => {
         performFetch,
       }),
     ).rejects.toThrow('request generation expired');
-
-    expect(requestDispatchGuard).toHaveBeenCalledTimes(2);
-    expect(performFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects an adapter retry exactly when its memory projection expires', async () => {
-    let now = 199;
-    const binding = buildModelTurnMemoryPolicyBinding({
-      ...captureCurrentModelTurnMemoryFence(),
-      validUntil: 200,
-    });
-    const requestDispatchGuard = jest.fn(
-      buildModelTurnMemoryPolicyDispatchGuard(binding, () => now),
-    );
-    const performFetch = jest.fn(async () => {
-      now = 200;
-      return anthropicSchemaRejection();
-    });
-
-    await expect(
-      sendLlmMessage({
-        provider: anthropicProvider,
-        messages: [{ role: 'user', content: 'Read the record.' }],
-        options: { requestDispatchGuard, tools },
-        performFetch,
-      }),
-    ).rejects.toThrow('memory_prompt_epoch_expired');
 
     expect(requestDispatchGuard).toHaveBeenCalledTimes(2);
     expect(performFetch).toHaveBeenCalledTimes(1);

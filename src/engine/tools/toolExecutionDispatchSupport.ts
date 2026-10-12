@@ -5,18 +5,13 @@
 // line-count limit. Small, stateless helpers shared by executeTool's
 // pre-dispatch and effect-dispatch branches.
 
-import { logToolCall } from '../../services/security/audit';
 import {
   type ToolEffectDispatchNotClaimedReason,
   type ToolEffectDispatchObservation,
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import type { ToolExecutionContext } from './toolExecutionContext';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
-import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
-import {
-  buildModelTurnMemoryPolicyExpiredToolResult,
-  isModelTurnMemoryPolicyBindingDurablyCurrent,
-} from '../authority/modelTurnMemoryPolicyBinding';
+import type { ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 
 export type ToolExecutionOutcome =
   | (ToolRuntimeOutcome & Readonly<{ effectDispatchObservation: ToolEffectDispatchObservation }>)
@@ -40,7 +35,6 @@ export function isolateExecutorContext(
   delete isolated.captureEffectReceipt;
   delete isolated.finalizeEffectReceiptCapture;
   delete isolated.captureEffectReconciliationRequired;
-  delete isolated.modelTurnMemoryPolicyBinding;
   return isolated;
 }
 
@@ -69,12 +63,6 @@ export function markEffectReconciliationRequired(context: ToolExecutionContext |
   } catch {
     // Graph notification is ancillary to the durable journal barrier.
   }
-}
-
-export function isModelTurnAuthorityCurrent(context: ToolExecutionContext | undefined): boolean {
-  const binding = context?.modelTurnMemoryPolicyBinding;
-  if (!binding) return context?.toolCallId === undefined;
-  return isModelTurnMemoryPolicyBindingDurablyCurrent(binding);
 }
 
 export function withEffectDispatchObservation(
@@ -111,28 +99,4 @@ export function resolveMobileControllerPreDispatchReason(
     }
   }
   return hasBinding ? 'tool_arguments_invalid' : 'runtime_binding_unavailable';
-}
-
-export function rejectExpiredModelTurnAuthority(params: {
-  context: ToolExecutionContext | undefined;
-  normalizedName: string;
-  argsString: string;
-  conversationId: string;
-  effectFreeInvocation: boolean;
-}): ToolExecutionOutcome {
-  const result = buildModelTurnMemoryPolicyExpiredToolResult();
-  finalizeEffectReceiptCapture(params.context);
-  logToolCall(
-    params.normalizedName,
-    params.argsString,
-    'denied',
-    0,
-    params.conversationId,
-    'model_turn_memory_epoch_expired',
-  );
-  return withPreDispatchObservation(
-    failedToolOutcome(result, 'authority_revoked'),
-    params.effectFreeInvocation,
-    'model_authority_changed',
-  );
 }

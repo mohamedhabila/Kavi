@@ -29,10 +29,7 @@ import type {
   AgentControlTurnDirectives,
 } from './agentControlGraph';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
-import {
-  resolveAgentControlGraphToolExecutionOutcomes,
-  type ToolExecutionOutcome,
-} from './toolExecutionOutcomeResolution';
+import { resolveAgentControlGraphToolExecutionOutcomes } from './toolExecutionOutcomeResolution';
 import { executeAgentControlGraphToolBatch } from './toolTurnBatchExecution';
 import { prepareAgentControlGraphToolTurn } from './toolTurnPreparation';
 import {
@@ -43,11 +40,6 @@ import {
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
-import {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  MemoryPromptEpochExpiredError,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import { resolveMobileControllerRecoveryPreflight } from './mobileControllerRecoveryPolicy';
@@ -92,19 +84,6 @@ type ToolTurnExecutionResult =
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
     };
-
-function isAuthorityRevokedToolOutcome(outcome: ToolExecutionOutcome): boolean {
-  if ('deferredHandoff' in outcome || outcome.toolMessage.isError !== true) {
-    return false;
-  }
-
-  return (
-    outcome.toolMessage.toolCalls?.some(
-      (toolCall) =>
-        toolCall.id === outcome.toolCallId && toolCall.failureKind === 'authority_revoked',
-    ) === true
-  );
-}
 
 export interface ExecuteAgentControlGraphToolTurnParams {
   iteration: number;
@@ -180,14 +159,12 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
   pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   workingMessages: Message[];
 }
 
 export async function executeAgentControlGraphToolTurn(
   params: ExecuteAgentControlGraphToolTurnParams,
 ): Promise<ToolTurnExecutionResult> {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   const toolTurnPreparation = prepareAgentControlGraphToolTurn({
     iteration: params.iteration,
     maxToolIterations: params.maxToolIterations,
@@ -204,7 +181,6 @@ export async function executeAgentControlGraphToolTurn(
   });
 
   if (toolTurnPreparation.status === 'finalized') {
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     return {
       status: 'finalized',
       lastPendingAsyncSignature: params.lastPendingAsyncSignature,
@@ -224,7 +200,6 @@ export async function executeAgentControlGraphToolTurn(
   }
 
   if (toolTurnPreparation.status === 'blocked') {
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     // The loop diagnostic is retained here, on the observability channel, because it
     // is the only place that carries the repeat count and the offending tool. It is
     // deliberately not the terminal content: the conversation gets a plain-language
@@ -289,7 +264,6 @@ export async function executeAgentControlGraphToolTurn(
 
   const toolExecutionOutcomes = await executeAgentControlGraphToolBatch({
     executableToolCalls,
-    memoryPolicyBinding: params.memoryPolicyBinding,
     iteration: params.iteration,
     conversationId: params.conversationId,
     activeProvider: params.activeProvider,
@@ -347,17 +321,6 @@ export async function executeAgentControlGraphToolTurn(
       params.applyGraphEvents(graphEvents);
     },
   });
-
-  // A turn whose entire batch lost memory authority did not dispatch any model-authorized
-  // work. Reprepare it with fresh memory instead of asking the model to interpret a
-  // transient preflight rejection as a task failure. Mixed batches are resolved normally:
-  // replaying them could duplicate a successful side effect from the same batch.
-  if (
-    toolExecutionOutcomes.length > 0 &&
-    toolExecutionOutcomes.every(isAuthorityRevokedToolOutcome)
-  ) {
-    throw new MemoryPromptEpochExpiredError();
-  }
 
   const batchYieldedEarly = toolExecutionOutcomes.some(
     (outcome) =>

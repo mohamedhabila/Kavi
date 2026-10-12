@@ -1,7 +1,6 @@
 import { executeAgentControlGraphToolBatch } from '../../src/engine/graph/toolTurnBatchExecution';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createPersistedMobileControllerHandoffFixture } from '../helpers/mobileControllerHandoffFixture';
 import { buildToolResultMessage } from '../../src/engine/toolExecution/toolExecutionMessages';
 
@@ -18,7 +17,6 @@ function params(
 ) {
   return {
     executableToolCalls,
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     iteration: 1,
     conversationId: 'conversation-mobile-1',
     activeProvider: {

@@ -31,7 +31,6 @@ import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { SessionMemoryRead } from '../../services/memory/memoryAccessGateway';
-import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 
@@ -69,7 +68,6 @@ export interface AgentControlGraphIterationRuntimeState {
   escalatedToAgentic?: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
-  lastModelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   /**
    * Set once a foreground run has forced its one budget-checkpoint text turn (from
    * either the iteration/wall-clock ceiling or a model-turn inactivity timeout), so
@@ -104,7 +102,6 @@ export type GraphIterationBindings = {
   finishFailure: (error: Error) => Promise<void>;
   finishWithGraphFinalCandidateEvent: (params: {
     assistantMetadata: AssistantMessageMetadata;
-    beforeAssistantDelivery?: () => void;
     content: string;
     graphEvent: FinalCandidateGraphEvent;
     providerReplay?: MessageProviderReplay;
@@ -112,7 +109,6 @@ export type GraphIterationBindings = {
   }) => Promise<void>;
   finishWithGraphTerminalEvent: (params: {
     assistantMetadata: AssistantMessageMetadata;
-    beforeAssistantDelivery?: () => void;
     content: string;
     graphEvent: TerminalGraphEvent;
     providerReplay?: MessageProviderReplay;
@@ -120,7 +116,6 @@ export type GraphIterationBindings = {
   }) => Promise<void>;
   finishWaitingForUserInput: (params: {
     assistantMetadata: AssistantMessageMetadata;
-    beforeAssistantDelivery?: () => void;
     content: string;
     graphEvent: Extract<AgentControlGraphEvent, { type: 'USER_INPUT_REQUIRED' }>;
     sessionEndReason?: string;
@@ -224,5 +219,5 @@ export interface ExecuteAgentControlGraphIterationParams {
 
 export interface ExecuteAgentControlGraphIterationResult {
   runtime: AgentControlGraphIterationRuntimeState;
-  status: 'continued' | 'finalized' | 'retry_current_iteration' | 'waiting';
+  status: 'continued' | 'finalized' | 'waiting';
 }

@@ -47,7 +47,6 @@ function fixture(): {
     idempotencyClass: 'declared_idempotent',
     idempotencyKeyDigest: DIGEST_D,
     requestDigest: DIGEST_B,
-    modelAuthorityValidUntil: null,
     outcomeDigest: null,
     status: 'planned',
     retryPolicy: 'reconcile_before_retry',
@@ -90,7 +89,6 @@ function fixture(): {
       planningCheckpoint,
       authorityCheckpoint,
       latestCheckpointId: authorityCheckpoint.id,
-      authorizationExpiresAt: 20,
     },
     evaluatedAt: 15,
   };
@@ -114,7 +112,6 @@ describe('effect dispatch policy', () => {
         expectedPlanningCheckpointId: 'checkpoint-planning',
         expectedLatestCheckpointId: 'checkpoint-authority',
         expectedAuthoritySequence: 2,
-        authorizationExpiresAt: 20,
         evaluatedAt: 15,
       },
     });
@@ -276,16 +273,6 @@ describe('effect dispatch policy', () => {
       });
     },
   );
-
-  it('treats the authorization expiry instant as outside the lease', () => {
-    const input = fixture();
-    input.evaluatedAt = 20;
-
-    expect(planEffectDispatch(input)).toEqual({
-      kind: 'blocked',
-      reason: 'authorization_expired',
-    });
-  });
 
   it.each([
     ['declared mutation without a key', { idempotencyKeyDigest: null }],

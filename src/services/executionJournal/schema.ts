@@ -4,7 +4,7 @@ import { SCHEMA_OBJECT_SQL, TABLE_NAMES, TRIGGER_NAMES } from './schemaDefinitio
 /** Keep synchronous native lock contention bounded on the mobile JS thread. */
 export const EXECUTION_JOURNAL_BUSY_TIMEOUT_MS = 100;
 
-export const EXECUTION_JOURNAL_SCHEMA_VERSION = 12;
+export const EXECUTION_JOURNAL_SCHEMA_VERSION = 13;
 export const EXECUTION_JOURNAL_APPLICATION_ID = 1_263_164_492;
 
 function pragmaNumber(database: SQLite.SQLiteDatabase, name: string): number {

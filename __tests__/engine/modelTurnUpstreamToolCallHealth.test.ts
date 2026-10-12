@@ -4,7 +4,6 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { executeAgentControlGraphModelTurnStreaming } from '../../src/engine/graph/modelTurnExecutionStreaming';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import {
   _resetUpstreamToolCallHealthForTests,
   getExcludedUpstreams,
@@ -49,7 +48,6 @@ async function turnServedBy(upstream: string, toolCallId: string): Promise<void>
         ]),
       ),
     },
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     recordPerformanceMetrics: jest.fn(),
     reportUsage: jest.fn(),
     requestMessages: [{ role: 'user', content: 'Plan it' }],

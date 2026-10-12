@@ -32,7 +32,6 @@ export const EFFECT_DISPATCH_BLOCK_REASONS = [
   'stale_authority',
   'approval_not_granted',
   'permission_not_granted',
-  'authorization_expired',
   'unsafe_idempotency_contract',
 ] as const;
 
@@ -67,7 +66,6 @@ export interface EffectDispatchSnapshot {
   planningCheckpoint: ExecutionCheckpointRecord;
   authorityCheckpoint: ExecutionCheckpointRecord;
   latestCheckpointId: string;
-  authorizationExpiresAt: number | null;
 }
 
 export interface AtomicEffectDispatchClaimCandidate {
@@ -82,7 +80,6 @@ export interface AtomicEffectDispatchClaimCandidate {
   expectedPlanningCheckpointId: string;
   expectedLatestCheckpointId: string;
   expectedAuthoritySequence: number;
-  authorizationExpiresAt: number | null;
   evaluatedAt: number;
 }
 
@@ -170,8 +167,7 @@ function snapshotOwnsExactEffect(snapshot: EffectDispatchSnapshot): boolean {
     authorityCheckpoint.createdAt >= effect.createdAt &&
     authorityCheckpoint.id === snapshot.latestCheckpointId &&
     run.updatedAt >= authorityCheckpoint.createdAt &&
-    run.updatedAt >= effect.updatedAt &&
-    (snapshot.authorizationExpiresAt === null || isSafeTimestamp(snapshot.authorizationExpiresAt))
+    run.updatedAt >= effect.updatedAt
   );
 }
 
@@ -230,7 +226,7 @@ export function planEffectDispatch(input: {
     return { kind: 'blocked', reason: 'identity_mismatch' };
   }
 
-  const { run, effect, authorityCheckpoint, authorizationExpiresAt } = input.snapshot;
+  const { run, effect, authorityCheckpoint } = input.snapshot;
   if (effect.status !== 'planned') {
     return { kind: 'blocked', reason: 'effect_already_started' };
   }
@@ -259,9 +255,6 @@ export function planEffectDispatch(input: {
   if (!isGrantedAuthorityState(authorityCheckpoint.permissionState)) {
     return { kind: 'blocked', reason: 'permission_not_granted' };
   }
-  if (authorizationExpiresAt !== null && input.evaluatedAt >= authorizationExpiresAt) {
-    return { kind: 'blocked', reason: 'authorization_expired' };
-  }
   if (!hasSafeIdempotencyContract(effect)) {
     return { kind: 'blocked', reason: 'unsafe_idempotency_contract' };
   }
@@ -280,7 +273,6 @@ export function planEffectDispatch(input: {
       expectedPlanningCheckpointId: input.snapshot.planningCheckpoint.id,
       expectedLatestCheckpointId: authorityCheckpoint.id,
       expectedAuthoritySequence: authorityCheckpoint.sequence,
-      authorizationExpiresAt,
       evaluatedAt: input.evaluatedAt,
     },
   };

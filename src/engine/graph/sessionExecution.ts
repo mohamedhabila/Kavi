@@ -11,11 +11,6 @@ import {
   isSessionMemoryReadCurrent,
   type SessionMemoryRead,
 } from '../../services/memory/memoryAccessGateway';
-import { removeLivingMemoryCompactionMessages } from './modelTurn/memoryPromptDispatchFence';
-import {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  isMemoryPromptEpochExpiredError,
-} from '../authority/modelTurnMemoryPolicyBinding';
 import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { buildRunStoppedMessage } from './runStoppedMessage';
@@ -31,24 +26,18 @@ export interface ExecuteAgentControlGraphSessionParams extends Omit<
   refreshSessionMemory: (workingMessages: ReadonlyArray<Message>) => SessionMemoryRead;
 }
 
-export const MAX_MEMORY_AUTHORITY_REPREPARATIONS_PER_ITERATION = 2;
-export const MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON = 'memory_authority_unstable';
-
 export async function executeAgentControlGraphSession(
   params: ExecuteAgentControlGraphSessionParams,
 ): Promise<void> {
   let iteration = 1;
-  let authorityRepreparationCount = 0;
   const iterationExtensionSize = params.maxToolIterations;
   let iterationLimit = params.maxToolIterations;
-  let restrictiveRefreshRequested = false;
   let runtime: AgentControlGraphIterationRuntimeState = {
     ...params.initialRuntime,
     workingMessages: [...params.initialRuntime.workingMessages],
   };
   let toolRuntime = params.toolRuntime;
   const finishMaxIterationSession = async (): Promise<void> => {
-    const maxIterationMemoryPolicyBinding = runtime.lastModelTurnMemoryPolicyBinding;
     await params.graph.finishWithGraphTerminalEvent({
       graphEvent: {
         type: 'FINALIZED',
@@ -59,8 +48,6 @@ export async function executeAgentControlGraphSession(
         completionStatus: 'complete',
         finishReason: 'max_iterations',
       }),
-      beforeAssistantDelivery: () =>
-        assertModelTurnMemoryPolicyBindingDurablyCurrent(maxIterationMemoryPolicyBinding),
       sessionEndReason: 'max_iterations',
     });
   };
@@ -98,28 +85,9 @@ export async function executeAgentControlGraphSession(
           }),
       }));
 
-      if (restrictiveRefreshRequested || !isSessionMemoryReadCurrent(runtime.memory)) {
-        if (authorityRepreparationCount >= MAX_MEMORY_AUTHORITY_REPREPARATIONS_PER_ITERATION) {
-          await params.graph.finishWithGraphTerminalEvent({
-            graphEvent: {
-              type: 'BLOCKED',
-              reason: MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON,
-            },
-            content: buildRunStoppedMessage('memory_changed'),
-            assistantMetadata: buildAssistantMessageMetadata('final', {
-              completionStatus: 'incomplete',
-              finishReason: 'response_failed',
-              terminalReason: MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON,
-            }),
-            sessionEndReason: MEMORY_AUTHORITY_UNSTABLE_TERMINAL_REASON,
-          });
-          return;
-        }
-
-        runtime.workingMessages = removeLivingMemoryCompactionMessages(runtime.workingMessages);
+      // Memory turned on or off since the last read applies from this iteration on.
+      if (!isSessionMemoryReadCurrent(runtime.memory)) {
         runtime.memory = params.refreshSessionMemory(runtime.workingMessages);
-        authorityRepreparationCount += 1;
-        restrictiveRefreshRequested = false;
       }
 
       const iterationExecution = await executeAgentControlGraphIteration({
@@ -134,10 +102,6 @@ export async function executeAgentControlGraphSession(
         toolRuntime,
       });
       runtime = iterationExecution.runtime;
-      if (iterationExecution.status === 'retry_current_iteration') {
-        restrictiveRefreshRequested = true;
-        continue;
-      }
       if (iterationExecution.status === 'finalized') {
         return;
       }
@@ -163,30 +127,10 @@ export async function executeAgentControlGraphSession(
         }
       }
       if (iteration === iterationLimit) {
-        try {
-          assertModelTurnMemoryPolicyBindingDurablyCurrent(
-            runtime.lastModelTurnMemoryPolicyBinding,
-          );
-          await finishMaxIterationSession();
-          return;
-        } catch (authorityError: unknown) {
-          if (!isMemoryPromptEpochExpiredError(authorityError)) throw authorityError;
-          params.graph.applyAgentControlGraphEvents([
-            {
-              type: 'MODEL_TURN_INVALIDATED',
-              iteration,
-              reason: 'memory_authority_changed',
-            },
-          ]);
-          params.callbacks.onAssistantStreamReset?.();
-          params.callbacks.onStateChange('thinking');
-          await params.yieldToUiFrame();
-          restrictiveRefreshRequested = true;
-          continue;
-        }
+        await finishMaxIterationSession();
+        return;
       }
       iteration += 1;
-      authorityRepreparationCount = 0;
     }
     await finishMaxIterationSession();
   } catch (error: unknown) {

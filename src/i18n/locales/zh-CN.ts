@@ -243,7 +243,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "这个请求已达到我一次能执行的最多步骤，所以我在全部完成之前停了下来。告诉我你想如何继续，我会从那里接着做。",
       repeatingStep: "我一直在重复同一个步骤却没有进展，所以停了下来。告诉我你想如何继续，我会从那里接着做。",
-      memoryChanged: "在我准备这个回答时，我的记忆发生了多次变化。请重新发送你的消息。",
       noUsableReply: "即使重试后，我也没有从 AI 模型得到可用的回复。请重试，或选择其他模型。",
       noWayToContinue: "我无法完成这个请求，因为在这里没有办法完成剩下的工作。没有把未完成的事情报告为已完成。",
       approvalDeclined: "好的，因为你拒绝了批准，我没有执行该操作。没有做任何更改。",

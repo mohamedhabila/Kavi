@@ -22,10 +22,6 @@ import { parseAgentControlGraphSessionsYieldResult } from './sessionsYield';
 import { shouldExecuteToolBatchInParallel } from './toolBatchExecutionPolicy';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
-import {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
@@ -52,7 +48,6 @@ function describeSkippedToolExecution(reason: string): string {
 
 export async function executeAgentControlGraphToolBatch(params: {
   executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   iteration: number;
   conversationId: string;
   activeProvider: LlmProviderConfig;
@@ -87,7 +82,6 @@ export async function executeAgentControlGraphToolBatch(params: {
   mobileController?: MobileControllerExecutionBinding;
   onBatchCommitted: () => void;
 }): Promise<ToolExecutionOutcome[]> {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   /**
    * Execution is filtered by permission alone, never by what this turn advertised.
    *
@@ -170,7 +164,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       activeTaskId: params.activeTaskId,
       agentRunId: params.agentRunId,
       executionRunId: params.executionRunId,
-      modelTurnMemoryPolicyBinding: params.memoryPolicyBinding,
       beforeEffectDispatch: params.beforeEffectDispatch,
       ...(params.mobileController ? { mobileController: params.mobileController } : {}),
       idPrefixes: {
@@ -213,9 +206,7 @@ export async function executeAgentControlGraphToolBatch(params: {
     params.executableToolCalls,
     params.groundedRequestScopedTools,
   );
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   params.onBatchCommitted();
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
 
   return executeToolExecutionBatch({
     executableToolCalls: params.executableToolCalls,

@@ -54,7 +54,6 @@ describe('buildRunStoppedMessage', () => {
   it.each([
     'step_limit',
     'repeating_step',
-    'memory_changed',
     'no_usable_reply',
     'no_way_to_continue',
     'approval_declined',

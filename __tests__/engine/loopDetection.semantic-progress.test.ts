@@ -29,8 +29,8 @@ const rec = (
 
 describe('blocked preflight retry detection', () => {
   const blocked = (path: string, modelTurnIteration?: number): ToolCallRecord => ({
-    ...rec('read_file', JSON.stringify({ path }), 'model_turn_memory_epoch_expired', 'failed'),
-    preflightBlockedKind: 'authority_revoked',
+    ...rec('read_file', JSON.stringify({ path }), 'tool_filtered', 'failed'),
+    preflightBlockedKind: 'tool_filter',
     ...(modelTurnIteration === undefined ? {} : { modelTurnIteration }),
   });
 
@@ -63,7 +63,7 @@ describe('blocked preflight retry detection', () => {
       ]),
     ).toEqual({
       detected: true,
-      kind: 'authority_revoked',
+      kind: 'tool_filter',
       count: 3,
     });
   });

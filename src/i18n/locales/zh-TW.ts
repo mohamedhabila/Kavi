@@ -243,7 +243,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "這個請求已達到我一次能執行的最多步驟，所以我在全部完成之前停了下來。告訴我你想如何繼續，我會從那裡接著做。",
       repeatingStep: "我一直在重複同一個步驟卻沒有進展，所以停了下來。告訴我你想如何繼續，我會從那裡接著做。",
-      memoryChanged: "在我準備這個回答時，我的記憶發生了多次變化。請重新傳送你的訊息。",
       noUsableReply: "即使重試後，我也沒有從 AI 模型得到可用的回覆。請重試，或選擇其他模型。",
       noWayToContinue: "我無法完成這個請求，因為在這裡沒有辦法完成剩下的工作。沒有把未完成的事情回報為已完成。",
       approvalDeclined: "好的，因為你拒絕了核准，我沒有執行該操作。沒有做任何變更。",

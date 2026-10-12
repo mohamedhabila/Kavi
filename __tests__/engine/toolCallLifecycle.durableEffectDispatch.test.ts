@@ -42,7 +42,6 @@ import {
 } from '../../src/services/skills/manager';
 import type { ToolDefinition } from '../../src/types/tool';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -97,7 +96,6 @@ function lifecycle(onToolCallComplete = jest.fn()): ToolExecutionLifecycleParams
     usePerformanceMetrics: false,
     agentRunId: 'agent-run-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     idPrefixes: {
       blocked: 'blocked',
       filtered: 'filtered',
@@ -226,7 +224,6 @@ describe('production tool lifecycle durable effect wiring', () => {
       {
         toolCallId: 'tool-call-memory-rejected',
         executionRunId: 'execution-run-memory-rejected',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
       },
     );
@@ -287,7 +284,6 @@ describe('production tool lifecycle durable effect wiring', () => {
       {
         toolCallId: 'tool-call-memory-invalid-arguments',
         executionRunId: 'execution-run-memory-invalid-arguments',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
       },
     );
@@ -326,7 +322,6 @@ describe('production tool lifecycle durable effect wiring', () => {
       {
         toolCallId: 'tool-call-cron-rejected',
         executionRunId: 'execution-run-cron-rejected',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
       },
     );
@@ -367,7 +362,6 @@ describe('production tool lifecycle durable effect wiring', () => {
       'conversation-1',
       {
         toolCallId: 'tool-call-missing-execution-run',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         finalizeEffectReceiptCapture,
       },
     );
@@ -397,7 +391,6 @@ describe('production tool lifecycle durable effect wiring', () => {
       expect(context).not.toHaveProperty('captureEffectReceipt');
       expect(context).not.toHaveProperty('finalizeEffectReceiptCapture');
       expect(context).toHaveProperty('executionSignal', undefined);
-      expect(context).not.toHaveProperty('modelTurnMemoryPolicyBinding');
       // Identity is provenance, not authority; the explicit recall grant binds to it.
       expect(context).toHaveProperty('toolCallId');
       expect(

@@ -7,7 +7,6 @@
 
 import type { Message } from '../../../src/types/message';
 import type { ToolDefinition } from '../../../src/types/tool';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 export const tools: ToolDefinition[] = [
   {
@@ -59,7 +58,6 @@ export function createParams(overrides: Record<string, unknown> = {}) {
         arguments: '{"queries":["OpenAI structured outputs developer guide"]}',
       },
     ],
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     iteration: 2,
     conversationId: 'conv-1',
     activeProvider: {

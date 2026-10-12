@@ -51,7 +51,6 @@ function memoryRead() {
   return {
     status: 'read' as const,
     policyEpoch: getMemoryPolicyEpoch(),
-    authoritySnapshot: {} as never,
     section: { text: 'private memory prompt section', itemIds: ['item-1'], turnIds: [] },
   };
 }

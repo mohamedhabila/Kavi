@@ -20,11 +20,6 @@ import type {
 import { upsertPendingToolCall } from '../orchestratorToolTranscript';
 import { createModelProjectionPublisher } from './modelTurnProjectionPublisher';
 import {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  MemoryPromptEpochExpiredError,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
-import {
   createModelTurnActivityGuard,
   FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
   normalizeModelTurnActivityError,
@@ -85,7 +80,6 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
   params: {
     budgetTools: ReadonlyArray<ToolDefinition>;
     geminiNative: boolean;
-    memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
     requestMessages: Array<{ role: string; content: any }>;
     streamOptions: Record<string, any>;
   } & ReturnType<typeof pickCalibrationInputs> &
@@ -117,8 +111,6 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
   });
   const projectionPublisher = createModelProjectionPublisher({
     callbacks: params.callbacks,
-    memoryPolicyBinding: params.memoryPolicyBinding,
-    onInvalidated: () => undefined,
   });
   const activityGuard = createModelTurnActivityGuard(
     params.signal?.signal,
@@ -164,7 +156,6 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
         ...(upstreamProvider ? { upstreamProvider } : {}),
       });
     }
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     const choice = isPlainRecord(response?.choices?.[0]) ? response.choices[0] : undefined;
     const message = isPlainRecord(choice?.message) ? choice.message : {};
     const fullContent = typeof message.content === 'string' ? message.content : '';
@@ -204,7 +195,6 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
       requestMessages: params.requestMessages,
       budgetTools: params.budgetTools,
     });
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     params.recordPerformanceMetrics(
       {
         modelTurnCount: 1,
@@ -229,9 +219,6 @@ export async function executeAgentControlGraphModelTurnViaSendMessage(
     };
   } catch (error: unknown) {
     const effectiveError = normalizeModelTurnActivityError(error, activityGuard);
-    if (effectiveError instanceof MemoryPromptEpochExpiredError) {
-      projectionPublisher.invalidate();
-    }
     usageTracker.flush({
       allowFallback: false,
       requestMessages: params.requestMessages,

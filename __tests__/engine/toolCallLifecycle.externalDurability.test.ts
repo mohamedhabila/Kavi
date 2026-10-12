@@ -3,7 +3,6 @@ import { executeTool } from '../../src/engine/tools';
 import { observeExternalToolResultDurability } from '../../src/services/executionJournal/externalToolDurabilityLifecycle';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 jest.mock('../../src/services/events/bus', () => ({ emitAgentEvent: jest.fn() }));
 jest.mock('../../src/engine/tools', () => ({ executeTool: jest.fn() }));
@@ -56,7 +55,6 @@ function lifecycle(onToolCallComplete = jest.fn()): ToolExecutionLifecycleParams
     usePerformanceMetrics: false,
     agentRunId: 'agent-run-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     idPrefixes: {
       blocked: 'blocked',
       filtered: 'filtered',

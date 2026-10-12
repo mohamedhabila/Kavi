@@ -83,19 +83,6 @@ export function createAgentControlGraphActions() {
         };
       },
     ),
-    recordModelTurnInvalidated: assignAgentControlGraph(
-      ({ context, event }: AgentControlGraphAssignArgs) => {
-        if (event.type !== 'MODEL_TURN_INVALIDATED') {
-          return {};
-        }
-        return {
-          expectedToolCalls: [],
-          observedToolResults: [],
-          updatedAt: getTimestamp(event),
-          audit: appendAudit(context.audit, event, event.reason),
-        };
-      },
-    ),
     recordToolResult: assignAgentControlGraph(({ context, event }: AgentControlGraphAssignArgs) => {
       if (event.type !== 'TOOL_RESULT_RECORDED') {
         return {};

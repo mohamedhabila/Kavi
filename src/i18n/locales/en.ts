@@ -254,7 +254,6 @@ export const en: TranslationMap = {
     runStopped: {
       stepLimit: "I stopped because this request reached the most steps I can take at once, before everything was finished. Tell me how you'd like to continue and I'll pick it up from there.",
       repeatingStep: "I stopped because I was repeating the same step without making progress. Tell me how you'd like to continue and I'll pick it up from there.",
-      memoryChanged: "My memory changed several times while I was preparing this answer. Please send your message again.",
       noUsableReply: "I couldn't get a usable reply from the AI model, even after trying again. Please retry, or choose a different model.",
       noWayToContinue: "I couldn't finish this request because I have no way to do the remaining work here. Nothing was reported as done that wasn't.",
       approvalDeclined: "Okay, I didn't do that because you declined the approval. Nothing was changed.",

@@ -1,21 +1,17 @@
 import type { Message } from '../../types/message';
 import { prepareMemoryPromptSection, type MemoryPromptSection } from './core/memoryPrompt';
 import { captureMemoryReadEpoch, getMemoryPolicyEpoch } from './policy';
-import { captureMemoryAuthoritySnapshot, type MemoryAuthoritySnapshot } from './memoryAuthority';
 
 /**
  * What one request read from memory for its prompt, under the memory policy generation
  * (`policyEpoch`) current when it read: turning memory on or off advances the generation.
+ * `unavailable` is a read that failed; the request goes on without memory.
  */
 export type SessionMemoryRead = Readonly<
   { policyEpoch: number } & (
     | { status: 'off' }
     | { status: 'unavailable' }
-    | {
-        status: 'read';
-        authoritySnapshot: MemoryAuthoritySnapshot;
-        section: MemoryPromptSection | null;
-      }
+    | { status: 'read'; section: MemoryPromptSection | null }
   )
 >;
 
@@ -26,13 +22,10 @@ export function readSessionMemory(
 ): SessionMemoryRead {
   const policyEpoch = getMemoryPolicyEpoch();
   if (captureMemoryReadEpoch() === null) return { status: 'off', policyEpoch };
-  const authoritySnapshot = captureMemoryAuthoritySnapshot();
-  if (!authoritySnapshot) return { status: 'unavailable', policyEpoch };
   const userMessages = messages.filter((message) => message.role === 'user');
   return {
     status: 'read',
     policyEpoch,
-    authoritySnapshot,
     section: prepareMemoryPromptSection({
       conversationId,
       latestUserMessage: userMessages[userMessages.length - 1]?.content ?? '',

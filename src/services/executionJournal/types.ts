@@ -211,7 +211,6 @@ export interface ExecutionEffectRecord {
   idempotencyClass: ExecutionIdempotencyClass;
   idempotencyKeyDigest: string | null;
   requestDigest: string;
-  modelAuthorityValidUntil: number | null;
   outcomeDigest: string | null;
   status: ExecutionEffectStatus;
   retryPolicy: ExecutionRetryPolicy;

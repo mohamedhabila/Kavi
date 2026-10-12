@@ -22,28 +22,13 @@ jest.mock('../../src/services/context/tokenOptimization', () => {
 const mockedPrepareAgentTurn = jest.mocked(prepareAgentTurn);
 const mockedPlanIterationModel = jest.mocked(planIterationModel);
 
-const mockAdmittedMemoryAuthoritySnapshot = {
-  processEpochs: { restrictive: 0, projection: 0 },
-  restrictiveRevision: { kind: 'restrictive', memoryOwnerId: 'owner', value: 0 },
-  projectionRevision: { kind: 'projection', memoryOwnerId: 'owner', value: 0 },
-  policy: { enabled: true, revision: 0 },
-} as const;
-
 function memoryRead(text: string, policyEpoch: number) {
   return {
     status: 'read' as const,
     policyEpoch,
-    authoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
     section: { text, itemIds: [], turnIds: [] },
   };
 }
-
-jest.mock('../../src/services/memory/memoryAuthority', () => ({
-  ...jest.requireActual('../../src/services/memory/memoryAuthority'),
-  captureMemoryAuthoritySnapshot: jest.fn(() => mockAdmittedMemoryAuthoritySnapshot),
-  isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn(() => true),
-  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn(() => true),
-}));
 
 jest.mock('../../src/services/memory/policy', () => ({
   ...jest.requireActual('../../src/services/memory/policy'),
@@ -300,7 +285,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     } as any);
     mockPreparedTurn();
 
-    const result = await prepareAgentControlGraphModelTurn({
+    await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
@@ -326,7 +311,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
         }),
       }),
     );
-    expect(result.preparedTurn.memoryReadFence).toMatchObject({ readEpoch: 0 });
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
@@ -396,43 +380,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
         }),
       }),
     );
-  });
-
-  it('carries the exact admitted memory authority to the dispatch boundary', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
-    mockedPrepareAgentTurn.mockImplementation((input) => {
-      const hasMemory = Boolean(input.promptBundleContext.memorySection);
-      return {
-        enrichedSystemPrompt: hasMemory ? 'System with private memory' : 'Memory-free system',
-        enrichedSystemPromptSections: [
-          { text: hasMemory ? 'System with private memory' : 'Memory-free system' },
-        ],
-        pinnedToolNames: [],
-        selectedToolTokenEstimate: 0,
-        selectedTools: [writeTool],
-        toolsForIteration: [writeTool],
-      };
-    });
-
-    const result = await prepareAgentControlGraphModelTurn({
-      ...createBaseParams(),
-      promptContextSupport: {
-        ...createBaseParams().promptContextSupport,
-        memory: memoryRead('Private memory', 0),
-      },
-    });
-
-    expect(result.preparedTurn.enrichedSystemPrompt).toBe('System with private memory');
-    expect(result.preparedTurn.memoryReadFence).toMatchObject({
-      readEpoch: 0,
-      memoryAuthoritySnapshot: mockAdmittedMemoryAuthoritySnapshot,
-    });
-    expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
   it('drops the memory section from the model prompt when its read epoch is stale', async () => {

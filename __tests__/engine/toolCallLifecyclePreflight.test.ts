@@ -1,6 +1,5 @@
 import { resolveToolCallPreflight } from '../../src/engine/toolExecution/toolCallLifecyclePreflight';
 import { validateToolArgumentsAgainstSchema } from '../../src/engine/toolExecution/toolArgumentSchemaValidation';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolCallRecord } from '../../src/engine/loopDetection';
 import { MEMORY_REMEMBER_TOOL } from '../../src/engine/tools/builtin-definitions-memory';
@@ -71,7 +70,6 @@ function buildLifecycle(
     conversationId: 'conv-1',
     provider: { id: 'p1', name: 'Test', apiKey: 'k', baseUrl: 'https://example.com', models: [] },
     model: 'test-model',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     availableToolNames: new Set(['update_plan']),
     runtimeToolAvailability: {
       hasWorkspaceTargets: false,

@@ -1,5 +1,5 @@
 import type * as SQLite from 'expo-sqlite';
-import { getExecutionJournalDb, quarantineExecutionJournalDb } from './database';
+import { getExecutionJournalDb } from './database';
 import type {
   AtomicEffectDispatchClaimResult,
   AtomicEffectDispatchSettlementResult,
@@ -23,8 +23,6 @@ import {
   type ToolEffectDispatchJournalPlan,
 } from './toolEffectDispatchJournalState';
 import type { ExecutionEffectRecord, ExecutionRunRecord } from './types';
-import { getSchemaReadyMemoryDb } from '../memory/access/schemaGuard';
-import type { DurableModelEffectAuthority } from '../../engine/authority/modelTurnMemoryPolicyBinding';
 import {
   insertEffectReceipt,
   readStoredEffectReceipt,
@@ -41,122 +39,12 @@ export interface ToolEffectDispatchAuthority {
 
 export interface ToolEffectDispatchStoreOptions {
   getDatabase?: () => SQLite.SQLiteDatabase;
-  getMemoryDatabase?: () => SQLite.SQLiteDatabase;
-  quarantineDatabase?: (database: SQLite.SQLiteDatabase) => void;
   now?: () => number;
 }
 
 export interface PreparedToolEffectDispatchJournal<TDeferred extends object = never> {
   identity: EffectDispatchIdentity;
   ports: EffectDispatchPorts<TDeferred>;
-}
-
-const MEMORY_EFFECT_AUTHORITY_SCHEMA = 'memory_effect_authority';
-
-function attachMemoryEffectAuthorityDatabase(
-  database: SQLite.SQLiteDatabase,
-  memoryDatabase: SQLite.SQLiteDatabase,
-): void {
-  if (
-    typeof memoryDatabase.databasePath !== 'string' ||
-    memoryDatabase.databasePath.length === 0 ||
-    memoryDatabase.databasePath === database.databasePath
-  ) {
-    throw new Error('effect_dispatch_memory_database_path_invalid');
-  }
-  const alreadyAttached = database
-    .getAllSync<{ name: string }>('PRAGMA database_list')
-    .some((entry) => entry.name === MEMORY_EFFECT_AUTHORITY_SCHEMA);
-  if (alreadyAttached) {
-    throw new Error('effect_dispatch_memory_database_already_attached');
-  }
-  database.runSync(
-    `ATTACH DATABASE ? AS ${MEMORY_EFFECT_AUTHORITY_SCHEMA}`,
-    memoryDatabase.databasePath,
-  );
-}
-
-function detachMemoryEffectAuthorityDatabase(database: SQLite.SQLiteDatabase): void {
-  database.execSync(`DETACH DATABASE ${MEMORY_EFFECT_AUTHORITY_SCHEMA}`);
-}
-
-type ImmediateTransactionAttempt<T> =
-  | Readonly<{ kind: 'completed'; result: T }>
-  | Readonly<{ kind: 'not_committed'; error: unknown }>
-  | Readonly<{ kind: 'outcome_unknown'; error: unknown }>;
-
-/**
- * Distinguish a transaction that definitely did not commit from an uncertain
- * COMMIT/ROLLBACK outcome. Only the former may be followed by journal-only
- * cancellation on a clean, detached connection.
- */
-function attemptImmediateTransaction<T>(
-  database: SQLite.SQLiteDatabase,
-  work: () => T,
-): ImmediateTransactionAttempt<T> {
-  try {
-    database.execSync('BEGIN IMMEDIATE');
-  } catch (error) {
-    return { kind: 'not_committed', error };
-  }
-
-  let result: T;
-  try {
-    result = work();
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-      return { kind: 'not_committed', error };
-    } catch {
-      return { kind: 'outcome_unknown', error };
-    }
-  }
-
-  try {
-    database.execSync('COMMIT');
-    return { kind: 'completed', result };
-  } catch (error) {
-    try {
-      database.execSync('ROLLBACK');
-      return { kind: 'not_committed', error };
-    } catch {
-      return { kind: 'outcome_unknown', error };
-    }
-  }
-}
-
-function lockAndValidateMemoryEffectAuthority(
-  database: SQLite.SQLiteDatabase,
-  authority: Extract<DurableModelEffectAuthority, { kind: 'memory_epoch' }>,
-  observedAt: number,
-): 'current' | 'changed' | 'expired' {
-  const lock = database.runSync(
-    `UPDATE ${MEMORY_EFFECT_AUTHORITY_SCHEMA}.memory_vault_identity
-        SET created_at = created_at
-      WHERE singleton = 1`,
-  );
-  if (lock.changes !== 1) return 'changed';
-  const vault = database.getFirstSync<{
-    owner_id: unknown;
-    restrictive_authority_revision: unknown;
-    memory_policy_enabled: unknown;
-    memory_policy_revision: unknown;
-  }>(
-    `SELECT owner_id, restrictive_authority_revision, memory_policy_enabled, memory_policy_revision
-      FROM ${MEMORY_EFFECT_AUTHORITY_SCHEMA}.memory_vault_identity
-      WHERE singleton = 1`,
-  );
-  if (!vault) return 'changed';
-  if (
-    vault.owner_id !== authority.memoryOwnerId ||
-    vault.restrictive_authority_revision !== authority.restrictiveRevision ||
-    vault.memory_policy_enabled !== 1 ||
-    vault.memory_policy_revision !== authority.memoryPolicyRevision
-  ) {
-    return 'changed';
-  }
-  if (authority.validUntil !== null && observedAt >= authority.validUntil) return 'expired';
-  return 'current';
 }
 
 function claimTokenFor(identity: EffectDispatchIdentity): string {
@@ -191,8 +79,7 @@ function candidateMatchesSnapshot(
     candidate.expectedEffectUpdatedAt === snapshot.effect.updatedAt &&
     candidate.expectedPlanningCheckpointId === snapshot.planningCheckpoint.id &&
     candidate.expectedLatestCheckpointId === snapshot.authorityCheckpoint.id &&
-    candidate.expectedAuthoritySequence === snapshot.authorityCheckpoint.sequence &&
-    candidate.authorizationExpiresAt === snapshot.authorizationExpiresAt
+    candidate.expectedAuthoritySequence === snapshot.authorityCheckpoint.sequence
   );
 }
 
@@ -357,12 +244,9 @@ function settleStartedEffect(
 
 function makePorts<TDeferred extends object>(input: {
   identity: EffectDispatchIdentity;
-  modelEffectAuthority: DurableModelEffectAuthority;
   authority: ToolEffectDispatchAuthority;
   dispatch(claim: EffectDispatchClaimEvidence): Promise<EffectDispatchCallbackResult<TDeferred>>;
   getDatabase: () => SQLite.SQLiteDatabase;
-  getMemoryDatabase: () => SQLite.SQLiteDatabase;
-  quarantineDatabase: (database: SQLite.SQLiteDatabase) => void;
   now: () => number;
 }): EffectDispatchPorts<TDeferred> {
   const claimToken = claimTokenFor(input.identity);
@@ -398,27 +282,7 @@ function makePorts<TDeferred extends object>(input: {
     const observedAt = input.now();
     if (!Number.isSafeInteger(observedAt) || observedAt < 0) {
       cancelUnclaimedDispatch(database, input.identity, 0);
-      return { kind: 'rejected', reason: 'model_authority_unavailable' };
-    }
-    if (input.modelEffectAuthority.kind === 'memory_epoch') {
-      let validation: ReturnType<typeof lockAndValidateMemoryEffectAuthority>;
-      try {
-        validation = lockAndValidateMemoryEffectAuthority(
-          database,
-          input.modelEffectAuthority,
-          observedAt,
-        );
-      } catch {
-        cancelUnclaimedDispatch(database, input.identity, observedAt);
-        return { kind: 'rejected', reason: 'model_authority_unavailable' };
-      }
-      if (validation !== 'current') {
-        cancelUnclaimedDispatch(database, input.identity, observedAt);
-        return {
-          kind: 'rejected',
-          reason: validation === 'expired' ? 'model_authority_expired' : 'model_authority_changed',
-        };
-      }
+      return { kind: 'rejected', reason: 'journal_unavailable' };
     }
     const snapshot = readToolEffectDispatchSnapshot(database, input.identity);
     const existing = existingClaim(input.identity, snapshot.effect);
@@ -459,14 +323,6 @@ function makePorts<TDeferred extends object>(input: {
       snapshot.effect.updatedAt,
       observedAt,
     );
-    if (
-      input.modelEffectAuthority.kind === 'memory_epoch' &&
-      input.modelEffectAuthority.validUntil !== null &&
-      claimedAt >= input.modelEffectAuthority.validUntil
-    ) {
-      cancelUnclaimedDispatch(database, input.identity, claimedAt);
-      return { kind: 'rejected', reason: 'model_authority_expired' };
-    }
     const effectUpdate = database.runSync(
       `UPDATE execution_effects
        SET status = 'started', started_at = ?, updated_at = ?
@@ -523,39 +379,7 @@ function makePorts<TDeferred extends object>(input: {
         return rejectAndCancel('control_epoch_changed');
       }
       const database = input.getDatabase();
-      if (input.modelEffectAuthority.kind === 'policy_independent') {
-        return withImmediateTransaction(database, () =>
-          claimWithinTransaction(database, candidate),
-        );
-      }
-      let memoryDatabase: SQLite.SQLiteDatabase;
-      try {
-        memoryDatabase = input.getMemoryDatabase();
-      } catch {
-        return rejectAndCancel('model_authority_unavailable');
-      }
-      try {
-        attachMemoryEffectAuthorityDatabase(database, memoryDatabase);
-      } catch {
-        input.quarantineDatabase(database);
-        return rejectAndCancel('model_authority_unavailable');
-      }
-
-      const attempt = attemptImmediateTransaction(database, () =>
-        claimWithinTransaction(database, candidate),
-      );
-      try {
-        detachMemoryEffectAuthorityDatabase(database);
-      } catch (error) {
-        input.quarantineDatabase(database);
-        throw error;
-      }
-      if (attempt.kind === 'completed') return attempt.result;
-      if (attempt.kind === 'outcome_unknown') {
-        input.quarantineDatabase(database);
-        throw attempt.error;
-      }
-      return rejectAndCancel('journal_unavailable');
+      return withImmediateTransaction(database, () => claimWithinTransaction(database, candidate));
     },
     dispatch: input.dispatch,
     settle: async (
@@ -662,8 +486,6 @@ export function prepareToolEffectDispatchJournal<TDeferred extends object = neve
   options: ToolEffectDispatchStoreOptions = {},
 ): PreparedToolEffectDispatchJournal<TDeferred> {
   const getDatabase = options.getDatabase ?? getExecutionJournalDb;
-  const getMemoryDatabase = options.getMemoryDatabase ?? getSchemaReadyMemoryDb;
-  const quarantineDatabase = options.quarantineDatabase ?? quarantineExecutionJournalDb;
   const now = options.now ?? Date.now;
   const database = getDatabase();
   prepareToolEffectDispatchState(database, plan);
@@ -671,12 +493,9 @@ export function prepareToolEffectDispatchJournal<TDeferred extends object = neve
     identity: plan.identity,
     ports: makePorts({
       identity: plan.identity,
-      modelEffectAuthority: plan.modelEffectAuthority,
       authority,
       dispatch,
       getDatabase,
-      getMemoryDatabase,
-      quarantineDatabase,
       now,
     }),
   };

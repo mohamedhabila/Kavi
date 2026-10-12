@@ -12,18 +12,12 @@ import type {
 } from './iterationExecutionTypes';
 import type { PendingAgentToolCall } from './modelTurnExecution';
 import type { PreparedAgentControlGraphModelTurnReady } from './prepareAgentControlGraphModelTurn';
-import {
-  assertModelTurnMemoryPolicyBindingCurrent,
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
 
 export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
   modelTurnPreparation: PreparedAgentControlGraphModelTurnReady;
   runtime: AgentControlGraphIterationRuntimeState;
   fullContent: string;
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
   completion?: AssistantCompletionMetadata;
@@ -37,11 +31,8 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
     providerReplay?: MessageProviderReplay;
     completion?: AssistantCompletionMetadata;
     pendingToolCalls: ReadonlyArray<PendingAgentToolCall>;
-    memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   }) => Promise<ExecuteAgentControlGraphIterationResult['status']>;
 }): Promise<ExecuteAgentControlGraphIterationResult['status']> {
-  assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
-  let modelTurnCommitted = false;
   const continuationPrefix =
     params.iterationParams.graph.getCurrentTurnDirectives().incompleteFinalTextContinuationPrefix;
   const turnAssistantContent = continuationPrefix
@@ -77,7 +68,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
       ),
       workingMessages: params.runtime.workingMessages,
       commitModelTurn: () => {
-        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
         params.iterationParams.graph.applyAgentControlGraphEvents([
           {
             type: 'MODEL_TURN_COMPLETED',
@@ -85,41 +75,22 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
             toolCalls: [],
           },
         ]);
-        modelTurnCommitted = true;
       },
       applyGraphEvents: params.iterationParams.graph.applyAgentControlGraphEvents,
       resetIncompleteFinalTextRecovery:
         params.iterationParams.graph.resetIncompleteFinalTextRecovery,
       recordTurnDirectives: params.iterationParams.graph.recordTurnDirectives,
-      finishWithGraphFinalCandidateEvent: async (finalParams) => {
-        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-        return params.iterationParams.graph.finishWithGraphFinalCandidateEvent({
-          ...finalParams,
-          beforeAssistantDelivery: () =>
-            assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
-        });
-      },
-      finishWithGraphTerminalEvent: async (terminalParams) => {
-        assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-        return params.iterationParams.graph.finishWithGraphTerminalEvent({
-          ...terminalParams,
-          beforeAssistantDelivery: () =>
-            assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
-        });
-      },
+      finishWithGraphFinalCandidateEvent:
+        params.iterationParams.graph.finishWithGraphFinalCandidateEvent,
+      finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
       onContinueThinking: async () => {
-        assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
         params.iterationParams.callbacks.onStateChange('thinking');
         await params.iterationParams.yieldToUiFrame();
-        assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
       },
       onFinalizationHeld: params.iterationParams.onFinalizationHeld,
     });
     if (noToolTurnResolution.status === 'finalized') {
       return 'finalized';
-    }
-    if (!modelTurnCommitted) {
-      assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
     }
     params.runtime.consecutivePendingAsyncNoToolTurns =
       noToolTurnResolution.nextConsecutivePendingAsyncNoToolTurns;
@@ -132,7 +103,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
     reasoning: params.reasoning,
     providerReplay: params.providerReplay,
     completion: params.completion,
-    memoryPolicyBinding: params.memoryPolicyBinding,
     pendingToolCalls: executableToolCalls,
   });
 }

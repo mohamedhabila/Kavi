@@ -263,7 +263,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "Je me suis arrêté car cette demande a atteint le nombre maximal d'étapes que je peux enchaîner, avant que tout soit terminé. Dites-moi comment continuer et je reprendrai à partir de là.",
       repeatingStep: "Je me suis arrêté car je répétais la même étape sans progresser. Dites-moi comment continuer et je reprendrai à partir de là.",
-      memoryChanged: "Ma mémoire a changé plusieurs fois pendant que je préparais cette réponse. Veuillez renvoyer votre message.",
       noUsableReply: "Je n'ai pas obtenu de réponse exploitable du modèle d'IA, même après plusieurs essais. Réessayez ou choisissez un autre modèle.",
       noWayToContinue: "Je n'ai pas pu terminer cette demande car je n'ai aucun moyen d'effectuer le travail restant ici. Rien n'a été présenté comme fait sans l'être.",
       approvalDeclined: "D'accord, je ne l'ai pas fait car vous avez refusé l'autorisation. Rien n'a été modifié.",

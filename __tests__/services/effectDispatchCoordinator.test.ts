@@ -44,7 +44,6 @@ describe('exactly-once effect dispatch coordinator', () => {
         expectedRunUpdatedAt: 14,
         expectedEffectUpdatedAt: 13,
         expectedLatestCheckpointId: 'checkpoint-authority',
-        authorizationExpiresAt: 30,
       }),
     );
     expect(test.calls.dispatches).toEqual([claimFor(test.identity)]);
@@ -353,7 +352,7 @@ describe('exactly-once effect dispatch coordinator', () => {
     expect(test.calls.dispatches).toHaveLength(0);
   });
 
-  it.each(['authorization_expired', 'generation_changed'] as const)(
+  it.each(['generation_changed'] as const)(
     'honors atomic claim rejection after the read: %s',
     async (reason) => {
       const test = harness({ claimResult: { kind: 'rejected', reason } });
@@ -393,21 +392,6 @@ describe('exactly-once effect dispatch coordinator', () => {
   it('fails closed on an unknown claim result variant', async () => {
     const test = harness();
     test.ports.claimAndStart = async () => ({ kind: 'legacy_claimed' }) as never;
-
-    await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
-      kind: 'reconciliation_required',
-      reason: 'claim_contract_violation',
-    });
-    expect(test.calls.dispatches).toHaveLength(0);
-  });
-
-  it('rejects a claim acquired at the authorization expiry boundary', async () => {
-    const test = harness({
-      claimResult: {
-        kind: 'claimed',
-        claim: { ...claimFor(dispatchFixture().identity), claimedAt: 30 },
-      },
-    });
 
     await expect(dispatchEffectExactlyOnce(test.identity, test.ports)).resolves.toEqual({
       kind: 'reconciliation_required',

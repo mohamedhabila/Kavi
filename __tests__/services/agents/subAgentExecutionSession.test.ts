@@ -38,7 +38,7 @@ describe('sub-agent execution session', () => {
         name: 'memory_recall',
         arguments: '{}',
         status: 'failed',
-        failureKind: 'authority_revoked',
+        failureKind: 'workflow_guard',
       },
       'failed',
     );
@@ -46,7 +46,7 @@ describe('sub-agent execution session', () => {
     expect(tracked).toMatchObject({
       id: 'call-1',
       status: 'failed',
-      failureKind: 'authority_revoked',
+      failureKind: 'workflow_guard',
     });
   });
 });

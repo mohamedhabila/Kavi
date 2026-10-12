@@ -18,7 +18,6 @@ import { executeTool } from '../../src/engine/tools';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolDefinition } from '../../src/types/tool';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 jest.mock('../../src/services/events/bus', () => ({
   emitAgentEvent: jest.fn(),
@@ -87,7 +86,6 @@ function buildLifecycle(
     conversationId: 'conv-1',
     memoryConversationId: 'memory-conv-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     provider: { id: 'p1', name: 'Test', apiKey: 'k', baseUrl: 'https://example.com', models: [] },
     model: 'test-model',
     availableToolNames: new Set(['calendar_create_event']),

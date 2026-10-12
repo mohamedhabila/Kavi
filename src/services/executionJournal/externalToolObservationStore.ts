@@ -258,7 +258,6 @@ function buildInitialRecords(
       idempotencyClass: 'declared_idempotent',
       idempotencyKeyDigest: identity.locatorDigest,
       requestDigest: identity.requestDigest,
-      modelAuthorityValidUntil: null,
       outcomeDigest: terminalStatus ? identity.resultDigest : null,
       status: terminalStatus ? 'verified' : 'started',
       retryPolicy: 'reconcile_before_retry',
@@ -292,9 +291,9 @@ function insertEffect(database: SQLite.SQLiteDatabase, effect: ExecutionEffectRe
        id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
        tool_contract_identity_digest, effect_class,
        idempotency_class, idempotency_key_digest, request_digest,
-       model_authority_valid_until, outcome_digest,
+       outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
 }

@@ -5,7 +5,6 @@ import {
   type AgentTurnPromptBundleParams,
 } from './agentTurnPromptBundle';
 import { isSessionCoordinationToolName } from '../tools/sessionToolKinds';
-import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
 
 type PromptBundleContext = Omit<
   AgentTurnPromptBundleParams,
@@ -34,13 +33,7 @@ export interface PreparedAgentTurnCore {
   toolsForIteration: ToolDefinition[] | undefined;
 }
 
-export interface PreparedAgentTurn extends PreparedAgentTurnCore {
-  memoryReadFence?: {
-    readEpoch: number;
-    memoryAuthoritySnapshot: MemoryAuthoritySnapshot;
-    validUntil?: number;
-  };
-}
+export type PreparedAgentTurn = PreparedAgentTurnCore;
 
 export function prepareAgentTurn(params: PrepareAgentTurnParams): PreparedAgentTurn {
   const selectedTools =

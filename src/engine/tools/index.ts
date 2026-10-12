@@ -27,7 +27,6 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
-import { canSettleAfterModelAuthorityChange } from '../toolExecution/modelAuthorityIndependentCompletion';
 import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import { executeMobileControllerTool } from '../mobileController/toolExecution';
 import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
@@ -37,10 +36,8 @@ import { classifyNativeTransportErrorIdentity } from '../../services/llm/support
 import {
   buildEffectReconciliationRequiredResult,
   finalizeEffectReceiptCapture,
-  isModelTurnAuthorityCurrent,
   isolateExecutorContext,
   markEffectReconciliationRequired,
-  rejectExpiredModelTurnAuthority,
   resolveMobileControllerPreDispatchReason,
   withEffectDispatchObservation,
   withPreDispatchObservation,
@@ -59,16 +56,6 @@ export async function executeTool(
 ): Promise<ToolExecutionOutcome> {
   const normalizedName = resolveRegisteredToolName(name);
   const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(normalizedName, argsString);
-
-  if (!isModelTurnAuthorityCurrent(context)) {
-    return rejectExpiredModelTurnAuthority({
-      context,
-      normalizedName,
-      argsString,
-      conversationId,
-      effectFreeInvocation,
-    });
-  }
 
   // Permission check
   const permissions = useToolPermissionsStore.getState();
@@ -192,15 +179,6 @@ export async function executeTool(
     mobileControllerApprovalRequest !== undefined ||
     needsApprovalWithContext(normalizedName, parsedArgs);
   if (approvalRequired) {
-    if (!isModelTurnAuthorityCurrent(context)) {
-      return rejectExpiredModelTurnAuthority({
-        context,
-        normalizedName,
-        argsString,
-        conversationId,
-        effectFreeInvocation,
-      });
-    }
     const truncatedArgs = truncateGraphemesWithSuffix(argsString, 200, '…');
     const decision = await requestToolApproval({
       toolName: normalizedName,
@@ -224,15 +202,6 @@ export async function executeTool(
         effectFreeInvocation,
         'user_approval_denied',
       );
-    }
-    if (!isModelTurnAuthorityCurrent(context)) {
-      return rejectExpiredModelTurnAuthority({
-        context,
-        normalizedName,
-        argsString,
-        conversationId,
-        effectFreeInvocation,
-      });
     }
   }
 
@@ -297,10 +266,6 @@ export async function executeTool(
     if (!isCodeOwnedExecutionRunId(executionRunId)) {
       throw new Error('execution_run_identity_invariant_violated');
     }
-    const modelTurnMemoryPolicyBinding = context.modelTurnMemoryPolicyBinding;
-    if (!modelTurnMemoryPolicyBinding) {
-      throw new Error('model_turn_memory_policy_binding_invariant_violated');
-    }
     const dispatched = await dispatchAuthorizedToolEffect({
       conversationId,
       toolCallId: context.toolCallId,
@@ -308,7 +273,6 @@ export async function executeTool(
       argumentsText: argsString,
       context: { ...context, executionRunId },
       approvalState: approvalRequired ? 'granted' : 'not_required',
-      modelTurnMemoryPolicyBinding,
       authority: {
         approvalGranted: () => true,
         permissionGranted: () =>
@@ -383,18 +347,6 @@ export async function executeTool(
         },
       );
     } else {
-      if (
-        dispatched.kind === 'blocked' &&
-        (dispatched.reason === 'model_authority_changed' || !isModelTurnAuthorityCurrent(context))
-      ) {
-        return rejectExpiredModelTurnAuthority({
-          context,
-          normalizedName,
-          argsString,
-          conversationId,
-          effectFreeInvocation: resolvedEffectFreeInvocation,
-        });
-      }
       if (dispatched.kind === 'reconciliation_required') {
         markEffectReconciliationRequired(context);
       }
@@ -420,30 +372,9 @@ export async function executeTool(
 
   let outcome: ToolRuntimeOutcome;
   try {
-    if (!isModelTurnAuthorityCurrent(context)) {
-      return rejectExpiredModelTurnAuthority({
-        context,
-        normalizedName,
-        argsString,
-        conversationId,
-        effectFreeInvocation: resolvedEffectFreeInvocation,
-      });
-    }
     outcome = runtimeExternalBinding
       ? await runtimeExternalBinding.execute(argsString, conversationId, executorContext)
       : await executeToolInner(normalizedName, argsString, conversationId, executorContext);
-    if (
-      !isModelTurnAuthorityCurrent(context) &&
-      !canSettleAfterModelAuthorityChange(normalizedName, outcome)
-    ) {
-      return rejectExpiredModelTurnAuthority({
-        context,
-        normalizedName,
-        argsString,
-        conversationId,
-        effectFreeInvocation: resolvedEffectFreeInvocation,
-      });
-    }
     logToolCall(
       normalizedName,
       argsString,
@@ -485,18 +416,6 @@ export async function executeTool(
         runtimeExternalEvidence,
         failureKind: outcome.status === 'failed' ? outcome.failureKind : undefined,
       });
-      if (
-        !isModelTurnAuthorityCurrent(context) &&
-        !canSettleAfterModelAuthorityChange(normalizedName, outcome)
-      ) {
-        return rejectExpiredModelTurnAuthority({
-          context,
-          normalizedName,
-          argsString,
-          conversationId,
-          effectFreeInvocation: resolvedEffectFreeInvocation,
-        });
-      }
       publishReceipt(receipt);
     } catch {
       // Effect-free tools do not need a durable claim; receipt absence stays fail-closed.

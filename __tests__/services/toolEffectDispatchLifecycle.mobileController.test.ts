@@ -12,7 +12,6 @@ import {
   type AuthorizedToolEffectDispatchInput,
 } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 import { buildMobileControllerDeferredExecution } from '../../src/engine/mobileController/runtimeExecution';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -53,7 +52,6 @@ function input(execute: AuthorizedToolEffectDispatchInput['execute']) {
       executionRunId: 'execution-run-mobile-1',
     },
     approvalState: 'granted' as const,
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: {
       approvalGranted: () => true,
       permissionGranted: () => true,

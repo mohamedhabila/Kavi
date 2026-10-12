@@ -11,7 +11,6 @@ import {
   dispatchAuthorizedToolEffect,
   type AuthorizedToolEffectDispatchInput,
 } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { completedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
@@ -31,7 +30,6 @@ function notificationInput(
       executionRunId: 'execution-run-notification-1',
     },
     approvalState: 'granted',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: {
       approvalGranted: () => true,
       permissionGranted: () => true,

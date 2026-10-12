@@ -246,7 +246,6 @@ const EFFECT_COLUMNS = [
   'idempotency_class',
   'idempotency_key_digest',
   'request_digest',
-  'model_authority_valid_until',
   'outcome_digest',
   'status',
   'retry_policy',
@@ -301,10 +300,6 @@ export function decodeExecutionEffectRow(value: unknown): ExecutionEffectRecord 
       'effect.idempotency_key_digest',
     ),
     requestDigest: requireDigest(row.request_digest, 'effect.request_digest'),
-    modelAuthorityValidUntil: nullableInteger(
-      row.model_authority_valid_until,
-      'effect.model_authority_valid_until',
-    ),
     outcomeDigest: nullableDigest(row.outcome_digest, 'effect.outcome_digest'),
     status,
     retryPolicy: requireEnum(row.retry_policy, EXECUTION_RETRY_POLICIES, 'effect.retry_policy'),

@@ -26,15 +26,11 @@ export const EFFECT_DISPATCH_CLAIM_REJECTION_REASONS = [
   'generation_changed',
   'control_epoch_changed',
   'authority_changed',
-  'authorization_expired',
   'approval_not_granted',
   'permission_not_granted',
   'run_not_executing',
   'effect_not_planned',
   'identity_conflict',
-  'model_authority_changed',
-  'model_authority_expired',
-  'model_authority_unavailable',
   'journal_unavailable',
 ] as const;
 
@@ -216,8 +212,6 @@ function claimMatchesCandidate(
     isEffectDispatchIdentity(claim.identity) &&
     isTimestamp(claim.claimedAt) &&
     claim.claimedAt >= candidate.evaluatedAt &&
-    (candidate.authorizationExpiresAt === null ||
-      claim.claimedAt < candidate.authorizationExpiresAt) &&
     identitiesMatch(claim.identity, candidate.identity)
   );
 }

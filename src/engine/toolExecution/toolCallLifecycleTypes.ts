@@ -7,7 +7,6 @@ import type { RuntimeToolAvailabilityContext } from '../tools/runtimeAvailabilit
 import type { RuntimeToolCallInput } from './toolExecutionMessages';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
-import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { ToolEffectDispatchObservation } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import type { PersistedMobileControllerHandoff } from '../../services/executionJournal/mobileControllerHandoffStore';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
@@ -68,7 +67,6 @@ export type ToolExecutionLifecycleParams = {
   activeTaskId?: string;
   agentRunId?: string;
   executionRunId: string;
-  modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   mobileController?: MobileControllerExecutionBinding;
 };

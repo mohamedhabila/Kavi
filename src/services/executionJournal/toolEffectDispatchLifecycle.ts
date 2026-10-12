@@ -51,11 +51,6 @@ import {
   persistClaimedMobileControllerHandoff,
   type PersistedMobileControllerHandoff,
 } from './mobileControllerHandoffStore';
-import {
-  buildDurableModelEffectAuthority,
-  serializeDurableModelEffectAuthority,
-  type ModelTurnMemoryPolicyBinding,
-} from '../../engine/authority/modelTurnMemoryPolicyBinding';
 
 const SHA256_PREFIX = 'sha256:';
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
@@ -82,7 +77,6 @@ export type AuthorizedToolEffectReconciliationReason =
 
 export type ToolEffectDispatchNotClaimedReason =
   | AuthorizedToolEffectBlockReason
-  | 'model_authority_changed'
   | 'tool_permission_denied'
   | 'tool_unknown'
   | 'tool_arguments_invalid'
@@ -177,7 +171,6 @@ export interface AuthorizedToolEffectDispatchInput {
   argumentsText: string;
   context: ToolExecutionContext & { executionRunId: string };
   approvalState: 'granted' | 'not_required';
-  modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   authority: ToolEffectDispatchAuthority;
   runtimeExternalEvidence?: RuntimeExternalToolEvidence;
   runtimeExternalEffectPolicy?: ToolEffectPolicy;
@@ -293,7 +286,6 @@ async function buildDispatchIdentity(input: {
   toolName: string;
   argumentsText: string;
   context: ToolExecutionContext & { executionRunId: string };
-  modelTurnMemoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   policy: ToolEffectPolicy;
   contractIdentity: ToolContractIdentity;
 }): Promise<{
@@ -303,7 +295,6 @@ async function buildDispatchIdentity(input: {
   initialStateDigest: string;
   planningStateDigest: string;
   authorityStateDigest: string;
-  modelEffectAuthority: ReturnType<typeof buildDurableModelEffectAuthority>;
 }> {
   const requestDigestWithPrefix = await digestToolEffectRequest(input.argumentsText);
   const requestDigest = withoutSha256Prefix(requestDigestWithPrefix);
@@ -381,8 +372,6 @@ async function buildDispatchIdentity(input: {
     idempotencyClassFor(input.policy),
     retryPolicyFor(input.policy),
   ].join('\u0000');
-  const modelEffectAuthority = buildDurableModelEffectAuthority(input.modelTurnMemoryPolicyBinding);
-  const durableAuthorityIdentity = serializeDurableModelEffectAuthority(modelEffectAuthority);
   const [initialStateDigest, planningStateDigest, authorityStateDigest] = await Promise.all([
     digestToolEffectText(
       ['tool-effect-dispatch-state-v2', identity.runId, 'created', durableContractIdentity].join(
@@ -395,13 +384,9 @@ async function buildDispatchIdentity(input: {
       ),
     ).then(withoutSha256Prefix),
     digestToolEffectText(
-      [
-        'tool-effect-dispatch-state-v2',
-        identity.runId,
-        'authority',
-        durableContractIdentity,
-        durableAuthorityIdentity,
-      ].join('\u0000'),
+      ['tool-effect-dispatch-state-v2', identity.runId, 'authority', durableContractIdentity].join(
+        '\u0000',
+      ),
     ).then(withoutSha256Prefix),
   ]);
   return {
@@ -411,7 +396,6 @@ async function buildDispatchIdentity(input: {
     initialStateDigest,
     planningStateDigest,
     authorityStateDigest,
-    modelEffectAuthority,
   };
 }
 
@@ -514,7 +498,6 @@ async function dispatchAuthorizedToolEffectWithinBarrier(
         initialStateDigest: preparedIdentity.initialStateDigest,
         planningStateDigest: preparedIdentity.planningStateDigest,
         authorityStateDigest: preparedIdentity.authorityStateDigest,
-        modelEffectAuthority: preparedIdentity.modelEffectAuthority,
       },
       input.authority,
       async (claim) => {

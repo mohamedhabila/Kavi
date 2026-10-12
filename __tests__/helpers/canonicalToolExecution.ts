@@ -1,5 +1,4 @@
 import type { ToolExecutionContext } from '../../src/engine/tools/toolExecutionContext';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolRuntimeOutcome } from '../../src/types/toolRuntimeOutcome';
 
 export type CanonicalToolExecutor = (
@@ -17,8 +16,6 @@ function canonicalExecutionContext(context?: ToolExecutionContext): ToolExecutio
     ...context,
     toolCallId: context?.toolCallId ?? `test-tool-call-${executionSequence}`,
     executionRunId: context?.executionRunId ?? `test-execution-run-${executionSequence}`,
-    modelTurnMemoryPolicyBinding:
-      context?.modelTurnMemoryPolicyBinding ?? POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
   };
 }
 

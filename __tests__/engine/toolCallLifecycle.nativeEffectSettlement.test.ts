@@ -42,7 +42,6 @@ import {
   SCREEN_RECORD_TOOL,
 } from '../../src/engine/tools/native/media/definitions';
 import { completedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -87,7 +86,6 @@ function nativeLifecycle(definition: ToolDefinition, args: object): ToolExecutio
     usePerformanceMetrics: false,
     agentRunId: 'agent-run-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     idPrefixes: {
       blocked: 'blocked',
       filtered: 'filtered',

@@ -24,7 +24,6 @@ import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
 } from '../../src/services/executionJournal/database';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import { mcpManager } from '../../src/services/mcp/manager';
@@ -71,7 +70,6 @@ function runtimeLifecycle(declaration: ToolDefinition): ToolExecutionLifecyclePa
     usePerformanceMetrics: false,
     agentRunId: 'agent-run-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     idPrefixes: {
       blocked: 'blocked',
       filtered: 'filtered',

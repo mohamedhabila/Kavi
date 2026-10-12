@@ -36,14 +36,11 @@ export function createAgentControlGraphRuntimeTerminal(params: {
     stageEvent: Extract<AgentControlGraphEvent, { type: 'FINAL_CANDIDATE_READY' }>;
     toolCalls?: ToolCall[];
     providerReplay?: MessageProviderReplay;
-    beforeAssistantDelivery?: () => void;
   }): void => {
-    args.beforeAssistantDelivery?.();
     let candidatePublicationStarted = false;
     try {
       candidatePublicationStarted = true;
       params.applyEvents([args.stageEvent]);
-      args.beforeAssistantDelivery?.();
       params.callbacks.onAssistantMessage(
         args.content,
         args.toolCalls ?? [],
@@ -77,7 +74,6 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       metadata: AssistantMessageMetadata;
     };
-    beforeAssistantDelivery?: () => void;
     error?: Error;
   }): Promise<void> => {
     if (args.assistant) {
@@ -90,7 +86,6 @@ export function createAgentControlGraphRuntimeTerminal(params: {
         },
         toolCalls: args.assistant.toolCalls,
         providerReplay: args.assistant.providerReplay,
-        beforeAssistantDelivery: args.beforeAssistantDelivery,
       });
     }
     params.applyEvents([args.graphEvent]);
@@ -113,7 +108,6 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       assistantMetadata: AssistantMessageMetadata;
       sessionEndReason?: string;
-      beforeAssistantDelivery?: () => void;
     }): Promise<void> {
       await finishTerminalRunWithGraphEvent({
         graphEvent: args.graphEvent,
@@ -125,7 +119,6 @@ export function createAgentControlGraphRuntimeTerminal(params: {
           providerReplay: args.providerReplay,
           metadata: args.assistantMetadata,
         },
-        beforeAssistantDelivery: args.beforeAssistantDelivery,
       });
     },
     async finishWithGraphFinalCandidateEvent(args: {
@@ -134,14 +127,12 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       providerReplay?: MessageProviderReplay;
       assistantMetadata: AssistantMessageMetadata;
       sessionEndReason?: string;
-      beforeAssistantDelivery?: () => void;
     }): Promise<void> {
       publishStagedAssistant({
         content: args.content,
         metadata: args.assistantMetadata,
         stageEvent: args.graphEvent,
         providerReplay: args.providerReplay,
-        beforeAssistantDelivery: args.beforeAssistantDelivery,
       });
       params.callbacks.onStateChange('idle');
       await emitSessionEnd(args.sessionEndReason);
@@ -152,17 +143,14 @@ export function createAgentControlGraphRuntimeTerminal(params: {
       content: string;
       assistantMetadata: AssistantMessageMetadata;
       sessionEndReason?: string;
-      beforeAssistantDelivery?: () => void;
     }): Promise<void> {
       let waitStaged = false;
       try {
-        args.beforeAssistantDelivery?.();
         const waitingState = params.applyEvents([args.graphEvent]);
         if (waitingState.status !== 'awaiting_user') {
           throw new Error('agent_control_graph_user_input_wait_transition_failed');
         }
         waitStaged = true;
-        args.beforeAssistantDelivery?.();
         params.callbacks.onAssistantMessage(args.content, [], undefined, args.assistantMetadata);
       } catch (error: unknown) {
         if (waitStaged) {

@@ -5,18 +5,10 @@ import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnT
 import type { ToolDefinition } from '../../../types/tool';
 import type { Message } from '../../../types/message';
 import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../../services/memory/policy';
-import {
-  captureMemoryAuthoritySnapshot,
-  isRestrictiveMemoryAuthoritySnapshotCurrent,
-  isRestrictiveMemoryAuthoritySnapshotDurablyCurrent,
-} from '../../../services/memory/memoryAuthority';
 import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
 import { renderPlanPromptSection } from '../../plan/agentPlan';
-import {
-  filterToolsForMemoryPolicy,
-  isToolAllowedForMemoryPolicy,
-} from '../../tools/memoryPolicyToolAuthority';
+import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
 
 export function buildPreparedModelTurnPrompt(params: {
   actionablePromptTurn: boolean;
@@ -35,21 +27,13 @@ export function buildPreparedModelTurnPrompt(params: {
   workflowRuntimePrompt?: string | null;
   workingMessages: ReadonlyArray<Message>;
 }): PreparedAgentTurn {
-  const currentReadEpoch = captureMemoryReadEpoch();
+  const longTermMemoryEnabled = captureMemoryReadEpoch() !== null;
   const memory = params.promptContextSupport.memory;
-  const memoryRead = memory?.status === 'read' ? memory : undefined;
-  const memoryReadAuthorityCurrent =
-    memoryRead !== undefined &&
-    isRestrictiveMemoryAuthoritySnapshotCurrent(memoryRead.authoritySnapshot) &&
-    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(memoryRead.authoritySnapshot);
-  const currentMemoryAuthoritySnapshot =
-    memoryReadAuthorityCurrent && memoryRead
-      ? memoryRead.authoritySnapshot
-      : currentReadEpoch !== null
-        ? captureMemoryAuthoritySnapshot()
-        : null;
-  const longTermMemoryEnabled =
-    currentReadEpoch !== null && currentMemoryAuthoritySnapshot !== null;
+  // A read from before memory was turned on or off is not shown.
+  const memorySection =
+    memory?.status === 'read' && isMemoryReadEpochCurrent(memory.policyEpoch)
+      ? memory.section?.text
+      : undefined;
   const groundedRequestScopedTools = filterToolsForMemoryPolicy(
     params.groundedRequestScopedTools,
     longTermMemoryEnabled,
@@ -58,26 +42,6 @@ export function buildPreparedModelTurnPrompt(params: {
   const policyAuthorizedPinnedToolNames = params.pinnedToolNames.filter((name) =>
     groundedToolNames.has(name),
   );
-  const hasCallableMemoryCapability =
-    params.actionablePromptTurn &&
-    params.toolingEnabledForProvider &&
-    !params.effectiveForceTextThisTurn &&
-    groundedRequestScopedTools.some((tool) => !isToolAllowedForMemoryPolicy(tool, false));
-  const memoryReadCurrent =
-    memoryRead !== undefined &&
-    isMemoryReadEpochCurrent(memoryRead.policyEpoch) &&
-    memoryReadAuthorityCurrent;
-  const memoryReadEpoch = memoryReadCurrent
-    ? memoryRead.policyEpoch
-    : hasCallableMemoryCapability && currentReadEpoch !== null
-      ? currentReadEpoch
-      : undefined;
-  const memoryAuthoritySnapshot = memoryReadCurrent
-    ? memoryRead.authoritySnapshot
-    : memoryReadEpoch !== undefined
-      ? currentMemoryAuthoritySnapshot
-      : undefined;
-  const memorySection = memoryReadCurrent ? memoryRead.section?.text : undefined;
   const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
   const transcriptCarriesSoleFirstTurnAnchor =
     params.iteration === 1 &&
@@ -115,18 +79,10 @@ export function buildPreparedModelTurnPrompt(params: {
       },
       toolingEnabledForProvider: params.toolingEnabledForProvider,
     });
-  const preparedTurn = prepare({
+  return prepare({
     groundedTools: groundedRequestScopedTools,
     longTermMemoryEnabled,
     pinnedTools: policyAuthorizedPinnedToolNames,
     memorySection,
   });
-  if (memoryReadEpoch === undefined || !memoryAuthoritySnapshot) return preparedTurn;
-  return {
-    ...preparedTurn,
-    memoryReadFence: {
-      readEpoch: memoryReadEpoch,
-      memoryAuthoritySnapshot,
-    },
-  };
 }

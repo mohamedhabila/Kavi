@@ -78,7 +78,6 @@ const FAILURE_KIND_PRESENTATION: Partial<Record<ToolCallFailureKind, ToolCallFai
     timeout: CONNECTION_PRESENTATION,
     rate_limited: CONNECTION_PRESENTATION,
     not_awaited: NOT_AWAITED_PRESENTATION,
-    authority_revoked: STOPPED_PRESENTATION,
     workflow_guard: STOPPED_PRESENTATION,
     aborted: STOPPED_PRESENTATION,
   };

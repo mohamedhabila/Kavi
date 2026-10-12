@@ -3,7 +3,6 @@ import type { PendingAgentToolCall } from '../../src/engine/graph/modelTurnExecu
 import type { ExecuteAgentControlGraphToolTurnParams } from '../../src/engine/graph/toolTurnExecution';
 import type { Message } from '../../src/types/message';
 import type { ToolDefinition } from '../../src/types/tool';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 export const toolTurnExecutionTools: ToolDefinition[] = [
   {
@@ -109,7 +108,6 @@ export function createToolTurnExecutionParams(
     providerReplay: undefined,
     completion: undefined,
     pendingToolCalls: [createPendingToolCall()],
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     workingMessages: [
       {
         id: 'msg_user_1',

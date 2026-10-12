@@ -260,7 +260,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "Me detuve porque esta solicitud alcanzó el máximo de pasos que puedo dar de una vez, antes de terminarlo todo. Dime cómo quieres continuar y seguiré desde ahí.",
       repeatingStep: "Me detuve porque estaba repitiendo el mismo paso sin avanzar. Dime cómo quieres continuar y seguiré desde ahí.",
-      memoryChanged: "Mi memoria cambió varias veces mientras preparaba esta respuesta. Vuelve a enviar tu mensaje, por favor.",
       noUsableReply: "No obtuve una respuesta útil del modelo de IA, ni siquiera tras volver a intentarlo. Vuelve a intentarlo o elige otro modelo.",
       noWayToContinue: "No pude terminar esta solicitud porque aquí no tengo forma de hacer el trabajo restante. No he dado por hecho nada que no lo esté.",
       approvalDeclined: "De acuerdo, no lo hice porque rechazaste la aprobación. No se cambió nada.",

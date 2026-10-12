@@ -58,12 +58,6 @@ export type AgentControlGraphEvent =
       timestamp?: number;
     }
   | {
-      type: 'MODEL_TURN_INVALIDATED';
-      iteration: number;
-      reason: 'memory_authority_changed';
-      timestamp?: number;
-    }
-  | {
       type: 'TOOL_RESULT_RECORDED';
       result: AgentControlToolResultRef;
       timestamp?: number;

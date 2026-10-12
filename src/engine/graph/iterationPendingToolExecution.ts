@@ -8,15 +8,12 @@ import type {
 import type { PendingAgentToolCall } from './modelTurnExecution';
 import type { PreparedAgentControlGraphModelTurnReady } from './prepareAgentControlGraphModelTurn';
 import { executeAgentControlGraphToolTurn } from './toolTurnExecution';
-import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
-import { assertModelTurnMemoryPolicyBindingDurablyCurrent } from '../authority/modelTurnMemoryPolicyBinding';
 
 export async function executePreparedAgentControlGraphPendingToolTurn(params: {
   iterationParams: ExecuteAgentControlGraphIterationParams;
   modelTurnPreparation: PreparedAgentControlGraphModelTurnReady;
   runtime: AgentControlGraphIterationRuntimeState;
   contextWindow: number;
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   turnAssistantContent: string;
   reasoning: string;
   providerReplay?: MessageProviderReplay;
@@ -72,22 +69,8 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     recordPostToolFinalTextDirective: params.iterationParams.graph.recordPostToolFinalTextDirective,
     getModelTurnBlocker: () =>
       getAgentControlGraphModelTurnBlocker(params.iterationParams.graph.getGraphSnapshot()),
-    finishWithGraphTerminalEvent: async (terminalParams) => {
-      assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-      return params.iterationParams.graph.finishWithGraphTerminalEvent({
-        ...terminalParams,
-        beforeAssistantDelivery: () =>
-          assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
-      });
-    },
-    finishWaitingForUserInput: async (waitingParams) => {
-      assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-      return params.iterationParams.graph.finishWaitingForUserInput({
-        ...waitingParams,
-        beforeAssistantDelivery: () =>
-          assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding),
-      });
-    },
+    finishWithGraphTerminalEvent: params.iterationParams.graph.finishWithGraphTerminalEvent,
+    finishWaitingForUserInput: params.iterationParams.graph.finishWaitingForUserInput,
     recordPerformanceMetrics: params.iterationParams.graph.recordPerformanceMetrics,
     emitPendingAsyncOperationsChange: params.iterationParams.emitPendingAsyncOperationsChange,
     agentRunId: params.iterationParams.agentRunId,
@@ -107,7 +90,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     providerReplay: params.providerReplay,
     completion: params.completion,
     pendingToolCalls: params.pendingToolCalls,
-    memoryPolicyBinding: params.memoryPolicyBinding,
     workingMessages: params.runtime.workingMessages,
   });
   params.runtime.workingMessages = toolTurnExecution.workingMessages;

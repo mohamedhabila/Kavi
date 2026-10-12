@@ -11,7 +11,6 @@ import {
 import {
   buildToolResultMessage,
   completeRunningToolCall,
-  createFailedToolCall,
   createRunningToolCall,
   failRunningToolCall,
 } from './toolExecutionMessages';
@@ -39,51 +38,11 @@ import {
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
-import { canSettleAfterModelAuthorityChange } from './modelAuthorityIndependentCompletion';
-import {
-  buildModelTurnMemoryPolicyExpiredToolResult,
-  isModelTurnMemoryPolicyBindingDurablyCurrent,
-} from '../authority/modelTurnMemoryPolicyBinding';
 
 function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
   return lifecycle.groundedRequestScopedTools?.find(
     (tool) => resolveRegisteredToolName(tool.name) === toolName,
   );
-}
-
-async function completeUnstartedMemoryPolicyRevocation(params: {
-  lifecycle: ToolExecutionLifecycleParams;
-  effectiveToolCall: ToolExecutionLifecycleParams['tc'];
-}): Promise<ToolExecutionLifecycleResult> {
-  const result = buildModelTurnMemoryPolicyExpiredToolResult();
-  const toolCall = createFailedToolCall(
-    params.effectiveToolCall,
-    result,
-    Date.now(),
-    'authority_revoked',
-  );
-  recordLifecycleToolCall(
-    params.lifecycle.toolCallHistory,
-    params.effectiveToolCall.id,
-    params.effectiveToolCall.name,
-    params.effectiveToolCall.arguments,
-    result,
-    'failed',
-    'authority_revoked',
-    params.lifecycle.iteration,
-  );
-  return {
-    toolCallId: params.effectiveToolCall.id,
-    effectiveToolName: params.effectiveToolCall.name,
-    toolMessage: buildToolResultMessage({
-      idPrefix: params.lifecycle.idPrefixes.filtered,
-      toolCallId: params.effectiveToolCall.id,
-      content: result,
-      toolCall,
-      isError: true,
-    }),
-    result,
-  };
 }
 
 export type {
@@ -106,22 +65,8 @@ export async function executeToolCallLifecycle(
     effectiveToolCall.name,
     effectiveToolCall.arguments,
   );
-  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-    return completeUnstartedMemoryPolicyRevocation({
-      lifecycle: params,
-      effectiveToolCall,
-    });
-  }
   const preflightResult = resolveToolCallPreflight(params, effectiveToolCall);
-  if (preflightResult) {
-    if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-      return completeUnstartedMemoryPolicyRevocation({
-        lifecycle: params,
-        effectiveToolCall,
-      });
-    }
-    return preflightResult;
-  }
+  if (preflightResult) return preflightResult;
 
   const toolCall = createRunningToolCall(effectiveToolCall);
   let toolStartEventEmitted = false;
@@ -141,47 +86,7 @@ export async function executeToolCallLifecycle(
     }
   };
 
-  const completeMemoryPolicyRevocation = async (): Promise<ToolExecutionLifecycleResult> => {
-    const result = buildModelTurnMemoryPolicyExpiredToolResult();
-    const completedAt = Date.now();
-    failRunningToolCall(toolCall, result, completedAt, 'authority_revoked');
-    params.callbacks.onToolCallComplete(toolCall);
-    recordLifecycleToolCall(
-      params.toolCallHistory,
-      effectiveToolCall.id,
-      effectiveToolCall.name,
-      effectiveToolCall.arguments,
-      result,
-      'failed',
-      'authority_revoked',
-      params.iteration,
-    );
-    await emitBalancedToolEnd();
-    return {
-      toolCallId: effectiveToolCall.id,
-      effectiveToolName: effectiveToolCall.name,
-      toolMessage: buildToolResultMessage({
-        idPrefix: params.idPrefixes.filtered,
-        toolCallId: effectiveToolCall.id,
-        content: result,
-        toolCall,
-        isError: true,
-      }),
-      result,
-    };
-  };
-
-  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-    return completeUnstartedMemoryPolicyRevocation({
-      lifecycle: params,
-      effectiveToolCall,
-    });
-  }
-
   params.callbacks.onToolCallStart(toolCall);
-  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-    return completeMemoryPolicyRevocation();
-  }
   await yieldToUiFrame();
 
   const completeCancellation = async (): Promise<ToolExecutionLifecycleResult> => {
@@ -220,9 +125,6 @@ export async function executeToolCallLifecycle(
   if (params.beforeEffectDispatch && !effectFreeInvocation) {
     await params.beforeEffectDispatch(effectiveToolCall.name);
     if (params.signal?.signal.aborted) return completeCancellation();
-    if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-      return completeMemoryPolicyRevocation();
-    }
   }
 
   await emitAgentEvent('tool_start', {
@@ -233,15 +135,11 @@ export async function executeToolCallLifecycle(
     executionSignal: params.signal,
   });
   toolStartEventEmitted = true;
-  if (!isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)) {
-    return completeMemoryPolicyRevocation();
-  }
   const toolExecutionStartedAt = Date.now();
   let authoritativeEffectReceipt: ToolEffectReceipt | undefined;
   let authoritativeReceiptFinalized = false;
   let effectReconciliationRequired = false;
   let effectDispatchObservation: ToolEffectDispatchObservation | undefined;
-  let resolvedEffectFreeInvocation = effectFreeInvocation;
 
   try {
     const execution = await executeTool(
@@ -262,7 +160,6 @@ export async function executeToolCallLifecycle(
         ...(params.activeTaskId ? { activeTaskId: params.activeTaskId } : {}),
         agentRunId: params.agentRunId,
         executionRunId: params.executionRunId,
-        modelTurnMemoryPolicyBinding: params.modelTurnMemoryPolicyBinding,
         toolCallId: effectiveToolCall.id,
         executionSignal: params.signal?.signal,
         runtimeToolDeclaration: runtimeToolDeclaration(params, effectiveToolCall.name),
@@ -283,8 +180,6 @@ export async function executeToolCallLifecycle(
       },
     );
     effectDispatchObservation = execution.effectDispatchObservation;
-    resolvedEffectFreeInvocation =
-      effectFreeInvocation || effectDispatchObservation?.kind === 'not_applicable';
     if (execution.status === 'deferred') {
       recordLifecyclePerformanceMetrics({
         enabled: params.usePerformanceMetrics,
@@ -300,16 +195,6 @@ export async function executeToolCallLifecycle(
       };
     }
     let outcome: ToolRuntimeOutcome = execution;
-    const outcomeRequiresCurrentModelAuthority = (): boolean =>
-      (resolvedEffectFreeInvocation &&
-        !canSettleAfterModelAuthorityChange(effectiveToolCall.name, outcome)) ||
-      (outcome.status === 'failed' && outcome.failureKind === 'authority_revoked');
-    if (
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding) &&
-      outcomeRequiresCurrentModelAuthority()
-    ) {
-      return completeMemoryPolicyRevocation();
-    }
     let result = outcome.content;
     if (authoritativeEffectReceipt) {
       attachExecutionReceipt({
@@ -326,18 +211,6 @@ export async function executeToolCallLifecycle(
         resultIsError: outcome.status === 'failed',
         recordedAt: Date.now(),
       });
-      if (
-        outcomeRequiresCurrentModelAuthority() &&
-        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-      ) {
-        return completeMemoryPolicyRevocation();
-      }
-    }
-    if (
-      outcomeRequiresCurrentModelAuthority() &&
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-    ) {
-      return completeMemoryPolicyRevocation();
     }
     if (outcome.status === 'completed') {
       const durability = await observeExternalToolResultDurability({
@@ -349,12 +222,6 @@ export async function executeToolCallLifecycle(
         parentAgentRunId: params.agentRunId,
         observedAt: Date.now(),
       });
-      if (
-        outcomeRequiresCurrentModelAuthority() &&
-        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-      ) {
-        return completeMemoryPolicyRevocation();
-      }
       if (durability.kind === 'untracked_external' || durability.kind === 'persistence_failed') {
         // The effect may already have happened but durable tracking of it did
         // not — the same "do not retry blindly" outcome as an effect-dispatch
@@ -379,12 +246,6 @@ export async function executeToolCallLifecycle(
       conversationId: spillConversationId,
       toolName: effectiveToolCall.name,
     });
-    if (
-      outcomeRequiresCurrentModelAuthority() &&
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-    ) {
-      return completeMemoryPolicyRevocation();
-    }
     result = spilled.payload;
     result = enrichToolResultWithSchemaRepair({
       result,
@@ -394,12 +255,6 @@ export async function executeToolCallLifecycle(
     const effectiveBudgetWindow =
       params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     result = enforceToolResultBudget(result, effectiveBudgetWindow);
-    if (
-      outcomeRequiresCurrentModelAuthority() &&
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-    ) {
-      return completeMemoryPolicyRevocation();
-    }
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
       effectiveToolCall.name,
@@ -466,12 +321,6 @@ export async function executeToolCallLifecycle(
       ...(effectDispatchObservation ? { effectDispatchObservation } : {}),
     };
   } catch (err: unknown) {
-    if (
-      resolvedEffectFreeInvocation &&
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-    ) {
-      return completeMemoryPolicyRevocation();
-    }
     const errMsg = err instanceof Error ? err.message : String(err);
     const completedAt = Date.now();
     const errorResult = `Error: ${errMsg}`;
@@ -484,18 +333,6 @@ export async function executeToolCallLifecycle(
         resultIsError: true,
         recordedAt: completedAt,
       });
-      if (
-        resolvedEffectFreeInvocation &&
-        !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-      ) {
-        return completeMemoryPolicyRevocation();
-      }
-    }
-    if (
-      resolvedEffectFreeInvocation &&
-      !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
-    ) {
-      return completeMemoryPolicyRevocation();
     }
     failRunningToolCall(
       toolCall,

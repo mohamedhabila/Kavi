@@ -2,7 +2,6 @@ import { createFailoverState } from '../../src/engine/failover';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { resolveModelTurnIterationRequest } from '../../src/engine/graph/modelTurn/resolveIterationRequest';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
 import type { LlmProviderConfig } from '../../src/types/provider';
@@ -232,7 +231,6 @@ describe('prepared graph turn directive consumption', () => {
       completion: { completionStatus: 'complete', finishReason: 'stop' },
       contextWindow: 8192,
       fullContent: 'Recovered answer.',
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       pendingToolCalls: [],
       providerReplay: undefined,
       reasoning: '',

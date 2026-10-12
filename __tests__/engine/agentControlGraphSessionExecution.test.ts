@@ -4,7 +4,6 @@ import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntry
 import { executeAgentControlGraphSession } from '../../src/engine/graph/sessionExecution';
 import { emitSessionEvent } from '../../src/services/events/bus';
 import { getMemoryPolicyEpoch } from '../../src/services/memory/policy';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
@@ -61,7 +60,6 @@ function createParams(
       memory: { status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() },
       consecutivePendingAsyncNoToolTurns: 0,
       lastPendingAsyncSignature: '',
-      lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       llm: {} as any,
       warningInjectedThisRound: false,
       workingMessages: [],
@@ -186,70 +184,9 @@ describe('agentControlGraphSessionExecution', () => {
     expect(params.graph.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
   });
 
-  it('retries an invalidated model turn without consuming the iteration budget', async () => {
-    const params = createParams({ maxToolIterations: 1 });
-    mockedExecuteAgentControlGraphIteration
-      .mockResolvedValueOnce({
-        status: 'retry_current_iteration',
-        runtime: params.initialRuntime,
-      })
-      .mockResolvedValueOnce({
-        status: 'finalized',
-        runtime: params.initialRuntime,
-      });
-
-    await executeAgentControlGraphSession(params);
-
-    expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledTimes(2);
-    expect(
-      mockedExecuteAgentControlGraphIteration.mock.calls.map(([input]) => input.iteration),
-    ).toEqual([1, 1]);
-    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
-    expect(params.graph.finishWithGraphTerminalEvent).not.toHaveBeenCalled();
-  });
-
-  it('reprepares the last logical iteration when its exact binding expires before max delivery', async () => {
-    const params = createParams({ maxToolIterations: 1 });
-    const staleRuntime = {
-      ...params.initialRuntime,
-      lastModelTurnMemoryPolicyBinding: {
-        kind: 'memory_epoch',
-        readEpoch: -1,
-      } as never,
-    };
-    const refreshedRuntime = {
-      ...params.initialRuntime,
-      lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-    };
-    mockedExecuteAgentControlGraphIteration
-      .mockResolvedValueOnce({ status: 'continued', runtime: staleRuntime })
-      .mockResolvedValueOnce({ status: 'continued', runtime: refreshedRuntime });
-
-    await executeAgentControlGraphSession(params);
-
-    expect(
-      mockedExecuteAgentControlGraphIteration.mock.calls.map(([input]) => input.iteration),
-    ).toEqual([1, 1]);
-    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
-    expect(params.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
-      {
-        type: 'MODEL_TURN_INVALIDATED',
-        iteration: 1,
-        reason: 'memory_authority_changed',
-      },
-    ]);
-    expect(params.graph.finishWithGraphTerminalEvent).toHaveBeenCalledTimes(1);
-    expect(params.graph.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        graphEvent: { type: 'FINALIZED', reason: 'max_iterations' },
-        beforeAssistantDelivery: expect.any(Function),
-      }),
-    );
-  });
-
-  it('refreshes stale memory structurally without interpreting Arabic or Japanese text', async () => {
+  it('reads memory again for the next step once memory was turned on or off, leaving the thread as it is', async () => {
     const compactMessage = {
-      id: 'compact_memory_projection',
+      id: 'compact_summary',
       role: 'system' as const,
       content: 'ملخص قديم 以前の要約',
       timestamp: 1,
@@ -260,16 +197,12 @@ describe('agentControlGraphSessionExecution', () => {
       content: 'تابع المهمة باستخدام تفضيلاتي الجديدة',
       timestamp: 2,
     };
-    const japaneseMessage = {
-      id: 'user-ja',
-      role: 'user' as const,
-      content: '新しい設定でタスクを続けてください',
-      timestamp: 3,
-    };
     const params = createParams({ maxToolIterations: 1 });
-    params.initialRuntime.workingMessages = [compactMessage, arabicMessage, japaneseMessage];
+    params.initialRuntime.workingMessages = [compactMessage, arabicMessage];
     // Read before memory was last turned on or off: no longer current.
     params.initialRuntime.memory = { status: 'off', policyEpoch: getMemoryPolicyEpoch() - 1 };
+    const refreshed = { status: 'off' as const, policyEpoch: getMemoryPolicyEpoch() };
+    jest.mocked(params.refreshSessionMemory).mockReturnValueOnce(refreshed);
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
       runtime: params.initialRuntime,
@@ -278,34 +211,29 @@ describe('agentControlGraphSessionExecution', () => {
     await executeAgentControlGraphSession(params);
 
     expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
-    expect(params.refreshSessionMemory).toHaveBeenCalledWith([arabicMessage, japaneseMessage]);
+    expect(params.refreshSessionMemory).toHaveBeenCalledWith([compactMessage, arabicMessage]);
     expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledWith(
       expect.objectContaining({
         iteration: 1,
         runtime: expect.objectContaining({
-          workingMessages: [arabicMessage, japaneseMessage],
+          memory: refreshed,
+          workingMessages: [compactMessage, arabicMessage],
         }),
       }),
     );
   });
 
-  it('blocks with a typed terminal after two unstable authority repreparations', async () => {
+  it('keeps a current memory read for the next step', async () => {
     const params = createParams({ maxToolIterations: 1 });
-    mockedExecuteAgentControlGraphIteration.mockResolvedValue({
-      status: 'retry_current_iteration',
+    params.initialRuntime.memory = { status: 'off', policyEpoch: getMemoryPolicyEpoch() };
+    mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
+      status: 'finalized',
       runtime: params.initialRuntime,
     });
 
     await executeAgentControlGraphSession(params);
 
-    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(2);
-    expect(mockedExecuteAgentControlGraphIteration).toHaveBeenCalledTimes(3);
-    expect(params.graph.finishWithGraphTerminalEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        graphEvent: { type: 'BLOCKED', reason: 'memory_authority_unstable' },
-        sessionEndReason: 'memory_authority_unstable',
-      }),
-    );
+    expect(params.refreshSessionMemory).not.toHaveBeenCalled();
   });
 
   it('preserves the original failure when failure finalization rejects', async () => {

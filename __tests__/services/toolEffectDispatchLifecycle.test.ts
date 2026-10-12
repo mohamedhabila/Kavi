@@ -16,7 +16,6 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -70,7 +69,6 @@ function writeInput(
       },
     },
     approvalState: 'granted',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: authority(),
     execute,
     ...overrides,
@@ -126,7 +124,6 @@ function dynamicInput(
       executionRunId: `execution-run-${suffix}`,
     },
     approvalState: 'not_required',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     authority: authority(),
     runtimeExternalEvidence: evidence,
     execute,

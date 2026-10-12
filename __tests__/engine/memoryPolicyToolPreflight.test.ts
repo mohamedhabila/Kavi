@@ -4,11 +4,6 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { resolveToolCallPreflight } from '../../src/engine/toolExecution/toolCallLifecyclePreflight';
-import {
-  buildModelTurnMemoryPolicyBinding,
-  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-  type ModelTurnMemoryPolicyBinding,
-} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { RuntimeToolCallInput } from '../../src/engine/toolExecution/toolExecutionMessages';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -16,22 +11,16 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
 const expoSqlite = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
 };
 
-function lifecycleFor(
-  tool: ToolDefinition,
-  toolCall: RuntimeToolCallInput,
-  binding: ModelTurnMemoryPolicyBinding = POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-) {
+function lifecycleFor(tool: ToolDefinition, toolCall: RuntimeToolCallInput) {
   return {
     tc: toolCall,
     availableToolNames: new Set([tool.name]),
     groundedRequestScopedTools: [tool],
-    modelTurnMemoryPolicyBinding: binding,
     toolCallHistory: [],
     callbacks: {
       onToolCallStart: jest.fn(),
@@ -110,30 +99,5 @@ describe('memory-policy tool preflight', () => {
     useSettingsStore.setState({ disableLongTermMemory: true });
 
     expect(resolveToolCallPreflight(lifecycleFor(definition, toolCall), toolCall)).toBeUndefined();
-  });
-
-  it('rejects a tool preflight at exact memory-expiry equality', () => {
-    const definition = memoryTool('leer_registro', ['read'], []);
-    const toolCall = { id: 'call-expired', name: definition.name, arguments: '{}' };
-    const validUntil = Date.now() + 1_000;
-    const binding = buildModelTurnMemoryPolicyBinding({
-      ...captureCurrentModelTurnMemoryFence(),
-      validUntil,
-    });
-    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(validUntil);
-
-    try {
-      const result = resolveToolCallPreflight(
-        lifecycleFor(definition, toolCall, binding),
-        toolCall,
-      );
-      expect(JSON.parse(result?.toolMessage.content ?? '{}')).toMatchObject({
-        status: 'rejected',
-        code: 'model_turn_memory_epoch_expired',
-        replanRequired: true,
-      });
-    } finally {
-      nowSpy.mockRestore();
-    }
   });
 });

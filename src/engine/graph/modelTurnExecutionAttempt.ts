@@ -41,18 +41,6 @@ import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,
 } from './modelTurnExecutionTypes';
-import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
-import {
-  buildModelTurnMemoryPolicyDispatchGuard,
-  isMemoryPromptEpochExpiredError,
-  isPreparedMemoryReadCurrent,
-} from './modelTurn/memoryPromptDispatchFence';
-import {
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  buildModelTurnMemoryPolicyBinding,
-  MemoryPromptEpochExpiredError,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
 import { getDeclaredReasoningCapability } from '../../services/llm/support/reasoningEffortResolution';
 
 export type ExecuteAgentControlGraphModelTurnAttemptResult =
@@ -61,7 +49,6 @@ export type ExecuteAgentControlGraphModelTurnAttemptResult =
       completion?: AssistantCompletionMetadata;
       contextWindow: number;
       fullContent: string;
-      memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
       pendingToolCalls: PendingAgentToolCall[];
       providerReplay?: MessageProviderReplay;
       reasoning: string;
@@ -74,19 +61,12 @@ export type ExecuteAgentControlGraphModelTurnAttemptResult =
       workingMessages: Message[];
     };
 
-function memoryAuthorityRetry(): never {
-  throw new MemoryPromptEpochExpiredError();
-}
-
 export async function executeAgentControlGraphModelTurnAttempt(
   params: ExecuteAgentControlGraphModelTurnParams & {
     allowOverflowRetry?: boolean;
   },
 ): Promise<ExecuteAgentControlGraphModelTurnAttemptResult> {
   const anthropicTarget = isDirectAnthropicProvider(params.activeProvider);
-  const memoryPolicyBinding = buildModelTurnMemoryPolicyBinding(
-    params.preparedTurn.memoryReadFence,
-  );
   const isGemini3 =
     resolveModelHostedFamily(params.requestModel) === 'gemini' &&
     /gemini[- ]?3/i.test(params.requestModel);
@@ -102,14 +82,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
   // `tokenCounter.ts`. Reading it later (e.g. at flush time) would risk pairing this request's
   // estimate with a factor other observations already nudged in the meantime.
   const appliedCalibrationFactor = getObservedTokenCalibrationFactor(requestFamily);
-  const stagedCompactionEvents: OrchestratorCompactionEvent[] = [];
-  const stageCompaction = params.preparedTurn.memoryReadFence
-    ? (event: OrchestratorCompactionEvent) => stagedCompactionEvents.push(event)
-    : params.onCompaction;
-  const releaseStagedCompactions = () => {
-    if (!isPreparedMemoryReadCurrent(params.preparedTurn)) return;
-    for (const event of stagedCompactionEvents.splice(0)) params.onCompaction?.(event);
-  };
 
   const onDeviceProvider = isOnDeviceLlmProvider(params.activeProvider);
   const preparedRequestBudget = await prepareAgentTurnRequestBudget({
@@ -122,7 +94,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     enrichedSystemPromptSections: params.preparedTurn.enrichedSystemPromptSections,
     iteration: params.iteration,
     memorySectionText: params.memorySectionText,
-    onCompaction: stageCompaction,
+    onCompaction: params.onCompaction,
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,
     turnPinnedCount: params.toolSurfacePinTelemetry?.turnPinnedCount ?? 0,
@@ -133,9 +105,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
     warn: params.warn,
     workingMessages: params.workingMessages,
   });
-  if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
-    return memoryAuthorityRetry();
-  }
   if (preparedRequestBudget.toolSurfaceTokenAudit) {
     params.applyGraphEvents([
       buildGraphObservabilityRecordedEvent({
@@ -209,9 +178,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
     : isGemini3
       ? 1.0
       : params.temperature;
-  const requestDispatchGuard = params.preparedTurn.memoryReadFence
-    ? buildModelTurnMemoryPolicyDispatchGuard(memoryPolicyBinding)
-    : undefined;
   const streamOptions: Record<string, any> = {
     model: params.requestModel,
     conversationId: params.conversationId,
@@ -226,7 +192,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
       tokenBuckets: preparedRequestBudget.usageTokenBuckets,
       promptCache: promptCachingPlan.telemetry,
     },
-    ...(requestDispatchGuard ? { requestDispatchGuard } : {}),
     ...thinkingParams,
   };
 
@@ -270,7 +235,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
           isForegroundRun: params.isForegroundRun,
           iteration: params.iteration,
           llm: params.llm,
-          memoryPolicyBinding,
           preflightEstimatedInputTokens: budgetResult.result.totalTokens,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
@@ -302,7 +266,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
           isForegroundRun: params.isForegroundRun,
           iteration: params.iteration,
           llm: params.llm,
-          memoryPolicyBinding,
           preflightEstimatedInputTokens: budgetResult.result.totalTokens,
           recordPerformanceMetrics: params.recordPerformanceMetrics,
           reportUsage: params.reportUsage,
@@ -365,14 +328,11 @@ export async function executeAgentControlGraphModelTurnAttempt(
       throw new Error('Model tool turn is missing required provider replay coverage after retries');
     }
 
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(memoryPolicyBinding);
-    releaseStagedCompactions();
     return {
       kind: 'success',
       completion: streamResult.completion,
       contextWindow,
       fullContent: streamResult.fullContent,
-      memoryPolicyBinding,
       pendingToolCalls: streamResult.pendingToolCalls,
       providerReplay: streamResult.providerReplay,
       reasoning: streamResult.reasoning,
@@ -381,42 +341,28 @@ export async function executeAgentControlGraphModelTurnAttempt(
     };
   } catch (streamError: unknown) {
     if (
-      isMemoryPromptEpochExpiredError(streamError) ||
-      !isPreparedMemoryReadCurrent(params.preparedTurn)
-    ) {
-      return memoryAuthorityRetry();
-    }
-    if (
       !params.signal?.signal.aborted &&
       params.compactionEngine &&
       params.allowOverflowRetry &&
       isContextOverflowProviderError(streamError)
     ) {
-      const overflowCompactionEvents: OrchestratorCompactionEvent[] = [];
       const overflowRecovery = await compactAgentTurnWorkingMessages({
         compactionEngine: params.compactionEngine,
         conversationId: params.conversationId,
         currentMessages: workingMessages,
-        onCompaction: params.preparedTurn.memoryReadFence
-          ? (event) => overflowCompactionEvents.push(event)
-          : params.onCompaction,
+        onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages, requestFamily),
         forceTier: 'aggressive',
         failureLabel: 'Provider overflow recovery compaction failed',
         requestFamily,
         warn: params.warn,
       });
-      if (!isPreparedMemoryReadCurrent(params.preparedTurn)) {
-        return memoryAuthorityRetry();
-      }
       const nextMaxTokens = getProviderOverflowRetryMaxTokens(
         params.requestMaxTokens,
         params.requestModel,
       );
 
       if (overflowRecovery.compacted || nextMaxTokens < params.requestMaxTokens) {
-        releaseStagedCompactions();
-        for (const event of overflowCompactionEvents) params.onCompaction?.(event);
         return {
           kind: 'overflow_retry',
           nextRequestMaxTokens: nextMaxTokens,
@@ -425,7 +371,6 @@ export async function executeAgentControlGraphModelTurnAttempt(
       }
     }
 
-    releaseStagedCompactions();
     throw streamError instanceof Error ? streamError : new Error(String(streamError));
   }
 }

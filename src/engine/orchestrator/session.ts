@@ -22,7 +22,6 @@ import { persistConversationModeEscalation } from '../graph/conversation/persist
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
 import { resolveRuntimeExplicitToolSurfaceToolNames } from '../tools/runtimeAvailability';
@@ -227,7 +226,6 @@ export async function runOrchestratorGraphSession(params: {
         memory,
         consecutivePendingAsyncNoToolTurns,
         lastPendingAsyncSignature,
-        lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         llm,
         warningInjectedThisRound,
         workingMessages,

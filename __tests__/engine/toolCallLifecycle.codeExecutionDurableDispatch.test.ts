@@ -20,7 +20,6 @@ import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
 import { needsApprovalWithContext } from '../../src/services/remote/approvalStore';
 import { useToolPermissionsStore } from '../../src/services/security/permissions';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
 const sqliteMock = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -64,7 +63,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-javascript-compute',
         executionRunId: 'execution-run-javascript-compute',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -108,7 +106,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-javascript-failed-read',
         executionRunId: 'execution-run-javascript-failed-read',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -154,7 +151,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-compute',
         executionRunId: 'execution-run-python-compute',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -202,7 +198,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-local-write',
         executionRunId: 'execution-run-python-local-write',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -248,7 +243,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-possible-network-write',
         executionRunId: 'execution-run-python-possible-network-write',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReconciliationRequired,
       },
     );
@@ -291,7 +285,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-failed-read',
         executionRunId: 'execution-run-python-failed-read',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -339,7 +332,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-timeout',
         executionRunId: 'execution-run-python-timeout',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReceipt,
         captureEffectReconciliationRequired,
       },
@@ -385,7 +377,6 @@ describe('code execution durable effect dispatch', () => {
       {
         toolCallId: 'tool-call-python-failed-mutation',
         executionRunId: 'execution-run-python-failed-mutation',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         captureEffectReconciliationRequired,
       },
     );

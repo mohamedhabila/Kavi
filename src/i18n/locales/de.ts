@@ -250,7 +250,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "Ich habe angehalten, weil diese Anfrage die größte Zahl an Schritten erreicht hat, die ich auf einmal ausführen kann, bevor alles erledigt war. Einfach sagen, wie es weitergehen soll, dann mache ich dort weiter.",
       repeatingStep: "Ich habe angehalten, weil ich denselben Schritt wiederholt habe, ohne voranzukommen. Einfach sagen, wie es weitergehen soll, dann mache ich dort weiter.",
-      memoryChanged: "Mein Gedächtnis hat sich mehrmals geändert, während ich diese Antwort vorbereitet habe. Bitte die Nachricht noch einmal senden.",
       noUsableReply: "Vom KI-Modell kam auch nach erneutem Versuch keine verwertbare Antwort. Bitte erneut versuchen oder ein anderes Modell wählen.",
       noWayToContinue: "Ich konnte diese Anfrage nicht abschließen, weil ich die restliche Arbeit hier nicht ausführen kann. Nichts wurde als erledigt gemeldet, was nicht erledigt ist.",
       approvalDeclined: "In Ordnung, das habe ich nicht getan, weil die Freigabe abgelehnt wurde. Es wurde nichts geändert.",

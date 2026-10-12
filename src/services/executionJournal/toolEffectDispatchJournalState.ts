@@ -22,7 +22,6 @@ import type {
   ExecutionRunRecord,
   ExecutionSurface,
 } from './types';
-import type { DurableModelEffectAuthority } from '../../engine/authority/modelTurnMemoryPolicyBinding';
 
 type GrantedAuthorityState = Extract<ExecutionApprovalState, 'granted' | 'not_required'>;
 
@@ -42,7 +41,6 @@ export interface ToolEffectDispatchJournalPlan {
   initialStateDigest: string;
   planningStateDigest: string;
   authorityStateDigest: string;
-  modelEffectAuthority: DurableModelEffectAuthority;
 }
 
 type IdentityInvariant = readonly [field: string, matches: boolean];
@@ -107,7 +105,6 @@ export function readToolEffectDispatchSnapshot(
     planningCheckpoint,
     authorityCheckpoint,
     latestCheckpointId: latest.id,
-    authorizationExpiresAt: effect.modelAuthorityValidUntil,
   };
 }
 
@@ -126,8 +123,6 @@ function assertPlanMatchesExisting(
     throw new Error('effect_dispatch_initial_checkpoint_missing');
   }
   const initialCheckpoint = decodeExecutionCheckpointRow(initialCheckpointRow);
-  const expectedModelAuthorityValidUntil =
-    plan.modelEffectAuthority.kind === 'memory_epoch' ? plan.modelEffectAuthority.validUntil : null;
   const effectSuffix = plan.identity.effectId.slice('effect-'.length);
   assertIdentityInvariants([
     ['plan_conversation_id', run.conversationId === plan.conversationId],
@@ -144,10 +139,6 @@ function assertPlanMatchesExisting(
     ['plan_effect_class', effect.effectClass === plan.effectClass],
     ['plan_idempotency_class', effect.idempotencyClass === plan.idempotencyClass],
     ['plan_effect_retry_policy', effect.retryPolicy === plan.retryPolicy],
-    [
-      'plan_model_authority_valid_until',
-      effect.modelAuthorityValidUntil === expectedModelAuthorityValidUntil,
-    ],
     ['plan_initial_checkpoint_id', initialCheckpoint.id === `effect-created-${effectSuffix}`],
     ['plan_initial_checkpoint_sequence', initialCheckpoint.sequence === 0],
     ['plan_initial_checkpoint_boundary', initialCheckpoint.boundary === 'run_created'],
@@ -244,10 +235,6 @@ function insertPlannedJournal(
     idempotencyClass: plan.idempotencyClass,
     idempotencyKeyDigest: identity.idempotencyKeyDigest,
     requestDigest: identity.requestDigest,
-    modelAuthorityValidUntil:
-      plan.modelEffectAuthority.kind === 'memory_epoch'
-        ? plan.modelEffectAuthority.validUntil
-        : null,
     outcomeDigest: null,
     status: 'planned',
     retryPolicy: plan.retryPolicy,
@@ -271,10 +258,9 @@ function insertPlannedJournal(
     `INSERT INTO execution_effects (
        id, run_id, checkpoint_id, tool_call_id, tool_name_digest,
        tool_contract_identity_digest, effect_class,
-       idempotency_class, idempotency_key_digest, request_digest,
-       model_authority_valid_until, outcome_digest,
+       idempotency_class, idempotency_key_digest, request_digest, outcome_digest,
        status, retry_policy, attempt, created_at, started_at, completed_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ...Object.values(effectRow(effect)),
   );
   insertCheckpoint(database, authorityCheckpoint);

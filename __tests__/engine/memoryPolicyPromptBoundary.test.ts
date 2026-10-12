@@ -78,9 +78,6 @@ describe('memory policy prompt boundary', () => {
   });
 
   it('rebuilds a memory-only turn as a truthful text-only turn after opt-out', () => {
-    const prepared = buildTurn([memoryWriteTool]);
-    expect(prepared.memoryReadFence).toBeDefined();
-
     useSettingsStore.setState({ disableLongTermMemory: true });
     const disabled = buildTurn([memoryWriteTool]);
 

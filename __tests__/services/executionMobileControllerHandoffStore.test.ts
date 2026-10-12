@@ -89,7 +89,6 @@ async function prepareClaimedHandoff() {
       initialStateDigest: RAW_A,
       planningStateDigest: RAW_B,
       authorityStateDigest: RAW_C,
-      modelEffectAuthority: { kind: 'policy_independent' },
     },
     {
       approvalGranted: () => true,

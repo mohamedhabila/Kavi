@@ -140,32 +140,6 @@ describe('stagnant progress detection', () => {
     });
   });
 
-  it('does not count a recoverable authority refresh between completed waits as stagnation', () => {
-    const signatures: IterationProgressSignature[] = [];
-    const entry = {
-      toolMultisetKey: buildToolMultisetKey(['wait']),
-      effectReceiptCount: 0,
-    };
-    for (let index = 0; index < STAGNANT_PROGRESS_THRESHOLD; index += 1) {
-      recordIterationProgressSignature(signatures, entry);
-    }
-
-    const authorityRefresh = rec(
-      'wait',
-      JSON.stringify({ ms: 60_000 }),
-      'model_turn_memory_epoch_expired',
-      'failed',
-    );
-    authorityRefresh.preflightBlockedKind = 'authority_revoked';
-    const history = [
-      rec('wait', JSON.stringify({ ms: 60_000 }), 'waited'),
-      authorityRefresh,
-      rec('wait', JSON.stringify({ ms: 60_000 }), 'waited'),
-    ];
-
-    expect(detectLoops(history, signatures)).toEqual({ loopDetected: false });
-  });
-
   it('still detects stagnant wait iterations when the waits fail', () => {
     const signatures: IterationProgressSignature[] = [];
     const history: ToolCallRecord[] = [];

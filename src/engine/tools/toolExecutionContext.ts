@@ -1,7 +1,6 @@
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type { ToolDefinition } from '../../types/tool';
-import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 
 export interface CodeOwnedCurrentUserMessage {
@@ -35,7 +34,6 @@ export interface ToolExecutionContext {
   /** Current lifecycle cancellation signal, revalidated immediately before effect dispatch. */
   executionSignal?: AbortSignal;
   /** Code-owned authority bound to the exact model turn that proposed this call. */
-  modelTurnMemoryPolicyBinding?: ModelTurnMemoryPolicyBinding;
   /** Exact code-selected runtime declaration for dynamic MCP/skill receipt evidence. */
   runtimeToolDeclaration?: ToolDefinition;
   /** Internal receipt handoff; never populated from provider-authored arguments. */

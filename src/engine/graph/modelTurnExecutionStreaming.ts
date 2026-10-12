@@ -11,12 +11,6 @@ import type {
   PendingAgentToolCall,
 } from './modelTurnExecutionTypes';
 import {
-  assertModelTurnMemoryPolicyBindingCurrent,
-  assertModelTurnMemoryPolicyBindingDurablyCurrent,
-  MemoryPromptEpochExpiredError,
-  type ModelTurnMemoryPolicyBinding,
-} from '../authority/modelTurnMemoryPolicyBinding';
-import {
   createModelTurnActivityGuard,
   FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
   normalizeModelTurnActivityError,
@@ -128,7 +122,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
   params: {
     allowQueuedToolCalls: boolean;
     budgetTools: ReadonlyArray<ToolDefinition>;
-    memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
     requestMessages: Array<{ role: string; content: any }>;
     streamOptions: Record<string, any>;
   } & ReturnType<typeof pickCalibrationInputs> &
@@ -165,14 +158,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
   });
   const projectionPublisher = createModelProjectionPublisher({
     callbacks: params.callbacks,
-    memoryPolicyBinding: params.memoryPolicyBinding,
-    onInvalidated: () => {
-      fullContent = '';
-      reasoning = '';
-      providerReplay = undefined;
-      completion = undefined;
-      pendingToolCalls.splice(0);
-    },
   });
   const activityGuard = createModelTurnActivityGuard(
     params.signal?.signal,
@@ -248,7 +233,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
         }
         continue;
       }
-      assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
 
       switch (event.type) {
         case 'token': {
@@ -291,7 +275,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
         projectionPublisher.flush();
       }
       if (event.type !== 'done') {
-        assertModelTurnMemoryPolicyBindingCurrent(params.memoryPolicyBinding);
       }
     }
 
@@ -300,7 +283,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
       requestMessages: params.requestMessages,
       budgetTools: params.budgetTools,
     });
-    assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
     params.recordPerformanceMetrics(
       {
         modelTurnCount: 1,
@@ -329,9 +311,6 @@ export async function executeAgentControlGraphModelTurnStreaming(
   } catch (streamError: unknown) {
     const effectiveError = normalizeModelTurnActivityError(streamError, activityGuard);
     closeModelStreamIterator(streamIterator);
-    if (effectiveError instanceof MemoryPromptEpochExpiredError) {
-      projectionPublisher.invalidate();
-    }
     usageTracker.flush({
       allowFallback: false,
       requestMessages: params.requestMessages,

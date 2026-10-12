@@ -14,7 +14,6 @@ import type { AgentPlanStep } from '../../types/agentRun';
 export type RunStoppedReason =
   | 'step_limit'
   | 'repeating_step'
-  | 'memory_changed'
   | 'no_usable_reply'
   | 'no_way_to_continue'
   | 'approval_declined'
@@ -24,7 +23,6 @@ export type RunStoppedReason =
 const MESSAGE_KEYS: Record<RunStoppedReason, string> = {
   step_limit: 'chat.runStopped.stepLimit',
   repeating_step: 'chat.runStopped.repeatingStep',
-  memory_changed: 'chat.runStopped.memoryChanged',
   no_usable_reply: 'chat.runStopped.noUsableReply',
   no_way_to_continue: 'chat.runStopped.noWayToContinue',
   approval_declined: 'chat.runStopped.approvalDeclined',

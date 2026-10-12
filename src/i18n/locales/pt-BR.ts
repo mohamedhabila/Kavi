@@ -255,7 +255,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     runStopped: {
       stepLimit: "Parei porque este pedido atingiu o máximo de etapas que consigo executar de uma vez, antes de terminar tudo. Diga como você quer continuar e eu retomo a partir daí.",
       repeatingStep: "Parei porque estava repetindo a mesma etapa sem avançar. Diga como você quer continuar e eu retomo a partir daí.",
-      memoryChanged: "Minha memória mudou várias vezes enquanto eu preparava esta resposta. Envie sua mensagem novamente, por favor.",
       noUsableReply: "Não recebi uma resposta utilizável do modelo de IA, mesmo depois de tentar de novo. Tente novamente ou escolha outro modelo.",
       noWayToContinue: "Não consegui concluir este pedido porque não tenho como fazer o trabalho restante aqui. Nada foi apresentado como feito sem ter sido.",
       approvalDeclined: "Tudo bem, não fiz isso porque você recusou a aprovação. Nada foi alterado.",

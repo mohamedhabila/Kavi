@@ -35,7 +35,6 @@ import {
   requestToolApproval,
 } from '../../src/services/remote/approvalStore';
 import { useToolPermissionsStore } from '../../src/services/security/permissions';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
 import { isTerminalToolEffectDispatchObservation } from '../../src/services/executionJournal/toolEffectDispatchLifecycle';
 
@@ -83,7 +82,6 @@ describe('mobile controller pre-claim validation', () => {
       {
         toolCallId: 'tool-call-mobile-invalid',
         executionRunId: 'execution-run-mobile-invalid',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         mobileController: {
           capability: createMobileControllerCapabilityFixture({
             supportedActionKinds: ['activate'],
@@ -152,7 +150,6 @@ describe('mobile controller pre-claim validation', () => {
       {
         toolCallId: 'tool-call-mobile-confirm',
         executionRunId: 'execution-run-mobile-confirm',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         mobileController: {
           capability: createMobileControllerCapabilityFixture({
             environmentClass: 'managed',
@@ -215,7 +212,6 @@ describe('mobile controller pre-claim validation', () => {
       {
         toolCallId: 'tool-call-mobile-takeover',
         executionRunId: 'execution-run-mobile-takeover',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         mobileController: {
           capability: createMobileControllerCapabilityFixture({
             environmentClass: 'policy_approved',
@@ -266,7 +262,6 @@ describe('mobile controller pre-claim validation', () => {
       {
         toolCallId: 'tool-call-mobile-rejected',
         executionRunId: 'execution-run-mobile-rejected',
-        modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         mobileController: {
           capability: createMobileControllerCapabilityFixture({
             environmentClass: 'managed',

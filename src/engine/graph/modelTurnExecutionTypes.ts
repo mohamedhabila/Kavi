@@ -15,7 +15,6 @@ import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
 import type { OrchestratorCallbacks } from '../orchestrator/types';
 import type { CompactionContext } from '../../services/context/types';
 import type { ThinkingLevel } from '../thinking';
-import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
 
 export interface PendingAgentToolCall {
   id: string;
@@ -80,7 +79,6 @@ export interface ExecuteAgentControlGraphModelTurnResult {
   completion?: AssistantCompletionMetadata;
   contextWindow: number;
   fullContent: string;
-  memoryPolicyBinding: ModelTurnMemoryPolicyBinding;
   pendingToolCalls: PendingAgentToolCall[];
   providerReplay?: MessageProviderReplay;
   reasoning: string;

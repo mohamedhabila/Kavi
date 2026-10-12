@@ -3,7 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import { executeTool } from '../../src/engine/tools';
@@ -29,7 +28,6 @@ function buildSessionWaitLifecycle(
     conversationId: 'conv-1',
     memoryConversationId: 'memory-conv-1',
     executionRunId: 'execution-run-1',
-    modelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     provider: {
       id: 'p1',
       name: 'Test',

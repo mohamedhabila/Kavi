@@ -28,9 +28,6 @@ export const CREATE_EXECUTION_EFFECTS = `
     idempotency_class TEXT NOT NULL CHECK (idempotency_class IN (${sqlEnum(EXECUTION_IDEMPOTENCY_CLASSES)})),
     idempotency_key_digest TEXT CHECK (idempotency_key_digest IS NULL OR (${digestCheck('idempotency_key_digest')})),
     request_digest TEXT NOT NULL CHECK (${digestCheck('request_digest')}),
-    model_authority_valid_until INTEGER CHECK (
-      model_authority_valid_until IS NULL OR model_authority_valid_until >= 0
-    ),
     outcome_digest TEXT CHECK (outcome_digest IS NULL OR (${digestCheck('outcome_digest')})),
     status TEXT NOT NULL CHECK (status IN (${sqlEnum(EXECUTION_EFFECT_STATUSES)})),
     retry_policy TEXT NOT NULL CHECK (retry_policy IN (${sqlEnum(EXECUTION_RETRY_POLICIES)})),

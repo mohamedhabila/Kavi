@@ -1,5 +1,4 @@
 import { executePreparedAgentControlGraphPendingToolTurn } from '../../src/engine/graph/iterationPendingToolExecution';
-import type { ModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { executeAgentControlGraphToolTurn } from '../../src/engine/graph/toolTurnExecution';
 
 jest.mock('../../src/engine/graph/toolTurnExecution', () => ({
@@ -7,9 +6,6 @@ jest.mock('../../src/engine/graph/toolTurnExecution', () => ({
 }));
 
 const mockedExecuteAgentControlGraphToolTurn = jest.mocked(executeAgentControlGraphToolTurn);
-const MEMORY_POLICY_BINDING_SENTINEL: ModelTurnMemoryPolicyBinding = Object.freeze({
-  kind: 'policy_independent',
-});
 
 function createParams(overrides: Record<string, unknown> = {}) {
   return {
@@ -72,7 +68,6 @@ function createParams(overrides: Record<string, unknown> = {}) {
       activeProvider: { id: 'provider-1' },
       activeModel: 'gemini-3.5-flash',
       lastPendingAsyncSignature: '',
-      lastModelTurnMemoryPolicyBinding: MEMORY_POLICY_BINDING_SENTINEL,
       warningInjectedThisRound: false,
       workingMessages: [],
     },
@@ -81,7 +76,6 @@ function createParams(overrides: Record<string, unknown> = {}) {
     reasoning: '',
     providerReplay: undefined,
     completion: undefined,
-    memoryPolicyBinding: MEMORY_POLICY_BINDING_SENTINEL,
     pendingToolCalls: [
       {
         id: 'gemini-call-0',
@@ -132,14 +126,6 @@ describe('iterationPendingToolExecution', () => {
       'write_file',
       'file_edit',
     ]);
-  });
-
-  it('passes the exact model-turn memory policy binding into tool execution', async () => {
-    await executePreparedAgentControlGraphPendingToolTurn(createParams());
-
-    expect(mockedExecuteAgentControlGraphToolTurn.mock.calls[0]?.[0]?.memoryPolicyBinding).toBe(
-      MEMORY_POLICY_BINDING_SENTINEL,
-    );
   });
 
   it('passes only the code-owned current user message into tool execution', async () => {

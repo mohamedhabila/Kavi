@@ -5,17 +5,11 @@ jest.mock('expo-sqlite', () => {
 
 let mockPolicyEpoch = 3;
 let mockMemoryOn = true;
-let mockAuthoritySnapshot: unknown = Object.freeze({ owner: 'vault-1' });
 
 jest.mock('../../src/services/memory/policy', () => ({
   ...jest.requireActual('../../src/services/memory/policy'),
   getMemoryPolicyEpoch: () => mockPolicyEpoch,
   captureMemoryReadEpoch: () => (mockMemoryOn ? mockPolicyEpoch : null),
-}));
-
-jest.mock('../../src/services/memory/memoryAuthority', () => ({
-  ...jest.requireActual('../../src/services/memory/memoryAuthority'),
-  captureMemoryAuthoritySnapshot: () => mockAuthoritySnapshot,
 }));
 
 import type { Message } from '../../src/types/message';
@@ -40,7 +34,6 @@ beforeEach(() => {
   resetMemoryCoreSchemaCacheForTests();
   mockPolicyEpoch = 3;
   mockMemoryOn = true;
-  mockAuthoritySnapshot = Object.freeze({ owner: 'vault-1' });
 });
 
 afterAll(() => {
@@ -70,7 +63,6 @@ describe('session memory read', () => {
 
     expect(read).toMatchObject({ status: 'read', policyEpoch: 3 });
     if (read.status !== 'read') throw new Error('memory was not read');
-    expect(read.authoritySnapshot).toBe(mockAuthoritySnapshot);
     expect(read.section?.text).toContain('Sara (the user’s sister) lives in Porto');
     expect(read.section?.text).toContain('Plan my Porto trip to visit Sara');
   });
@@ -111,15 +103,6 @@ describe('session memory read', () => {
 
     expect(readSessionMemory('conv-1', [userMessage('u1', 'Sara in Porto?', 1)])).toEqual({
       status: 'off',
-      policyEpoch: 3,
-    });
-  });
-
-  it('reports memory unavailable when its authority cannot be read', () => {
-    mockAuthoritySnapshot = null;
-
-    expect(readSessionMemory('conv-1', [userMessage('u1', 'Sara in Porto?', 1)])).toEqual({
-      status: 'unavailable',
       policyEpoch: 3,
     });
   });

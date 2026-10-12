@@ -30,11 +30,7 @@ export interface ToolCallRecord {
 }
 
 export type LoopSeverity = 'warning' | 'critical';
-export type PreflightBlockedKind =
-  | 'authority_revoked'
-  | 'schema_validation'
-  | 'tool_filter'
-  | 'unknown_tool';
+export type PreflightBlockedKind = 'schema_validation' | 'tool_filter' | 'unknown_tool';
 
 export type LoopDetectorKind =
   | 'generic_repeat'
@@ -117,17 +113,7 @@ function isCompletedElapsedProgressWindow(params: {
 
   const count = params.count ?? STAGNANT_PROGRESS_THRESHOLD;
   const recent = params.history.slice(-count);
-  const isRecoverableAuthorityRefresh = (entry: ToolCallRecord) =>
-    entry.status === 'failed' &&
-    entry.preflightBlockedKind === 'authority_revoked' &&
-    ELAPSED_PROGRESS_TOOL_NAMES.has(normalizeToolNameKey(entry.name));
-  return (
-    recent.length === count &&
-    recent.some(isCompletedElapsedProgress) &&
-    recent.every(
-      (entry) => isCompletedElapsedProgress(entry) || isRecoverableAuthorityRefresh(entry),
-    )
-  );
+  return recent.length === count && recent.every(isCompletedElapsedProgress);
 }
 
 function isCompletedElapsedProgress(entry: ToolCallRecord): boolean {

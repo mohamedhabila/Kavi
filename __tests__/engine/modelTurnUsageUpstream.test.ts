@@ -5,7 +5,6 @@ jest.mock('expo-sqlite', () => {
 
 import { executeAgentControlGraphModelTurnStreaming } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { executeAgentControlGraphModelTurnViaSendMessage } from '../../src/engine/graph/modelTurnExecutionSendMessage';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { readUpstreamProvider } from '../../src/services/llm/core/streaming/metadataBuilder';
 import { streamOpenAICompatibleChat } from '../../src/services/llm/providers/openaiChat/stream';
 import { aggregateE2ETokenUsage } from '../../src/acceptance/e2eAgent/tokenUsage';
@@ -100,7 +99,6 @@ describe('upstream provider on usage', () => {
           ]),
         ),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage,
       requestMessages: [{ role: 'user', content: 'Hello' }],
@@ -137,7 +135,6 @@ describe('upstream provider on usage', () => {
           },
         })),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage,
       requestMessages: [{ role: 'user', content: 'Continue' }],

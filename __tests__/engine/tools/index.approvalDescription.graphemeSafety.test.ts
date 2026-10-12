@@ -43,10 +43,6 @@ jest.mock('../../../src/services/executionJournal/executionRunEffectBarrier', ()
   isCodeOwnedExecutionRunId: jest.fn().mockReturnValue(true),
 }));
 
-jest.mock('../../../src/engine/toolExecution/modelAuthorityIndependentCompletion', () => ({
-  canSettleAfterModelAuthorityChange: jest.fn().mockReturnValue(true),
-}));
-
 jest.mock('../../../src/engine/mobileController/toolExecution', () => ({
   executeMobileControllerTool: jest.fn(),
 }));

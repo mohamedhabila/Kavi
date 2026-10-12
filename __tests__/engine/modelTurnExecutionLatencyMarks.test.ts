@@ -5,7 +5,6 @@ jest.mock('expo-sqlite', () => {
 
 import { executeAgentControlGraphModelTurnStreaming } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { executeAgentControlGraphModelTurnViaSendMessage } from '../../src/engine/graph/modelTurnExecutionSendMessage';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createTurnLatencyTimeline } from '../../src/engine/turnLatencyTimeline';
 import type { AgentRunTurnLatencyStage } from '../../src/types/agentRun';
 
@@ -48,7 +47,6 @@ function baseStreamingParams(overrides: Record<string, unknown>) {
     applyGraphEvents: jest.fn(),
     budgetTools: [],
     iteration: 1,
-    memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     recordPerformanceMetrics: jest.fn(),
     reportUsage: jest.fn(),
     requestMessages: [{ role: 'user', content: 'Hello' }],
@@ -216,7 +214,6 @@ describe('model turn send-to-first-output latency marks', () => {
           return { choices: [{ message: { content: 'Done' }, finish_reason: 'stop' }] };
         }),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics,
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Continue' }],

@@ -9,13 +9,8 @@ import {
 } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { executeAgentControlGraphModelTurnViaSendMessage } from '../../src/engine/graph/modelTurnExecutionSendMessage';
 import { hasGeminiToolTurnThoughtSignatureCoverage } from '../../src/services/llm/providers/gemini/thoughtSignatureCoverage';
-import {
-  buildModelTurnMemoryPolicyBinding,
-  POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-} from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 
 beforeEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
@@ -101,7 +96,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
       callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
       iteration: 1,
       llm: { streamMessage: jest.fn(() => stream) },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -139,7 +133,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
           return stream;
         }),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -185,7 +178,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
           return stream;
         }),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -239,7 +231,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
         callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
         iteration: 1,
         llm: { streamMessage },
-        memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         recordPerformanceMetrics: jest.fn(),
         reportUsage: jest.fn(),
         requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -253,69 +244,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
     expect(streamMessage).toHaveBeenCalledTimes(1);
     expect(requestDispatchGuard).toHaveBeenCalledTimes(1);
     expect(transportStarted).toBe(false);
-  });
-
-  it('reports terminal streaming usage once after memory authority expires', async () => {
-    const memoryFence = captureCurrentModelTurnMemoryFence();
-    let releaseTerminalUsage!: () => void;
-    let markTokenPublished!: () => void;
-    const tokenPublished = new Promise<void>((resolve) => {
-      markTokenPublished = resolve;
-    });
-    const terminalUsageReleased = new Promise<void>((resolve) => {
-      releaseTerminalUsage = resolve;
-    });
-    const onToken = jest.fn(() => markTokenPublished());
-    const reportUsage = jest.fn();
-    const streamMessage = jest.fn(() =>
-      (async function* () {
-        yield { type: 'token' as const, content: 'PROVISIONAL_MEMORY_OUTPUT' };
-        await terminalUsageReleased;
-        yield {
-          type: 'usage' as const,
-          usage: {
-            inputTokens: 140,
-            outputTokens: 12,
-            cacheReadTokens: 40,
-            cacheWriteTokens: 0,
-            totalTokens: 152,
-          },
-        };
-      })(),
-    );
-
-    const execution = executeAgentControlGraphModelTurnStreaming({
-      allowQueuedToolCalls: true,
-      applyGraphEvents: jest.fn(),
-      budgetTools: [],
-      callbacks: { onStateChange: jest.fn(), onToken },
-      iteration: 1,
-      llm: { streamMessage },
-      memoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
-      recordPerformanceMetrics: jest.fn(),
-      reportUsage,
-      requestMessages: [{ role: 'user', content: 'Continue' }],
-      requestModel: 'gpt-5-mini',
-      signal: undefined,
-      streamOptions: {},
-    });
-
-    await tokenPublished;
-    expect(onToken).toHaveBeenCalledWith('PROVISIONAL_MEMORY_OUTPUT');
-    useSettingsStore.setState({ disableLongTermMemory: true });
-    releaseTerminalUsage();
-
-    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
-    expect(reportUsage).toHaveBeenCalledTimes(1);
-    expect(reportUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        inputTokens: 140,
-        outputTokens: 12,
-        cacheReadTokens: 40,
-        cacheWriteTokens: 0,
-        totalTokens: 152,
-      }),
-    );
   });
 
   it('queues unsigned Gemini tool calls when allowQueuedToolCalls is true', async () => {
@@ -334,7 +262,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
       llm: {
         streamMessage: () => unsignedToolTurnStream(),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Read file' }],
@@ -367,7 +294,6 @@ describe('executeAgentControlGraphModelTurnStreaming', () => {
       llm: {
         streamMessage: () => duplicateSyntheticToolIdStream(),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Find agent tools' }],
@@ -405,7 +331,6 @@ describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
           return new Promise<never>(() => undefined);
         }),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -442,7 +367,6 @@ describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
         geminiNative: true,
         iteration: 1,
         llm: { sendMessage },
-        memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
         recordPerformanceMetrics: jest.fn(),
         reportUsage: jest.fn(),
         requestMessages: [{ role: 'user', content: 'Continue' }],
@@ -456,127 +380,6 @@ describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(requestDispatchGuard).toHaveBeenCalledTimes(1);
     expect(transportStarted).toBe(false);
-  });
-
-  it('reports non-streaming usage once while rejecting content after memory authority expires', async () => {
-    const memoryFence = captureCurrentModelTurnMemoryFence();
-    let resolveResponse!: (response: unknown) => void;
-    const response = new Promise((resolve) => {
-      resolveResponse = resolve;
-    });
-    const sendMessage = jest.fn(() => response);
-    const callbacks = {
-      onStateChange: jest.fn(),
-      onToken: jest.fn(),
-      onToolCallQueued: jest.fn(),
-    };
-    const reportUsage = jest.fn();
-    const execution = executeAgentControlGraphModelTurnViaSendMessage({
-      applyGraphEvents: jest.fn(),
-      budgetTools: [],
-      callbacks,
-      geminiNative: true,
-      iteration: 1,
-      llm: { sendMessage },
-      memoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
-      recordPerformanceMetrics: jest.fn(),
-      reportUsage,
-      requestMessages: [{ role: 'user', content: 'Continue' }],
-      requestModel: 'gemini-3-flash-preview',
-      signal: undefined,
-      streamOptions: {},
-    });
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-
-    useSettingsStore.setState({ disableLongTermMemory: true });
-    resolveResponse({
-      choices: [
-        {
-          finish_reason: 'tool_calls',
-          message: {
-            content: 'STALE_NON_STREAMING',
-            tool_calls: [
-              {
-                id: 'stale-call',
-                function: { name: 'write_file', arguments: '{}' },
-              },
-            ],
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: 120,
-        completion_tokens: 30,
-        cache_read_input_tokens: 20,
-        cache_creation_input_tokens: 10,
-        total_tokens: 150,
-      },
-    });
-
-    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
-    expect(reportUsage).toHaveBeenCalledTimes(1);
-    expect(reportUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'gemini-3-flash-preview',
-        inputTokens: 120,
-        outputTokens: 30,
-        cacheReadTokens: 20,
-        cacheWriteTokens: 10,
-        totalTokens: 150,
-      }),
-    );
-    expect(callbacks.onToken).not.toHaveBeenCalled();
-    expect(callbacks.onToolCallQueued).not.toHaveBeenCalled();
-  });
-
-  it('stops publishing a non-streaming response when a callback revokes memory authority', async () => {
-    const memoryFence = captureCurrentModelTurnMemoryFence();
-    const onToolCallQueued = jest.fn();
-    const onToken = jest.fn(() => {
-      useSettingsStore.setState({ disableLongTermMemory: true });
-    });
-
-    await expect(
-      executeAgentControlGraphModelTurnViaSendMessage({
-        applyGraphEvents: jest.fn(),
-        budgetTools: [{ name: '記録_موعد', description: 'typed fixture', parameters: {} }],
-        callbacks: {
-          onStateChange: jest.fn(),
-          onToken,
-          onToolCallQueued,
-        },
-        geminiNative: true,
-        iteration: 1,
-        llm: {
-          sendMessage: jest.fn().mockResolvedValue({
-            choices: [
-              {
-                finish_reason: 'tool_calls',
-                message: {
-                  content: 'VISIBLE_BEFORE_REVOCATION',
-                  tool_calls: [
-                    {
-                      id: 'must-not-publish',
-                      function: { name: '記録_موعد', arguments: '{}' },
-                    },
-                  ],
-                },
-              },
-            ],
-          }),
-        },
-        memoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
-        recordPerformanceMetrics: jest.fn(),
-        reportUsage: jest.fn(),
-        requestMessages: [{ role: 'user', content: 'Continue' }],
-        requestModel: 'gemini-3-flash-preview',
-        signal: undefined,
-        streamOptions: {},
-      }),
-    ).rejects.toThrow('memory_prompt_epoch_expired');
-
-    expect(onToken).toHaveBeenCalledTimes(1);
-    expect(onToolCallQueued).not.toHaveBeenCalled();
   });
 });
 
@@ -643,7 +446,6 @@ describe('executeAgentControlGraphModelTurnViaSendMessage', () => {
           },
         }),
       },
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
       recordPerformanceMetrics: jest.fn(),
       reportUsage: jest.fn(),
       requestMessages: [{ role: 'user', content: 'recall' }],

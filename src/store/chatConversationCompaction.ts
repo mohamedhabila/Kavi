@@ -6,8 +6,7 @@ function isCodeOwnedCompactionSummary(message: Message): boolean {
   return (
     message.role === 'system' &&
     message.compactionProvenance?.version === 1 &&
-    (message.compactionProvenance.dependency === 'transcript_only' ||
-      message.compactionProvenance.dependency === 'memory_dependent')
+    message.compactionProvenance.dependency === 'transcript_only'
   );
 }
 

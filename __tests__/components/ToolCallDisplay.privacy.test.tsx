@@ -142,7 +142,6 @@ describe('ToolCallDisplay privacy and recovery', () => {
     [{ failureKind: 'not_found' }, 'toolCall.outcomes.unavailableTitle', 'danger'],
     [{ failureKind: 'network' }, 'toolCall.outcomes.connectionTitle', 'danger'],
     [{ failureKind: 'timeout' }, 'toolCall.outcomes.connectionTitle', 'danger'],
-    [{ failureKind: 'authority_revoked' }, 'toolCall.outcomes.stoppedTitle', 'warning'],
     [{ failureKind: 'aborted' }, 'toolCall.outcomes.stoppedTitle', 'warning'],
     [{ failureKind: 'internal' }, 'toolCall.outcomes.failedTitle', 'danger'],
     [{}, 'toolCall.outcomes.failedTitle', 'danger'],

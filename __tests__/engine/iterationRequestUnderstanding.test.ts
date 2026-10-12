@@ -2,7 +2,6 @@ import { executeAgentControlGraphIteration } from '../../src/engine/graph/iterat
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import {
   projectRequestUnderstanding,
   summarizeRequestUnderstanding,
@@ -26,7 +25,6 @@ function params(iteration: number) {
     memory: { status: 'off', policyEpoch: 0 },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
-    lastModelTurnMemoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
     llm: {},
     warningInjectedThisRound: false,
     workingMessages: [],
