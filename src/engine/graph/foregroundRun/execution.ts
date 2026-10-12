@@ -305,7 +305,6 @@ async function executeReservedForegroundConversationRun(
     completeRunOnce,
     conversation: runConversation,
     conversationId,
-    executionContext,
     finalizationProviderContext,
     getCurrentConversation: () => context.helpers.getConversation(conversationId),
     guardRunCallback,

@@ -23,7 +23,6 @@ type RuntimeControllersParams = Pick<
   ForegroundConversationRunRuntimeParams,
   | 'bootstrapResult'
   | 'conversationId'
-  | 'executionContext'
   | 'getCurrentConversation'
   | 'provider'
   | 'shared'
@@ -39,7 +38,6 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     appendConversationLog,
     bootstrapResult,
     conversationId,
-    executionContext,
     getCurrentConversation,
     mutableState,
     provider,
@@ -271,21 +269,13 @@ export function createForegroundRunRuntimeControllers(params: RuntimeControllers
     },
     actions: {
       appendConversationLog,
-      startNewConversation: (options) => {
-        const currentConversation = getCurrentConversation();
-        return shared.store.createConversation(
-          provider.id,
-          currentConversation?.systemPrompt ?? shared.state.systemPrompt,
-          currentConversation?.modelOverride ?? provider.model,
-          { ...options, activate: true },
-        );
+      resetContext: () => {
+        shared.store.resetConversationContext(conversationId);
       },
       updateAssistantMessage: (messageId, content) =>
         shared.store.updateMessage(conversationId, messageId, content),
     },
     exportDialogTitle: shared.state.exportDialogTitle,
-    mode: executionContext.mode,
-    personaId: executionContext.personaId,
   });
 
   return {

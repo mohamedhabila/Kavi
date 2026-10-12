@@ -20,7 +20,7 @@ export type CommandContext = {
 
 export type CommandResult = {
   response?: string;
-  action?: 'new_conversation' | 'stop' | 'clear_context' | 'export' | 'none';
+  action?: 'stop' | 'clear_context' | 'export' | 'none';
   shouldDisplay?: boolean;
 };
 
@@ -45,27 +45,23 @@ export function getAllCommands(): Array<{ name: string; description: string }> {
 
 // Register built-in commands
 
-registerCommand('new', 'Start a new conversation', async (ctx) => {
-  await triggerInternalHook(
-    createInternalHookEvent('command', 'new', ctx.conversationId ?? 'system', {
-      commandName: 'new',
-      agentRunId: ctx.agentRunId,
-      executionSignal: ctx.executionSignal,
-    }),
-  );
-  return { action: 'new_conversation', response: 'Starting new conversation...' };
-});
+// Kavi is one conversation: starting over means a fresh context in it. Earlier messages stay
+// in the transcript and in memory, but the model no longer reads them.
+function registerContextReset(name: string, description: string): void {
+  registerCommand(name, description, async (ctx) => {
+    await triggerInternalHook(
+      createInternalHookEvent('command', name, ctx.conversationId ?? 'system', {
+        commandName: name,
+        agentRunId: ctx.agentRunId,
+        executionSignal: ctx.executionSignal,
+      }),
+    );
+    return { action: 'clear_context', response: 'Context cleared.' };
+  });
+}
 
-registerCommand('reset', 'Reset the current conversation context', async (ctx) => {
-  await triggerInternalHook(
-    createInternalHookEvent('command', 'reset', ctx.conversationId ?? 'system', {
-      commandName: 'reset',
-      agentRunId: ctx.agentRunId,
-      executionSignal: ctx.executionSignal,
-    }),
-  );
-  return { action: 'clear_context', response: 'Context cleared.' };
-});
+registerContextReset('new', 'Start fresh: earlier messages leave the context');
+registerContextReset('reset', 'Reset the current conversation context');
 
 registerCommand('stop', 'Stop the current generation', () => {
   return { action: 'stop', response: 'Stopping...' };

@@ -73,7 +73,7 @@ export function createReadyPreflightResult(params: {
 
 export function createExecutionContext(params: {
   conversation: Conversation;
-  createConversation?: jest.Mock;
+  resetConversationContext?: jest.Mock;
   providers: LlmProviderConfig[];
   recordConversationTurnMemory: jest.Mock;
   ensureCanonicalConversation: jest.Mock;
@@ -353,7 +353,7 @@ export function createExecutionContext(params: {
       appendAgentRunCheckpoint,
       applyConversationCompaction: noOp,
       completeAgentRun,
-      createConversation: params.createConversation ?? jest.fn(() => 'new-conversation'),
+      resetConversationContext: params.resetConversationContext ?? jest.fn(() => true),
       setAgentRunPhase,
       startAgentRun,
       updateAgentRunAsyncWork,

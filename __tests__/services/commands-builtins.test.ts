@@ -89,11 +89,11 @@ describe('Built-in Commands', () => {
     expect(names).toContain('/cron');
   });
 
-  it('/new should return new_conversation action', async () => {
-    const cmd = getCommand('new');
-    expect(cmd).toBeDefined();
-    const result = await cmd!.handler({ conversationId: 'conv1', args: '' });
-    expect(result.action).toBe('new_conversation');
+  it('/new and /reset start a fresh context in the one conversation', async () => {
+    for (const name of ['new', 'reset']) {
+      const result = await getCommand(name)!.handler({ conversationId: 'conv1', args: '' });
+      expect(result).toEqual({ action: 'clear_context', response: 'Context cleared.' });
+    }
   });
 
   it('/new propagates scheduled execution identity into its hook event', async () => {

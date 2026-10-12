@@ -26,6 +26,7 @@ import {
   preserveProtectedExecutionMessages,
 } from './chatExecutionMessageProtection';
 import { selectDurableCompactionMessages } from './chatConversationCompaction';
+import { archiveLeavingMessages } from './chatPersistence';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
@@ -53,6 +54,7 @@ export function createMessageStoreActions(
   ChatState,
   | 'addMessage'
   | 'applyConversationCompaction'
+  | 'resetConversationContext'
   | 'updateMessage'
   | 'updateMessageEnrichedContent'
   | 'updateMessageAttachments'
@@ -126,6 +128,35 @@ export function createMessageStoreActions(
       });
 
       requestChatStorePersistenceCheckpoint();
+    },
+
+    resetConversationContext: (conversationId) => {
+      let reset = false;
+      set((state) => {
+        const conversations = updateConversationById(
+          state.conversations,
+          conversationId,
+          (conversation) => {
+            const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
+            const leaving = conversation.messages.filter(
+              (message) => !protectedMessageIds.has(message.id),
+            );
+            if (leaving.length === 0) return conversation;
+            archiveLeavingMessages(conversation.id, leaving);
+            reset = true;
+            return {
+              ...conversation,
+              messages: conversation.messages.filter((message) =>
+                protectedMessageIds.has(message.id),
+              ),
+              updatedAt: Date.now(),
+            };
+          },
+        );
+        return conversations ? { conversations } : state;
+      });
+      if (reset) requestChatStorePersistenceCheckpoint();
+      return reset;
     },
 
     updateMessage: (conversationId, messageId, content) =>

@@ -104,6 +104,13 @@ export interface ChatState {
     },
   ) => void;
   applyConversationCompaction: (conversationId: string, messages: Message[]) => void;
+  /**
+   * Starts a fresh context in the conversation: its messages move to the transcript archive,
+   * where the person can still scroll back to them and memory still recalls them, and the
+   * model no longer reads them. An active run keeps its own messages. False when nothing
+   * left.
+   */
+  resetConversationContext: (conversationId: string) => boolean;
   updateMessage: (conversationId: string, messageId: string, content: string) => void;
   updateMessageEnrichedContent: (
     conversationId: string,

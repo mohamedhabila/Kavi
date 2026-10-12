@@ -1,4 +1,5 @@
 import type { Conversation, ConversationLogEntry } from '../types/conversation';
+import type { Message } from '../types/message';
 import {
   MAX_PERSISTED_AGENT_RUNS,
   MAX_PERSISTED_EXACT_REPLAY_MESSAGES,
@@ -66,23 +67,32 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
 }
 
 /**
- * Hand the messages a projection leaves out to the transcript archive, in the form they
- * had when they left the persisted window. They are written before the commit that omits
- * them, so a conversation the person keeps using does not lose its older history.
+ * Hand messages leaving a conversation's live window to the transcript archive, in the form
+ * they had when they left. They are written before the commit that omits them, so a
+ * conversation the person keeps using does not lose its older history.
  */
+export function archiveLeavingMessages(
+  conversationId: string,
+  messages: ReadonlyArray<Message>,
+): void {
+  noteEvictedMessages(
+    conversationId,
+    messages
+      .filter((message) => !isMessageArchivedOrQueued(conversationId, message.id))
+      .map((message) =>
+        sanitizeMessage(message, { preserveReplay: false, preserveReasoning: false }),
+      ),
+  );
+}
+
+/** Archives the messages a persisted projection leaves out. */
 function archiveEvictedMessages(conversation: Conversation, persisted: Conversation): void {
   const messages = conversation.messages ?? [];
   if (messages.length <= persisted.messages.length) return;
   const keptIds = new Set(persisted.messages.map((message) => message.id));
-  const evicted = messages.filter(
-    (message) =>
-      !keptIds.has(message.id) && !isMessageArchivedOrQueued(conversation.id, message.id),
-  );
-  noteEvictedMessages(
+  archiveLeavingMessages(
     conversation.id,
-    evicted.map((message) =>
-      sanitizeMessage(message, { preserveReplay: false, preserveReasoning: false }),
-    ),
+    messages.filter((message) => !keptIds.has(message.id)),
   );
 }
 

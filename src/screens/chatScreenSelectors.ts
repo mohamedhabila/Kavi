@@ -16,7 +16,7 @@ export function selectChatScreenChatSlice(state: ChatState) {
     activeConversationId: state.activeConversationId,
     setActiveConversation: state.setActiveConversation,
     isLoading: state.isLoading,
-    createConversation: state.createConversation,
+    resetConversationContext: state.resetConversationContext,
     getOrCreateCanonicalThread: state.getOrCreateCanonicalThread,
     addMessage: state.addMessage,
     updateMessage: state.updateMessage,

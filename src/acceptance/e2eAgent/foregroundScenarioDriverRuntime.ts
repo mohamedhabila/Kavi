@@ -426,7 +426,7 @@ export function createForegroundScenarioRuntime(
       appendAgentRunCheckpoint: store.appendAgentRunCheckpoint,
       applyConversationCompaction: store.applyConversationCompaction,
       completeAgentRun: store.completeAgentRun,
-      createConversation: store.createConversation,
+      resetConversationContext: store.resetConversationContext,
       setAgentRunPhase: store.setAgentRunPhase,
       startAgentRun: store.startAgentRun,
       updateAgentRunAsyncWork: store.updateAgentRunAsyncWork,

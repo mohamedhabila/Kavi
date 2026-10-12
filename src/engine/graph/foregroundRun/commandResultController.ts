@@ -23,8 +23,6 @@ function loadArchivedHistoryForExport(conversation: Conversation): Message[] {
   }
 }
 
-type ConversationMode = 'agentic' | 'chitchat';
-
 type ForegroundCommandResult = {
   action?: string;
   response?: string;
@@ -37,7 +35,8 @@ type ForegroundCommandResultControllerAccessors = {
 
 type ForegroundCommandResultControllerActions = {
   appendConversationLog: (entry: ConversationLogEntry) => void;
-  startNewConversation: (options: { mode?: ConversationMode; personaId?: string }) => string;
+  /** Starts a fresh context in the conversation (see `resetConversationContext`). */
+  resetContext: () => void;
   updateAssistantMessage: (messageId: string, content: string) => void;
 };
 
@@ -61,8 +60,6 @@ export function createForegroundCommandResultController(params: {
   accessors: ForegroundCommandResultControllerAccessors;
   actions: ForegroundCommandResultControllerActions;
   exportDialogTitle: string;
-  mode?: ConversationMode;
-  personaId?: string;
 }) {
   return {
     async handleCommandResult(result: ForegroundCommandResult): Promise<void> {
@@ -75,11 +72,8 @@ export function createForegroundCommandResultController(params: {
 
       params.actions.appendConversationLog(buildCommandResultLogEntry(result));
 
-      if (result.action === 'new_conversation') {
-        params.actions.startNewConversation({
-          personaId: params.personaId,
-          mode: params.mode,
-        });
+      if (result.action === 'clear_context') {
+        params.actions.resetContext();
         return;
       }
 

@@ -73,12 +73,12 @@ describe('foreground run target-conversation execution context', () => {
     const staleProvider = createProvider('stale-provider', 'stale-model');
     const targetProvider = createProvider('target-provider', 'target-model');
     const finalizationProvider = { ...targetProvider, apiKey: 'hydrated-key' };
-    const startConversation = jest.fn(() => 'new-conversation');
+    const resetConversationContext = jest.fn(() => true);
     const ensureCanonicalConversation = jest.fn(() => 'new-conversation');
     const recordConversationTurnMemory = jest.fn();
     const context = createExecutionContext({
       conversation,
-      createConversation: startConversation,
+      resetConversationContext,
       providers: [staleProvider, targetProvider],
       ensureCanonicalConversation,
       recordConversationTurnMemory,
@@ -92,8 +92,8 @@ describe('foreground run target-conversation execution context', () => {
       }),
     );
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
-      callbacks.onCommandResult?.({ action: 'new_conversation' });
-      deliverFinalAssistantMessage(callbacks, 'A new conversation is ready.');
+      callbacks.onCommandResult?.({ action: 'clear_context' });
+      deliverFinalAssistantMessage(callbacks, 'Context cleared.');
       callbacks.onDone();
       return { terminalDisposition: 'command' };
     });
@@ -112,12 +112,7 @@ describe('foreground run target-conversation execution context', () => {
       expect.any(Object),
     );
     expect(ensureCanonicalConversation).not.toHaveBeenCalled();
-    expect(startConversation).toHaveBeenCalledWith(
-      'target-provider',
-      conversation.systemPrompt,
-      'target-model',
-      { mode: 'chitchat', personaId: 'reviewer', activate: true },
-    );
+    expect(resetConversationContext).toHaveBeenCalledWith(conversation.id);
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,
       context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,

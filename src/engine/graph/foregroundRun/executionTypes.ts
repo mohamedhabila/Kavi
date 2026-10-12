@@ -15,7 +15,6 @@ import type {
   RunChatOptions,
 } from './contracts';
 import type { ForegroundRunRequestBootstrapResult } from './requestBootstrap';
-import type { ForegroundConversationExecutionContext } from './executionContext';
 import type {
   ActivateForegroundModelExecutionInput,
   BeginForegroundModelExecutionInput,
@@ -62,7 +61,7 @@ export type ForegroundConversationRunStoreActions = Pick<
   | 'appendAgentRunCheckpoint'
   | 'applyConversationCompaction'
   | 'completeAgentRun'
-  | 'createConversation'
+  | 'resetConversationContext'
   | 'setAgentRunPhase'
   | 'startAgentRun'
   | 'updateAgentRunAsyncWork'
@@ -211,7 +210,6 @@ export interface ForegroundConversationRunRuntimeParams {
   completeRunOnce: (task: () => Promise<void> | void) => Promise<void>;
   conversation: Conversation | undefined;
   conversationId: string;
-  executionContext: ForegroundConversationExecutionContext;
   finalizationProviderContext: ResolvedFinalizationProviderContext;
   getCurrentConversation: () => Conversation | undefined;
   guardRunCallback: () => boolean;

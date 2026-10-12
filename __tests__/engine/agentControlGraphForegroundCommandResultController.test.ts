@@ -43,7 +43,7 @@ function createConversation(): Conversation {
 function createHarness(overrides: { conversation?: Conversation } = {}) {
   const actions = {
     appendConversationLog: jest.fn(),
-    startNewConversation: jest.fn(() => 'new-conversation'),
+    resetContext: jest.fn(),
     updateAssistantMessage: jest.fn(),
   };
 
@@ -54,8 +54,6 @@ function createHarness(overrides: { conversation?: Conversation } = {}) {
     },
     actions,
     exportDialogTitle: 'Export conversation',
-    mode: 'agentic',
-    personaId: 'super-agent',
   });
 
   return {
@@ -107,18 +105,19 @@ describe('foreground command result controller', () => {
     );
   });
 
-  it('starts a genuinely fresh conversation for new-conversation command results', async () => {
+  it('starts a fresh context when a command clears it', async () => {
     const harness = createHarness();
 
     await harness.controller.handleCommandResult({
-      action: 'new_conversation',
-      response: 'Starting new conversation...',
+      action: 'clear_context',
+      response: 'Context cleared.',
     });
 
-    expect(harness.actions.startNewConversation).toHaveBeenCalledWith({
-      personaId: 'super-agent',
-      mode: 'agentic',
-    });
+    expect(harness.actions.updateAssistantMessage).toHaveBeenCalledWith(
+      'assistant-1',
+      'Context cleared.',
+    );
+    expect(harness.actions.resetContext).toHaveBeenCalledTimes(1);
     expect(mockShareTextExport).not.toHaveBeenCalled();
   });
 

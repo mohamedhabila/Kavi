@@ -73,11 +73,11 @@ describe('Built-in commands', () => {
   });
 
   describe('/new', () => {
-    it('returns new_conversation action', async () => {
+    it('starts a fresh context rather than another conversation', async () => {
       const cmd = getCommand('new');
       expect(cmd).toBeDefined();
       const result = await cmd!.handler({ conversationId: 'test', args: '' });
-      expect(result.action).toBe('new_conversation');
+      expect(result.action).toBe('clear_context');
     });
   });
 
