@@ -226,8 +226,9 @@ describe('E2E native mobile fixtures', () => {
       'conv-mobile-calendar-e2e',
     );
     expect(parseCompletedToolOutcome(mapsRaw)).toEqual({
-      status: 'maps_opened',
-      targetKind: 'query',
+      status: 'opened',
+      code: 'maps_opened',
+      details: { targetKind: 'query' },
     });
   });
 

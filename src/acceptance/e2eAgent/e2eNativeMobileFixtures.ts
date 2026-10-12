@@ -468,9 +468,11 @@ async function executeE2ENativeMobileTool(
           : 'query';
       e2eNativeFixtureState.maps.opened = true;
       e2eNativeFixtureState.maps.targetKind = targetKind;
+      // The shape the native action service returns: status `opened`, code `maps_opened`.
       return completedE2ENativeOutcome({
-        status: 'maps_opened',
-        targetKind,
+        status: 'opened',
+        code: 'maps_opened',
+        details: { targetKind },
       });
     }
     case 'device_status':
