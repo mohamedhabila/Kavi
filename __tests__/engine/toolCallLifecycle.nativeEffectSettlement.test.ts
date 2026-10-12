@@ -57,6 +57,7 @@ function nativeLifecycle(definition: ToolDefinition, args: object): ToolExecutio
       arguments: JSON.stringify(args),
     },
     iteration: 1,
+    batchIndex: 0,
     conversationId: 'conversation-1',
     memoryConversationId: 'memory-conversation-1',
     provider: {
@@ -75,6 +76,9 @@ function nativeLifecycle(definition: ToolDefinition, args: object): ToolExecutio
       hasBrowserControllableWorkspaceTargets: false,
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
+      hasWebSearchProvider: false,
+      hasDeveloperModeEnabled: false,
+      hasConfiguredSecret: () => false,
     },
     toolCallHistory: [],
     groundedRequestScopedTools: [definition],
