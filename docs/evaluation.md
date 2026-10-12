@@ -27,7 +27,7 @@ The machine-readable sources are:
   strict contract for enabled upstream adapters, licenses, immutable inputs,
   model terms, privacy, reproducibility, and submission state.
 - [`evaluation/benchmark-provenance.json`](../evaluation/benchmark-provenance.json):
-  reviewed provenance for the LongMemEval-V2 and STATE-Bench adapters that are
+  reviewed provenance for the STATE-Bench adapter, the upstream adapter that is
   actually executable from this repository.
 
 Validate all public governance artifacts without a provider key, private pack,
@@ -57,20 +57,14 @@ The default validation remains network-free and does not inspect ignored
 `.private` checkouts. A candidate run must separately prove that its app and
 upstream base are clean, that only the declared adapter patch was installed,
 and that its run manifest records the actual models, endpoints, terms, pricing,
-and environment. LongMemEval-V2 supplies constraint files but no transitive
-lock or container; STATE-Bench supplies `uv.lock` but no upstream container.
-Those facts must remain visible rather than being presented as equivalent
+and environment. STATE-Bench supplies `uv.lock` but no upstream container;
+that fact must remain visible rather than being presented as full
 reproducibility.
 
-A local score is never official. LongMemEval-V2 accepts a validated package
-through its submission form; STATE-Bench accepts scored trajectories and
+A local score is never official. STATE-Bench accepts scored trajectories and
 metrics through a GitHub issue. `resultStatus` stays `not_submitted` until a
 submission exists and cannot become `accepted` without its public review URL.
-LongMemEval-V2 candidates must be built through Kavi's private preparation gate,
-which rejects subset runs, verifies score-bearing dataset files, sanitizes a
-copy without mutating raw evidence, and records package content hashes. Passing
-that gate means only that the archive is ready for maintainer review.
-STATE-Bench preparation likewise emits only `prepared_adapter`; only the
+STATE-Bench preparation emits only `prepared_adapter`; only the
 post-run validator may emit `official_candidate`, after validating the frozen
 revisions and preparation hashes, exact 3-domain by 5-run by 50-task held-out
 coverage, locked trajectory/metrics provenance, and an exact output archive.
@@ -122,7 +116,7 @@ npm run eval:e2e:paired
 
 Set `E2E_PAIRED_REFERENCE_CONDITION` and
 `E2E_PAIRED_CANDIDATE_CONDITION` to compare another supported product
-treatment, such as `lexical_baseline` versus `production_auto`. Reports are immutable under
+treatment, such as `memory_off` versus `production_auto`. Reports are immutable under
 `.private/evals/runs/e2e-paired` by default; choose a new run ID for every
 attempt. A valid paired delta is local product evidence, not an official benchmark result or a capability pass bar.
 

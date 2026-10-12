@@ -26,18 +26,23 @@ describe('benchmark provenance', () => {
     expect(validateBenchmarkProvenance(registry, schema, projectRoot)).toEqual([]);
   });
 
-  it('rejects missing enabled adapters and unresolved license values', () => {
+  it('rejects missing enabled adapters', () => {
     const incomplete = clone(registry);
     incomplete.adapters.pop();
-    incomplete.adapters[0].licenses.code.spdxId = 'unknown';
 
-    const failures = validateBenchmarkProvenance(incomplete, schema, projectRoot);
-
-    expect(failures).toEqual(
+    expect(validateBenchmarkProvenance(incomplete, schema, projectRoot)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('must contain every enabled adapter in order'),
-        expect.stringContaining('unresolved values are forbidden'),
       ]),
+    );
+  });
+
+  it('rejects unresolved license values', () => {
+    const unresolved = clone(registry);
+    unresolved.adapters[0].licenses.code.spdxId = 'unknown';
+
+    expect(validateBenchmarkProvenance(unresolved, schema, projectRoot)).toEqual(
+      expect.arrayContaining([expect.stringContaining('unresolved values are forbidden')]),
     );
   });
 
@@ -45,7 +50,7 @@ describe('benchmark provenance', () => {
     const drifted = clone(registry);
     drifted.adapters[0].adapter.sourceSha256 = '0'.repeat(64);
     drifted.adapters[0].upstream.immutableSourceUrl =
-      'https://github.com/xiaowu0162/LongMemEval-V2/tree/main';
+      'https://github.com/microsoft/STATE-Bench/tree/main';
 
     const failures = validateBenchmarkProvenance(drifted, schema, projectRoot);
 
@@ -63,7 +68,7 @@ describe('benchmark provenance', () => {
     const ignoredCache = path.join(
       projectRoot,
       'benchmarks',
-      'longmemeval_v2',
+      'state_bench',
       '__pycache__',
       'provenance-test.pyc',
     );
@@ -78,19 +83,19 @@ describe('benchmark provenance', () => {
 
   it('cannot label a result submitted or accepted without a public record', () => {
     const claimed = clone(registry);
-    claimed.adapters[1].submission.resultStatus = 'accepted';
+    claimed.adapters[0].submission.resultStatus = 'accepted';
 
     expect(validateBenchmarkProvenance(claimed, schema, projectRoot)).toContain(
-      'provenance.adapters[1].submission: submitted results require a submission record URL',
+      'provenance.adapters[0].submission: submitted results require a submission record URL',
     );
   });
 
   it('requires canonical service terms for protocol-locked OpenAI models', () => {
     const invalidTerms = clone(registry);
-    invalidTerms.adapters[1].models[1].termsUrl = 'https://example.com/terms';
+    invalidTerms.adapters[0].models[1].termsUrl = 'https://example.com/terms';
 
     expect(validateBenchmarkProvenance(invalidTerms, schema, projectRoot)).toContain(
-      'provenance.adapters[1].models[1].termsUrl: must use the canonical OpenAI service terms',
+      'provenance.adapters[0].models[1].termsUrl: must use the canonical OpenAI service terms',
     );
   });
 });

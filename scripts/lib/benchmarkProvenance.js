@@ -12,7 +12,7 @@ const BENCHMARK_PROVENANCE_SCHEMA_FILE = path.join(
   'benchmark-provenance.schema.json',
 );
 const BENCHMARK_PROVENANCE_FILE = path.join('evaluation', 'benchmark-provenance.json');
-const ENABLED_BENCHMARK_IDS = Object.freeze(['longmemeval-v2', 'state-bench-agent-learning']);
+const ENABLED_BENCHMARK_IDS = Object.freeze(['state-bench-agent-learning']);
 const OPENAI_SERVICE_TERMS_URL = 'https://openai.com/policies/service-terms/';
 
 function readJson(filePath) {
@@ -135,25 +135,16 @@ function walkStrings(value, location, visitor) {
 
 function validateSourceEvidence(projectRoot, adapter, failures) {
   const evidence =
-    adapter.id === 'longmemeval-v2'
+    adapter.id === 'state-bench-agent-learning'
       ? {
-          path: path.join('benchmarks', 'longmemeval_v2', 'run_kavi_isolated.py'),
+          path: path.join('benchmarks', 'state_bench', 'stateBenchTrainingArtifact.ts'),
           values: [
+            adapter.upstream.releaseTag,
             adapter.upstream.commitSha,
-            adapter.data.revision,
             ...adapter.data.integrity.map((entry) => entry.sha256),
           ],
         }
-      : adapter.id === 'state-bench-agent-learning'
-        ? {
-            path: path.join('benchmarks', 'state_bench', 'stateBenchTrainingArtifact.ts'),
-            values: [
-              adapter.upstream.releaseTag,
-              adapter.upstream.commitSha,
-              ...adapter.data.integrity.map((entry) => entry.sha256),
-            ],
-          }
-        : null;
+      : null;
   if (!evidence) return;
   const source = fs.readFileSync(path.join(projectRoot, evidence.path), 'utf8');
   for (const value of evidence.values.filter(Boolean)) {

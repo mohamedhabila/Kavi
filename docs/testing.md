@@ -222,7 +222,7 @@ or external benchmark checkouts:
 npm run test:benchmark-adapters
 ```
 
-These tests validate Kavi's AMemGym, LongMemEval-V2, and STATE-Bench adapter protocols
+These tests validate Kavi's AMemGym and STATE-Bench adapter protocols
 and artifact handling only. They do not execute or score the upstream benchmark suites.
 MobileWorld's adapter deliberately imports the pinned upstream parser; after preparing
 the private checkout and virtual environment from `benchmarks/mobileworld/README.md`, run
