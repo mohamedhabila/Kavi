@@ -1,14 +1,11 @@
 import { applyForegroundRetryResend } from '../../src/engine/graph/foregroundConversationReplay';
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
 import { buildToolSchemaDigest } from '../../src/engine/tools/builtin-tool-schemaDigest';
-import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
 import { windowMessages } from '../../src/services/context/budgetManager';
 import { estimateApiMessageCost } from '../../src/services/context/contentTokens';
 import { mcpManager } from '../../src/services/mcp/manager';
-import { bindCurrentTurnToolObservedMemoryEvidence } from '../../src/services/memory/toolObservedMemoryEvidence';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
-import { sha256HexUtf8 } from '../../src/utils/sha256';
 import { useChatStore } from '../helpers/chatStoreHarness';
 import { tools, userMessage } from '../helpers/turnToolSurfaceHarness';
 
@@ -86,38 +83,6 @@ describe('tool surface across steers', () => {
     });
 
     expect(selected.map((tool) => tool.name)).toContain(name);
-  });
-});
-
-describe('tool-observed memory evidence across a steer', () => {
-  it('still binds a result the run observed before the steer', () => {
-    const result = '{"displayName":"Nour","timezone":"Asia/Amman"}';
-    const args = '{"path":"profile.json"}';
-    const messages: Message[] = [
-      { id: 'request', role: 'user', content: 'Inspect the profile.', timestamp: 1 },
-      ...toolStep('tc-profile', 'read_file', args, result, 2),
-      steer('steer', 'Remember my timezone.', 4),
-    ];
-
-    const capabilities = bindCurrentTurnToolObservedMemoryEvidence({
-      executionRunId: 'execution-run-current',
-      currentUserMessageId: 'steer',
-      workingMessages: messages,
-      executedToolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.name === 'read_file'),
-      currentRunCompletedToolResults: [
-        {
-          executionRunId: 'execution-run-current',
-          sourceMessageId: 'tool-tc-profile',
-          sourceToolCallId: 'tc-profile',
-          sourceToolName: 'read_file',
-          argumentsSha256: sha256HexUtf8(args),
-          visibleResultSha256: sha256HexUtf8(result),
-          visibleResultFidelity: 'complete',
-        },
-      ],
-    });
-
-    expect(capabilities).toHaveLength(1);
   });
 });
 

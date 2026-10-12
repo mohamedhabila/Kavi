@@ -201,21 +201,21 @@ describe('I18nManager', () => {
 
   describe('t (plural tables)', () => {
     it('selects the "one" category for count 1', () => {
-      expect(i18n.t('nav.memoryStatsFacts', { count: 1 })).toBe('1 fact');
+      expect(i18n.t('memory.count', { count: 1 })).toBe('1 memory');
     });
 
     it('selects the "other" category for count 0', () => {
-      expect(i18n.t('nav.memoryStatsFacts', { count: 0 })).toBe('0 facts');
+      expect(i18n.t('memory.count', { count: 0 })).toBe('0 memories');
     });
 
     it('selects the "other" category for count 2 and beyond', () => {
-      expect(i18n.t('nav.memoryStatsFacts', { count: 2 })).toBe('2 facts');
-      expect(i18n.t('nav.memoryStatsFacts', { count: 42 })).toBe('42 facts');
+      expect(i18n.t('memory.count', { count: 2 })).toBe('2 memories');
+      expect(i18n.t('memory.count', { count: 42 })).toBe('42 memories');
     });
 
     it('accepts a string count and still interpolates and selects correctly', () => {
-      expect(i18n.t('nav.memoryStatsFacts', { count: '1' })).toBe('1 fact');
-      expect(i18n.t('nav.memoryStatsFacts', { count: '5' })).toBe('5 facts');
+      expect(i18n.t('memory.count', { count: '1' })).toBe('1 memory');
+      expect(i18n.t('memory.count', { count: '5' })).toBe('5 memories');
     });
 
     it('selects the correct category in a locale with its own plural rules (Arabic)', async () => {
@@ -232,8 +232,8 @@ describe('I18nManager', () => {
       // @ts-expect-error deliberately removing a constructor to test the guarded fallback
       delete (Intl as { PluralRules?: unknown }).PluralRules;
       try {
-        expect(i18n.t('nav.memoryStatsFacts', { count: 1 })).toBe('1 fact');
-        expect(i18n.t('nav.memoryStatsFacts', { count: 3 })).toBe('3 facts');
+        expect(i18n.t('memory.count', { count: 1 })).toBe('1 memory');
+        expect(i18n.t('memory.count', { count: 3 })).toBe('3 memories');
       } finally {
         (Intl as { PluralRules?: typeof Intl.PluralRules }).PluralRules = OriginalPluralRules;
       }
@@ -244,7 +244,7 @@ describe('I18nManager', () => {
     });
 
     it('missing count falls back to the "other" category', () => {
-      expect(i18n.t('nav.memoryStatsFacts')).toBe('{count} facts');
+      expect(i18n.t('memory.count')).toBe('{count} memories');
     });
   });
 

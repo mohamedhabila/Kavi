@@ -5,9 +5,7 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 import type { AppPalette } from '../../theme/useAppTheme';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { CompactionSummarizerMode } from '../../types/settings';
-import type { ConsolidationStatusSnapshot } from '../../services/memory/consolidationStatus';
 import type { MemoryConsolidationMode } from '../../services/memory/memoryConsolidationMode';
-import { consolidationTierLabel } from '../memory/consolidationStatusLabel';
 import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
 type TranslationFn = (key: string, params?: any) => string;
@@ -29,7 +27,6 @@ type SettingsDataSectionProps = {
   setCompactionSummarizer: (mode: CompactionSummarizerMode) => void;
   setCompactionProvider: (providerId: string | null) => void;
   setCompactionModel: (model: string | null) => void;
-  consolidationStatus: ConsolidationStatusSnapshot;
   onLayout?: (event: any) => void;
   onManageMemory: () => void;
   onManageApprovals: () => void;
@@ -75,7 +72,6 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   setCompactionSummarizer,
   setCompactionProvider,
   setCompactionModel,
-  consolidationStatus,
   onLayout,
   onManageMemory,
   onManageApprovals,
@@ -156,15 +152,6 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
                 );
               })}
           </ScrollView>
-          <Text
-            style={[styles.listItemSubtitle, { marginTop: 8 }]}
-            testID="settings-consolidation-status"
-          >
-            {consolidationTierLabel(consolidationStatus, t)}
-            {consolidationStatus.isFallback && !consolidationStatus.memoryDisabled
-              ? ` · ${t('memory.consolidationFallbackActive')}`
-              : ''}
-          </Text>
         </View>
       ) : null}
 

@@ -4,7 +4,7 @@ import {
   type StateBenchDomain,
   type StateBenchTrainingFile,
 } from '../../benchmarks/state_bench/stateBenchTrainingArtifact';
-import { retrieveExperienceLearnings } from '../../src/services/memory/experienceLearningArtifact';
+import { retrieveExperienceLearnings } from '../../benchmarks/state_bench/experienceLearningArtifact';
 
 function trajectory(tools: string[], done = true): string {
   return JSON.stringify({

@@ -20,11 +20,18 @@ import {
   recordTurnsIndexedThrough,
   skipCaptureThrough,
 } from './memoryCaptureCursor';
-import { scheduleMemoryExtraction } from './memoryExtractionWorker';
-import { deleteMemoryItemsFromConversation } from './memoryItemsStore';
-import { deleteMemoryPromptBuildsFromConversation } from './memoryPromptLog';
+import { cancelMemoryExtraction, scheduleMemoryExtraction } from './memoryExtractionWorker';
+import { deleteAllMemoryItems, deleteMemoryItemsFromConversation } from './memoryItemsStore';
+import {
+  deleteAllMemoryPromptBuilds,
+  deleteMemoryPromptBuildsFromConversation,
+} from './memoryPromptLog';
 import { ensureMemoryCoreSchema } from './memorySchema';
-import { deleteMemoryTurnsFromConversation, indexClosedTurn } from './memoryTurnsStore';
+import {
+  deleteAllMemoryTurns,
+  deleteMemoryTurnsFromConversation,
+  indexClosedTurn,
+} from './memoryTurnsStore';
 
 const logger = createLogger('memory.capture');
 
@@ -116,6 +123,22 @@ export function deleteConversationMemory(conversationId: string): void {
   deleteMemoryTurnsFromConversation(conversationId);
   deleteMemoryPromptBuildsFromConversation(conversationId);
   deleteCaptureCursor(conversationId);
+}
+
+/**
+ * Clearing memory forgets everything it kept — what Kavi saved, its index of earlier
+ * exchanges and the prompt log — and stops extraction first, so nothing said before the
+ * clear is captured again.
+ */
+export function clearAllMemory(
+  conversations: ReadonlyArray<CaptureThread> = currentConversations(),
+): void {
+  cancelMemoryExtraction();
+  ensureMemoryCoreSchema(getMemoryDb());
+  deleteAllMemoryItems();
+  deleteAllMemoryTurns();
+  deleteAllMemoryPromptBuilds();
+  skipMemoryCaptureToNow(conversations);
 }
 
 function currentConversations(): ReadonlyArray<CaptureThread> {

@@ -152,7 +152,7 @@ class I18nManager {
    *   t('chat.toolCall', { name: 'web_fetch' })
    *   // → "Using tool: web_fetch"
    * @example
-   *   t('nav.memoryStatsFacts', { count: 1 })
+   *   t('memory.count', { count: 1 })
    *   // → "1 fact" (selects the `one` category)
    */
   t(key: string, params?: Record<string, string | number>): string {

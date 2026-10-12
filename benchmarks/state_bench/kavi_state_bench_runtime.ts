@@ -15,7 +15,7 @@ import process from 'node:process';
 import {
   retrieveExperienceLearnings,
   sanitizeExperienceLearningArtifact,
-} from '../../src/services/memory/experienceLearningArtifact';
+} from './experienceLearningArtifact';
 import {
   buildStateBenchLearningArtifact,
   STATE_BENCH_ADAPTER_COMMIT,

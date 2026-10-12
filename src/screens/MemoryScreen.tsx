@@ -1,226 +1,129 @@
 // ---------------------------------------------------------------------------
-// Kavi — Memory Viewer / Editor Screen
+// Kavi — Memory screen
 // ---------------------------------------------------------------------------
-// Lets users inspect and manage the canonical structured memory system.
+// What Kavi remembers about the user, newest first: search it, pin what should always be
+// in mind, forget an item, or clear everything.
+// ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert } from 'react-native';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import { loadMemoryDiagnosticsSnapshot } from '../services/memory/memoryDiagnostics';
-import { loadMemoryOverviewSnapshot } from '../services/memory/memoryOverview';
-import { useChatStore } from '../store/useChatStore';
-import {
-  getMemoryLastUpdatedAt,
-  subscribeToMemoryChanges,
-} from '../services/memory/changeNotifications';
-import { resetCanonicalMemoryForManagement } from '../services/memory/memoryReset';
-import { queryMemoryFactsForManagement } from '../services/memory/memoryTools';
-import { recallRecentEpisodes } from '../services/memory/episodeRecall';
-import { useAppTheme } from '../theme/useAppTheme';
-import { MemoryScreenView } from './memory/MemoryScreenView';
-import type {
-  MemoryDiagnostics,
-  MemoryEpisodeRow as MemoryEpisode,
-  MemoryFactRow as FactRow,
-  MemoryOverview,
-  MemoryTab as Tab,
-} from './memory/memoryScreenTypes';
-import { createMemoryScreenStyles as createStyles } from './memory/memoryScreenStyles';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { Trash2 } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { BackIcon } from '../components/navigation/DirectionalIcons';
+import { getLocaleBcp47Tag } from '../i18n/localeBcp47';
 import { useTranslation } from '../i18n/useTranslation';
 import { useBackToChat } from '../navigation/useBackToChat';
-import { useMemoryFactManagement } from './memory/useMemoryFactManagement';
+import { subscribeToMemoryChanges } from '../services/memory/changeNotifications';
+import { clearAllMemory } from '../services/memory/core/memoryCapture';
+import {
+  forgetMemoryItem,
+  listMemoryItems,
+  searchMemoryItems,
+  setMemoryItemPinned,
+  type MemoryItem,
+} from '../services/memory/core/memoryItemsStore';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { useAppTheme } from '../theme/useAppTheme';
+import { createLogger } from '../utils/logger';
+import { MemoryItemCard } from './memory/MemoryItemCard';
+import { createMemoryScreenStyles } from './memory/memoryScreenStyles';
 
-function resolveRouteTab(tabParam: unknown): Tab {
-  if (tabParam === 'facts') return 'facts';
-  if (tabParam === 'advanced') return 'advanced';
-  return 'overview';
+const logger = createLogger('MemoryScreen');
+const LISTED_ITEM_LIMIT = 200;
+const SEARCHED_ITEM_LIMIT = 100;
+const SEARCH_DEBOUNCE_MS = 150;
+
+function readItems(query: string): MemoryItem[] {
+  const trimmed = query.trim();
+  return trimmed
+    ? searchMemoryItems({ query: trimmed, limit: SEARCHED_ITEM_LIMIT, includeSensitive: true })
+    : listMemoryItems({ limit: LISTED_ITEM_LIMIT, offset: 0 });
 }
 
 export const MemoryScreen: React.FC = () => {
   const { colors } = useAppTheme();
-  const { t } = useTranslation();
-  const navigation = useNavigation<any>();
+  const { t, locale } = useTranslation();
   const route = useRoute<any>();
   const handleBack = useBackToChat();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const routeQuery = typeof route.params?.query === 'string' ? route.params.query.trim() : '';
-  const routeTab = resolveRouteTab(route.params?.tab);
+  const styles = useMemo(() => createMemoryScreenStyles(colors), [colors]);
+  const dateFormat = useMemo(
+    () => new Intl.DateTimeFormat(getLocaleBcp47Tag(locale), { dateStyle: 'medium' }),
+    [locale],
+  );
+  const memoryOff = useSettingsStore((state) => state.disableLongTermMemory === true);
+  const routeQuery = typeof route.params?.query === 'string' ? route.params.query : '';
 
-  const [tab, setTab] = useState<Tab>(routeTab);
-  const [overview, setOverview] = useState<MemoryOverview | null>(null);
-  const [overviewLoaded, setOverviewLoaded] = useState(false);
-  const [diagnostics, setDiagnostics] = useState<MemoryDiagnostics | null>(null);
-  const [diagnosticsError, setDiagnosticsError] = useState(false);
-  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
-  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
-  const [overviewSearch, setOverviewSearch] = useState(routeQuery);
-  const [overviewFacts, setOverviewFacts] = useState<FactRow[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() => getMemoryLastUpdatedAt());
+  const [query, setQuery] = useState(routeQuery);
+  const [items, setItems] = useState<MemoryItem[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  // Facts tab state.
-  const [facts, setFacts] = useState<FactRow[]>([]);
-  const [factsFilter, setFactsFilter] = useState(routeQuery);
-  const [factsPinnedOnly, setFactsPinnedOnly] = useState(false);
-  const [episodes, setEpisodes] = useState<MemoryEpisode[]>([]);
-
-  const overviewRequestEpochRef = useRef(0);
-  const diagnosticsRequestEpochRef = useRef(0);
-  const diagnosticsExpandedRef = useRef(false);
+  const reload = useCallback(() => {
+    try {
+      setItems(readItems(query));
+      setLoadFailed(false);
+    } catch (error) {
+      logger.warn('Could not read memory items.', { error: String(error) });
+      setItems([]);
+      setLoadFailed(true);
+    }
+  }, [query]);
 
   useEffect(() => {
-    diagnosticsExpandedRef.current = diagnosticsExpanded;
-  }, [diagnosticsExpanded]);
+    if (routeQuery) setQuery(routeQuery);
+  }, [routeQuery]);
 
   useEffect(() => {
-    if (!route.params?.tab && !routeQuery) return;
-    setTab(resolveRouteTab(route.params?.tab));
-    if (routeQuery) {
-      setOverviewSearch(routeQuery);
-      setFactsFilter(routeQuery);
-    }
-  }, [route.params?.tab, routeQuery]);
-
-  const loadFacts = useCallback(() => {
-    const subject = factsFilter.trim();
-    const result = queryMemoryFactsForManagement({
-      ...(subject ? { search: subject } : { all: true }),
-      memoryKind: 'semantic_fact',
-      ...(factsPinnedOnly ? { pinnedOnly: true } : {}),
-      limit: subject ? 50 : 100,
-    });
-    if ('ok' in result && result.ok) {
-      setFacts(result.facts);
-    } else {
-      setFacts([]);
-    }
-  }, [factsFilter, factsPinnedOnly]);
-
-  const loadEpisodes = useCallback(() => {
-    try {
-      setEpisodes(recallRecentEpisodes({ limit: 20 }));
-    } catch {
-      setEpisodes([]);
-    }
-  }, []);
-
-  const loadOverviewFacts = useCallback((query: string) => {
-    const subject = query.trim();
-    const result = queryMemoryFactsForManagement({
-      ...(subject ? { search: subject } : { all: true }),
-      memoryKind: 'semantic_fact',
-      limit: 8,
-    });
-    if ('ok' in result && result.ok) {
-      setOverviewFacts(result.facts);
-    } else {
-      setOverviewFacts([]);
-    }
-  }, []);
-
-  const loadOverviewSnapshot = useCallback(async () => {
-    const requestEpoch = overviewRequestEpochRef.current + 1;
-    overviewRequestEpochRef.current = requestEpoch;
-    try {
-      const snapshot = loadMemoryOverviewSnapshot({ recentFactLimit: 8 });
-      if (overviewRequestEpochRef.current === requestEpoch) setOverview(snapshot);
-    } catch {
-      if (overviewRequestEpochRef.current === requestEpoch) setOverview(null);
-    } finally {
-      if (overviewRequestEpochRef.current === requestEpoch) setOverviewLoaded(true);
-    }
-  }, []);
-
-  const loadDiagnostics = useCallback(async () => {
-    const requestEpoch = diagnosticsRequestEpochRef.current + 1;
-    diagnosticsRequestEpochRef.current = requestEpoch;
-    const threadId = useChatStore.getState().activeConversationId;
-    setDiagnosticsLoading(true);
-    setDiagnosticsError(false);
-    try {
-      const snapshot = await loadMemoryDiagnosticsSnapshot({ threadId });
-      if (
-        diagnosticsRequestEpochRef.current === requestEpoch &&
-        useChatStore.getState().activeConversationId === threadId
-      ) {
-        setDiagnostics(snapshot);
-      }
-    } catch {
-      if (
-        diagnosticsRequestEpochRef.current === requestEpoch &&
-        useChatStore.getState().activeConversationId === threadId
-      ) {
-        setDiagnostics(null);
-        setDiagnosticsError(true);
-      }
-    } finally {
-      if (diagnosticsRequestEpochRef.current === requestEpoch) {
-        setDiagnosticsLoading(false);
-      }
-    }
-  }, []);
-
-  const refreshMemory = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await loadOverviewSnapshot();
-      loadFacts();
-      loadEpisodes();
-      setLastSyncedAt(Date.now());
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [loadOverviewSnapshot, loadFacts, loadEpisodes]);
-
-  const refreshVisibleMemory = useCallback(async () => {
-    await refreshMemory();
-    if (diagnosticsExpandedRef.current) await loadDiagnostics();
-  }, [loadDiagnostics, refreshMemory]);
-
-  useEffect(() => {
-    if (tab !== 'overview') return;
-    void loadOverviewSnapshot();
-  }, [tab, loadOverviewSnapshot]);
-
-  useEffect(() => {
-    if (tab !== 'overview') return;
-    const timeout = setTimeout(() => loadOverviewFacts(overviewSearch), 150);
+    const timeout = setTimeout(reload, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
-  }, [tab, overviewSearch, loadOverviewFacts]);
-
-  useEffect(() => {
-    void refreshMemory();
-  }, [refreshMemory]);
+  }, [reload]);
 
   useFocusEffect(
     useCallback(() => {
-      void refreshVisibleMemory();
+      reload();
       return undefined;
-    }, [refreshVisibleMemory]),
+    }, [reload]),
   );
 
-  useEffect(() => {
-    const unsubscribe = subscribeToMemoryChanges((event) => {
-      void loadOverviewSnapshot();
-      if (tab === 'overview') {
-        loadOverviewFacts(overviewSearch);
-      }
-      loadFacts();
-      loadEpisodes();
-      if (diagnosticsExpandedRef.current) void loadDiagnostics();
-      setLastSyncedAt(event.updatedAt);
-    });
+  useEffect(() => subscribeToMemoryChanges(reload), [reload]);
 
-    return unsubscribe;
-  }, [
-    loadDiagnostics,
-    loadOverviewSnapshot,
-    loadOverviewFacts,
-    loadFacts,
-    loadEpisodes,
-    tab,
-    overviewSearch,
-  ]);
+  const handleTogglePin = useCallback(
+    (item: MemoryItem) => {
+      let changed = false;
+      try {
+        changed = setMemoryItemPinned(item.id, !item.pinned, Date.now());
+      } catch (error) {
+        logger.warn('Could not change a memory pin.', { error: String(error) });
+      }
+      if (!changed) Alert.alert(t('memory.pinFailedTitle'), t('memory.retryMessage'));
+      reload();
+    },
+    [reload, t],
+  );
+
+  const handleForget = useCallback(
+    (item: MemoryItem) => {
+      Alert.alert(t('memory.forgetTitle'), t('memory.forgetConfirm'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('memory.forget'),
+          style: 'destructive',
+          onPress: () => {
+            let forgotten = false;
+            try {
+              forgotten = forgetMemoryItem(item.id);
+            } catch (error) {
+              logger.warn('Could not forget a memory item.', { error: String(error) });
+            }
+            if (!forgotten) Alert.alert(t('memory.forgetFailedTitle'), t('memory.retryMessage'));
+            reload();
+          },
+        },
+      ]);
+    },
+    [reload, t],
+  );
 
   const handleClearAll = useCallback(() => {
     Alert.alert(t('memory.clearTitle'), t('memory.clearConfirm'), [
@@ -229,73 +132,80 @@ export const MemoryScreen: React.FC = () => {
         text: t('memory.clearAction'),
         style: 'destructive',
         onPress: () => {
-          resetCanonicalMemoryForManagement();
-          void refreshVisibleMemory();
-          setLastSyncedAt(Date.now());
+          try {
+            clearAllMemory();
+          } catch (error) {
+            logger.warn('Could not clear memory.', { error: String(error) });
+            Alert.alert(t('memory.clearFailedTitle'), t('memory.retryMessage'));
+          }
+          reload();
         },
       },
     ]);
-  }, [refreshVisibleMemory, t]);
+  }, [reload, t]);
 
-  const handleToggleDiagnostics = useCallback(() => {
-    if (diagnosticsExpanded) {
-      setDiagnosticsExpanded(false);
-      return;
-    }
-    setDiagnosticsExpanded(true);
-    void loadDiagnostics();
-  }, [diagnosticsExpanded, loadDiagnostics]);
-
-  // Re-query when facts filter / pinned toggle changes.
-  useEffect(() => {
-    if (tab !== 'facts') return;
-    loadFacts();
-    loadEpisodes();
-  }, [tab, loadFacts, loadEpisodes]);
-
-  const reloadManagedFacts = useCallback(() => {
-    loadFacts();
-    loadOverviewFacts(overviewSearch);
-  }, [loadFacts, loadOverviewFacts, overviewSearch]);
-  const factManagement = useMemoryFactManagement({ onChanged: reloadManagedFacts, t });
-  const handleAskKavi = useCallback(() => navigation.navigate('Chat'), [navigation]);
-
-  const memoryStatus = isRefreshing
-    ? t('memory.refreshing')
-    : lastSyncedAt
-      ? t('memory.lastSynced', { time: new Date(lastSyncedAt).toLocaleTimeString() })
-      : t('memory.notSyncedYet');
+  const emptyText = loadFailed
+    ? t('memory.loadFailed')
+    : query.trim()
+      ? t('memory.searchEmpty')
+      : t('memory.empty');
 
   return (
-    <MemoryScreenView
-      colors={colors}
-      diagnostics={diagnostics}
-      diagnosticsError={diagnosticsError}
-      diagnosticsExpanded={diagnosticsExpanded}
-      diagnosticsLoading={diagnosticsLoading}
-      episodes={episodes}
-      facts={facts}
-      factsFilter={factsFilter}
-      factsPinnedOnly={factsPinnedOnly}
-      factManagement={factManagement}
-      handleAskKavi={handleAskKavi}
-      handleBack={handleBack}
-      handleClearAll={handleClearAll}
-      loadFacts={loadFacts}
-      memoryStatus={memoryStatus}
-      onToggleDiagnostics={handleToggleDiagnostics}
-      overview={overview}
-      overviewFacts={overviewFacts}
-      overviewLoaded={overviewLoaded}
-      overviewSearch={overviewSearch}
-      refreshMemory={refreshVisibleMemory}
-      setFactsFilter={setFactsFilter}
-      setFactsPinnedOnly={setFactsPinnedOnly}
-      setOverviewSearch={setOverviewSearch}
-      setTab={setTab}
-      styles={styles}
-      t={t}
-      tab={tab}
-    />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          accessibilityLabel={t('common.back')}
+          accessibilityRole="button"
+          onPress={handleBack}
+          style={styles.headerButton}
+        >
+          <BackIcon size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.title}>{t('memory.title')}</Text>
+        <TouchableOpacity
+          accessibilityLabel={t('memory.clearTitle')}
+          accessibilityRole="button"
+          onPress={handleClearAll}
+          style={styles.headerButton}
+          testID="memory-clear-all"
+        >
+          <Trash2 size={20} color={colors.danger} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.toolbar}>
+        <TextInput
+          accessibilityLabel={t('memory.searchPlaceholder')}
+          autoCapitalize="none"
+          onChangeText={setQuery}
+          placeholder={t('memory.searchPlaceholder')}
+          placeholderTextColor={colors.placeholder}
+          returnKeyType="search"
+          style={styles.search}
+          testID="memory-search"
+          value={query}
+        />
+        {memoryOff ? <Text style={styles.notice}>{t('memory.memoryOff')}</Text> : null}
+        <Text style={styles.statusLine}>{t('memory.count', { count: items.length })}</Text>
+      </View>
+      <FlatList
+        contentContainerStyle={styles.listContent}
+        data={items}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={<Text style={styles.emptyText}>{emptyText}</Text>}
+        renderItem={({ item }) => (
+          <MemoryItemCard
+            colors={colors}
+            item={item}
+            onForget={handleForget}
+            onTogglePin={handleTogglePin}
+            savedOn={dateFormat.format(item.updatedAt)}
+            styles={styles}
+            t={t}
+          />
+        )}
+        testID="memory-items"
+      />
+    </SafeAreaView>
   );
 };

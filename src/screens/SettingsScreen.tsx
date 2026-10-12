@@ -30,7 +30,6 @@ import { getBrowserProviderAuthLabel } from '../services/browser/providers/label
 import { getSshHostKeyPolicyLabel, getSshTargetAuthModeLabel } from '../services/ssh/connector';
 import { getLocalLlmModelDisplayName } from '../services/localLlm/catalog';
 import { isOnDeviceLlmProvider } from '../services/localLlm/provider';
-import { deriveConsolidationStatusSnapshot } from '../services/memory/consolidationStatus';
 import { SettingsProviderEditor } from './components/settings/SettingsProviderEditor';
 import { SettingsHome } from './settings/SettingsHome';
 import { SettingsNotificationsVoiceSection } from './settings/SettingsNotificationsVoiceSection';
@@ -130,23 +129,6 @@ export const SettingsScreen: React.FC = () => {
   const activeProviderId = useSettingsStore((s) => s.activeProviderId ?? null);
   const developerModeEnabled = useSettingsStore((s) => s.developerModeEnabled);
   const setDeveloperModeEnabled = useSettingsStore((s) => s.setDeveloperModeEnabled);
-  const consolidationStatus = useMemo(
-    () =>
-      deriveConsolidationStatusSnapshot({
-        disableLongTermMemory,
-        memoryConsolidationMode,
-        consolidationProviderId,
-        activeProviderId,
-        providers,
-      }),
-    [
-      activeProviderId,
-      consolidationProviderId,
-      disableLongTermMemory,
-      memoryConsolidationMode,
-      providers,
-    ],
-  );
   const clearAllConversations = useChatStore((s) => s.clearAllConversations);
   const permissions = useToolPermissionsStore((s) => s.permissions);
   const setToolPermission = useToolPermissionsStore((s) => s.setPermission);
@@ -576,7 +558,6 @@ export const SettingsScreen: React.FC = () => {
                 setCompactionSummarizer={setCompactionSummarizer}
                 setCompactionProvider={setCompactionProvider}
                 setCompactionModel={setCompactionModel}
-                consolidationStatus={consolidationStatus}
                 onManageMemory={handleManageMemory}
                 onManageApprovals={handleManageApprovals}
                 onClearAllConversations={handleClearAllConversations}

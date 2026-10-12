@@ -16,7 +16,7 @@ import {
 } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { listEpisodes } from '../../src/services/memory/episodes/queries';
+import { getMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
 import type { Message } from '../../src/types/message';
 
 type JsonObject = Record<string, unknown>;
@@ -77,37 +77,28 @@ function usagePayload(turn: Awaited<ReturnType<typeof runForegroundScenario>>['t
   };
 }
 
-function retrievalDiagnostics(
+function memoryPromptDiagnostics(
   turn: Awaited<ReturnType<typeof runForegroundScenario>>['turns'][number],
 ) {
   return {
-    instrumentation_status: turn.retrieval.instrumentationStatus,
-    events: turn.retrieval.events.map((event) => ({
-      mode: event.mode,
-      outcome: event.outcome,
-      candidate_fact_count: event.counts.candidateFactCount,
-      selected_fact_count: event.counts.selectedFactCount,
-      candidate_episode_count: event.counts.candidateEpisodeCount,
-      selected_episode_count: event.counts.selectedEpisodeCount,
-      selector_mode: event.selector.mode,
-      selector_outcome: event.selector.outcome,
-      evidence_span_count: event.expansion.emittedEvidenceCount,
-      prompt_chars: event.expansion.promptChars,
+    status: turn.memoryPrompt.status,
+    builds: turn.memoryPrompt.builds.map((build) => ({
+      item_count: build.itemIds.length,
+      past_turn_count: build.turnIds.length,
+      prompt_chars: build.chars,
+      duration_ms: build.durationMs,
     })),
   };
 }
 
-function selectedEpisodeSummaries(
+function selectedMemoryItemTexts(
   turn: Awaited<ReturnType<typeof runForegroundScenario>>['turns'][number],
-  memoryConversationId: string,
 ): string[] {
-  const selectedIds = new Set(
-    turn.retrieval.events.flatMap((event) => event.counts.selectedEpisodeIds),
-  );
-  if (selectedIds.size === 0) return [];
-  return listEpisodes({ conversationId: memoryConversationId, limit: 200 })
-    .filter((episode) => selectedIds.has(episode.id))
-    .map((episode) => episode.summary);
+  const selectedIds = new Set(turn.memoryPrompt.builds.flatMap((build) => build.itemIds));
+  return [...selectedIds].flatMap((id) => {
+    const item = getMemoryItem(id);
+    return item ? [item.text] : [];
+  });
 }
 
 function requireCompletedTurn(
@@ -324,7 +315,7 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             response: turn.finalAssistant!.text,
             usage: usagePayload(turn),
             diagnostics: {
-              retrieval: retrievalDiagnostics(turn),
+              memory_prompt: memoryPromptDiagnostics(turn),
               memory: {
                 current_item_count: result.memoryItems.items.filter(
                   (item) => item.supersededBy === null,
@@ -383,12 +374,9 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             response: turn.finalAssistant!.text,
             usage: usagePayload(turn),
             diagnostics: {
-              ...retrievalDiagnostics(turn),
+              memory_prompt: memoryPromptDiagnostics(turn),
               private_response_text: turn.finalAssistant!.text,
-              private_selected_episode_summaries: selectedEpisodeSummaries(
-                turn,
-                session.rootConversationId,
-              ),
+              private_selected_memory_items: selectedMemoryItemTexts(turn),
             },
           });
           return;

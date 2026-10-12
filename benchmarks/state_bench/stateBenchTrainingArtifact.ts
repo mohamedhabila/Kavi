@@ -4,7 +4,7 @@ import {
   buildExperienceLearningArtifact,
   type ExperienceLearningArtifact,
   type ExperienceProcedureObservation,
-} from '../../src/services/memory/experienceLearningArtifact';
+} from './experienceLearningArtifact';
 
 export const STATE_BENCH_ADAPTER_RELEASE = 'v0.8.1';
 export const STATE_BENCH_ADAPTER_COMMIT = '4efcbf2d4fe60df04878859b692d9391f3d5b33a';

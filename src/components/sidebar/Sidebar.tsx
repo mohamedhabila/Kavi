@@ -14,9 +14,7 @@ import {
   MoreHorizontal,
   type LucideIcon,
 } from 'lucide-react-native';
-import { TodaysFocusTile } from './SidebarMemorySections';
 import { SidebarRecentChats } from './SidebarRecentChats';
-import MigrationProgressBanner from '../MigrationProgressBanner';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
@@ -178,7 +176,6 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
             {t('nav.assistant')}
           </Text>
         </TouchableOpacity>
-        <TodaysFocusTile colors={colors} conversationId={activeId} onPress={handleOpenChat} />
         <SidebarRecentChats
           activeConversationId={activeId}
           colors={colors}
@@ -189,7 +186,6 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
           }}
           onSelect={handleSelectConversation}
         />
-        <MigrationProgressBanner colors={colors} />
         <View style={styles.destinationGroup}>
           {groupedRoutes.map((route) => {
             const active = declaredParentRoute

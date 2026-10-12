@@ -4,8 +4,10 @@ jest.mock('expo-sqlite', () => {
 });
 
 const mockScheduleMemoryExtraction = jest.fn();
+const mockCancelMemoryExtraction = jest.fn();
 jest.mock('../../../../src/services/memory/core/memoryExtractionWorker', () => ({
   scheduleMemoryExtraction: (...args: unknown[]) => mockScheduleMemoryExtraction(...args),
+  cancelMemoryExtraction: () => mockCancelMemoryExtraction(),
 }));
 
 import { closeMemoryDb, getMemoryDb } from '../../../../src/services/memory/database';
@@ -15,6 +17,7 @@ import {
 } from '../../../../src/services/memory/core/memorySchema';
 import {
   catchUpMemoryCapture,
+  clearAllMemory,
   deleteConversationMemory,
   publishConversationTurnMemory,
   skipMemoryCaptureToNow,
@@ -78,6 +81,7 @@ beforeEach(() => {
   expoSqlite.__resetExpoSqliteForTests();
   resetMemoryCoreSchemaCacheForTests();
   mockScheduleMemoryExtraction.mockClear();
+  mockCancelMemoryExtraction.mockClear();
   useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
@@ -202,5 +206,35 @@ describe('deleting a conversation', () => {
     expect(rowCount('memory_prompt_log')).toBe(1);
     expect(readCaptureCursor('conv-1')).toBeNull();
     expect(readCaptureCursor('conv-2')).not.toBeNull();
+  });
+});
+
+describe('clearing all memory', () => {
+  it('stops extraction, forgets everything memory kept, and never re-captures what was said', () => {
+    const conversations = [thread('conv-1', firstTurn), thread('conv-2', secondTurn)];
+    publishConversationTurnMemory('conv-1', 'a1', conversations);
+    publishConversationTurnMemory('conv-2', 'a2', conversations);
+    addMemoryItem({ text: 'Prefers kayaking at dawn', conversationId: 'conv-1', now: 1 });
+    recordMemoryPromptBuild({
+      conversationId: 'conv-1',
+      at: 1,
+      itemIds: [],
+      turnIds: [],
+      chars: 0,
+      durationMs: 0,
+    });
+    mockScheduleMemoryExtraction.mockClear();
+
+    clearAllMemory(conversations);
+
+    expect(mockCancelMemoryExtraction).toHaveBeenCalledTimes(1);
+    expect(rowCount('memory_items')).toBe(0);
+    expect(indexedTurns()).toEqual([]);
+    expect(rowCount('memory_prompt_log')).toBe(0);
+
+    catchUpMemoryCapture(conversations);
+
+    expect(indexedTurns()).toEqual([]);
+    expect(mockScheduleMemoryExtraction).not.toHaveBeenCalled();
   });
 });
