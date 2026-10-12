@@ -42,7 +42,7 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       expect(prepareMemoryPromptSection).toHaveBeenCalledWith({
-        visibility: { conversationId: 'conv1' },
+        conversationId: 'conv1',
         latestUserMessage: 'Hello',
         inRequestUserMessageIds: ['msg1'],
       });
@@ -80,7 +80,7 @@ describe('Orchestrator', () => {
       await runOrchestrator(options, callbacks);
 
       expect(prepareMemoryPromptSection).toHaveBeenCalledWith(
-        expect.objectContaining({ visibility: { conversationId: 'parent-memory-7' } }),
+        expect.objectContaining({ conversationId: 'parent-memory-7' }),
       );
     });
 
