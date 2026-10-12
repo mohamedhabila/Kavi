@@ -20,10 +20,6 @@ import {
   startNewForegroundScenarioConversation,
 } from './foregroundScenarioLifecycle';
 import {
-  beginForegroundScenarioRetrievalCapture,
-  completeForegroundScenarioRetrievalCapture,
-} from './foregroundScenarioRetrievalEvidence';
-import {
   beginForegroundScenarioMemoryPromptCapture,
   captureForegroundScenarioMemoryItems,
   completeForegroundScenarioMemoryPromptCapture,
@@ -196,13 +192,6 @@ async function runScenarioIsolated(
         lifecycleBefore = transition.lifecycle;
       }
       if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input);
-      const retrievalCapture = await awaitBeforeScenarioDeadline(
-        beginForegroundScenarioRetrievalCapture({
-          sourceThreadId: currentConversationId,
-          memoryOptOut: input.disableLongTermMemory === true,
-        }),
-        scenarioDeadline,
-      );
       const memoryPromptCapture = beginForegroundScenarioMemoryPromptCapture({
         memoryOptOut: input.disableLongTermMemory === true,
       });
@@ -403,7 +392,6 @@ async function runScenarioIsolated(
             stateAfter: getE2ENativeMobileFixtureStateSnapshot(),
             invocations: nativeInvocations,
           },
-          retrieval: completeForegroundScenarioRetrievalCapture({ capture: retrievalCapture }),
           memoryPrompt: completeForegroundScenarioMemoryPromptCapture({
             capture: memoryPromptCapture,
             memoryConversationId: memoryScope.memoryConversationId,

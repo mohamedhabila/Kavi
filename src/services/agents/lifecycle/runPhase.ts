@@ -6,7 +6,6 @@ import type {
   SubAgentTerminationCause,
 } from '../../../types/subAgent';
 import { generateId } from '../../../utils/id';
-import { truncateGraphemesTo } from '../../../utils/graphemes';
 import { createSubAgentExecutionSession } from '../subAgentExecutionSession';
 import type { SubAgentExecutionRuntimeState } from '../subAgentOrchestratorCallbacks';
 import { runSubAgentOrchestratorLoop } from '../subAgentOrchestratorRun';
@@ -24,7 +23,6 @@ import {
 import { normalizePreviewText } from './runText';
 import { createSubAgentUsageRecorder } from './runUsage';
 import { resolveSubAgentToolAccess } from '../subAgentToolAccess';
-import { pushTask, completeTask } from '../../memory/taskStack';
 import {
   requireExactDurableScopeId,
   resolveOptionalExactDurableScopeId,
@@ -195,20 +193,6 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       : undefined;
   (timeoutTimer as any)?.unref?.();
 
-  // Push task onto the conversation stack so memory recall is scoped.
-  let taskStackEntry: ReturnType<typeof pushTask> | null = null;
-  if (params.config.parentConversationId) {
-    const title =
-      params.config.name?.trim() ||
-      truncateGraphemesTo(currentTaskPrompt.trim(), 80) ||
-      'Sub-agent task';
-    try {
-      taskStackEntry = pushTask(params.config.parentConversationId, title);
-    } catch {
-      // Task-stack failure is best-effort; never break sub-agent execution.
-    }
-  }
-
   try {
     const workerModel = params.config.model || params.provider.model;
     const orchestratorResult = await runSubAgentOrchestratorLoop({
@@ -341,13 +325,6 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       scheduleSessionContextEvictionWhenDurable: params.scheduleSessionContextEvictionWhenDurable,
     });
   } finally {
-    if (taskStackEntry && params.config.parentConversationId) {
-      try {
-        completeTask(params.config.parentConversationId, taskStackEntry.id);
-      } catch {
-        // Best-effort; never break the teardown path.
-      }
-    }
     params.activeRunControls.delete(sessionId);
     if (timeoutTimer) {
       clearTimeout(timeoutTimer);

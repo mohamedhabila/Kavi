@@ -2,9 +2,9 @@ import { projectPublicRedactedTrace } from '../../../scripts/e2eReport/publicTra
 import { type E2EPairedCondition } from './e2ePairedConditions';
 import { type E2EPairedConditionExecution, type E2EPairedRuntimeResult } from './e2ePairedRuntime';
 import {
-  buildE2EPairedPublicRetrievalMetrics,
-  type E2EPairedPublicRetrievalMetrics,
-} from './e2ePairedPublicRetrievalMetrics';
+  buildE2EPairedPublicMemoryMetrics,
+  type E2EPairedPublicMemoryMetrics,
+} from './e2ePairedPublicMemoryMetrics';
 import {
   buildE2EPairedEstimatedCost,
   type E2EPairedEstimatedCostSummary,
@@ -14,7 +14,7 @@ import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EEstimatedCostSummary, E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v5' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v6' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;
@@ -41,7 +41,7 @@ type PublicConditionMetrics = Readonly<{
   totalTokens: number;
   estimatedCost: E2EEstimatedCostSummary;
   publicTraceHash: string;
-  retrieval: E2EPairedPublicRetrievalMetrics;
+  memory: E2EPairedPublicMemoryMetrics;
 }>;
 
 export type E2EPairedPublicCondition =
@@ -246,7 +246,7 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
       totalTokens: condition.result.usage.totalTokens,
       estimatedCost: { ...condition.result.estimatedCost },
       publicTraceHash: stableHash(stableStringify(trace)),
-      retrieval: buildE2EPairedPublicRetrievalMetrics(condition.result.turnTraces),
+      memory: buildE2EPairedPublicMemoryMetrics(condition.result.turnTraces),
     },
   };
 }
@@ -272,23 +272,14 @@ function buildDelta(
 
 type CompletedPublicCondition = Extract<E2EPairedPublicCondition, { status: 'completed' }>;
 
-function hasCompleteRetrievalTurnCoverage(condition: CompletedPublicCondition): boolean {
-  const { retrieval, userTurnCount } = condition.metrics;
-  const statusCoverage =
-    retrieval.turnStatusCounts.recorded +
-    retrieval.turnStatusCounts.missing +
-    retrieval.turnStatusCounts.optOut +
-    retrieval.turnStatusCounts.overflow;
+function hasCompleteMemoryTurnCoverage(condition: CompletedPublicCondition): boolean {
+  const { memory, userTurnCount } = condition.metrics;
+  const { recorded, missing, optOut } = memory.turnStatusCounts;
   return (
     userTurnCount > 0 &&
     condition.metrics.turnTraceIndexCoverage === 'complete' &&
-    statusCoverage === userTurnCount &&
-    retrieval.instrumentationFailureTurnCount === 0 &&
-    retrieval.retrievalFailureCount === 0 &&
-    retrieval.outcomeCounts.degraded === 0 &&
-    retrieval.outcomeCounts.failed === 0 &&
-    (retrieval.selectedFactCount === 0 || retrieval.selectedFactIdCoverage === 'complete') &&
-    (retrieval.selectedEpisodeCount === 0 || retrieval.selectedEpisodeIdCoverage === 'complete')
+    recorded + missing + optOut === userTurnCount &&
+    missing === 0
   );
 }
 
@@ -301,39 +292,22 @@ function hasProductionAutoDirectiveCoverage(condition: CompletedPublicCondition)
   );
 }
 
-function hasCompleteEnabledRetrieval(condition: CompletedPublicCondition): boolean {
-  const { retrieval, userTurnCount } = condition.metrics;
+function hasCompleteEnabledMemory(condition: CompletedPublicCondition): boolean {
+  const { memory, userTurnCount } = condition.metrics;
   return (
-    hasCompleteRetrievalTurnCoverage(condition) &&
-    retrieval.turnStatusCounts.recorded === userTurnCount &&
-    retrieval.turnStatusCounts.optOut === 0 &&
-    retrieval.eventCount >= userTurnCount &&
-    retrieval.modeCounts.disabled === 0 &&
-    retrieval.outcomeCounts.disabled === 0
+    hasCompleteMemoryTurnCoverage(condition) &&
+    memory.turnStatusCounts.recorded === userTurnCount &&
+    memory.buildCount >= userTurnCount
   );
 }
 
-function hasCandidateStrategyCoverage(
-  condition: CompletedPublicCondition,
-  strategy: 'lexical' | 'hybrid',
-): boolean {
-  const { eventCount, candidateStages } = condition.metrics.retrieval;
-  return (
-    eventCount > 0 &&
-    candidateStages.strategyCounts[strategy] === eventCount &&
-    candidateStages.strategyCounts.notRequested === 0 &&
-    candidateStages.strategyCounts[strategy === 'lexical' ? 'hybrid' : 'lexical'] === 0
-  );
-}
-
-function hasExpectedMemoryControlRetrieval(condition: CompletedPublicCondition): boolean {
-  const { retrieval, userTurnCount } = condition.metrics;
+function hasExpectedMemoryControl(condition: CompletedPublicCondition): boolean {
+  const { memory, userTurnCount } = condition.metrics;
   return (
     condition.condition === 'memory_off' &&
-    hasCompleteRetrievalTurnCoverage(condition) &&
-    retrieval.turnStatusCounts.optOut === userTurnCount &&
-    retrieval.turnStatusCounts.recorded === 0 &&
-    retrieval.eventCount === 0
+    hasCompleteMemoryTurnCoverage(condition) &&
+    memory.turnStatusCounts.optOut === userTurnCount &&
+    memory.buildCount === 0
   );
 }
 
@@ -363,11 +337,10 @@ function buildMemoryPairedObservation(
   const instrumentationInvalid =
     !hasProductionAutoDirectiveCoverage(control) ||
     !hasProductionAutoDirectiveCoverage(product) ||
-    !hasExpectedMemoryControlRetrieval(control) ||
-    !hasCompleteEnabledRetrieval(product) ||
-    !hasCandidateStrategyCoverage(product, 'hybrid') ||
-    (product.metrics.retrieval.selectedFactCount === 0 &&
-      product.metrics.retrieval.selectedEpisodeCount === 0);
+    !hasExpectedMemoryControl(control) ||
+    !hasCompleteEnabledMemory(product) ||
+    (product.metrics.memory.selectedItemCount === 0 &&
+      product.metrics.memory.selectedPastTurnCount === 0);
   if (instrumentationInvalid) {
     return {
       status: 'invalid_instrumentation',

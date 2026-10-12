@@ -8,7 +8,6 @@ import type {
   E2ENativeMobileFixtureStateSnapshot,
   E2ENativeMobileInvocationSnapshot,
 } from './e2eNativeMobileFixtures';
-import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
 import type {
   ForegroundScenarioMemoryItemsState,
   ForegroundScenarioMemoryPromptEvidence,
@@ -154,7 +153,6 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   /** How long the turn waited for background extraction after its reply; part of `durationMs`. */
   memoryExtractionWaitMs: number;
   native: ForegroundScenarioNativeEvidenceSnapshot;
-  retrieval: DeepReadonly<ForegroundScenarioRetrievalEvidence>;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
   messages: DeepReadonly<Message[]>;
   route: Readonly<{

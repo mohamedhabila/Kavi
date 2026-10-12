@@ -21,7 +21,6 @@ import {
 } from './prompts/orchestratorPromptSections';
 import { repairModelVisibleToolResultTranscript } from './orchestratorToolTranscript';
 import type { CodeOwnedCurrentUserMessage } from './tools/toolExecutionContext';
-import { getMemoryPolicyEpoch } from '../services/memory/policy';
 import {
   captureSessionInternalUserMessages,
   rebuildSessionMemoryRefreshMessages,
@@ -221,7 +220,7 @@ export function loadOrchestratorMemoryAccessContext(params: OrchestratorMemoryAc
     );
     return {
       scopedMessages,
-      memory: { status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() },
+      memory: { status: 'unavailable' },
     };
   }
 }

@@ -47,7 +47,6 @@ export function buildFixtureTurnTrace(
     memoryExtractionSettled: true,
     memoryExtractionWaitMs: 0,
     native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
-    retrieval: { sourceThreadIdHash: null, instrumentationStatus: 'missing', events: [] },
     memoryPrompt: { status: 'missing', builds: [] },
     toolCalls: [],
     toolResults: [],

@@ -1,82 +1,38 @@
 import { getE2ENativeMobileFixtureStateSnapshot } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
-import type { ForegroundScenarioRetrievalEvidence } from '../../src/acceptance/e2eAgent/foregroundScenarioRetrievalEvidence';
+import type { ForegroundScenarioMemoryPromptEvidence } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
 import type { E2EScenarioTurnTrace } from '../../src/acceptance/e2eAgent/types';
-import type { MemoryRetrievalEvent } from '../../src/services/memory/retrievalEventTypes';
 import { buildFixtureResult } from './e2eRunReportHarness';
 
-export const PAIRED_TEST_SOURCE_THREAD_HASH = 'a'.repeat(64);
-export const PAIRED_TEST_MEMORY_CONVERSATION_HASH = 'b'.repeat(64);
+export type PairedMemoryPromptBuild = ForegroundScenarioMemoryPromptEvidence['builds'][number];
 
-export function buildPairedRetrievalEvent(
-  overrides: Partial<MemoryRetrievalEvent> = {},
-): MemoryRetrievalEvent {
+/** One memory section build that selected one saved memory and one past exchange. */
+export function buildPairedMemoryPromptBuild(
+  overrides: Partial<PairedMemoryPromptBuild> = {},
+): PairedMemoryPromptBuild {
   return {
-    id: 'retrieval-private-event',
-    operation: 'prompt_assembly',
-    mode: 'query',
-    outcome: 'completed',
-    queryFingerprint: {
-      hashAlgorithm: 'sha256',
-      hash: 'c'.repeat(64),
-      length: 10,
-      unitCount: 2,
-    },
-    scope: {
-      memoryConversationIdHash: PAIRED_TEST_MEMORY_CONVERSATION_HASH,
-      sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-      taskScopePresent: false,
-    },
-    counts: {
-      candidateFactCount: 1,
-      selectedFactCount: 1,
-      selectedFactIds: ['private-fact-id'],
-      candidateEpisodeCount: 1,
-      selectedEpisodeCount: 1,
-      selectedEpisodeIds: ['private-episode-id'],
-    },
-    timings: {
-      planMs: 1,
-      factRecallMs: 2,
-      episodeRecallMs: 3,
-      candidateFetchMs: 1,
-      scoreMs: 1,
-      selectorMs: 0,
-      evidenceExpansionMs: 1,
-      totalMs: 5,
-    },
-    candidates: {
-      strategy: 'hybrid',
-      localSimilarityOutcome: 'not_requested',
-      eligibleScanCount: 1,
-      pinnedCount: 0,
-      exactQuotedCount: 0,
-      lexicalCount: 1,
-      entityCount: 0,
-      temporalCount: 1,
-      localSimilarityCount: 0,
-      unionCount: 1,
-      diversifiedCount: 1,
-      unionMs: 1,
-    },
-    expansion: {
-      outcome: 'completed',
-      requestedSourceCount: 2,
-      acceptedSourceCount: 2,
-      sourceWithEvidenceCount: 1,
-      emittedEvidenceCount: 1,
-      promptBudgetDroppedCount: 0,
-      promptChars: 400,
-      durationMs: 1,
-    },
-    selector: { mode: 'deterministic', outcome: 'not_requested' },
-    barrier: null,
-    createdAt: 1,
+    itemIds: ['private-item-id'],
+    turnIds: ['private-past-turn-id'],
+    chars: 400,
+    durationMs: 1,
     ...overrides,
   };
 }
 
+/** A turn whose memory reads were recorded, by default one build that selected memory. */
+export function recordedMemoryPrompt(
+  builds: ReadonlyArray<PairedMemoryPromptBuild> = [buildPairedMemoryPromptBuild()],
+): ForegroundScenarioMemoryPromptEvidence {
+  return { status: 'recorded', builds };
+}
+
+/** A turn run with memory off. */
+export const OPTED_OUT_MEMORY_PROMPT: ForegroundScenarioMemoryPromptEvidence = {
+  status: 'opt_out',
+  builds: [],
+};
+
 export function buildPairedTurnTrace(
-  retrieval: ForegroundScenarioRetrievalEvidence,
+  memoryPrompt: ForegroundScenarioMemoryPromptEvidence,
   overrides: Readonly<{
     route?: Pick<E2EScenarioTurnTrace['route'], 'directive' | 'mode'>;
     turnIndex?: number;
@@ -115,8 +71,7 @@ export function buildPairedTurnTrace(
     memoryExtractionSettled: true,
     memoryExtractionWaitMs: 0,
     native: { stateBefore: nativeState, stateAfter: nativeState, invocations: [] },
-    retrieval,
-    memoryPrompt: { status: 'missing', builds: [] },
+    memoryPrompt,
     toolCalls: [],
     toolResults: [],
     graphSnapshots: [],

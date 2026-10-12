@@ -20,7 +20,6 @@ import {
   writeWorkspaceRelativeFile,
 } from '../../src/acceptance/e2eAgent/sandboxWorkspace';
 import { recordE2ENativeMobileInvocation } from '../../src/acceptance/e2eAgent/e2eNativeMobileEvidence';
-import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { executeMemoryRemember } from '../../src/services/memory/core/memoryItemsTools';
 import { listMemoryItems } from '../../src/services/memory/core/memoryItemsStore';
 import { indexMemoryTurn } from '../../src/services/memory/core/memoryTurnsStore';
@@ -30,37 +29,23 @@ import { useChatStore } from '../../src/store/useChatStore';
 describe('paired E2E state isolation', () => {
   it('keeps the reset verification list synchronized with mutable memory tables', () => {
     expect(E2E_RESETTABLE_MEMORY_TABLES).toEqual([
-      'memory_consolidation_state',
-      'memory_entities',
-      'memory_episodes',
-      'memory_fact_evidence',
-      'memory_fact_term_stats',
-      'memory_fact_terms',
-      'memory_facts',
-      'memory_ingestion_jobs',
-      'memory_ingestion_source_snapshots',
-      'memory_ingestion_structural_receipts',
-      'memory_ingestion_receipts',
       'memory_items',
-      'memory_migration_state',
       'memory_capture_cursor',
       'memory_prompt_log',
-      'memory_reflections',
-      'memory_retrieval_events',
-      'memory_retrieval_outcomes',
-      'memory_tasks',
       'memory_turns',
-      'memory_working_blocks',
     ]);
   });
 
-  it('rejects contaminated scoped working state as an incomplete reset', () => {
+  it('rejects a remembered past turn left behind as an incomplete reset', () => {
     resetAndVerifyE2EScenarioSandboxes();
-    editPromptEligibleWorkingBlock('active_focus', 'PRIVATE-CONTAMINATED-FOCUS', {
+    indexMemoryTurn({
       conversationId: 'contaminated-conversation',
-      threadId: 'contaminated-thread',
+      userMessageId: 'contaminated-user',
+      userText: 'PRIVATE-CONTAMINATED-PLAN',
+      replyText: 'Planned.',
+      at: 1,
     });
-    expect(() => assertE2EMemorySandboxReset()).toThrow('memory_working_blocks');
+    expect(() => assertE2EMemorySandboxReset()).toThrow('memory_turns');
     resetAndVerifyE2EScenarioSandboxes();
   });
 

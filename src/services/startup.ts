@@ -39,7 +39,6 @@ import { emitAppEvent } from './events/bus';
 import { unrefTimerIfSupported } from '../utils/timers';
 import { catchUpMemoryCapture } from './memory/core/memoryCapture';
 import { hydrateTokenCalibrationFromStorage } from './usage/tracker';
-import { initializeMemoryPolicyObservation } from './memory/policy';
 import {
   providerRequiresApiKey,
   resolveConversationModel,
@@ -264,10 +263,6 @@ export function initializeServices(): void {
   void hydrateTokenCalibrationFromStorage().catch((e) =>
     console.warn('[startup] hydrateTokenCalibrationFromStorage failed:', e),
   );
-
-  if (!initializeMemoryPolicyObservation()) {
-    console.warn('[startup] memory policy observation unavailable; durable memory is disabled');
-  }
 
   void triggerPersistedAgentRecovery().catch((e) =>
     console.warn('[startup] recoverPersistedAgentState failed:', e),

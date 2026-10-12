@@ -9,12 +9,10 @@ import {
 } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { executeAgentControlGraphModelTurnViaSendMessage } from '../../src/engine/graph/modelTurnExecutionSendMessage';
 import { hasGeminiToolTurnThoughtSignatureCoverage } from '../../src/services/llm/providers/gemini/thoughtSignatureCoverage';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 beforeEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
-  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {

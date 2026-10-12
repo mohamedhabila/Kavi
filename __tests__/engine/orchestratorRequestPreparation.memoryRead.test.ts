@@ -11,7 +11,7 @@ import { readSessionMemory } from '../../src/services/memory/memoryAccessGateway
 import type { LlmProviderConfig } from '../../src/types/provider';
 
 const mockedReadSessionMemory = jest.mocked(readSessionMemory);
-const MEMORY_READ = Object.freeze({ status: 'off', policyEpoch: 7 } as const);
+const MEMORY_READ = Object.freeze({ status: 'off' } as const);
 
 const provider = {
   id: 'provider-1',

@@ -8,9 +8,7 @@ import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecutio
 import type { RuntimeToolCallInput } from '../../src/engine/toolExecution/toolExecutionMessages';
 import type { ToolDefinition } from '../../src/types/tool';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { closeMemoryDb } from '../../src/services/memory/database';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 
 const expoSqlite = jest.requireMock('expo-sqlite') as {
   __resetExpoSqliteForTests(): void;
@@ -60,10 +58,7 @@ function memoryTool(
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
-  resetFactSchemaCacheForTests();
-  ensureFactSchema();
   useSettingsStore.setState({ disableLongTermMemory: false });
-  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {

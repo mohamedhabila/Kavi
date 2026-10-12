@@ -8,15 +8,12 @@ import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { getLocalLlmCatalogEntry } from '../../src/services/localLlm/catalog';
 import { closeMemoryDb } from '../../src/services/memory/database';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
 beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
-  resetFactSchemaCacheForTests();
-  ensureFactSchema();
   resetSettingsStore();
 });
 

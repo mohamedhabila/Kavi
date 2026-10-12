@@ -73,7 +73,7 @@ describe('agent control graph tool run provenance', () => {
         },
       } as never,
       runtime: {
-        memory: { status: 'off', policyEpoch: 0 },
+        memory: { status: 'off' },
         activeProvider: {
           id: 'provider',
           name: 'Provider',

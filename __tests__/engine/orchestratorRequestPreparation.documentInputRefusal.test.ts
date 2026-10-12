@@ -8,7 +8,7 @@
 // never just fold a notice into the enriched text and drop the structured signal.
 
 jest.mock('../../src/services/memory/memoryAccessGateway', () => ({
-  readSessionMemory: jest.fn(() => ({ status: 'off', policyEpoch: 0 })),
+  readSessionMemory: jest.fn(() => ({ status: 'off' })),
 }));
 
 jest.mock('../../src/services/skills/manager', () => ({

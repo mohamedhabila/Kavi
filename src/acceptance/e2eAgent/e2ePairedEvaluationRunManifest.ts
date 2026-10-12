@@ -120,7 +120,7 @@ function metrics(report: E2EPairedPublicReport) {
     pass_at_1: completed ? Number(completed.metrics.passed) : null,
     task_completion: completed ? completed.metrics.rubricPassRate : null,
     memory_retrieval:
-      completed && completed.metrics.retrieval.instrumentationFailureTurnCount === 0 ? 1 : null,
+      completed && completed.metrics.memory.turnStatusCounts.missing === 0 ? 1 : null,
     latency: completed ? completed.metrics.durationMs : null,
     cost: report.model.capabilityClass === 'on_device' ? 0 : null,
     resource_use: completed ? completed.metrics.totalTokens : null,

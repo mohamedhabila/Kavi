@@ -8,8 +8,7 @@ import { getLoadedHooks as getRegisteredHooks } from '../hooks/loader';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { listScheduledJobs } from '../scheduler/commands';
 import { useSkillsStore } from '../skills/manager';
-import { searchMemoryFactsForManagement } from '../memory/facts/managementSearch';
-import { serializeMemoryFact } from '../memory/memoryFactSerialization';
+import { listMemoryItems, searchMemoryItems } from '../memory/core/memoryItemsStore';
 import { truncateGraphemesTo } from '../../utils/graphemes';
 
 export type CommandContext = {
@@ -103,26 +102,30 @@ registerCommand('export', 'Export current conversation', () => {
   return { action: 'export', response: 'Exporting conversation...' };
 });
 
-registerCommand('memory', 'Search remembered facts', (ctx) => {
+const MEMORY_COMMAND_RESULT_LIMIT = 10;
+
+registerCommand('memory', 'Search what Kavi remembers', (ctx) => {
   const query = truncateGraphemesTo(ctx.args.trim(), 200);
   if (!query) {
     return { response: 'Use `/memory <query>` to search memory.', shouldDisplay: true };
   }
 
-  const result = searchMemoryFactsForManagement(query, 10);
-  if (result.totalCurrentFacts === 0) {
+  if (listMemoryItems({ limit: 1, offset: 0 }).length === 0) {
     return { response: 'Memory is empty.', shouldDisplay: true };
   }
-  if (result.totalMatches === 0) {
-    return { response: `No remembered facts matching "${query}".`, shouldDisplay: true };
-  }
-  const preview = result.facts.map((memoryFact) => {
-    const fact = serializeMemoryFact(memoryFact);
-    const value = truncateGraphemesTo(fact.value.replace(/\s+/g, ' ').trim(), 300);
-    return `- **${fact.subject} · ${fact.predicate}**: ${value}`;
+  const items = searchMemoryItems({
+    query,
+    limit: MEMORY_COMMAND_RESULT_LIMIT,
+    includeSensitive: true,
   });
+  if (items.length === 0) {
+    return { response: `Nothing remembered matches "${query}".`, shouldDisplay: true };
+  }
+  const preview = items.map(
+    (item) => `- ${truncateGraphemesTo(item.text.replace(/\s+/g, ' ').trim(), 300)}`,
+  );
   return {
-    response: `**Remembered facts: "${query}"** (${result.totalMatches} matches)\n\n${preview.join('\n')}${result.totalMatches > result.facts.length ? '\n…' : ''}`,
+    response: `**Remembered: "${query}"**\n\n${preview.join('\n')}`,
     shouldDisplay: true,
   };
 });

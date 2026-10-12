@@ -6,8 +6,6 @@ import type { OrchestratorCompactionEvent } from './orchestratorCompaction';
 export type OrchestratorCompactionEffect = {
   logEntry?: ConversationLogEntry;
   messages: Message[];
-  /** The compaction summary text, if any. */
-  summary?: string;
 };
 
 export function buildOrchestratorCompactionEffect(params: {
@@ -16,7 +14,6 @@ export function buildOrchestratorCompactionEffect(params: {
 }): OrchestratorCompactionEffect {
   return {
     messages: params.event.messages,
-    summary: params.event.summary,
     logEntry:
       params.includeLogEntry === false
         ? undefined
@@ -35,15 +32,11 @@ export function applyOrchestratorCompactionEffect(params: {
   actions: {
     appendConversationLog?: (entry: ConversationLogEntry) => void;
     applyConversationCompaction: (messages: Message[]) => void;
-    writeCompactionSummary?: (summary: string) => void;
   };
   effect: OrchestratorCompactionEffect;
 }): void {
   params.actions.applyConversationCompaction(params.effect.messages);
   if (params.effect.logEntry) {
     params.actions.appendConversationLog?.(params.effect.logEntry);
-  }
-  if (params.effect.summary && params.effect.summary.trim().length > 0) {
-    params.actions.writeCompactionSummary?.(params.effect.summary.trim());
   }
 }

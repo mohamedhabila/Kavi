@@ -31,7 +31,6 @@ jest.mock('../../src/engine/graph/foregroundRun/foregroundInterruptedResponse', 
 
 jest.mock('../../src/services/memory/policy', () => ({
   ...jest.requireActual('../../src/services/memory/policy'),
-  canWriteLongTermMemory: (...args: unknown[]) => mockCanWriteLongTermMemory(...args),
 }));
 
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;

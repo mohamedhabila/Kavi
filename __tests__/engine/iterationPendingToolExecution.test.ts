@@ -63,7 +63,7 @@ function createParams(overrides: Record<string, unknown> = {}) {
       },
     },
     runtime: {
-      memory: { status: 'off', policyEpoch: 0 },
+      memory: { status: 'off' },
       consecutivePendingAsyncNoToolTurns: 0,
       activeProvider: { id: 'provider-1' },
       activeModel: 'gemini-3.5-flash',

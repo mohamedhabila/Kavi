@@ -9,14 +9,12 @@ jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
   scheduleMemoryExtraction: jest.fn(),
 }));
 
-import * as memoryAuthority from '../../src/services/memory/memoryAuthority';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import {
   catchUpMemoryCapture,
   publishConversationTurnMemory,
 } from '../../src/services/memory/core/memoryCapture';
 import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { searchMemoryTurns } from '../../src/services/memory/core/memoryTurnsStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../helpers/chatStoreHarness';
@@ -28,8 +26,6 @@ beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetMemoryCoreSchemaCacheForTests();
-  resetFactSchemaCacheForTests();
-  ensureFactSchema();
   useChatStore.setState({ conversations: [] });
   resetSettingsStore();
   mockCancelMemoryExtraction.mockClear();
@@ -64,11 +60,10 @@ function indexedTurnIds(): string[] {
 }
 
 describe('settings memory opt-out transition', () => {
-  it('turning memory off stops durable memory and cancels background extraction', () => {
+  it('turning memory off cancels background extraction', () => {
     useSettingsStore.getState().setDisableLongTermMemory(true);
 
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
-    expect(memoryAuthority.isDurableMemoryPolicyEnabled()).toBe(false);
     expect(mockCancelMemoryExtraction).toHaveBeenCalledTimes(1);
 
     useSettingsStore.getState().setDisableLongTermMemory(true);
@@ -86,24 +81,12 @@ describe('settings memory opt-out transition', () => {
     useSettingsStore.getState().setDisableLongTermMemory(false);
     catchUpMemoryCapture(useChatStore.getState().conversations);
 
-    expect(memoryAuthority.isDurableMemoryPolicyEnabled()).toBe(true);
     expect(indexedTurnIds()).toEqual(['user-before-opt-out']);
 
     addClosedTurn(conversationId, 'after-opt-in', 30);
     publishConversationTurnMemory(conversationId, 'after-opt-in');
 
     expect(indexedTurnIds()).toEqual(['user-after-opt-in', 'user-before-opt-out']);
-  });
-
-  it('keeps the visible setting off when the durable policy cannot be written', () => {
-    jest.spyOn(memoryAuthority, 'setDurableMemoryPolicyEnabled').mockImplementation(() => {
-      throw new Error('storage unavailable');
-    });
-
-    expect(() => useSettingsStore.getState().setDisableLongTermMemory(true)).toThrow(
-      'storage unavailable',
-    );
-    expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);
   });
 
   it('applies the same transitions to settings replacement', () => {

@@ -1,4 +1,5 @@
-import type { MemoryFactSensitivity } from './facts/applicabilityProvenance';
+/** `restricted` is a credential and is never stored; `sensitive` is personal data kept out of the automatic prompt. */
+export type DetectedMemorySensitivity = 'sensitive' | 'restricted';
 
 const CREDENTIAL_PATTERNS = [
   /-----BEGIN ((?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY)-----[\r\n]+[A-Za-z0-9+/=\r\n]{32,}-----END \1-----/u,
@@ -179,7 +180,7 @@ function hasGovernmentId(text: string): boolean {
 }
 
 /** High-confidence secret and PII formats independent of field names or locale. */
-export function classifyStructuredMemoryText(text: string): MemoryFactSensitivity | null {
+export function classifyStructuredMemoryText(text: string): DetectedMemorySensitivity | null {
   const normalized = text.normalize('NFKC');
   if (containsCredentialStructure(normalized)) return 'restricted';
   if (

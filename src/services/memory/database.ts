@@ -1,5 +1,4 @@
 import * as SQLite from 'expo-sqlite';
-import { clearLocalSimilarityVectorCache } from './localSimilarity';
 
 const MEMORY_DATABASE_NAME = 'kavi-memory.db';
 
@@ -105,7 +104,6 @@ export function getMemoryDb(): SQLite.SQLiteDatabase {
 }
 
 export function closeMemoryDb(): void {
-  clearLocalSimilarityVectorCache();
   if (!database) return;
   database.closeSync();
   database = null;

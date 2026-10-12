@@ -8,9 +8,10 @@ import {
 } from '../../src/acceptance/e2eAgent/e2ePairedRuntime';
 import { stableHash } from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
 import {
-  buildPairedRetrievalEvent,
+  buildPairedMemoryPromptBuild,
   buildPairedTurnTrace,
-  PAIRED_TEST_SOURCE_THREAD_HASH,
+  OPTED_OUT_MEMORY_PROMPT,
+  recordedMemoryPrompt,
 } from '../helpers/e2ePairedRunHarness';
 import {
   completedCondition,
@@ -251,7 +252,6 @@ describe('paired public report projection', () => {
       ),
     ).toThrow('invalid paired assessment');
 
-    const event = buildPairedRetrievalEvent();
     expect(() =>
       buildE2EPairedPublicReport(
         runtime([
@@ -262,16 +262,8 @@ describe('paired public report projection', () => {
             rubricTotal: 1,
             userTurnCount: 1,
             turnTraces: [
-              buildPairedTurnTrace({
-                sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-                instrumentationStatus: 'recorded',
-                events: [event],
-              }),
-              buildPairedTurnTrace({
-                sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-                instrumentationStatus: 'recorded',
-                events: [{ ...event, id: 'retrieval-private-event-2' }],
-              }),
+              buildPairedTurnTrace(recordedMemoryPrompt()),
+              buildPairedTurnTrace(recordedMemoryPrompt()),
             ],
           }),
         ]),
@@ -329,9 +321,11 @@ describe('paired public report projection', () => {
           forced_agentic: 0,
         },
         conversationModeCounts: { chitchat: 1, agentic: 0 },
-        retrieval: {
-          turnStatusCounts: { recorded: 0, missing: 0, optOut: 1, overflow: 0 },
-          eventCount: 0,
+        memory: {
+          turnStatusCounts: { recorded: 0, missing: 0, optOut: 1 },
+          buildCount: 0,
+          selectedItemCount: 0,
+          selectedPastTurnCount: 0,
         },
       },
     });
@@ -345,10 +339,12 @@ describe('paired public report projection', () => {
           forced_agentic: 0,
         },
         conversationModeCounts: { chitchat: 1, agentic: 0 },
-        retrieval: {
-          turnStatusCounts: { recorded: 1, missing: 0, optOut: 0, overflow: 0 },
-          eventCount: 1,
-          modeCounts: { disabled: 0 },
+        memory: {
+          turnStatusCounts: { recorded: 1, missing: 0, optOut: 0 },
+          buildCount: 1,
+          selectedItemCount: 1,
+          selectedPastTurnCount: 1,
+          promptChars: 400,
         },
       },
     });
@@ -363,10 +359,9 @@ describe('paired public report projection', () => {
           rubricPassed: 0,
           rubricTotal: 1,
           turnTraces: [
-            buildPairedTurnTrace(
-              { sourceThreadIdHash: null, instrumentationStatus: 'opt_out', events: [] },
-              { route: { directive: 'forced_chitchat', mode: 'chitchat' } },
-            ),
+            buildPairedTurnTrace(OPTED_OUT_MEMORY_PROMPT, {
+              route: { directive: 'forced_chitchat', mode: 'chitchat' },
+            }),
           ],
         }),
         completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
@@ -387,7 +382,7 @@ describe('paired public report projection', () => {
     });
   });
 
-  it('invalidates memory observations when retrieval traces are absent', () => {
+  it('invalidates memory observations when memory evidence is absent', () => {
     const report = buildE2EPairedPublicReport(
       runtime([
         completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
@@ -406,7 +401,7 @@ describe('paired public report projection', () => {
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
-  it('invalidates memory observations when retrieval traces cover only part of the user turns', () => {
+  it('invalidates memory observations when memory evidence covers only part of the user turns', () => {
     const report = buildE2EPairedPublicReport(
       runtime([
         completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
@@ -414,13 +409,7 @@ describe('paired public report projection', () => {
           condition: 'production_auto',
           rubricPassed: 1,
           rubricTotal: 1,
-          turnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'recorded',
-              events: [buildPairedRetrievalEvent()],
-            }),
-          ],
+          turnTraces: [buildPairedTurnTrace(recordedMemoryPrompt())],
           userTurnCount: 2,
         }),
       ]),
@@ -437,7 +426,6 @@ describe('paired public report projection', () => {
   ] as const)(
     'withholds task deltas and invalidates memory observations for %s turn indexes',
     (_label, secondProductTurnIndex) => {
-      const firstEvent = buildPairedRetrievalEvent();
       const report = buildE2EPairedPublicReport(
         runtime([
           completedCondition({
@@ -446,10 +434,7 @@ describe('paired public report projection', () => {
             rubricTotal: 1,
             userTurnCount: 2,
             turnTraces: [0, 1].map((turnIndex) =>
-              buildPairedTurnTrace(
-                { sourceThreadIdHash: null, instrumentationStatus: 'opt_out', events: [] },
-                { turnIndex },
-              ),
+              buildPairedTurnTrace(OPTED_OUT_MEMORY_PROMPT, { turnIndex }),
             ),
           }),
           completedCondition({
@@ -458,22 +443,8 @@ describe('paired public report projection', () => {
             rubricTotal: 1,
             userTurnCount: 2,
             turnTraces: [
-              buildPairedTurnTrace(
-                {
-                  sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-                  instrumentationStatus: 'recorded',
-                  events: [firstEvent],
-                },
-                { turnIndex: 0 },
-              ),
-              buildPairedTurnTrace(
-                {
-                  sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-                  instrumentationStatus: 'recorded',
-                  events: [{ ...firstEvent, id: 'retrieval-private-event-2' }],
-                },
-                { turnIndex: secondProductTurnIndex },
-              ),
+              buildPairedTurnTrace(recordedMemoryPrompt(), { turnIndex: 0 }),
+              buildPairedTurnTrace(recordedMemoryPrompt(), { turnIndex: secondProductTurnIndex }),
             ],
           }),
         ]),
@@ -496,12 +467,28 @@ describe('paired public report projection', () => {
           condition: 'production_auto',
           rubricPassed: 1,
           rubricTotal: 1,
+          turnTraces: [buildPairedTurnTrace(OPTED_OUT_MEMORY_PROMPT)],
+        }),
+      ]),
+    );
+
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
+    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
+  });
+
+  it('invalidates memory observations when production selects no memory', () => {
+    const report = buildE2EPairedPublicReport(
+      runtime([
+        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
+        completedCondition({
+          condition: 'production_auto',
+          rubricPassed: 1,
+          rubricTotal: 1,
           turnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: null,
-              instrumentationStatus: 'opt_out',
-              events: [],
-            }),
+            buildPairedTurnTrace(
+              recordedMemoryPrompt([buildPairedMemoryPromptBuild({ itemIds: [], turnIds: [] })]),
+            ),
           ],
         }),
       ]),
@@ -512,8 +499,7 @@ describe('paired public report projection', () => {
     expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
   });
 
-  it('invalidates memory observations for disabled production retrieval events', () => {
-    const event = buildPairedRetrievalEvent();
+  it('invalidates memory observations when a production turn has no recorded memory read', () => {
     const report = buildE2EPairedPublicReport(
       runtime([
         completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
@@ -521,122 +507,7 @@ describe('paired public report projection', () => {
           condition: 'production_auto',
           rubricPassed: 1,
           rubricTotal: 1,
-          turnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'recorded',
-              events: [
-                {
-                  ...event,
-                  mode: 'disabled',
-                  outcome: 'disabled',
-                  counts: {
-                    candidateFactCount: 0,
-                    selectedFactCount: 0,
-                    selectedFactIds: [],
-                    candidateEpisodeCount: 0,
-                    selectedEpisodeCount: 0,
-                    selectedEpisodeIds: [],
-                  },
-                  timings: {
-                    planMs: 0,
-                    factRecallMs: 0,
-                    episodeRecallMs: 0,
-                    candidateFetchMs: 0,
-                    scoreMs: 0,
-                    selectorMs: 0,
-                    evidenceExpansionMs: 0,
-                    totalMs: 0,
-                  },
-                  candidates: {
-                    strategy: 'not_requested',
-                    localSimilarityOutcome: 'not_requested',
-                    eligibleScanCount: 0,
-                    pinnedCount: 0,
-                    exactQuotedCount: 0,
-                    lexicalCount: 0,
-                    entityCount: 0,
-                    temporalCount: 0,
-                    localSimilarityCount: 0,
-                    unionCount: 0,
-                    diversifiedCount: 0,
-                    unionMs: 0,
-                  },
-                  expansion: {
-                    outcome: 'not_requested',
-                    requestedSourceCount: 0,
-                    acceptedSourceCount: 0,
-                    sourceWithEvidenceCount: 0,
-                    emittedEvidenceCount: 0,
-                    promptBudgetDroppedCount: 0,
-                    promptChars: 0,
-                    durationMs: 0,
-                  },
-                },
-              ],
-            }),
-          ],
-        }),
-      ]),
-    );
-
-    expect(report.validForDeltaClaims).toBe(false);
-    expect(report.pairedDelta).toBeNull();
-    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
-  });
-
-  it('invalidates memory observations when production selects no facts or episodes', () => {
-    const event = buildPairedRetrievalEvent();
-    const report = buildE2EPairedPublicReport(
-      runtime([
-        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
-        completedCondition({
-          condition: 'production_auto',
-          rubricPassed: 1,
-          rubricTotal: 1,
-          turnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'recorded',
-              events: [
-                {
-                  ...event,
-                  counts: {
-                    candidateFactCount: 1,
-                    selectedFactCount: 0,
-                    selectedFactIds: [],
-                    candidateEpisodeCount: 1,
-                    selectedEpisodeCount: 0,
-                    selectedEpisodeIds: [],
-                  },
-                },
-              ],
-            }),
-          ],
-        }),
-      ]),
-    );
-
-    expect(report.validForDeltaClaims).toBe(false);
-    expect(report.pairedDelta).toBeNull();
-    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
-  });
-
-  it('invalidates memory observations for degraded production retrieval', () => {
-    const report = buildE2EPairedPublicReport(
-      runtime([
-        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
-        completedCondition({
-          condition: 'production_auto',
-          rubricPassed: 1,
-          rubricTotal: 1,
-          turnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'recorded',
-              events: [buildPairedRetrievalEvent({ outcome: 'degraded' })],
-            }),
-          ],
+          turnTraces: [buildPairedTurnTrace({ status: 'missing', builds: [] })],
         }),
       ]),
     );

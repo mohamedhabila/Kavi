@@ -6,7 +6,6 @@ import { closeMemoryDb, getMemoryDb } from '../../services/memory/database';
 import { closeExecutionJournalDb } from '../../services/executionJournal/database';
 import { closeRemindersDb } from '../../services/scheduler/reminders/database';
 import { closeTranscriptArchiveDb } from '../../services/transcriptArchive/database';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
 import {
   ensureMemoryCoreSchema,
   resetMemoryCoreSchemaCacheForTests,
@@ -34,34 +33,15 @@ function resetEveryDatabase(): void {
 
 export function resetE2EMemorySandbox(): void {
   resetEveryDatabase();
-  resetFactSchemaCacheForTests();
   resetMemoryCoreSchemaCacheForTests();
-  ensureFactSchema();
   ensureMemoryCoreSchema();
 }
 
 export const E2E_RESETTABLE_MEMORY_TABLES = [
-  'memory_consolidation_state',
-  'memory_entities',
-  'memory_episodes',
-  'memory_fact_evidence',
-  'memory_fact_term_stats',
-  'memory_fact_terms',
-  'memory_facts',
-  'memory_ingestion_jobs',
-  'memory_ingestion_source_snapshots',
-  'memory_ingestion_structural_receipts',
-  'memory_ingestion_receipts',
   'memory_items',
-  'memory_migration_state',
   'memory_capture_cursor',
   'memory_prompt_log',
-  'memory_reflections',
-  'memory_retrieval_events',
-  'memory_retrieval_outcomes',
-  'memory_tasks',
   'memory_turns',
-  'memory_working_blocks',
 ] as const;
 
 export function assertE2EMemorySandboxReset(): void {

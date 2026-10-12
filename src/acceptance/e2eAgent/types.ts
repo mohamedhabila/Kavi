@@ -22,7 +22,6 @@ import type {
   ForegroundScenarioSteerDirective,
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
-import type { ForegroundScenarioRetrievalEvidence } from './foregroundScenarioRetrievalEvidence';
 import type {
   ForegroundScenarioMemoryItemsState,
   ForegroundScenarioMemoryPromptEvidence,
@@ -136,7 +135,6 @@ export type E2EScenarioTurnTrace = {
   /** Time spent waiting for background extraction after the reply (not user-facing latency). */
   memoryExtractionWaitMs: number;
   native: ForegroundScenarioNativeEvidenceSnapshot;
-  retrieval: ForegroundScenarioRetrievalEvidence;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
   toolCalls: ReadonlyArray<E2EToolCallRecord>;
   toolResults: ReadonlyArray<E2EToolResultRecord>;

@@ -22,7 +22,7 @@ function params(iteration: number) {
   const runtime = {
     activeModel: 'test-model',
     activeProvider: { id: 'provider', name: 'Provider', enabled: true },
-    memory: { status: 'off', policyEpoch: 0 },
+    memory: { status: 'off' },
     consecutivePendingAsyncNoToolTurns: 0,
     lastPendingAsyncSignature: '',
     llm: {},

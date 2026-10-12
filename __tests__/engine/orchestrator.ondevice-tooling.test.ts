@@ -6,21 +6,6 @@ import {
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { Message } from '../../src/types/message';
 
-const mockMemoryAuthoritySnapshot = Object.freeze({
-  processEpochs: Object.freeze({ restrictive: 0, projection: 0 }),
-  restrictiveRevision: Object.freeze({
-    kind: 'restrictive' as const,
-    memoryOwnerId: 'test-memory-owner',
-    value: 0,
-  }),
-  projectionRevision: Object.freeze({
-    kind: 'projection' as const,
-    memoryOwnerId: 'test-memory-owner',
-    value: 0,
-  }),
-  policy: Object.freeze({ enabled: true as const, revision: 0 }),
-});
-
 const mockStreamMessage = jest.fn();
 
 jest.mock('../../src/services/llm/LlmService', () => ({
@@ -68,26 +53,8 @@ jest.mock('../../src/services/skills/manager', () => ({
 jest.mock('../../src/services/memory/core/memoryPrompt', () => ({
   prepareMemoryPromptSection: jest.fn(() => null),
 }));
-jest.mock('../../src/services/memory/memoryAuthority', () => {
-  const actual = jest.requireActual('../../src/services/memory/memoryAuthority');
-  return {
-    ...actual,
-    captureMemoryAuthoritySnapshot: jest.fn(() => mockMemoryAuthoritySnapshot),
-    isMemoryProjectionSnapshotCurrent: jest.fn().mockReturnValue(true),
-    isMemoryProjectionSnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
-    isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn().mockReturnValue(true),
-    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn().mockReturnValue(true),
-  };
-});
 jest.mock('../../src/services/memory/policy', () => ({
-  canReadLongTermMemory: jest.fn().mockReturnValue(true),
-  canUseNetworkMemoryProvider: jest.fn().mockReturnValue(true),
-  canWriteLongTermMemory: jest.fn().mockReturnValue(true),
-  captureMemoryReadEpoch: jest.fn().mockReturnValue(0),
-  getMemoryPolicyEpoch: jest.fn().mockReturnValue(0),
   isLongTermMemoryEnabled: jest.fn().mockReturnValue(true),
-  isMemoryPolicyEpochCurrent: jest.fn().mockReturnValue(true),
-  isMemoryReadEpochCurrent: jest.fn().mockReturnValue(true),
 }));
 
 jest.mock('../../src/services/commands/parser', () => ({

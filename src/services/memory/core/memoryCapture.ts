@@ -8,12 +8,12 @@
 // off; turning it back on moves every thread's cursor past what was said meanwhile.
 // ---------------------------------------------------------------------------
 
-import { useSettingsStore } from '../../../store/useSettingsStore';
 import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import { hasTerminalAssistantCompletionMetadata } from '../../../utils/assistantMessageMetadata';
 import { createLogger } from '../../../utils/logger';
 import { getMemoryDb } from '../database';
+import { isLongTermMemoryEnabled } from '../policy';
 import {
   deleteCaptureCursor,
   readCaptureCursor,
@@ -39,10 +39,6 @@ const logger = createLogger('memory.capture');
 export type RecordConversationTurnMemory = (conversationId: string, replyMessageId: string) => void;
 
 type CaptureThread = Pick<Conversation, 'id' | 'isSideThread' | 'messages'>;
-
-function isMemoryOn(): boolean {
-  return useSettingsStore.getState().disableLongTermMemory !== true;
-}
 
 function isClosedReply(message: Message): boolean {
   return (
@@ -70,7 +66,7 @@ export function publishConversationTurnMemory(
   replyMessageId: string,
   conversations: ReadonlyArray<CaptureThread> = currentConversations(),
 ): void {
-  if (!isMemoryOn()) return;
+  if (!isLongTermMemoryEnabled()) return;
   const thread = conversations.find((candidate) => candidate.id === conversationId);
   if (!thread || thread.isSideThread) return;
   const reply = thread.messages.find((message) => message.id === replyMessageId);
@@ -85,7 +81,7 @@ export function publishConversationTurnMemory(
 
 /** Captures every turn closed since each thread's cursor: those a killed app never captured. */
 export function catchUpMemoryCapture(conversations: ReadonlyArray<CaptureThread>): void {
-  if (!isMemoryOn()) return;
+  if (!isLongTermMemoryEnabled()) return;
   for (const thread of conversations) {
     if (thread.isSideThread) continue;
     try {

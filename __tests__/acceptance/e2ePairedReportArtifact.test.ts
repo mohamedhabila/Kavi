@@ -19,9 +19,9 @@ import {
 } from '../../src/acceptance/e2eAgent/e2ePairedEvaluationRunManifest';
 import type { E2EScenarioTurnTrace } from '../../src/acceptance/e2eAgent/types';
 import {
-  buildPairedRetrievalEvent,
   buildPairedTurnTrace,
-  PAIRED_TEST_SOURCE_THREAD_HASH,
+  OPTED_OUT_MEMORY_PROMPT,
+  recordedMemoryPrompt,
 } from '../helpers/e2ePairedRunHarness';
 import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
 
@@ -33,20 +33,8 @@ function validRuntime(input?: {
   const condition = (label: 'memory_off' | 'production_auto') => {
     const turnTraces =
       label === 'memory_off'
-        ? [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: null,
-              instrumentationStatus: 'opt_out',
-              events: [],
-            }),
-          ]
-        : (input?.productTurnTraces ?? [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'recorded',
-              events: [buildPairedRetrievalEvent()],
-            }),
-          ]);
+        ? [buildPairedTurnTrace(OPTED_OUT_MEMORY_PROMPT)]
+        : (input?.productTurnTraces ?? [buildPairedTurnTrace(recordedMemoryPrompt())]);
     return {
       condition: label,
       conditionConfigHash: stableHash(`${label}-config`),
@@ -244,21 +232,15 @@ describe('paired public report artifact', () => {
     },
   );
 
-  it('persists zero-event overflow evidence and fails closed without a paired delta', () => {
-    const reportPath = join(directory, 'run-overflow', 'paired-report.json');
+  it('persists a turn without recorded memory evidence and fails closed without a paired delta', () => {
+    const reportPath = join(directory, 'run-missing-memory', 'paired-report.json');
     expect(() =>
       writeE2EPairedPublicReportArtifact({
         runtime: validRuntime({
-          productTurnTraces: [
-            buildPairedTurnTrace({
-              sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-              instrumentationStatus: 'overflow',
-              events: [],
-            }),
-          ],
+          productTurnTraces: [buildPairedTurnTrace({ status: 'missing', builds: [] })],
         }),
         retentionRoot: directory,
-        runId: 'run-overflow',
+        runId: 'run-missing-memory',
       }),
     ).toThrow(E2EPairedClaimFailure);
 

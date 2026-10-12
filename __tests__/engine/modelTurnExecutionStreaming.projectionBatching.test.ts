@@ -5,12 +5,10 @@ jest.mock('expo-sqlite', () => {
 
 import { executeAgentControlGraphModelTurnStreaming } from '../../src/engine/graph/modelTurnExecutionStreaming';
 import { getMemoryDb } from '../../src/services/memory/database';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 beforeEach(() => {
   useSettingsStore.setState({ disableLongTermMemory: false });
-  initializeMemoryPolicyObservation();
 });
 
 afterEach(() => {

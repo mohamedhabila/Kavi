@@ -7,21 +7,6 @@ export const mockStreamMessage = jest.fn();
 let mockWorkspaceTargets: any[] = [];
 let mockDisableLongTermMemory = false;
 let mockDeveloperModeEnabled = false;
-const mockMemoryAuthoritySnapshot = Object.freeze({
-  processEpochs: Object.freeze({ restrictive: 0, projection: 0 }),
-  restrictiveRevision: Object.freeze({
-    kind: 'restrictive' as const,
-    memoryOwnerId: 'test-memory-owner',
-    value: 0,
-  }),
-  projectionRevision: Object.freeze({
-    kind: 'projection' as const,
-    memoryOwnerId: 'test-memory-owner',
-    value: 0,
-  }),
-  policy: Object.freeze({ enabled: true as const, revision: 0 }),
-});
-
 jest.mock('../../../src/services/llm/LlmService', () => ({
   LlmService: jest.fn().mockImplementation(() => ({
     streamMessage: mockStreamMessage,
@@ -72,29 +57,8 @@ jest.mock('../../../src/services/memory/core/memoryPrompt', () => ({
   prepareMemoryPromptSection: jest.fn(() => null),
 }));
 
-jest.mock('../../../src/services/memory/memoryAuthority', () => {
-  const actual = jest.requireActual('../../../src/services/memory/memoryAuthority');
-  return {
-    ...actual,
-    captureMemoryAuthoritySnapshot: jest.fn(() =>
-      mockDisableLongTermMemory ? null : mockMemoryAuthoritySnapshot,
-    ),
-    isMemoryProjectionSnapshotCurrent: jest.fn(() => !mockDisableLongTermMemory),
-    isMemoryProjectionSnapshotDurablyCurrent: jest.fn(() => !mockDisableLongTermMemory),
-    isRestrictiveMemoryAuthoritySnapshotCurrent: jest.fn(() => !mockDisableLongTermMemory),
-    isRestrictiveMemoryAuthoritySnapshotDurablyCurrent: jest.fn(() => !mockDisableLongTermMemory),
-  };
-});
-
 jest.mock('../../../src/services/memory/policy', () => ({
-  canReadLongTermMemory: jest.fn(() => !mockDisableLongTermMemory),
-  canUseNetworkMemoryProvider: jest.fn(() => !mockDisableLongTermMemory),
-  canWriteLongTermMemory: jest.fn(() => !mockDisableLongTermMemory),
-  captureMemoryReadEpoch: jest.fn(() => (mockDisableLongTermMemory ? null : 0)),
-  getMemoryPolicyEpoch: jest.fn().mockReturnValue(0),
   isLongTermMemoryEnabled: jest.fn(() => !mockDisableLongTermMemory),
-  isMemoryPolicyEpochCurrent: jest.fn(() => !mockDisableLongTermMemory),
-  isMemoryReadEpochCurrent: jest.fn(() => !mockDisableLongTermMemory),
 }));
 
 jest.mock('../../../src/services/commands/parser', () => ({

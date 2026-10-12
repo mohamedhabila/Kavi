@@ -14,10 +14,7 @@ import {
 } from '../../src/services/memory/memoryAccessGateway';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import { getSkillSystemPrompts } from '../../src/services/skills/manager';
-import {
-  getMemoryPolicyEpoch,
-  initializeMemoryPolicyObservation,
-} from '../../src/services/memory/policy';
+import {} from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const mockedReadSessionMemory = jest.mocked(readSessionMemory);
@@ -50,7 +47,6 @@ function baseParams() {
 function memoryRead() {
   return {
     status: 'read' as const,
-    policyEpoch: getMemoryPolicyEpoch(),
     section: { text: 'private memory prompt section', itemIds: ['item-1'], turnIds: [] },
   };
 }
@@ -59,7 +55,6 @@ describe('orchestrator request memory policy', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useSettingsStore.setState({ disableLongTermMemory: false } as never);
-    initializeMemoryPolicyObservation();
   });
 
   afterEach(() => {
@@ -73,7 +68,7 @@ describe('orchestrator request memory policy', () => {
     const params = baseParams();
     const result = await prepareOrchestratorRequestBundle(params);
     expect(result.workingMessages).toEqual(params.messages);
-    expect(result.memory).toEqual({ status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() });
+    expect(result.memory).toEqual({ status: 'unavailable' });
     expect(params.logger.devWarn).toHaveBeenCalledWith(
       'Memory unavailable for this request:',
       'memory unavailable',

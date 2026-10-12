@@ -1,122 +1,16 @@
-jest.mock('expo-sqlite', () => {
-  const { makeExpoSqliteMock } = require('../../helpers/expoSqliteShim');
-  return makeExpoSqliteMock();
-});
+import { isLongTermMemoryEnabled } from '../../../src/services/memory/policy';
+import { useSettingsStore } from '../../../src/store/useSettingsStore';
 
-type SettingsState = { disableLongTermMemory: boolean };
-
-function loadPolicy(initialState: SettingsState, subscribeAvailable = true) {
-  let state = initialState;
-  let listener: ((next: SettingsState, previous: SettingsState) => void) | null = null;
-  const unsubscribe = jest.fn();
-  const subscribe = jest.fn((nextListener) => {
-    listener = nextListener;
-    return unsubscribe;
-  });
-  const store = {
-    getState: jest.fn(() => state),
-    ...(subscribeAvailable ? { subscribe } : {}),
-  };
-
-  jest.resetModules();
-  jest.doMock('../../../src/store/useSettingsStore', () => ({
-    useSettingsStore: store,
-  }));
-  let policy!: typeof import('../../../src/services/memory/policy');
-  let authority!: typeof import('../../../src/services/memory/memoryAuthority');
-  jest.isolateModules(() => {
-    policy = require('../../../src/services/memory/policy');
-    authority = require('../../../src/services/memory/memoryAuthority');
-  });
-
-  return {
-    policy,
-    authority,
-    subscribe,
-    setDisabled(disabled: boolean) {
-      const previous = state;
-      state = { disableLongTermMemory: disabled };
-      listener?.(state, previous);
-    },
-    failReads() {
-      store.getState.mockImplementation(() => {
-        throw new Error('settings unavailable');
-      });
-    },
-  };
-}
-
-describe('memory policy observation', () => {
+describe('memory policy', () => {
   afterEach(() => {
-    jest.dontMock('../../../src/store/useSettingsStore');
-    jest.resetModules();
+    useSettingsStore.setState({ disableLongTermMemory: false });
   });
 
-  it('starts explicitly and invalidates in-flight work on the opt-out edge', () => {
-    const harness = loadPolicy({ disableLongTermMemory: false });
-    const handler = jest.fn();
-    harness.policy.registerMemoryOptOutHandler(handler);
-    const initialEpoch = harness.policy.getMemoryPolicyEpoch();
+  it('is on unless the user turned long-term memory off', () => {
+    useSettingsStore.setState({ disableLongTermMemory: false });
+    expect(isLongTermMemoryEnabled()).toBe(true);
 
-    expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
-    expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
-    expect(harness.subscribe).toHaveBeenCalledTimes(1);
-    const readEpoch = harness.policy.captureMemoryReadEpoch();
-    expect(readEpoch).toBe(initialEpoch);
-    expect(harness.policy.isMemoryReadEpochCurrent(readEpoch!)).toBe(true);
-
-    harness.setDisabled(true);
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(harness.policy.getMemoryPolicyEpoch()).toBe(initialEpoch + 1);
-    expect(harness.policy.canReadLongTermMemory()).toBe(false);
-    expect(harness.policy.isMemoryReadEpochCurrent(readEpoch!)).toBe(false);
-
-    harness.setDisabled(true);
-    expect(handler).toHaveBeenCalledTimes(1);
-  });
-
-  it('invalidates immediately when startup finds memory already disabled', () => {
-    const harness = loadPolicy({ disableLongTermMemory: true });
-    const handler = jest.fn();
-    harness.policy.registerMemoryOptOutHandler(handler);
-
-    expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(harness.policy.canWriteLongTermMemory()).toBe(false);
-  });
-
-  it('never re-enables a durable fail-closed policy from startup defaults', () => {
-    const harness = loadPolicy({ disableLongTermMemory: false });
-    harness.authority.setDurableMemoryPolicyEnabled(false);
-
-    expect(harness.policy.initializeMemoryPolicyObservation()).toBe(true);
-    expect(harness.authority.isDurableMemoryPolicyEnabled()).toBe(false);
-    expect(harness.policy.canReadLongTermMemory()).toBe(false);
-  });
-
-  it('fails closed when settings reads or observation are unavailable', () => {
-    const unreadable = loadPolicy({ disableLongTermMemory: false });
-    unreadable.failReads();
-    expect(unreadable.policy.canUseNetworkMemoryProvider()).toBe(false);
-
-    const unobservable = loadPolicy({ disableLongTermMemory: false }, false);
-    const handler = jest.fn();
-    unobservable.policy.registerMemoryOptOutHandler(handler);
-    expect(unobservable.policy.initializeMemoryPolicyObservation()).toBe(false);
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(unobservable.policy.canReadLongTermMemory()).toBe(false);
-  });
-
-  it('runs every opt-out handler even when one throws', () => {
-    const harness = loadPolicy({ disableLongTermMemory: false });
-    const second = jest.fn();
-    harness.policy.registerMemoryOptOutHandler(() => {
-      throw new Error('cleanup failed');
-    });
-    harness.policy.registerMemoryOptOutHandler(second);
-    harness.policy.initializeMemoryPolicyObservation();
-
-    expect(() => harness.setDisabled(true)).not.toThrow();
-    expect(second).toHaveBeenCalledTimes(1);
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    expect(isLongTermMemoryEnabled()).toBe(false);
   });
 });

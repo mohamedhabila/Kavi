@@ -2,6 +2,7 @@ import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepar
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { planIterationModel } from '../../src/services/context/tokenOptimization';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 jest.mock('../../src/engine/graph/agentTurnPreparation', () => {
   const actual = jest.requireActual('../../src/engine/graph/agentTurnPreparation');
@@ -22,19 +23,12 @@ jest.mock('../../src/services/context/tokenOptimization', () => {
 const mockedPrepareAgentTurn = jest.mocked(prepareAgentTurn);
 const mockedPlanIterationModel = jest.mocked(planIterationModel);
 
-function memoryRead(text: string, policyEpoch: number) {
+function memoryRead(text: string) {
   return {
     status: 'read' as const,
-    policyEpoch,
     section: { text, itemIds: [], turnIds: [] },
   };
 }
-
-jest.mock('../../src/services/memory/policy', () => ({
-  ...jest.requireActual('../../src/services/memory/policy'),
-  captureMemoryReadEpoch: jest.fn(() => 0),
-  isMemoryReadEpochCurrent: jest.fn((epoch: number) => epoch === 0),
-}));
 
 const writeTool = {
   name: 'write_file',
@@ -289,7 +283,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       ...createBaseParams(),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        memory: memoryRead('Living memory section', 0),
+        memory: memoryRead('Living memory section'),
       },
       turnDirectives: {
         forceFinalText: true,
@@ -369,7 +363,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       }),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
-        memory: memoryRead('Living memory section', 0),
+        memory: memoryRead('Living memory section'),
       },
     });
 
@@ -382,7 +376,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     );
   });
 
-  it('drops the memory section from the model prompt when its read epoch is stale', async () => {
+  it('drops a memory section read before memory was turned off', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,
@@ -390,14 +384,19 @@ describe('prepareAgentControlGraphModelTurn', () => {
       reason: 'test',
     } as any);
     mockPreparedTurn();
+    useSettingsStore.setState({ disableLongTermMemory: true });
 
-    await prepareAgentControlGraphModelTurn({
-      ...createBaseParams(),
-      promptContextSupport: {
-        ...createBaseParams().promptContextSupport,
-        memory: memoryRead('Private stale memory section', -1),
-      },
-    });
+    try {
+      await prepareAgentControlGraphModelTurn({
+        ...createBaseParams(),
+        promptContextSupport: {
+          ...createBaseParams().promptContextSupport,
+          memory: memoryRead('Private memory section'),
+        },
+      });
+    } finally {
+      useSettingsStore.setState({ disableLongTermMemory: false });
+    }
 
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({

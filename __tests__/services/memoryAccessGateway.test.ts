@@ -3,15 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-let mockPolicyEpoch = 3;
-let mockMemoryOn = true;
-
-jest.mock('../../src/services/memory/policy', () => ({
-  ...jest.requireActual('../../src/services/memory/policy'),
-  getMemoryPolicyEpoch: () => mockPolicyEpoch,
-  captureMemoryReadEpoch: () => (mockMemoryOn ? mockPolicyEpoch : null),
-}));
-
 import type { Message } from '../../src/types/message';
 import {
   isSessionMemoryReadCurrent,
@@ -21,6 +12,7 @@ import { closeMemoryDb } from '../../src/services/memory/database';
 import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
 import { addMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
 import { indexMemoryTurn } from '../../src/services/memory/core/memoryTurnsStore';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -32,8 +24,7 @@ beforeEach(() => {
   closeMemoryDb();
   expoSqlite.__resetExpoSqliteForTests();
   resetMemoryCoreSchemaCacheForTests();
-  mockPolicyEpoch = 3;
-  mockMemoryOn = true;
+  useSettingsStore.setState({ disableLongTermMemory: false });
 });
 
 afterAll(() => {
@@ -61,7 +52,7 @@ describe('session memory read', () => {
       userMessage('u2', 'When should I visit Sara in Porto?', 3),
     ]);
 
-    expect(read).toMatchObject({ status: 'read', policyEpoch: 3 });
+    expect(read).toMatchObject({ status: 'read' });
     if (read.status !== 'read') throw new Error('memory was not read');
     expect(read.section?.text).toContain('Sara (the user’s sister) lives in Porto');
     expect(read.section?.text).toContain('Plan my Porto trip to visit Sara');
@@ -94,7 +85,7 @@ describe('session memory read', () => {
   });
 
   it('reads nothing while memory is off', () => {
-    mockMemoryOn = false;
+    useSettingsStore.setState({ disableLongTermMemory: true });
     addMemoryItem({
       text: 'Sara (the user’s sister) lives in Porto',
       conversationId: 'conv-1',
@@ -103,15 +94,20 @@ describe('session memory read', () => {
 
     expect(readSessionMemory('conv-1', [userMessage('u1', 'Sara in Porto?', 1)])).toEqual({
       status: 'off',
-      policyEpoch: 3,
     });
   });
 
-  it('stays current until memory is turned on or off', () => {
-    const read = readSessionMemory('conv-1', [userMessage('u1', 'Hello', 1)]);
-    expect(isSessionMemoryReadCurrent(read)).toBe(true);
+  it('stays current while memory is as on or off as it was when read', () => {
+    const readWhileOn = readSessionMemory('conv-1', [userMessage('u1', 'Hello', 1)]);
+    expect(isSessionMemoryReadCurrent(readWhileOn)).toBe(true);
 
-    mockPolicyEpoch = 4;
-    expect(isSessionMemoryReadCurrent(read)).toBe(false);
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    expect(isSessionMemoryReadCurrent(readWhileOn)).toBe(false);
+    const readWhileOff = readSessionMemory('conv-1', [userMessage('u1', 'Hello', 1)]);
+    expect(isSessionMemoryReadCurrent(readWhileOff)).toBe(true);
+
+    useSettingsStore.setState({ disableLongTermMemory: false });
+    expect(isSessionMemoryReadCurrent(readWhileOff)).toBe(false);
+    expect(isSessionMemoryReadCurrent({ status: 'unavailable' })).toBe(true);
   });
 });

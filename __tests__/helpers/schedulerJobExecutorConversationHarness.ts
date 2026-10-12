@@ -272,9 +272,6 @@ jest.mock('../../src/services/llm/support/providerSupport', () => ({
   resolveEnabledProvider: () => mockProvider,
   resolveProviderApiKey: () => Promise.resolve(mockProvider.apiKey),
 }));
-jest.mock('../../src/services/memory/workingBlocks', () => ({
-  editWorkingBlock: jest.fn(),
-}));
 jest.mock('../../src/utils/id', () => ({
   generateId: () => `generated-message-${++mockNextId}`,
 }));

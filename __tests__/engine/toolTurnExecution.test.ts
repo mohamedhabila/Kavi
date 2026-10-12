@@ -8,7 +8,6 @@ import { detectLoops, type IterationProgressSignature } from '../../src/engine/l
 import { executeToolExecutionBatch } from '../../src/engine/toolExecution/toolExecutionBatch';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
@@ -54,7 +53,6 @@ const mockedResolveToolExecutionOutcomes = jest.mocked(
 describe('toolTurnExecution', () => {
   beforeEach(() => {
     useSettingsStore.setState({ disableLongTermMemory: false });
-    initializeMemoryPolicyObservation();
     mockedDetectLoops.mockReset();
     mockedExecuteToolExecutionBatch.mockReset();
     mockedExecuteToolCallLifecycle.mockReset();

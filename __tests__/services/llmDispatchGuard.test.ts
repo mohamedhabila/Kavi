@@ -7,8 +7,6 @@ import { finalizeProviderConfig } from '../../src/constants/api';
 import { sendLlmMessage } from '../../src/services/llm/messageService';
 import { streamLlmMessage } from '../../src/services/llm/streamService';
 import { closeMemoryDb } from '../../src/services/memory/database';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
-import { resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
@@ -90,9 +88,7 @@ describe('LLM provider dispatch guard', () => {
   beforeEach(() => {
     closeMemoryDb();
     sqliteMock.__resetExpoSqliteForTests();
-    resetFactSchemaCacheForTests();
     useSettingsStore.setState({ disableLongTermMemory: false });
-    initializeMemoryPolicyObservation();
     mockSendLocalLlmMessage.mockReset();
     mockStreamLocalLlmMessage.mockReset();
   });

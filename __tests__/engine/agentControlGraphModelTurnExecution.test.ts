@@ -5,7 +5,6 @@ jest.mock('expo-sqlite', () => {
 
 import { executeAgentControlGraphModelTurn } from '../../src/engine/graph/modelTurnExecution';
 import { prepareAgentTurnRequestBudget } from '../../src/engine/graph/agentTurnRequestBudget';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   coordinateToolDefinition,
@@ -30,7 +29,6 @@ describe('agent control graph model turn execution', () => {
   beforeEach(() => {
     mockedPrepareAgentTurnRequestBudget.mockReset();
     useSettingsStore.setState({ disableLongTermMemory: false });
-    initializeMemoryPolicyObservation();
   });
 
   afterEach(() => {

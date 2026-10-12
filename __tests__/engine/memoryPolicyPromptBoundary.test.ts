@@ -6,9 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { buildPreparedModelTurnPrompt } from '../../src/engine/graph/modelTurn/buildPreparedPromptTurn';
 import { resolveModelTurnGroundedToolSurface } from '../../src/engine/graph/modelTurn/resolveGroundedToolSurface';
 import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
-import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { closeMemoryDb } from '../../src/services/memory/database';
-import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import type { ToolDefinition } from '../../src/types/tool';
 
@@ -66,10 +64,7 @@ describe('memory policy prompt boundary', () => {
     closeMemoryDb();
     const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
     expoSqlite.__resetExpoSqliteForTests();
-    resetFactSchemaCacheForTests();
-    ensureFactSchema();
     useSettingsStore.setState({ disableLongTermMemory: false });
-    initializeMemoryPolicyObservation();
   });
 
   afterEach(() => {

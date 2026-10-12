@@ -125,7 +125,6 @@ function buildTurnTrace(turn: ForegroundScenarioTurnSnapshot): E2EScenarioTurnTr
     memoryExtractionSettled: turn.memoryExtractionSettled,
     memoryExtractionWaitMs: turn.memoryExtractionWaitMs,
     native: cloneJson(turn.native),
-    retrieval: cloneJson(turn.retrieval),
     memoryPrompt: cloneJson(turn.memoryPrompt),
     toolCalls: collectToolCalls(turn.messages),
     toolResults: collectToolResults(turn.messages),

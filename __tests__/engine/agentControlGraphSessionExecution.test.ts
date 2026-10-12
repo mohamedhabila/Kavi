@@ -3,7 +3,6 @@ import type { ExecuteAgentControlGraphSessionParams } from '../../src/engine/gra
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { executeAgentControlGraphSession } from '../../src/engine/graph/sessionExecution';
 import { emitSessionEvent } from '../../src/services/events/bus';
-import { getMemoryPolicyEpoch } from '../../src/services/memory/policy';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
@@ -57,7 +56,7 @@ function createParams(
     initialRuntime: {
       activeModel: 'gpt-5-mini',
       activeProvider: { id: 'provider-1', name: 'OpenAI', enabled: true } as any,
-      memory: { status: 'unavailable', policyEpoch: getMemoryPolicyEpoch() },
+      memory: { status: 'unavailable' },
       consecutivePendingAsyncNoToolTurns: 0,
       lastPendingAsyncSignature: '',
       llm: {} as any,
@@ -75,7 +74,6 @@ function createParams(
     reportUsage: jest.fn(),
     refreshSessionMemory: jest.fn(() => ({
       status: 'unavailable' as const,
-      policyEpoch: getMemoryPolicyEpoch(),
     })),
     requestFrame: buildGraphEntryRequestFrame({
       text: 'Run the task',
@@ -199,9 +197,9 @@ describe('agentControlGraphSessionExecution', () => {
     };
     const params = createParams({ maxToolIterations: 1 });
     params.initialRuntime.workingMessages = [compactMessage, arabicMessage];
-    // Read before memory was last turned on or off: no longer current.
-    params.initialRuntime.memory = { status: 'off', policyEpoch: getMemoryPolicyEpoch() - 1 };
-    const refreshed = { status: 'off' as const, policyEpoch: getMemoryPolicyEpoch() };
+    // Read while memory was off; it is on now, so the read is no longer current.
+    params.initialRuntime.memory = { status: 'off' };
+    const refreshed = { status: 'read' as const, section: null };
     jest.mocked(params.refreshSessionMemory).mockReturnValueOnce(refreshed);
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
@@ -225,7 +223,7 @@ describe('agentControlGraphSessionExecution', () => {
 
   it('keeps a current memory read for the next step', async () => {
     const params = createParams({ maxToolIterations: 1 });
-    params.initialRuntime.memory = { status: 'off', policyEpoch: getMemoryPolicyEpoch() };
+    params.initialRuntime.memory = { status: 'read', section: null };
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
       runtime: params.initialRuntime,

@@ -6,7 +6,6 @@ import type {
 import type { Attachment } from '../../../types/attachment';
 import type { ConversationLogEntry } from '../../../types/conversation';
 import { recordConversationUsageEvent } from '../../../services/usage/conversationUsage';
-import { editWorkingBlock } from '../../../services/memory/workingBlocks';
 import { generateId } from '../../../utils/id';
 import type { OrchestratorCallbacks } from '../../orchestrator';
 import type { AgentRunControlGraphState } from '../../../types/agentRun';
@@ -275,15 +274,6 @@ export function createForegroundRunOrchestratorCallbacks(params: {
         actions: {
           applyConversationCompaction: params.actions.applyConversationCompaction,
           appendConversationLog: params.actions.appendConversationLog,
-          writeCompactionSummary: (summary) => {
-            try {
-              editWorkingBlock('compaction_summary', summary, {
-                conversationId: params.conversationId,
-              });
-            } catch {
-              // Memory write is best-effort; never break compaction
-            }
-          },
         },
       });
     },

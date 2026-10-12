@@ -264,10 +264,7 @@ describe('runForegroundScenario', () => {
     );
     expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(1);
     expect(result.turns[0].finalAssistantCandidateCount).toBe(1);
-    expect(result.turns[0].retrieval).toMatchObject({
-      instrumentationStatus: 'missing',
-      events: [],
-    });
+    expect(result.turns[0].memoryPrompt).toEqual({ status: 'missing', builds: [] });
   });
 
   it('reports background extraction separately from foreground completion', async () => {
@@ -320,11 +317,7 @@ describe('runForegroundScenario', () => {
     expect(toolFilter?.('memory_search')).toBe(true);
     expect(toolFilter?.('memory_remember')).toBe(false);
     expect(mockedRunOrchestrator.mock.calls[0][0].explicitToolSurfaceToolNames).toBeUndefined();
-    expect(result.turns[0].retrieval).toEqual({
-      sourceThreadIdHash: null,
-      instrumentationStatus: 'opt_out',
-      events: [],
-    });
+    expect(result.turns[0].memoryPrompt).toEqual({ status: 'opt_out', builds: [] });
     expect(result.turns[0]).toMatchObject({
       completion: {
         assistantStatus: 'complete',

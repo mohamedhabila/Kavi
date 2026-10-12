@@ -10,7 +10,6 @@ import {
   applyOrchestratorCompactionEffect,
   buildOrchestratorCompactionEffect,
 } from '../../engine/orchestratorCompactionEffect';
-import { editWorkingBlock } from '../memory/workingBlocks';
 import type { OrchestratorCallbacks } from '../../engine/orchestrator';
 import type { AssistantMessageMetadata, MessageProviderReplay } from '../../types/message';
 import {
@@ -471,15 +470,6 @@ export function createScheduledJobOrchestratorCallbacks(params: {
         actions: {
           applyConversationCompaction: (messages) => {
             useChatStore.getState().applyConversationCompaction(conversationId, messages);
-          },
-          writeCompactionSummary: (summary) => {
-            try {
-              editWorkingBlock('compaction_summary', summary, {
-                conversationId,
-              });
-            } catch {
-              // Memory write is best-effort; never break compaction
-            }
           },
         },
       });

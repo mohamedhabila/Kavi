@@ -9,7 +9,6 @@ import {
 } from '../../src/acceptance/e2eAgent/scenarios';
 import type { E2EScenario, E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import type { LlmProviderConfig } from '../../src/types/provider';
-import { buildPairedRetrievalEvent } from '../helpers/e2ePairedRunHarness';
 import { completedCondition, runtime } from '../helpers/e2ePairedPublicReportHarness';
 import { buildFixtureResult, buildFixtureTurnTrace } from '../helpers/e2eRunReportHarness';
 
@@ -82,13 +81,6 @@ function conditionResult(product: boolean): E2EScenarioResult {
           newConversationInitialMessageCount: 0,
         },
         native: { ...baseTurn.native, stateAfter },
-        retrieval: product
-          ? {
-              sourceThreadIdHash: 'a'.repeat(64),
-              instrumentationStatus: 'recorded',
-              events: [buildPairedRetrievalEvent()],
-            }
-          : { sourceThreadIdHash: null, instrumentationStatus: 'opt_out', events: [] },
         memoryPrompt: product
           ? {
               status: 'recorded',

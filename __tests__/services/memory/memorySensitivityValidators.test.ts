@@ -1,4 +1,4 @@
-import { classifyMemoryTextSensitivity } from '../../../src/services/memory/memorySensitivityPolicy';
+import { classifyStructuredMemoryText } from '../../../src/services/memory/memorySensitivityValidators';
 
 const restrictedStructures = [
   `-----BEGIN PRIVATE KEY-----\n${'A'.repeat(48)}\n-----END PRIVATE KEY-----`,
@@ -20,7 +20,7 @@ const restrictedStructures = [
 ] as const;
 
 it.each(restrictedStructures)('detects a high-confidence credential structure: %s', (text) => {
-  expect(classifyMemoryTextSensitivity(text)).toBe('restricted');
+  expect(classifyStructuredMemoryText(text)).toBe('restricted');
 });
 
 const sensitiveStructures = [
@@ -34,7 +34,7 @@ const sensitiveStructures = [
 ] as const;
 
 it.each(sensitiveStructures)('detects validated sensitive structure: %s', (text) => {
-  expect(classifyMemoryTextSensitivity(text)).toBe('sensitive');
+  expect(classifyStructuredMemoryText(text)).toBe('sensitive');
 });
 
 it.each([
@@ -57,13 +57,13 @@ it.each([
   'identifier 123456789',
   'sk-short',
 ])('rejects structural near-miss: %s', (text) => {
-  expect(classifyMemoryTextSensitivity(text)).toBe('normal');
+  expect(classifyStructuredMemoryText(text)).toBeNull();
 });
 
 it.each(['person@example.com', '123-45-6789'])(
   'is deterministic across repeated calls for global-regex risk: %s',
   (text) => {
-    expect(Array.from({ length: 12 }, () => classifyMemoryTextSensitivity(text))).toEqual(
+    expect(Array.from({ length: 12 }, () => classifyStructuredMemoryText(text))).toEqual(
       Array.from({ length: 12 }, () => 'sensitive'),
     );
   },

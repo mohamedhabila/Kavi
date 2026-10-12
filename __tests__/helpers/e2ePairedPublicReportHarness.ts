@@ -8,9 +8,9 @@ import {
 import { stableHash } from '../../src/acceptance/e2eAgent/e2eTraceRedaction';
 import type { E2EScenarioTurnTrace } from '../../src/acceptance/e2eAgent/types';
 import {
-  buildPairedRetrievalEvent,
   buildPairedTurnTrace,
-  PAIRED_TEST_SOURCE_THREAD_HASH,
+  OPTED_OUT_MEMORY_PROMPT,
+  recordedMemoryPrompt,
 } from './e2ePairedRunHarness';
 import { buildFixtureResult } from './e2eRunReportHarness';
 
@@ -34,10 +34,6 @@ export const PAIRED_TEST_MODEL = {
   endpointSha256: 'c'.repeat(64),
 } as const;
 
-function defaultRetrievalEvent() {
-  return buildPairedRetrievalEvent();
-}
-
 export function completedCondition(input: {
   condition: Extract<E2EPairedConditionExecution, { status: 'completed' }>['condition'];
   rubricPassed: number;
@@ -59,13 +55,7 @@ export function completedCondition(input: {
         : ({ directive: 'production_auto', mode: 'chitchat' } as const);
   const turnTraces = input.turnTraces ?? [
     buildPairedTurnTrace(
-      input.condition === 'memory_off'
-        ? { sourceThreadIdHash: null, instrumentationStatus: 'opt_out', events: [] }
-        : {
-            sourceThreadIdHash: PAIRED_TEST_SOURCE_THREAD_HASH,
-            instrumentationStatus: 'recorded',
-            events: [defaultRetrievalEvent()],
-          },
+      input.condition === 'memory_off' ? OPTED_OUT_MEMORY_PROMPT : recordedMemoryPrompt(),
       { route: defaultRoute },
     ),
   ];

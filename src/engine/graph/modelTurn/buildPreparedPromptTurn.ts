@@ -4,7 +4,7 @@ import type { PreparedAgentTurn } from '../agentTurnPreparation';
 import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnTypes';
 import type { ToolDefinition } from '../../../types/tool';
 import type { Message } from '../../../types/message';
-import { captureMemoryReadEpoch, isMemoryReadEpochCurrent } from '../../../services/memory/policy';
+import { isLongTermMemoryEnabled } from '../../../services/memory/policy';
 import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
 import { renderPlanPromptSection } from '../../plan/agentPlan';
@@ -27,13 +27,11 @@ export function buildPreparedModelTurnPrompt(params: {
   workflowRuntimePrompt?: string | null;
   workingMessages: ReadonlyArray<Message>;
 }): PreparedAgentTurn {
-  const longTermMemoryEnabled = captureMemoryReadEpoch() !== null;
+  const longTermMemoryEnabled = isLongTermMemoryEnabled();
   const memory = params.promptContextSupport.memory;
-  // A read from before memory was turned on or off is not shown.
+  // A read made while memory was on is not shown once it is turned off.
   const memorySection =
-    memory?.status === 'read' && isMemoryReadEpochCurrent(memory.policyEpoch)
-      ? memory.section?.text
-      : undefined;
+    memory?.status === 'read' && longTermMemoryEnabled ? memory.section?.text : undefined;
   const groundedRequestScopedTools = filterToolsForMemoryPolicy(
     params.groundedRequestScopedTools,
     longTermMemoryEnabled,
