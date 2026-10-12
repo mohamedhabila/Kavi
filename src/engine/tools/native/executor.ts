@@ -34,12 +34,7 @@ import { executeHapticFeedback } from './haptics/executor';
 import { executeLocationCurrent } from './location/executor';
 import { executeCameraClip, executePhotosPick, executeScreenRecord } from './media/executor';
 import { executeNotificationSend } from './notifications/executor';
-import {
-  executeShareContact,
-  executeShareFile,
-  executeShareText,
-  executeShareUrl,
-} from './share/executor';
+import { executeShareFile, executeShareText, executeShareUrl } from './share/executor';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../../types/toolRuntimeOutcome';
 
 export async function executeNativeTool(
@@ -110,34 +105,12 @@ export async function executeNativeTool(
       return executeClipboardRead();
     case 'clipboard_write':
       return executeClipboardWrite(args);
-    case 'clipboard': {
-      const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
-      if (action === 'read') return executeClipboardRead();
-      if (action === 'write') return executeClipboardWrite(args);
-      return failedToolOutcome(
-        'Error: clipboard requires action ∈ {read, write}',
-        'invalid_arguments',
-      );
-    }
     case 'share_text':
       return executeShareText(args);
     case 'share_url':
       return executeShareUrl(args);
     case 'share_file':
       return executeShareFile(args);
-    case 'share_contact':
-      return executeShareContact(args);
-    case 'share': {
-      const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : '';
-      if (kind === 'text') return executeShareText(args);
-      if (kind === 'url') return executeShareUrl(args);
-      if (kind === 'file') return executeShareFile(args);
-      if (kind === 'contact') return executeShareContact(args);
-      return failedToolOutcome(
-        'Error: share requires kind ∈ {text, url, file, contact}',
-        'invalid_arguments',
-      );
-    }
     case 'open_url':
       return executeOpenUrl(args);
     case 'notification_send':

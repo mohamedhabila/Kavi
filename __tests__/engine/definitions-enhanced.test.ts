@@ -38,9 +38,21 @@ describe('TOOL_DEFINITIONS — full set', () => {
     expect(n).toContain('email_compose');
     expect(n).toContain('contacts_pick');
     expect(n).toContain('contacts_manage_access');
-    expect(n).toContain('clipboard');
-    expect(n).toContain('share');
+    expect(n).toContain('clipboard_write');
+    expect(n).toContain('share_text');
     expect(n).toContain('open_url');
+  });
+
+  // Each of these did what single-purpose tools already did: `clipboard` (clipboard_read and
+  // clipboard_write), `share` (share_text, share_url, share_file, contacts_share) and
+  // `share_contact` (contacts_share). Two ways to make one call is redundancy the model has
+  // to choose between; on the GLM 5.3 Flash suite it called `clipboard` with no text, then
+  // switched to clipboard_write.
+  it('offers one tool per native action', () => {
+    const n = names();
+    expect(n).not.toContain('clipboard');
+    expect(n).not.toContain('share');
+    expect(n).not.toContain('share_contact');
   });
 
   it('has at least 25 tools', () => {

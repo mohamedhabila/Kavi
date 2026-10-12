@@ -24,10 +24,3 @@ export async function executeShareFile(args: {
 }): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('share_file', args as Record<string, unknown>);
 }
-
-export async function executeShareContact(args: {
-  id: string;
-  message?: string;
-}): Promise<ToolRuntimeOutcome> {
-  return executeStructuredNativeAction('share_contact', args as Record<string, unknown>);
-}

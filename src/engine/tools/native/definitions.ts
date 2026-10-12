@@ -5,7 +5,7 @@ import {
   CALENDAR_LIST_TOOL,
   CALENDAR_UPDATE_TOOL,
 } from './calendar/definitions';
-import { CLIPBOARD_READ_TOOL, CLIPBOARD_TOOL, CLIPBOARD_WRITE_TOOL } from './clipboard/definitions';
+import { CLIPBOARD_READ_TOOL, CLIPBOARD_WRITE_TOOL } from './clipboard/definitions';
 import {
   CONTACTS_CREATE_TOOL,
   CONTACTS_EDIT_TOOL,
@@ -37,13 +37,7 @@ import { HAPTIC_FEEDBACK_TOOL } from './haptics/definitions';
 import { LOCATION_CURRENT_TOOL } from './location/definitions';
 import { CAMERA_CLIP_TOOL, PHOTOS_PICK_TOOL, SCREEN_RECORD_TOOL } from './media/definitions';
 import { NOTIFICATION_SEND_TOOL } from './notifications/definitions';
-import {
-  SHARE_CONTACT_TOOL,
-  SHARE_FILE_TOOL,
-  SHARE_TEXT_TOOL,
-  SHARE_TOOL,
-  SHARE_URL_TOOL,
-} from './share/definitions';
+import { SHARE_FILE_TOOL, SHARE_TEXT_TOOL, SHARE_URL_TOOL } from './share/definitions';
 
 export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   CALENDAR_LIST_TOOL,
@@ -68,12 +62,9 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   LOCATION_CURRENT_TOOL,
   CLIPBOARD_READ_TOOL,
   CLIPBOARD_WRITE_TOOL,
-  CLIPBOARD_TOOL,
   SHARE_TEXT_TOOL,
   SHARE_URL_TOOL,
   SHARE_FILE_TOOL,
-  SHARE_CONTACT_TOOL,
-  SHARE_TOOL,
   OPEN_URL_TOOL,
   NOTIFICATION_SEND_TOOL,
   DEVICE_STATUS_TOOL,

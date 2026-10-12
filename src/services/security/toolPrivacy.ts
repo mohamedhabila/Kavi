@@ -108,7 +108,6 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName.startsWith('contacts_') ||
     toolName.startsWith('location_') ||
     toolName.startsWith('clipboard_') ||
-    toolName === 'clipboard' ||
     toolName.startsWith('device_') ||
     toolName.startsWith('photos_') ||
     toolName.startsWith('camera_') ||
@@ -119,7 +118,6 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'screen_record' ||
     toolName === 'haptic_feedback' ||
     toolName === 'open_url' ||
-    toolName === 'share' ||
     toolName.startsWith('share_') ||
     toolName.startsWith('notification_') ||
     toolName === 'reminder'
@@ -167,7 +165,6 @@ function getToolTitle(toolName: string): string {
     case 'contacts_create':
       return i18n.t('toolApproval.actions.contactsCreateTitle');
     case 'contacts_share':
-    case 'share_contact':
       return i18n.t('toolApproval.actions.contactsShareTitle');
     case 'contacts_search_full':
     case 'contacts_search':
@@ -338,7 +335,6 @@ function summarizeNativeTool(
     }
     case 'contacts_view':
     case 'contacts_share':
-    case 'share_contact':
     case 'contacts_get_full':
     case 'contacts_get': {
       pushDetail(details, 'toolApproval.details.contactReference');
@@ -403,16 +399,6 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'clipboard': {
-      const action = hasNonEmptyString(args.action) ? String(args.action).toLowerCase() : undefined;
-      if (hasNonEmptyString(args.text))
-        pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
-      redactedArguments = {
-        action,
-        textLength: hasNonEmptyString(args.text) ? String(args.text).length : undefined,
-      };
-      break;
-    }
     case 'share_text': {
       if (hasNonEmptyString(args.text)) {
         pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
@@ -448,18 +434,6 @@ function summarizeNativeTool(
         mimeType: hasNonEmptyString(args.mimeType) ? String(args.mimeType) : undefined,
         hasDialogTitle: hasNonEmptyString(args.dialogTitle),
         hasUti: hasNonEmptyString(args.uti),
-      };
-      break;
-    }
-    case 'share': {
-      if (hasNonEmptyString(args.text))
-        pushDetail(details, 'toolApproval.details.textLength', { count: String(args.text).length });
-      const scheme = getUrlScheme(args.url);
-      if (scheme) pushDetail(details, 'toolApproval.details.scheme', { scheme });
-      redactedArguments = {
-        hasText: hasNonEmptyString(args.text),
-        textLength: hasNonEmptyString(args.text) ? String(args.text).length : undefined,
-        scheme,
       };
       break;
     }

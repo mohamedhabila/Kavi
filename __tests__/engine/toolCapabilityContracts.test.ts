@@ -14,7 +14,6 @@ import {
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../src/engine/tools/native/definitions';
 import {
   CLIPBOARD_READ_TOOL,
-  CLIPBOARD_TOOL,
   CLIPBOARD_WRITE_TOOL,
 } from '../../src/engine/tools/native/clipboard/definitions';
 import {
@@ -83,7 +82,7 @@ describe('tool capability contracts', () => {
     expect(EXPO_EAS_WORKFLOW_WAIT_TOOL.contract).toBeDefined();
     expect(CALENDAR_LIST_TOOL.contract).toBeDefined();
     expect(LOCATION_CURRENT_TOOL.contract).toBeDefined();
-    expect(CLIPBOARD_TOOL.contract).toBeDefined();
+    expect(CLIPBOARD_WRITE_TOOL.contract).toBeDefined();
     expect(SHARE_URL_TOOL.contract).toBeDefined();
     expect(DEVICE_STATUS_TOOL.contract).toBeDefined();
     expect(SESSION_WAIT_TOOL.contract).toBeDefined();
@@ -274,14 +273,14 @@ describe('tool capability contracts', () => {
   });
 
   it('uses the explicit native clipboard contract for descriptor inference', () => {
-    const descriptor = inferToolCapabilityDescriptor(CLIPBOARD_TOOL);
+    const descriptor = inferToolCapabilityDescriptor(CLIPBOARD_WRITE_TOOL);
 
     expect(descriptor).toEqual(
       expect.objectContaining({
         category: 'communication',
-        capabilities: ['read', 'write', 'verify'],
+        capabilities: ['write'],
         sideEffects: ['local_artifact'],
-        workflowStages: ['persist_artifact', 'verify_evidence'],
+        workflowStages: ['persist_artifact'],
       }),
     );
   });

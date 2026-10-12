@@ -220,7 +220,6 @@ export function getApprovalScope(toolName: string): ApprovalScope {
     toolName.startsWith('contacts_') ||
     toolName.startsWith('location_') ||
     toolName.startsWith('clipboard_') ||
-    toolName === 'clipboard' ||
     toolName.startsWith('device_') ||
     toolName.startsWith('photos_') ||
     toolName.startsWith('camera_') ||
@@ -230,7 +229,6 @@ export function getApprovalScope(toolName: string): ApprovalScope {
     toolName === 'maps_open' ||
     toolName === 'screen_record' ||
     toolName === 'haptic_feedback' ||
-    toolName === 'share' ||
     toolName.startsWith('share_') ||
     toolName === 'open_url' ||
     toolName.startsWith('notification_')

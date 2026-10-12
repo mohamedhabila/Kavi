@@ -65,7 +65,9 @@ describe('builtin-tool-catalogSearch', () => {
     const parsed = parseCompletedToolOutcome(result);
     const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
 
-    expect(toolNames).toEqual(expect.arrayContaining(['clipboard', 'share', 'reminder']));
+    expect(toolNames).toEqual(
+      expect.arrayContaining(['clipboard_write', 'share_text', 'reminder']),
+    );
   });
 
   it('ranks structurally related identifier tokens without natural-language task routes', () => {

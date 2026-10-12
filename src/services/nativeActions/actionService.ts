@@ -61,7 +61,6 @@ export async function executeNativeAction(
       case 'contacts_create':
         return createContact(args as any);
       case 'contacts_share':
-      case 'share_contact':
         return shareContact(args as any);
       case 'contacts_search_full':
       case 'contacts_search':

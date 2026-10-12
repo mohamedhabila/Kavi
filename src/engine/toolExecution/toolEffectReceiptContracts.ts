@@ -445,15 +445,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       written_verified: VERIFIED,
       written_unverified: APPLIED,
     }),
-    clipboard: effectful(
-      'clipboard.write',
-      {
-        read: outcome('none', 'not_applicable', 'observation.read'),
-        written_verified: VERIFIED,
-        written_unverified: APPLIED,
-      },
-      { completion: { effectFreeWhen: { argumentPath: ['action'], values: ['read'] } } },
-    ),
     email_compose: effectful(
       'communication.send',
       nativeOutcomes({
@@ -492,11 +483,9 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       },
     ),
     contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
-    share_contact: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_text: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_url: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_file: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
-    share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     notification_send: effectful(
       'notification.send',
       { notification_accepted: outcome('accepted', 'acknowledged') },

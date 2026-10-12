@@ -125,7 +125,6 @@ import {
 import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import { executeLocationCurrent } from '../../src/engine/tools/native/location/executor';
 import {
-  executeShareContact,
   executeShareFile,
   executeShareText,
   executeShareUrl,
@@ -445,7 +444,7 @@ describe('typed native actions', () => {
     expect(mockContactsShareContactAsync).toHaveBeenCalledWith('contact-1', 'Reach out');
   });
 
-  it('supports text, URL, file, and contact share flows', async () => {
+  it('supports text, URL, and file share flows', async () => {
     const textResult = parseCompletedToolOutcome(await executeShareText({ text: 'Hello' }));
     const urlResult = parseCompletedToolOutcome(
       await executeShareUrl({ url: 'https://example.com', message: 'Read this' }),
@@ -453,12 +452,10 @@ describe('typed native actions', () => {
     const fileResult = parseCompletedToolOutcome(
       await executeShareFile({ fileUri: 'file:///tmp/report.pdf', mimeType: 'application/pdf' }),
     );
-    const contactResult = parseCompletedToolOutcome(await executeShareContact({ id: 'contact-1' }));
 
     expect(textResult.status).toBe('handed_off');
     expect(urlResult.status).toBe('handed_off');
     expect(fileResult.status).toBe('handed_off');
-    expect(contactResult.status).toBe('handed_off');
     expect(mockShare).toHaveBeenNthCalledWith(1, expect.objectContaining({ message: 'Hello' }));
     expect(mockShare).toHaveBeenNthCalledWith(
       2,
@@ -535,11 +532,11 @@ describe('executeNativeTool', () => {
     expect(shareResult.status).toBe('handed_off');
   });
 
-  it('rejects composite share calls without an explicit kind', async () => {
-    const result = await executeNativeTool('share', '{}');
-    expect(failedToolContent(result)).toContain('share requires kind');
-    expect(result.status).toBe('failed');
-    expect((result as { failureKind?: string }).failureKind).toBe('invalid_arguments');
+  it('no longer routes the composite share and clipboard tools', async () => {
+    for (const name of ['share', 'clipboard', 'share_contact']) {
+      const result = await executeNativeTool(name, '{}');
+      expect(failedToolContent(result)).toContain(`unknown native tool "${name}"`);
+    }
   });
 
   it('routes calendar update through the dispatcher', async () => {

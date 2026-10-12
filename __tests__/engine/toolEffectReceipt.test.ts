@@ -251,26 +251,6 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
-      'generic share handoff',
-      'share',
-      { status: 'handed_off' },
-      {
-        effectKind: 'share.handoff',
-        effectState: 'applied',
-        verificationState: 'verified',
-      },
-    ],
-    [
-      'generic clipboard write',
-      'clipboard',
-      { status: 'written_verified', characterCount: 5, verified: true },
-      {
-        effectKind: 'clipboard.write',
-        effectState: 'applied',
-        verificationState: 'verified',
-      },
-    ],
-    [
       'calendar creation',
       'calendar_create_event',
       { status: 'created_verified', eventId: 'event-42' },

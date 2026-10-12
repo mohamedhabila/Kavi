@@ -58,7 +58,6 @@ describe('Tool executor routing completeness', () => {
       'share_text',
       'share_url',
       'share_file',
-      'share_contact',
       'open_url',
       'notification_send',
       'device_status',
