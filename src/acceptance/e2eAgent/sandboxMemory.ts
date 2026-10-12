@@ -4,6 +4,8 @@
 
 import { closeMemoryDb, getMemoryDb } from '../../services/memory/database';
 import { closeExecutionJournalDb } from '../../services/executionJournal/database';
+import { closeRemindersDb } from '../../services/scheduler/reminders/database';
+import { closeTranscriptArchiveDb } from '../../services/transcriptArchive/database';
 import { ensureFactSchema, resetFactSchemaCacheForTests } from '../../services/memory/schema';
 import {
   ensureMemoryCoreSchema,
@@ -18,10 +20,20 @@ function getExpoSqliteMock(): ExpoSqliteMock {
   return jest.requireMock('expo-sqlite') as ExpoSqliteMock;
 }
 
-export function resetE2EMemorySandbox(): void {
+/**
+ * Resetting the mock closes every SQLite connection, so each store that keeps one open is
+ * closed first and reopens on its next use instead of holding a dead handle.
+ */
+function resetEveryDatabase(): void {
   closeMemoryDb();
   closeExecutionJournalDb();
+  closeRemindersDb();
+  closeTranscriptArchiveDb();
   getExpoSqliteMock().__resetExpoSqliteForTests?.();
+}
+
+export function resetE2EMemorySandbox(): void {
+  resetEveryDatabase();
   resetFactSchemaCacheForTests();
   resetMemoryCoreSchemaCacheForTests();
   ensureFactSchema();
@@ -64,7 +76,5 @@ export function assertE2EMemorySandboxReset(): void {
 }
 
 export function teardownE2EMemorySandbox(): void {
-  closeMemoryDb();
-  closeExecutionJournalDb();
-  getExpoSqliteMock().__resetExpoSqliteForTests?.();
+  resetEveryDatabase();
 }
