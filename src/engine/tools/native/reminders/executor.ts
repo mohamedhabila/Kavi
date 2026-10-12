@@ -64,13 +64,21 @@ function formatReminderForOutput(reminder: ReminderRecord): Record<string, unkno
   };
 }
 
+function nonEmptyText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 async function handleCreate(args: Record<string, unknown>): Promise<ToolRuntimeOutcome> {
-  const title = typeof args.title === 'string' ? args.title.trim() : '';
+  // The notification shows the title; a reminder given only notes is titled by them.
+  const givenTitle = nonEmptyText(args.title);
+  const givenNotes = nonEmptyText(args.notes);
+  const title = givenTitle ?? givenNotes;
   if (!title) {
-    return rejectedOutcome('reminder_title_required', 'A reminder title is required for create.', {
+    return rejectedOutcome('reminder_title_required', 'A reminder needs its text in "title".', {
       repair: { retryable: true, missingFields: ['title'] },
     });
   }
+  const notes = givenTitle ? givenNotes : undefined;
   const whenResult = parseReminderWhen(args.when);
   if (!whenResult.ok) {
     return rejectedOutcome('reminder_when_invalid', whenResult.error, {
@@ -83,8 +91,6 @@ async function handleCreate(args: Record<string, unknown>): Promise<ToolRuntimeO
       repair: repairFor(tzResult),
     });
   }
-  const notes = typeof args.notes === 'string' && args.notes.trim() ? args.notes.trim() : undefined;
-
   try {
     const reminder = await createReminder({
       title,

@@ -1,4 +1,8 @@
-import { parseReminderWhen, resolveReminderTimezone } from '../../src/services/scheduler/reminders/input';
+import {
+  MAX_REMINDER_DELAY_SECONDS,
+  parseReminderWhen,
+  resolveReminderTimezone,
+} from '../../src/services/scheduler/reminders/input';
 
 describe('parseReminderWhen: kind "once"', () => {
   it('accepts an "at" with an explicit UTC offset unchanged', () => {
@@ -59,6 +63,47 @@ describe('parseReminderWhen: kind "once"', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('unreachable');
     expect(result.invalidFields).toEqual(['when.at']);
+  });
+});
+
+describe('parseReminderWhen: a delay for kind "once"', () => {
+  const NOW = Date.parse('2026-10-12T10:00:00.000Z');
+
+  it('resolves the delay against the call time to an absolute UTC instant', () => {
+    expect(parseReminderWhen({ kind: 'once', delaySeconds: 600 }, NOW)).toEqual({
+      ok: true,
+      recurrence: { kind: 'once', at: '2026-10-12T10:10:00.000Z' },
+    });
+  });
+
+  it('keeps a fractional delay to the millisecond', () => {
+    expect(parseReminderWhen({ kind: 'once', delaySeconds: 1.5 }, NOW)).toEqual({
+      ok: true,
+      recurrence: { kind: 'once', at: '2026-10-12T10:00:01.500Z' },
+    });
+  });
+
+  it.each([[0], [0.5], [-30], [MAX_REMINDER_DELAY_SECONDS + 1], [Number.NaN], ['30']])(
+    'reports a delay of %p as invalid',
+    (delaySeconds) => {
+      expect(parseReminderWhen({ kind: 'once', delaySeconds }, NOW)).toMatchObject({
+        ok: false,
+        missingFields: [],
+        invalidFields: ['when.delaySeconds'],
+      });
+    },
+  );
+
+  it('refuses both a delay and a date-time, since they can disagree', () => {
+    expect(
+      parseReminderWhen({ kind: 'once', delaySeconds: 30, at: '2026-10-12T12:00:00Z' }, NOW),
+    ).toMatchObject({ ok: false, invalidFields: ['when.at', 'when.delaySeconds'] });
+  });
+
+  it('names both ways to schedule when neither is given', () => {
+    const result = parseReminderWhen({ kind: 'once' }, NOW);
+    expect(result).toMatchObject({ ok: false, missingFields: ['when.at'] });
+    expect(result.ok === false && result.error).toContain('when.delaySeconds');
   });
 });
 

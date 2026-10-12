@@ -3,8 +3,10 @@
 // ---------------------------------------------------------------------------
 // Validates the structured `when`/`timezone` fields the model supplies for the
 // reminder tool. Deliberately no natural-language parsing: the model resolves
-// relative phrases ("tomorrow", "in an hour") to explicit ISO-8601/HH:MM
-// values before calling, and this module only checks the resulting shape.
+// phrases like "tomorrow at 9" to explicit ISO-8601/HH:MM values, or passes a
+// delay in seconds for "in 10 minutes", and this module only checks the shape.
+// A delay is resolved against the clock when the call runs, so it never depends
+// on the model's arithmetic over a timestamp that has aged since the request.
 
 import type { ReminderRecurrence, ReminderRecurrenceKind } from './types';
 import { hasExplicitOffset, parseLocalDateTimeParts } from './zonedTime';
@@ -18,6 +20,9 @@ const RECURRENCE_KINDS: ReadonlySet<string> = new Set<ReminderRecurrenceKind>([
 ]);
 
 const TIME_OF_DAY_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** Longest delay a one-off reminder accepts: a year. */
+export const MAX_REMINDER_DELAY_SECONDS = 366 * 24 * 60 * 60;
 
 /**
  * Repair hints describing exactly which fields need fixing: `missingFields`
@@ -54,7 +59,33 @@ function buildLocalDateTimeExample(nowMs: number = Date.now()): { text: string; 
   return { text, timezone };
 }
 
-export function parseReminderWhen(raw: unknown): ReminderWhenValidation {
+function isPresent(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+/** A one-off reminder `delaySeconds` from `nowMs`, as an absolute UTC instant. */
+function parseOnceDelay(delaySeconds: unknown, nowMs: number): ReminderWhenValidation {
+  if (
+    typeof delaySeconds !== 'number' ||
+    !Number.isFinite(delaySeconds) ||
+    delaySeconds < 1 ||
+    delaySeconds > MAX_REMINDER_DELAY_SECONDS
+  ) {
+    return {
+      ok: false,
+      error: `"when.delaySeconds" must be a number of seconds from 1 to ${MAX_REMINDER_DELAY_SECONDS}.`,
+      missingFields: [],
+      invalidFields: ['when.delaySeconds'],
+    };
+  }
+  const at = new Date(nowMs + Math.round(delaySeconds * 1000)).toISOString();
+  return { ok: true, recurrence: { kind: 'once', at } };
+}
+
+export function parseReminderWhen(
+  raw: unknown,
+  nowMs: number = Date.now(),
+): ReminderWhenValidation {
   if (raw === undefined || raw === null) {
     return {
       ok: false,
@@ -91,10 +122,21 @@ export function parseReminderWhen(raw: unknown): ReminderWhenValidation {
   }
 
   if (kind === 'once') {
-    if (raw.at === undefined || raw.at === null) {
+    if (isPresent(raw.delaySeconds)) {
+      if (isPresent(raw.at)) {
+        return {
+          ok: false,
+          error: 'Give either "when.at" or "when.delaySeconds" for kind "once", not both.',
+          missingFields: [],
+          invalidFields: ['when.at', 'when.delaySeconds'],
+        };
+      }
+      return parseOnceDelay(raw.delaySeconds, nowMs);
+    }
+    if (!isPresent(raw.at)) {
       return {
         ok: false,
-        error: '"when.at" is required for kind "once".',
+        error: '"when.at" or "when.delaySeconds" is required for kind "once".',
         missingFields: ['when.at'],
         invalidFields: [],
       };
@@ -111,7 +153,7 @@ export function parseReminderWhen(raw: unknown): ReminderWhenValidation {
     if (atRaw === '') {
       return {
         ok: false,
-        error: '"when.at" is required for kind "once".',
+        error: '"when.at" or "when.delaySeconds" is required for kind "once".',
         missingFields: ['when.at'],
         invalidFields: [],
       };

@@ -4,18 +4,19 @@ import { nativeContract, RECOVERABLE_PLATFORM_ERRORS } from '../shared';
 export const REMINDER_TOOL: ToolDefinition = {
   name: 'reminder',
   description:
-    'Create, list, update, or cancel a personal reminder. Unlike cron, a reminder never resumes a ' +
-    'conversation — the operating system delivers it as a real notification straight from the lock ' +
-    'screen or notification center, even while the app is closed or the device is offline. ' +
-    'Use this tool for a person\'s reminder (e.g. "remind me to call mom at 6pm", "remind me every ' +
-    'weekday at 9am to check standup notes", "remind me on the 1st of each month to pay rent"). Use ' +
-    'the cron tool instead for an automated assistant task that should run a prompt on a schedule. ' +
-    'This tool never parses natural language: resolve relative phrases like "tomorrow" or "in an ' +
-    'hour" to an explicit ISO-8601 date-time or 24-hour "HH:MM" yourself before calling. For kind ' +
-    '"once", prefer an offset-less local date-time in "when.at" plus an IANA "timezone" over ' +
-    'computing a UTC offset yourself. ' +
-    'The "list" action is read-only and returns all pending reminders sorted by next fire time; ' +
-    'create, update, and cancel change device state and ask the user to confirm first.',
+    'Create, list, update, or cancel a reminder or scheduled notification. Unlike cron, a reminder ' +
+    'never resumes a conversation — the operating system delivers it as a real notification straight ' +
+    'from the lock screen or notification center, even while the app is closed or the device is ' +
+    'offline. Use this tool for a person\'s reminder or a notification at a later time (e.g. "remind ' +
+    'me to call mom at 6pm", "notify me in 30 seconds", "remind me every weekday at 9am to check ' +
+    'standup notes", "remind me on the 1st of each month to pay rent"). Use the cron tool instead for ' +
+    'an automated assistant task that should run a prompt on a schedule. ' +
+    'For a delay from now ("in 30 seconds", "in 10 minutes") use kind "once" with "when.delaySeconds". ' +
+    'For a clock time, resolve phrases like "tomorrow at 9" to an explicit date-time or 24-hour ' +
+    '"HH:MM" yourself; for kind "once", prefer an offset-less local date-time in "when.at" plus an ' +
+    'IANA "timezone" over computing a UTC offset yourself. ' +
+    'The "list" action returns all pending reminders sorted by next fire time; cancel takes the id ' +
+    'that create returned.',
   input_schema: {
     type: 'object',
     properties: {
@@ -30,7 +31,9 @@ export const REMINDER_TOOL: ToolDefinition = {
       },
       title: {
         type: 'string',
-        description: 'Reminder title, shown as the notification title. Required for create.',
+        description:
+          'The reminder text, shown as the notification title. Required for create; when only ' +
+          'notes are given, they become the title.',
       },
       notes: {
         type: 'string',
@@ -40,17 +43,22 @@ export const REMINDER_TOOL: ToolDefinition = {
         type: 'object',
         description:
           'Structured schedule. Required for create; optional for update (omit to keep the ' +
-          'existing schedule).',
+          'existing schedule). A delay is counted from when the call runs.',
         properties: {
           kind: {
             type: 'string',
             enum: ['once', 'daily', 'weekdays', 'weekly', 'monthly'],
             description: 'Recurrence kind.',
           },
+          delaySeconds: {
+            type: 'number',
+            description:
+              'Seconds from now, for kind "once" instead of "at" (e.g. 600 for "in 10 minutes").',
+          },
           at: {
             type: 'string',
             description:
-              'ISO-8601 date-time. Required when kind is "once". Preferred form: an offset-less local ' +
+              'ISO-8601 date-time, for kind "once" unless "delaySeconds" is given. Preferred form: an offset-less local ' +
               'date-time paired with "timezone" (e.g. "2026-09-10T14:00:00" with timezone ' +
               '"Europe/Amsterdam") — it is resolved against that IANA zone, DST-corrected. An explicit ' +
               'UTC offset or "Z" (e.g. "2026-09-10T14:00:00-04:00") also works and names an absolute ' +

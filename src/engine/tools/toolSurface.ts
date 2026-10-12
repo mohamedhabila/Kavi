@@ -91,9 +91,7 @@ export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
  * ordinary first turn: clarification, grounded memory, web lookup, and the native
  * capabilities a phone assistant is asked for most (calendar, contacts, messaging,
  * maps, sharing, device state) — present immediately so none of them costs a
- * `tool_catalog` round-trip before the turn can start. A name not registered at
- * runtime (`reminder`, until it ships) is simply never matched when the surface is
- * built from `allTools`, so listing it here ahead of its registration is inert.
+ * `tool_catalog` round-trip before the turn can start.
  */
 const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   REQUEST_CLARIFICATION_TOOL_NAME,
