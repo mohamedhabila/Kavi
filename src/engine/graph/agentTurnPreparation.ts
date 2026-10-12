@@ -5,7 +5,6 @@ import {
   type AgentTurnPromptBundleParams,
 } from './agentTurnPromptBundle';
 import { isSessionCoordinationToolName } from '../tools/sessionToolKinds';
-import type { VerifiedProcedureAuthoritySnapshot } from '../../services/memory/verifiedProcedure/observationAuthority';
 import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
 
 type PromptBundleContext = Omit<
@@ -40,7 +39,6 @@ export interface PreparedAgentTurn extends PreparedAgentTurnCore {
     readEpoch: number;
     memoryAuthoritySnapshot: MemoryAuthoritySnapshot;
     validUntil?: number;
-    verifiedProcedureAuthoritySnapshot?: VerifiedProcedureAuthoritySnapshot;
   };
 }
 

@@ -23,6 +23,7 @@ import { recordE2ENativeMobileInvocation } from '../../src/acceptance/e2eAgent/e
 import { editPromptEligibleWorkingBlock } from '../../src/services/memory/workingBlocks';
 import { executeMemoryRemember } from '../../src/services/memory/core/memoryItemsTools';
 import { listMemoryItems } from '../../src/services/memory/core/memoryItemsStore';
+import { indexMemoryTurn } from '../../src/services/memory/core/memoryTurnsStore';
 import { getMemoryDb } from '../../src/services/memory/database';
 import { useChatStore } from '../../src/store/useChatStore';
 
@@ -48,7 +49,6 @@ describe('paired E2E state isolation', () => {
       'memory_retrieval_events',
       'memory_retrieval_outcomes',
       'memory_tasks',
-      'memory_verified_procedure_observations',
       'memory_turns',
       'memory_working_blocks',
     ]);
@@ -114,31 +114,16 @@ describe('paired E2E state isolation', () => {
         ).content,
       ),
     ).toMatchObject({ ok: true });
-    getMemoryDb().runSync(
-      `INSERT INTO memory_verified_procedure_observations(
-        id, memory_owner_id, memory_conversation_id_hash, source_thread_id_hash,
-        source_run_id_hash, procedure_id, procedure_contract_digest, platform,
-        precondition_ids_json, precondition_ids_hash, evidence_manifest_json,
-        evidence_manifest_digest, evidence_id_digest, linkage_digest,
-        terminal_proof_digest, contract_version, observed_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ios', '["platform.ios"]', ?, '{}', ?, ?, ?, ?, 1, 1, 1)`,
-      `verified_procedure_${'a'.repeat(64)}`,
-      'vault_owner_test',
-      '1'.repeat(64),
-      '2'.repeat(64),
-      '3'.repeat(64),
-      'verified-procedure.test',
-      '4'.repeat(64),
-      '5'.repeat(64),
-      '6'.repeat(64),
-      '7'.repeat(64),
-      '8'.repeat(64),
-      '9'.repeat(64),
-    );
+    indexMemoryTurn({
+      conversationId: 'contaminated-chat',
+      userMessageId: 'contaminated-user',
+      userText: 'MUST-NOT-CROSS-CONDITIONS plan',
+      replyText: 'Planned.',
+      at: 1,
+    });
     expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',
-      )?.count,
+      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_turns')
+        ?.count,
     ).toBe(1);
 
     await resetAndVerifyE2EPairedConditionState();
@@ -146,9 +131,8 @@ describe('paired E2E state isolation', () => {
     expect(useChatStore.getState().conversations).toEqual([]);
     expect(listMemoryItems({ limit: 10, offset: 0 })).toEqual([]);
     expect(
-      getMemoryDb().getFirstSync<{ count: number }>(
-        'SELECT COUNT(*) AS count FROM memory_verified_procedure_observations',
-      )?.count,
+      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_turns')
+        ?.count,
     ).toBe(0);
   });
 });

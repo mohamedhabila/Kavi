@@ -3,13 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-jest.mock('../../src/services/memory/verifiedProcedure/invalidation', () => ({
-  invalidateVerifiedProcedureObservationsForExecutionRun: jest.fn(() => ({
-    status: 'invalidated',
-    deletedCount: 0,
-  })),
-}));
-
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,

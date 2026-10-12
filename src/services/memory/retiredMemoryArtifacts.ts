@@ -3,13 +3,24 @@ import type * as SQLite from 'expo-sqlite';
 
 const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;
 
+/** Tables of retired memory stores: the chunk store, product experience, verified procedures. */
+const RETIRED_MEMORY_TABLES = [
+  'memory_chunks',
+  'memory_product_experience_observations',
+  'memory_verified_procedure_observations',
+  'memory_verified_procedure_run_invalidations',
+  'memory_verified_procedure_state',
+  'memory_extraction_cursor',
+] as const;
+
 /**
- * Permanently remove the table used by the retired chunk-based memory store.
- * This is deletion-only: no data is read or imported into canonical memory.
+ * Permanently remove the tables of retired memory stores. This is deletion-only: no data is
+ * read or imported into canonical memory.
  */
 export function removeRetiredMemoryDatabaseArtifacts(database: SQLite.SQLiteDatabase): void {
-  database.execSync('DROP TABLE IF EXISTS memory_chunks');
-  database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');
+  for (const table of RETIRED_MEMORY_TABLES) {
+    database.execSync(`DROP TABLE IF EXISTS ${table}`);
+  }
 }
 
 /**

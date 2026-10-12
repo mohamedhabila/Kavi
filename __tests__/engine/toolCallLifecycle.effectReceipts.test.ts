@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
-// Tests — executeToolCallLifecycle effect-receipt capture, verified-procedure
-// observation, durability, and interpreter effect-state classification.
+// Tests — executeToolCallLifecycle effect-receipt capture, durability, and
+// interpreter effect-state classification.
 //
 // Split out of toolCallLifecycle.test.ts (which keeps core control-flow and
 // failureKind classification) to stay under the project's maintainability
@@ -17,8 +17,6 @@ import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCal
 import { executeTool } from '../../src/engine/tools';
 import type { ToolExecutionLifecycleParams } from '../../src/engine/toolExecution/toolCallLifecycleTypes';
 import type { ToolDefinition } from '../../src/types/tool';
-import type { VerifiedProcedureExecutionSession } from '../../src/services/memory/verifiedProcedure/executionSession';
-import * as toolOutputSpill from '../../src/engine/tools/toolOutputSpill';
 import { completedToolOutcome, failedToolOutcome } from '../../src/types/toolRuntimeOutcome';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 
@@ -171,152 +169,6 @@ describe('executeToolCallLifecycle effect receipts and durability', () => {
       }),
     );
     expect(result.toolMessage.toolCalls?.[0]?.effectReceipts).toBeUndefined();
-  });
-
-  it('preserves the primary receipt when the awaited procedure observer fails unexpectedly', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
-    );
-    const markReconciliationRequired = jest.fn();
-    const verifiedProcedureSession = {
-      observeRawOutcome: jest.fn().mockRejectedValue(new Error('observer unavailable')),
-      markReconciliationRequired,
-    } as unknown as VerifiedProcedureExecutionSession;
-
-    const result = await executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-          }),
-        },
-        memoryConversationId: 'memory-conversation-1',
-        conversationId: 'source-thread-1',
-        agentRunId: 'agent-run-1',
-        executionRunId: 'execution-run-1',
-        verifiedProcedureSession,
-      }),
-    );
-
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        executionRunId: 'execution-run-1',
-        effectKind: 'calendar.create',
-        effectState: 'applied',
-        verificationState: 'verified',
-      }),
-    );
-    expect(result.toolMessage.isError).not.toBe(true);
-    expect(markReconciliationRequired).toHaveBeenCalledTimes(1);
-  });
-
-  it('awaits raw procedure observation before lifecycle completion', async () => {
-    mockedExecuteTool.mockResolvedValueOnce(
-      completedToolOutcome(JSON.stringify({ status: 'created_verified', eventId: 'event-1' })),
-    );
-    let releaseObserver!: () => void;
-    let observerStarted!: () => void;
-    const observerStartedPromise = new Promise<void>((resolve) => {
-      observerStarted = resolve;
-    });
-    const verifiedProcedureSession = {
-      observeRawOutcome: jest.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseObserver = resolve;
-            observerStarted();
-          }),
-      ),
-      markReconciliationRequired: jest.fn(),
-    } as unknown as VerifiedProcedureExecutionSession;
-    let completed = false;
-    const execution = executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-          }),
-        },
-        memoryConversationId: 'memory-conversation-1',
-        conversationId: 'source-thread-1',
-        agentRunId: 'agent-run-1',
-        executionRunId: 'execution-run-1',
-        verifiedProcedureSession,
-      }),
-    ).then((value) => {
-      completed = true;
-      return value;
-    });
-
-    await observerStartedPromise;
-    expect(completed).toBe(false);
-    releaseObserver();
-    const result = await execution;
-
-    expect(result.effectReceipt).toEqual(
-      expect.objectContaining({
-        effectState: 'applied',
-        verificationState: 'verified',
-      }),
-    );
-    expect(result.toolMessage.isError).not.toBe(true);
-  });
-
-  it('observes authoritative raw output before spill transforms model-visible content', async () => {
-    const rawResult = JSON.stringify({
-      status: 'created_verified',
-      eventId: 'event-raw',
-      calendarId: 'calendar-raw',
-      privatePayload: 'RAW-ONLY-EVIDENCE',
-    });
-    const spilledPayload = JSON.stringify({ status: 'spilled', path: '.kavi/spill/result.txt' });
-    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome(rawResult));
-    jest.spyOn(toolOutputSpill, 'maybeSpillToolOutput').mockResolvedValueOnce({
-      spilled: true,
-      path: '.kavi/spill/result.txt',
-      byteLength: rawResult.length,
-      preview: 'redacted preview',
-      payload: spilledPayload,
-    });
-    const observeRawOutcome = jest.fn().mockResolvedValue(undefined);
-    const verifiedProcedureSession = {
-      observeRawOutcome,
-      markReconciliationRequired: jest.fn(),
-    } as unknown as VerifiedProcedureExecutionSession;
-
-    const result = await executeToolCallLifecycle(
-      buildLifecycle({
-        tc: {
-          id: 'tc-calendar-create',
-          name: calendarCreateTool.name,
-          arguments: JSON.stringify({
-            title: 'Planning',
-            startDate: '2026-06-14T09:00:00',
-            endDate: '2026-06-14T10:00:00',
-            calendarId: 'calendar-raw',
-          }),
-        },
-        executionRunId: 'execution-run-raw-seam',
-        verifiedProcedureSession,
-      }),
-    );
-
-    expect(observeRawOutcome).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resultText: rawResult,
-        receipt: expect.objectContaining({ resultDigest: expect.stringMatching(/^sha256:/u) }),
-      }),
-    );
-    expect(result.result).toBe(spilledPayload);
-    expect(result.result).not.toContain('RAW-ONLY-EVIDENCE');
   });
 
   it('records a code-owned workspace artifact ref and digest end to end', async () => {

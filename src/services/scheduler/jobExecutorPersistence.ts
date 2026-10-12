@@ -131,7 +131,6 @@ export async function checkpointScheduledExecutionResult(params: {
   output: string;
   conversationId: string;
   warnings?: string[];
-  pendingVerifiedProcedureCommit?: SchedulerExecutionResult['pendingVerifiedProcedureCommit'];
 }): Promise<SchedulerExecutionResult> {
   const warnings = params.warnings ?? [];
   const result: SchedulerExecutionResult = {
@@ -140,12 +139,7 @@ export async function checkpointScheduledExecutionResult(params: {
     ...(warnings.length > 0 ? { warnings, conversationDurable: false } : {}),
   };
   await checkpointScheduledAttemptCompletion(params.job, result);
-  return params.pendingVerifiedProcedureCommit
-    ? {
-        ...result,
-        pendingVerifiedProcedureCommit: params.pendingVerifiedProcedureCommit,
-      }
-    : result;
+  return result;
 }
 
 export async function flushScheduledConversationPersistence(

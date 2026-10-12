@@ -5,7 +5,6 @@ import { persistAttemptMutation, scheduleAmbiguousSettlementRecovery } from './a
 import type { useSchedulerStore } from './store';
 import { buildSchedulerTerminalReport } from './terminalReport';
 import { drainSchedulerTerminalReports } from './terminalReportProcessor';
-import { commitPendingVerifiedProcedureObservation } from '../memory/verifiedProcedure/executionSession';
 
 export async function settleSuccessfulScheduledRun(params: {
   store: ReturnType<typeof useSchedulerStore.getState>;
@@ -81,16 +80,6 @@ export async function settleSuccessfulScheduledRun(params: {
       trigger: params.trigger,
     });
     return { status: 'failed', error };
-  }
-  if (params.result.pendingVerifiedProcedureCommit) {
-    await commitPendingVerifiedProcedureObservation({
-      memoryLineage: params.result.pendingVerifiedProcedureCommit.memoryLineage,
-      pending: params.result.pendingVerifiedProcedureCommit.observation,
-      surface: 'scheduler',
-      terminalObservedAt: Date.now(),
-    }).catch(() => {
-      // Procedure learning is ancillary and cannot alter a durably successful task.
-    });
   }
   await emitActiveSchedulerEvent('task_complete', {
     taskId: params.job.id,

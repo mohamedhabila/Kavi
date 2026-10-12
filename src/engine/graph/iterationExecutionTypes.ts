@@ -29,7 +29,6 @@ import type { AgentModelTurnCallbacks } from './modelTurnExecutionTypes';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { ThinkingLevel } from '../thinking';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
-import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { AdmittedSessionMemoryContext } from './sessionMemoryContext';
 import type { ModelTurnMemoryPolicyBinding } from '../authority/modelTurnMemoryPolicyBinding';
@@ -183,7 +182,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
-  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   callbacks: IterationCallbacks;
   compactionEngine: AgentTurnCompactionEngine;
   conversationId: string;

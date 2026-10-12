@@ -22,7 +22,6 @@ import { parseAgentControlGraphSessionsYieldResult } from './sessionsYield';
 import { shouldExecuteToolBatchInParallel } from './toolBatchExecutionPolicy';
 import type { ToolExecutionOutcome } from './toolExecutionOutcomeResolution';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
-import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
   type ModelTurnMemoryPolicyBinding,
@@ -86,7 +85,6 @@ export async function executeAgentControlGraphToolBatch(params: {
   executionRunId: string;
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   mobileController?: MobileControllerExecutionBinding;
-  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   onBatchCommitted: () => void;
 }): Promise<ToolExecutionOutcome[]> {
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
@@ -175,7 +173,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       modelTurnMemoryPolicyBinding: params.memoryPolicyBinding,
       beforeEffectDispatch: params.beforeEffectDispatch,
       ...(params.mobileController ? { mobileController: params.mobileController } : {}),
-      verifiedProcedureSession: params.verifiedProcedureSession,
       idPrefixes: {
         blocked: 'tool_blocked',
         filtered: 'tool_filtered',
@@ -216,17 +213,6 @@ export async function executeAgentControlGraphToolBatch(params: {
     params.executableToolCalls,
     params.groundedRequestScopedTools,
   );
-  assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
-  await params.verifiedProcedureSession?.observePlannedBatch({
-    iteration: params.iteration,
-    executeInParallel: executeBatchInParallel,
-    memoryPolicyBinding: params.memoryPolicyBinding,
-    toolCalls: params.executableToolCalls.map((toolCall, batchIndex) => ({
-      batchIndex,
-      toolCallId: toolCall.id,
-      toolName: resolveRegisteredToolName(toolCall.name),
-    })),
-  });
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);
   params.onBatchCommitted();
   assertModelTurnMemoryPolicyBindingDurablyCurrent(params.memoryPolicyBinding);

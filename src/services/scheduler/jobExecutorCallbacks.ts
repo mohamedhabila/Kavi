@@ -37,7 +37,6 @@ export interface ScheduledJobOrchestratorCallbacksHandle {
   commitPostSurfaceSuccessResponse: () => boolean;
   commitTerminalFailureResponse: (fallback?: PendingAssistantResponse) => boolean;
   finalizeSurfacedOutputSuccess: () => void;
-  getActiveAssistantMessageId: () => string;
   getAccumulatedContent: () => string;
   getGraphFailureResponseApplied: () => boolean;
 }
@@ -500,7 +499,6 @@ export function createScheduledJobOrchestratorCallbacks(params: {
     commitPostSurfaceSuccessResponse,
     commitTerminalFailureResponse,
     finalizeSurfacedOutputSuccess,
-    getActiveAssistantMessageId: () => activeAssistantMessageId,
     getAccumulatedContent: () => accumulatedContent,
     getGraphFailureResponseApplied: () => graphFailureResponseApplied,
   };

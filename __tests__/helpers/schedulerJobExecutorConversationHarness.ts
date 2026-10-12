@@ -223,16 +223,12 @@ jest.mock('../../src/services/scheduler/jobExecutorPersistence', () => ({
     output: string;
     conversationId: string;
     warnings?: string[];
-    pendingVerifiedProcedureCommit?: unknown;
   }) => {
     const warnings = params.warnings ?? [];
     const result = {
       output: params.output,
       conversationId: params.conversationId,
       ...(warnings.length > 0 ? { warnings, conversationDurable: false } : {}),
-      ...(params.pendingVerifiedProcedureCommit
-        ? { pendingVerifiedProcedureCommit: params.pendingVerifiedProcedureCommit }
-        : {}),
     };
     await mockCheckpointScheduledAttemptCompletion(params.job, result);
     return result;

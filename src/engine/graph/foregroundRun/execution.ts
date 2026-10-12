@@ -22,11 +22,6 @@ import type { ModelProjectionOwner } from '../../../types/conversation';
 import { modelProjectionOwnersEqual } from '../../../utils/modelProjectionOwner';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { terminalizeAndReleaseForegroundProjectionReservation } from './projectionReservation';
-import {
-  commitPendingVerifiedProcedureObservation,
-  type PendingVerifiedProcedureObservation,
-} from '../../../services/memory/verifiedProcedure/executionSession';
-import { resolveGraphTaskId } from '../graphTaskScope';
 import { resolveForegroundTerminalProjection } from './terminalProjection';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
 import { buildForegroundOrchestratorMessages } from './modelReadyMessages';
@@ -279,7 +274,6 @@ async function executeReservedForegroundConversationRun(
   }
   const { assistantMessageId } = bootstrapResult;
   let executionLease: ForegroundModelExecutionLease | null = null;
-  let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | undefined;
   let orchestratorTerminalDisposition: OrchestratorTerminalDisposition | undefined;
   let journalTerminal = false;
   let closingSupersededGeneration = false;
@@ -419,28 +413,6 @@ async function executeReservedForegroundConversationRun(
       if (terminalReplyId) {
         context.helpers.recordConversationTurnMemory(conversationId, terminalReplyId);
       }
-    }
-    if (journalStatus === 'succeeded' && terminalReplyId && pendingVerifiedProcedureObservation) {
-      const pending = pendingVerifiedProcedureObservation;
-      pendingVerifiedProcedureObservation = undefined;
-      const finalAgentRun = bootstrapResult.trackedAgentRunId
-        ? context.helpers
-            .getConversation(conversationId)
-            ?.agentRuns?.find((run) => run.id === bootstrapResult.trackedAgentRunId)
-        : undefined;
-      await commitPendingVerifiedProcedureObservation({
-        memoryLineage: {
-          sourceMessageId: requestMessageId,
-          sourceRunId: bootstrapResult.trackedAgentRunId ?? null,
-          sourceTurnId: terminalReplyId,
-          taskId: resolveGraphTaskId(finalAgentRun?.controlGraph?.activeTaskId) ?? null,
-        },
-        pending,
-        surface: 'foreground',
-        terminalObservedAt: Date.now(),
-      }).catch(() => {
-        // Learning is ancillary and cannot change a durably completed response.
-      });
     }
     if (projectionOwner && !projectionReleased) {
       const release = context.durability.releaseModelProjection({
@@ -630,7 +602,6 @@ async function executeReservedForegroundConversationRun(
         },
       );
       orchestratorTerminalDisposition = orchestratorResult.terminalDisposition;
-      pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;
       runtime.terminalLifecycle.handleDone();
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {

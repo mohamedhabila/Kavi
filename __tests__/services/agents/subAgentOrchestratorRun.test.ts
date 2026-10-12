@@ -10,7 +10,6 @@ jest.mock('../../../src/services/agents/subAgentOrchestratorCallbacks', () => ({
     mockCreateSubAgentOrchestratorCallbacks(...args),
 }));
 
-import type { PendingVerifiedProcedureObservation } from '../../../src/services/memory/verifiedProcedure/executionSession';
 import { runSubAgentOrchestratorLoop } from '../../../src/services/agents/subAgentOrchestratorRun';
 
 describe('runSubAgentOrchestratorLoop', () => {
@@ -23,11 +22,7 @@ describe('runSubAgentOrchestratorLoop', () => {
   });
 
   it('preserves the structured orchestrator result and exact worker execution binding', async () => {
-    const pending = {} as PendingVerifiedProcedureObservation;
-    const result = {
-      terminalDisposition: 'final_candidate' as const,
-      pendingVerifiedProcedureObservation: pending,
-    };
+    const result = { terminalDisposition: 'final_candidate' as const };
     mockRunOrchestrator.mockResolvedValue(result);
 
     const received = await runSubAgentOrchestratorLoop({

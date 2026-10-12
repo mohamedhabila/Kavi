@@ -30,40 +30,6 @@ import {
   resolveOptionalExactDurableScopeId,
 } from '../../../utils/durableScopeIdentity';
 import { isWorkerMemoryToolName } from '../workerMemoryBundle';
-import { isExactMemoryProvenanceId } from '../../memory/memoryProvenanceIdentity';
-import type { VerifiedProcedureMemoryLineage } from '../../memory/verifiedProcedure/provenanceHash';
-
-function lastExactMessageId(
-  messages: readonly Message[],
-  role: Message['role'],
-): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === role && isExactMemoryProvenanceId(message.id)) {
-      return message.id;
-    }
-  }
-  return undefined;
-}
-
-function resolveVerifiedProcedureMemoryLineage(params: {
-  requestMessages: readonly Message[];
-  sessionId: string;
-  taskId: string | null;
-  transcriptMessages: readonly Message[];
-}): VerifiedProcedureMemoryLineage | undefined {
-  const sourceMessageId = lastExactMessageId(params.requestMessages, 'user');
-  const sourceTurnId = lastExactMessageId(params.transcriptMessages, 'assistant');
-  if (!sourceMessageId || !sourceTurnId || !isExactMemoryProvenanceId(params.sessionId)) {
-    return undefined;
-  }
-  return {
-    sourceMessageId,
-    sourceRunId: params.sessionId,
-    sourceTurnId,
-    taskId: params.taskId,
-  };
-}
 
 export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot>(
   params: RunPreparedSubAgentSessionParams<TAgent>,
@@ -283,21 +249,6 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       'completed',
       orchestratorResult.terminalDisposition,
     );
-    const pendingVerifiedProcedureObservation =
-      orchestratorResult.terminalDisposition === 'final_candidate' &&
-      terminalCompletionState === 'verified_success' &&
-      !abortController.signal.aborted
-        ? orchestratorResult.pendingVerifiedProcedureObservation
-        : undefined;
-    const verifiedProcedureMemoryLineage = pendingVerifiedProcedureObservation
-      ? resolveVerifiedProcedureMemoryLineage({
-          requestMessages: messages,
-          sessionId,
-          taskId: params.config.workstreamId ?? null,
-          transcriptMessages,
-        })
-      : undefined;
-
     failureCause = 'internal_failure';
     return finalizeCompletedSubAgentRun({
       sessionId,
@@ -319,13 +270,6 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       scheduleSessionContextCheckpoint: params.scheduleSessionContextCheckpoint,
       persistRegistryBestEffort: params.persistRegistryBestEffort,
       scheduleSessionContextEvictionWhenDurable: params.scheduleSessionContextEvictionWhenDurable,
-      pendingVerifiedProcedureCommit:
-        pendingVerifiedProcedureObservation && verifiedProcedureMemoryLineage
-          ? {
-              memoryLineage: verifiedProcedureMemoryLineage,
-              observation: pendingVerifiedProcedureObservation,
-            }
-          : undefined,
     });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);

@@ -9,7 +9,6 @@ import type { CronJob } from '../cron/types';
 import { createAgentControlGraphTerminalOutcomeTracker } from '../../engine/graph/terminalOutcome';
 import { createScheduledJobOrchestratorCallbacks } from './jobExecutorCallbacks';
 import type { SchedulerExecutionResult } from './executionResult';
-import type { PendingVerifiedProcedureObservation } from '../memory/verifiedProcedure/executionSession';
 import {
   registerScheduledJobExecution,
   getScheduledExecutionLifecycleEpoch,
@@ -33,7 +32,6 @@ import {
 import {
   checkpointScheduledProjectionClaim,
   claimScheduledProjection,
-  pendingScheduledProcedureCommit,
   releaseScheduledProjectionAfterExecution,
   type ScheduledProjectionLease,
 } from './jobExecutorProjection';
@@ -107,7 +105,6 @@ export async function executeScheduledJob(
       commitPostSurfaceSuccessResponse,
       commitTerminalFailureResponse,
       finalizeSurfacedOutputSuccess,
-      getActiveAssistantMessageId,
       getAccumulatedContent,
       getGraphFailureResponseApplied,
     } = createScheduledJobOrchestratorCallbacks({
@@ -124,10 +121,9 @@ export async function executeScheduledJob(
         .getState()
         .conversations.find((conversation) => conversation.id === conversationId)
         ?.messages.filter((message) => message.id !== assistantMessageId) || [];
-    let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | undefined;
 
     try {
-      const orchestratorResult = await runOrchestrator(
+      await runOrchestrator(
         {
           provider: { ...provider, apiKey },
           model,
@@ -152,7 +148,6 @@ export async function executeScheduledJob(
         },
         callbacks,
       );
-      pendingVerifiedProcedureObservation = orchestratorResult.pendingVerifiedProcedureObservation;
       flushReadySurfacedSubAgentOutputs();
       commitPostSurfaceSuccessResponse();
       commitTerminalFailureResponse();
@@ -209,16 +204,6 @@ export async function executeScheduledJob(
       output: result,
       conversationId,
       warnings,
-      ...(pendingVerifiedProcedureObservation
-        ? {
-            pendingVerifiedProcedureCommit: pendingScheduledProcedureCommit(
-              pendingVerifiedProcedureObservation,
-              job,
-              projectionLease,
-              getActiveAssistantMessageId(),
-            ),
-          }
-        : {}),
     });
   } catch (error: unknown) {
     return await throwNormalizedScheduledJobExecutionError(error, executionConversationId);

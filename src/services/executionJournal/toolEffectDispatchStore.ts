@@ -156,17 +156,7 @@ function lockAndValidateMemoryEffectAuthority(
     return 'changed';
   }
   if (authority.validUntil !== null && observedAt >= authority.validUntil) return 'expired';
-  if (authority.verifiedProcedureRestrictiveRevision === null) return 'current';
-  const procedure = database.getFirstSync<{ restrictive_authority_revision: unknown }>(
-    `SELECT restrictive_authority_revision
-       FROM ${MEMORY_EFFECT_AUTHORITY_SCHEMA}.memory_verified_procedure_state
-      WHERE memory_owner_id = ?`,
-    authority.memoryOwnerId,
-  );
-  return procedure?.restrictive_authority_revision ===
-    authority.verifiedProcedureRestrictiveRevision
-    ? 'current'
-    : 'changed';
+  return 'current';
 }
 
 function claimTokenFor(identity: EffectDispatchIdentity): string {

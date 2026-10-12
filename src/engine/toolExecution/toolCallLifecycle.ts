@@ -23,11 +23,7 @@ import {
 import { resolveToolCallPreflight } from './toolCallLifecyclePreflight';
 import { buildRepeatedToolCallNotice } from './repeatedToolCallNotice';
 import { enrichToolResultWithSchemaRepair } from './toolResultRepair';
-import {
-  appendExecutionReceipt,
-  attachExecutionReceipt,
-  observeVerifiedProcedureRawOutcome,
-} from './toolCallLifecycleReceipts';
+import { appendExecutionReceipt, attachExecutionReceipt } from './toolCallLifecycleReceipts';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import type {
   ToolExecutionLifecycleParams,
@@ -66,11 +62,6 @@ async function completeUnstartedMemoryPolicyRevocation(params: {
     Date.now(),
     'authority_revoked',
   );
-  await observeVerifiedProcedureRawOutcome({
-    lifecycle: params.lifecycle,
-    toolCall,
-    resultText: result,
-  });
   recordLifecycleToolCall(
     params.lifecycle.toolCallHistory,
     params.effectiveToolCall.id,
@@ -155,11 +146,6 @@ export async function executeToolCallLifecycle(
     const completedAt = Date.now();
     failRunningToolCall(toolCall, result, completedAt, 'authority_revoked');
     params.callbacks.onToolCallComplete(toolCall);
-    await observeVerifiedProcedureRawOutcome({
-      lifecycle: params,
-      toolCall,
-      resultText: result,
-    });
     recordLifecycleToolCall(
       params.toolCallHistory,
       effectiveToolCall.id,
@@ -210,12 +196,6 @@ export async function executeToolCallLifecycle(
       resultIsError: true,
       terminalEffectState: 'cancelled',
       recordedAt: completedAt,
-    });
-    await observeVerifiedProcedureRawOutcome({
-      lifecycle: params,
-      toolCall,
-      resultText: cancellationMessage,
-      receipt: effectReceipt,
     });
     params.callbacks.onToolCallComplete(toolCall);
     return {
@@ -353,13 +333,6 @@ export async function executeToolCallLifecycle(
         return completeMemoryPolicyRevocation();
       }
     }
-    await observeVerifiedProcedureRawOutcome({
-      lifecycle: params,
-      toolCall,
-      resultText: result,
-      receipt: authoritativeEffectReceipt,
-      reconciliationRequired: effectReconciliationRequired,
-    });
     if (
       outcomeRequiresCurrentModelAuthority() &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)
@@ -518,13 +491,6 @@ export async function executeToolCallLifecycle(
         return completeMemoryPolicyRevocation();
       }
     }
-    await observeVerifiedProcedureRawOutcome({
-      lifecycle: params,
-      toolCall,
-      resultText: errorResult,
-      receipt: authoritativeEffectReceipt,
-      reconciliationRequired: effectReconciliationRequired,
-    });
     if (
       resolvedEffectFreeInvocation &&
       !isModelTurnMemoryPolicyBindingDurablyCurrent(params.modelTurnMemoryPolicyBinding)

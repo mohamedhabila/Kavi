@@ -76,7 +76,6 @@ it('deletes and probes an exact structural receipt whose ingestion job is missin
     retrievalTermStats: [],
     evidenceIds: [],
     observationIds: [],
-    verifiedProcedureObservationIds: [],
     episodeIds: [],
     reflectionIds: [],
     workingBlocks: [],

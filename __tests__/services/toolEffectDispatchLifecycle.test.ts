@@ -3,12 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-const mockInvalidateVerifiedProcedureObservationsForExecutionRun = jest.fn();
-jest.mock('../../src/services/memory/verifiedProcedure/invalidation', () => ({
-  invalidateVerifiedProcedureObservationsForExecutionRun: (...args: unknown[]) =>
-    mockInvalidateVerifiedProcedureObservationsForExecutionRun(...args),
-}));
-
 import {
   closeExecutionJournalDb,
   getExecutionJournalDb,
@@ -153,10 +147,6 @@ beforeEach(() => {
     closeExecutionJournalDb();
   } catch {}
   sqliteMock.__resetExpoSqliteForTests();
-  mockInvalidateVerifiedProcedureObservationsForExecutionRun.mockReturnValue({
-    status: 'invalidated',
-    deletedCount: 0,
-  });
 });
 
 afterEach(() => {
@@ -469,9 +459,6 @@ describe('authorized durable tool effect dispatch', () => {
     await expect(replay).resolves.toMatchObject({ kind: 'reconciliation_required' });
     expect(firstExecutor).toHaveBeenCalledTimes(1);
     expect(replayExecutor).not.toHaveBeenCalled();
-    expect(mockInvalidateVerifiedProcedureObservationsForExecutionRun).toHaveBeenCalledWith(
-      'execution-run-1',
-    );
   });
 
   it('suppresses an exact replay after verified settlement', async () => {

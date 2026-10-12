@@ -8,10 +8,8 @@ import { detectLoops, type IterationProgressSignature } from '../../src/engine/l
 import { executeToolExecutionBatch } from '../../src/engine/toolExecution/toolExecutionBatch';
 import { executeToolCallLifecycle } from '../../src/engine/toolExecution/toolCallLifecycle';
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
-import { buildModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
-import { captureCurrentModelTurnMemoryFence } from '../helpers/modelTurnMemoryAuthority';
 import { MOBILE_UI_ACTION_TOOL_DEFINITION } from '../../src/engine/mobileController/toolDefinition';
 import { createMobileControllerCapabilityFixture } from '../helpers/mobileControllerHandoffFixture';
 import { resolveMobileControllerRecoveryPreflight } from '../../src/engine/graph/mobileControllerRecoveryPolicy';
@@ -66,46 +64,6 @@ describe('toolTurnExecution', () => {
       lastPendingAsyncSignature: 'next-signature',
       workingMessages: params.workingMessages,
     }));
-  });
-
-  afterEach(() => {
-    useSettingsStore.setState({ disableLongTermMemory: false });
-  });
-
-  it('does not persist or dispatch a tool plan invalidated during async batch planning', async () => {
-    const memoryFence = captureCurrentModelTurnMemoryFence();
-    let releasePlan!: () => void;
-    let markPlanStarted!: () => void;
-    const planStarted = new Promise<void>((resolve) => {
-      markPlanStarted = resolve;
-    });
-    const verifiedProcedureSession = {
-      observePlannedBatch: jest.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            releasePlan = resolve;
-            markPlanStarted();
-          }),
-      ),
-    };
-    mockedDetectLoops.mockReturnValue({ loopDetected: false, level: 'none' } as never);
-    const params = createParams({
-      memoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
-      verifiedProcedureSession: verifiedProcedureSession as never,
-    });
-
-    const execution = executeAgentControlGraphToolTurn(params);
-    await planStarted;
-    useSettingsStore.setState({ disableLongTermMemory: true });
-    releasePlan();
-
-    await expect(execution).rejects.toThrow('memory_prompt_epoch_expired');
-    expect(params.callbacks.onAssistantMessage).not.toHaveBeenCalled();
-    expect(mockedExecuteToolExecutionBatch).not.toHaveBeenCalled();
-    const graphEvents = (params.applyGraphEvents as jest.Mock).mock.calls.flatMap(
-      ([events]) => events,
-    );
-    expect(graphEvents.some((event) => event.type === 'MODEL_TURN_COMPLETED')).toBe(false);
   });
 
   it('blocks the run when a critical loop is detected before tool execution', async () => {

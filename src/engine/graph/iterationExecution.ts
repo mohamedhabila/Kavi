@@ -114,7 +114,6 @@ export async function executeAgentControlGraphIteration(
     turnDirectives: params.graph.getCurrentTurnDirectives(),
     sessionActivatedToolNames: params.graph.getGraphSnapshot().sessionActivatedToolNames,
     workingMessages: runtime.workingMessages,
-    verifiedProcedureSession: params.verifiedProcedureSession,
   });
 
   // A chitchat turn that reached for agentic-only capability escalates the whole

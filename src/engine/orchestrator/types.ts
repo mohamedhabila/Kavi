@@ -22,7 +22,6 @@ import type {
   MemoryContextStrategy,
   MemoryRetrievalStrategy,
 } from '../../services/memory/memoryAccessPolicy';
-import type { PendingVerifiedProcedureObservation } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import type { MobileControllerRuntimePort } from '../mobileController/runtimeBinding';
@@ -39,7 +38,6 @@ export type OrchestratorTerminalDisposition =
 export type OrchestratorRunResult = Readonly<{
   terminalDisposition: OrchestratorTerminalDisposition;
   graphSnapshot?: AgentRunControlGraphState;
-  pendingVerifiedProcedureObservation?: PendingVerifiedProcedureObservation;
 }>;
 
 export interface OrchestratorCallbacks {

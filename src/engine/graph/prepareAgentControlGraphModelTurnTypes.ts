@@ -7,7 +7,6 @@ import type { ThinkingLevel } from '../thinking';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
-import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { ConversationModeEscalation } from './conversation/modeEscalation';
 import type { MemoryAuthoritySnapshot } from '../../services/memory/memoryAuthority';
@@ -71,5 +70,4 @@ export interface PrepareAgentControlGraphModelTurnParams {
   turnDirectives: AgentControlTurnDirectives;
   sessionActivatedToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
-  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
 }

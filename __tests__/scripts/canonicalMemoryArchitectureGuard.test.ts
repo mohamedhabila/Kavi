@@ -30,8 +30,11 @@ describe('canonical memory architecture guard', () => {
       [
         "import { Directory, Paths } from 'expo-file-system';",
         "const RETIRED_MEMORY_DIRECTORY_NAMES = ['global-memory', 'conversation-memory'] as const;",
-        "database.execSync('DROP TABLE IF EXISTS memory_chunks');",
-        "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');",
+        'const RETIRED_MEMORY_TABLES = [',
+        "  'memory_chunks',",
+        "  'memory_product_experience_observations',",
+        "  'memory_verified_procedure_state',",
+        '] as const;',
       ].join('\n'),
     );
 
@@ -109,7 +112,7 @@ describe('canonical memory architecture guard', () => {
     writeProjectFile(
       projectRoot,
       'src/services/memory/retiredMemoryArtifacts.ts',
-      "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');\n",
+      "const RETIRED_MEMORY_TABLES = [\n  'memory_product_experience_observations',\n];\n",
     );
     expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual([]);
 
@@ -122,6 +125,26 @@ describe('canonical memory architecture guard', () => {
       expect.arrayContaining([
         expect.stringContaining('restores a retired memory implementation'),
         expect.stringContaining('uses retired product-experience table'),
+      ]),
+    );
+  });
+
+  it('rejects a verified-procedure table outside the retired table list', () => {
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/retiredMemoryArtifacts.ts',
+      "database.getAllSync('SELECT * FROM memory_verified_procedure_observations');\n",
+    );
+    writeProjectFile(
+      projectRoot,
+      'src/services/memory/verifiedProcedure/executionSession.ts',
+      'export const session = true;\n',
+    );
+
+    expect(collectCanonicalMemoryArchitectureViolations(projectRoot)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('uses retired verified-procedure table'),
+        expect.stringContaining('restores a retired memory implementation'),
       ]),
     );
   });

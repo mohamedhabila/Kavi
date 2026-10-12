@@ -15,16 +15,6 @@ import {
   createPendingSubAgentOutcomeReconciliation,
   reconcileSubAgentOutcomeMemory,
 } from '../subAgentOutcomeReconciliation';
-import {
-  commitPendingVerifiedProcedureObservation,
-  type PendingVerifiedProcedureObservation,
-} from '../../memory/verifiedProcedure/executionSession';
-import type { VerifiedProcedureMemoryLineage } from '../../memory/verifiedProcedure/provenanceHash';
-
-type PendingSubAgentVerifiedProcedureCommit = Readonly<{
-  memoryLineage: VerifiedProcedureMemoryLineage;
-  observation: PendingVerifiedProcedureObservation;
-}>;
 
 function truncateSubAgentOutput(output: string, outputTruncation: number): string {
   return exceedsGraphemeLength(output, outputTruncation)
@@ -94,40 +84,6 @@ async function persistTerminalSessionContext(params: {
   params.scheduleSessionContextEvictionWhenDurable(params.sessionId, persistOutcome);
 }
 
-async function commitVerifiedProcedureObservationAfterDurableTerminal(params: {
-  completionState: SubAgentCompletionState | undefined;
-  pendingCommit: PendingSubAgentVerifiedProcedureCommit | undefined;
-  persistOutcome: PersistRegistryBestEffortOutcome;
-}): Promise<void> {
-  if (params.completionState !== 'verified_success' || !params.pendingCommit) {
-    return;
-  }
-  const pendingCommit = params.pendingCommit;
-
-  const commit = async (): Promise<void> => {
-    try {
-      await commitPendingVerifiedProcedureObservation({
-        memoryLineage: pendingCommit.memoryLineage,
-        pending: pendingCommit.observation,
-        surface: 'subagent',
-        terminalObservedAt: Date.now(),
-      });
-    } catch {
-      // Verified-procedure learning is ancillary to the already durable worker result.
-    }
-  };
-
-  if (params.persistOutcome.status === 'persisted') {
-    await commit();
-    return;
-  }
-  if (params.persistOutcome.status === 'timed-out') {
-    void params.persistOutcome.completion
-      .then((persisted) => (persisted ? commit() : undefined))
-      .catch(() => undefined);
-  }
-}
-
 export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapshot>(params: {
   sessionId: string;
   depth: number;
@@ -158,7 +114,6 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
     sessionId: string,
     persistOutcome: PersistRegistryBestEffortOutcome,
   ) => void;
-  pendingVerifiedProcedureCommit?: PendingSubAgentVerifiedProcedureCommit;
 }): Promise<SubAgentResult> {
   const uniqueToolsUsed = [...new Set(params.toolsUsed)];
   const truncatedOutput = truncateSubAgentOutput(params.output, params.outputTruncation);
@@ -199,14 +154,9 @@ export async function finalizeCompletedSubAgentRun<TAgent extends SubAgentSnapsh
     messages: params.transcriptMessages,
     now: updatedAt,
   });
-  const terminalPersistOutcome = await params.persistRegistryBestEffort(
+  await params.persistRegistryBestEffort(
     'Persisting completed worker outcome reconciliation failed',
   );
-  await commitVerifiedProcedureObservationAfterDurableTerminal({
-    completionState: params.completionState,
-    pendingCommit: params.pendingVerifiedProcedureCommit,
-    persistOutcome: terminalPersistOutcome,
-  });
 
   params.signalTerminal(params.subAgent, 'completed', {
     announce: params.shouldAnnounce,

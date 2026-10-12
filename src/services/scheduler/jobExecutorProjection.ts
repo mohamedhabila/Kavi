@@ -14,38 +14,10 @@ import {
 } from './executionError';
 import { scheduledOccurrenceMessageIds } from './jobExecutorSetup';
 import { useSchedulerStore } from './store';
-import type { VerifiedProcedureMemoryLineage } from '../memory/verifiedProcedure/provenanceHash';
-import type { PendingScheduledVerifiedProcedureCommit } from './executionResult';
-import type { PendingVerifiedProcedureObservation } from '../memory/verifiedProcedure/executionSession';
 
 export interface ScheduledProjectionLease {
   conversationId: string;
   owner: ModelProjectionOwner;
-}
-
-function scheduledProcedureLineage(
-  job: CronJob,
-  lease: ScheduledProjectionLease,
-  sourceTurnId: string,
-): VerifiedProcedureMemoryLineage {
-  return {
-    sourceMessageId: lease.owner.requestMessageId,
-    sourceRunId: job.runningAttemptId ?? null,
-    sourceTurnId,
-    taskId: job.runningAttemptId ?? null,
-  };
-}
-
-export function pendingScheduledProcedureCommit(
-  observation: PendingVerifiedProcedureObservation,
-  job: CronJob,
-  lease: ScheduledProjectionLease,
-  sourceTurnId: string,
-): PendingScheduledVerifiedProcedureCommit {
-  return {
-    observation,
-    memoryLineage: scheduledProcedureLineage(job, lease, sourceTurnId),
-  };
 }
 
 const releaseRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();

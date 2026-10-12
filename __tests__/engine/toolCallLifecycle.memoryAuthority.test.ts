@@ -142,11 +142,6 @@ describe('executeToolCallLifecycle memory authority', () => {
     const memoryFence = captureCurrentModelTurnMemoryFence();
     let persistedToolCall: ToolCall | undefined;
     const publishedStatuses: ToolCall['status'][] = [];
-    let releaseObservation!: () => void;
-    let markObservationStarted!: () => void;
-    const observationStarted = new Promise<void>((resolve) => {
-      markObservationStarted = resolve;
-    });
     const foregroundActions = {
       addToolCall: jest.fn((_assistantMessageId: string, toolCall: ToolCall) => {
         persistedToolCall = { ...toolCall };
@@ -199,7 +194,7 @@ describe('executeToolCallLifecycle memory authority', () => {
       foregroundController.completeToolCall(toolCall);
     });
 
-    const execution = executeToolCallLifecycle(
+    const result = await executeToolCallLifecycle(
       buildLifecycle({
         modelTurnMemoryPolicyBinding: buildModelTurnMemoryPolicyBinding(memoryFence),
         callbacks: { onToolCallStart, onToolCallComplete },
@@ -212,20 +207,9 @@ describe('executeToolCallLifecycle memory authority', () => {
             endDate: '2026-06-14T10:00:00',
           }),
         },
-        verifiedProcedureSession: {
-          markReconciliationRequired: jest.fn(),
-          observeRawOutcome: jest.fn(
-            () =>
-              new Promise<void>((resolve) => {
-                releaseObservation = resolve;
-                markObservationStarted();
-              }),
-          ),
-        } as never,
       }),
     );
 
-    await observationStarted;
     expect(mockedExecuteTool).not.toHaveBeenCalled();
     expect(onToolCallStart).toHaveBeenCalledTimes(1);
     expect(onToolCallComplete).toHaveBeenCalledWith(
@@ -242,8 +226,6 @@ describe('executeToolCallLifecycle memory authority', () => {
       'failed',
       expect.objectContaining({ completedAt: expect.any(Number) }),
     );
-    releaseObservation();
-    const result = await execution;
     expect(result.toolMessage.toolCalls?.[0]?.status).toBe('failed');
   });
 

@@ -112,7 +112,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
           publishMobileControllerHandoff: params.iterationParams.publishMobileControllerHandoff,
         }
       : {}),
-    verifiedProcedureSession: params.iterationParams.verifiedProcedureSession,
     warningInjectedThisRound: params.runtime.warningInjectedThisRound,
     turnAssistantContent: params.turnAssistantContent,
     reasoning: params.reasoning,

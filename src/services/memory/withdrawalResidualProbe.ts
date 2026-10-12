@@ -12,7 +12,6 @@ export const MEMORY_WITHDRAWAL_RESIDUAL_SURFACES = [
   'retrievalTermStats',
   'factEvidence',
   'factObservations',
-  'verifiedProcedureObservations',
   'episodeAccessPolicies',
   'episodes',
   'reflections',
@@ -52,7 +51,6 @@ export interface MemoryWithdrawalResidualPlan {
   retrievalTermStats: ReadonlyArray<{ unit: string; memoryKind: string }>;
   evidenceIds: ReadonlyArray<string>;
   observationIds: ReadonlyArray<string>;
-  verifiedProcedureObservationIds: ReadonlyArray<string>;
   episodeIds: ReadonlyArray<string>;
   reflectionIds: ReadonlyArray<string>;
   workingBlocks: ReadonlyArray<{ label: string; scopeKey: string }>;
@@ -303,12 +301,6 @@ export function probeMemoryWithdrawalResiduals(
     retrievalTermStats: retrievalTermStatResiduals(db, plan),
     factEvidence: countIds(db, 'memory_fact_evidence', 'id', plan.evidenceIds),
     factObservations: factObservationResiduals(db, plan),
-    verifiedProcedureObservations: countIds(
-      db,
-      'memory_verified_procedure_observations',
-      'id',
-      plan.verifiedProcedureObservationIds,
-    ),
     episodeAccessPolicies: countIds(
       db,
       'memory_episode_access_policies',

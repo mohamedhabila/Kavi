@@ -3,12 +3,6 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock({ fileBacked: true });
 });
 
-const mockInvalidateVerifiedProcedureObservationsForExecutionRun = jest.fn();
-jest.mock('../../src/services/memory/verifiedProcedure/invalidation', () => ({
-  invalidateVerifiedProcedureObservationsForExecutionRun: (...args: unknown[]) =>
-    mockInvalidateVerifiedProcedureObservationsForExecutionRun(...args),
-}));
-
 import Database from 'better-sqlite3';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { buildModelTurnMemoryPolicyBinding } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
@@ -86,10 +80,6 @@ beforeEach(() => {
   // so an unavailable database used to surface here as seven confusing assertion
   // failures in the fence helper instead of a real cause.
   setDurableMemoryPolicyEnabled(true);
-  mockInvalidateVerifiedProcedureObservationsForExecutionRun.mockReturnValue({
-    status: 'invalidated',
-    deletedCount: 0,
-  });
 });
 
 afterEach(() => {

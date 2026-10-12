@@ -6,9 +6,6 @@ import { normalizeWithdrawalOpaqueId } from './withdrawalLineage';
 import { assertMemoryWithdrawalHasNoResiduals } from './withdrawalResidualProbe';
 import type { MemoryWithdrawalResidualPlan } from './withdrawalResidualProbe';
 import { EMPTY_MEMORY_WITHDRAWAL_COUNTS, type MemoryWithdrawalCounts } from './withdrawalTypes';
-import { hashVerifiedProcedureProvenanceSync } from './verifiedProcedure/provenanceHash';
-import { decodeVerifiedProcedureEvidenceManifest } from './verifiedProcedure/evidenceManifest';
-import { fenceVerifiedProcedureExecutionRunHashes } from './verifiedProcedure/invalidation';
 
 const DELETE_BATCH_SIZE = 200;
 const MAX_LINEAGE_IDS = 512;
@@ -22,21 +19,6 @@ interface RetrievalEventLineageRow {
 interface FactObservationLineageRow {
   id: string;
   fact_id: string;
-}
-
-interface VerifiedProcedureObservationLineageRow {
-  id: string;
-  evidence_manifest_json: string;
-  source_run_id_hash: string;
-}
-
-interface VerifiedProcedureScopedSourceHashes {
-  memoryConversationIdHash: string;
-  sourceThreadIdHash: string;
-  taskIdHash: string | null;
-  messageIds: Set<string>;
-  runIds: Set<string>;
-  turnIds: Set<string>;
 }
 
 export interface MemoryRetirementArtifactCleanupResult {
@@ -192,76 +174,6 @@ function collectFactObservations(
   return Array.from(observations.values()).sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function collectVerifiedProcedureObservations(
-  db: MemoryDatabase,
-  lineage: MemoryWithdrawalLineage,
-  memoryOwnerId: string,
-): VerifiedProcedureObservationLineageRow[] {
-  const scopeIndexes = new Map<string, VerifiedProcedureScopedSourceHashes>();
-  for (const source of lineage.scopedSources) {
-    const memoryConversationIdHash = hashVerifiedProcedureProvenanceSync(
-      'memory-conversation',
-      source.memoryConversationId,
-    );
-    const sourceThreadIdHash = hashVerifiedProcedureProvenanceSync(
-      'source-thread',
-      source.sourceThreadId,
-    );
-    const taskIdHash = source.taskId
-      ? hashVerifiedProcedureProvenanceSync('memory-source-task', source.taskId)
-      : null;
-    const key = `${memoryConversationIdHash}:${sourceThreadIdHash}:${taskIdHash ?? ''}`;
-    let index = scopeIndexes.get(key);
-    if (!index) {
-      index = {
-        memoryConversationIdHash,
-        sourceThreadIdHash,
-        taskIdHash,
-        messageIds: new Set(),
-        runIds: new Set(),
-        turnIds: new Set(),
-      };
-      scopeIndexes.set(key, index);
-    }
-    if (source.sourceKind === 'message') {
-      index.messageIds.add(
-        hashVerifiedProcedureProvenanceSync('memory-source-message', source.sourceId),
-      );
-    } else if (source.sourceKind === 'turn') {
-      index.turnIds.add(hashVerifiedProcedureProvenanceSync('memory-source-turn', source.sourceId));
-    } else {
-      index.runIds.add(hashVerifiedProcedureProvenanceSync('memory-source-run', source.sourceId));
-    }
-  }
-  const rows = new Map<string, VerifiedProcedureObservationLineageRow>();
-  for (const index of scopeIndexes.values()) {
-    for (const row of db.getAllSync<VerifiedProcedureObservationLineageRow>(
-      `SELECT id, evidence_manifest_json, source_run_id_hash
-         FROM memory_verified_procedure_observations
-        WHERE memory_owner_id = ?
-          AND memory_conversation_id_hash = ?
-          AND source_thread_id_hash = ?`,
-      memoryOwnerId,
-      index.memoryConversationIdHash,
-      index.sourceThreadIdHash,
-    )) {
-      const manifest = decodeVerifiedProcedureEvidenceManifest(row.evidence_manifest_json);
-      if (!manifest || manifest.sourceLineage.taskIdHash !== index.taskIdHash) continue;
-      const specificSourceMatches =
-        index.messageIds.has(manifest.sourceLineage.sourceMessageIdHash) ||
-        index.turnIds.has(manifest.sourceLineage.sourceTurnIdHash);
-      const hasSpecificSources = index.messageIds.size > 0 || index.turnIds.size > 0;
-      const runSourceMatches =
-        manifest.sourceLineage.sourceRunIdHash !== null &&
-        index.runIds.has(manifest.sourceLineage.sourceRunIdHash);
-      if (specificSourceMatches || (!hasSpecificSources && runSourceMatches)) {
-        rows.set(row.id, row);
-      }
-    }
-  }
-  return Array.from(rows.values()).sort((left, right) => left.id.localeCompare(right.id));
-}
-
 function recomputeFactObservationState(
   db: MemoryDatabase,
   factIds: ReadonlyArray<string>,
@@ -303,18 +215,6 @@ export function cleanupRetiredMemoryArtifactsInTransaction(
   const episodeIds = new Set(lineage.episodeIds);
   const observations = collectFactObservations(db, lineage);
   const observationIds = observations.map((row) => row.id);
-  const verifiedProcedureObservations = collectVerifiedProcedureObservations(
-    db,
-    lineage,
-    memoryOwnerId,
-  );
-  const verifiedProcedureObservationIds = verifiedProcedureObservations.map((row) => row.id);
-  fenceVerifiedProcedureExecutionRunHashes({
-    db,
-    memoryOwnerId,
-    sourceRunIdHashes: verifiedProcedureObservations.map((row) => row.source_run_id_hash),
-    invalidatedAt: now,
-  });
   const survivingObservationFactIds = Array.from(
     new Set(
       observations
@@ -340,12 +240,6 @@ export function cleanupRetiredMemoryArtifactsInTransaction(
       lineage.evidence.map((row) => row.id),
     ),
     factObservations: deleteIds(db, 'memory_fact_observations', 'id', observationIds),
-    verifiedProcedureObservations: deleteIds(
-      db,
-      'memory_verified_procedure_observations',
-      'id',
-      verifiedProcedureObservationIds,
-    ),
     retrievalTerms: 0,
     reflections: deleteIds(
       db,
@@ -394,7 +288,6 @@ export function cleanupRetiredMemoryArtifactsInTransaction(
     retrievalTermStats,
     evidenceIds: lineage.evidence.map((row) => row.id),
     observationIds,
-    verifiedProcedureObservationIds,
     episodeIds: lineage.episodeIds,
     reflectionIds: lineage.reflections.map((row) => row.id),
     workingBlocks: lineage.workingBlocks.map((row) => ({

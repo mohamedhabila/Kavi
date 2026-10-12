@@ -43,7 +43,6 @@ import {
 } from './graphObservability';
 import type { AgentControlGraphWorkflowToolResultProgress } from './workflowToolResultProgress';
 import type { CodeOwnedCurrentUserMessage } from '../tools/toolExecutionContext';
-import type { VerifiedProcedureExecutionSession } from '../../services/memory/verifiedProcedure/executionSession';
 import type { ToolMessageOutcome } from '../toolExecution/toolMessageOutcome';
 import {
   assertModelTurnMemoryPolicyBindingDurablyCurrent,
@@ -177,7 +176,6 @@ export interface ExecuteAgentControlGraphToolTurnParams {
   beforeEffectDispatch?: (toolName: string) => Promise<void>;
   mobileController?: MobileControllerExecutionBinding;
   publishMobileControllerHandoff?: (handoff: PersistedMobileControllerHandoff) => Promise<void>;
-  verifiedProcedureSession?: VerifiedProcedureExecutionSession;
   warningInjectedThisRound: boolean;
   turnAssistantContent: string;
   reasoning: string;
@@ -326,7 +324,6 @@ export async function executeAgentControlGraphToolTurn(
     executionRunId: params.executionRunId,
     beforeEffectDispatch: params.beforeEffectDispatch,
     ...(params.mobileController ? { mobileController: params.mobileController } : {}),
-    verifiedProcedureSession: params.verifiedProcedureSession,
     onBatchCommitted: () => {
       if (mobileControllerRecoveryDecision.kind !== 'not_applicable') {
         params.recordTurnDirectives(

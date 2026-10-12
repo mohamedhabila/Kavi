@@ -20,12 +20,7 @@ import {
 } from '../../services/memory/memoryScopeIdentity';
 import { persistConversationModeEscalation } from '../graph/conversation/persistModeEscalation';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
-import {
-  createVerifiedProcedureExecutionSession,
-  type PendingVerifiedProcedureObservation,
-} from '../../services/memory/verifiedProcedure/executionSession';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
-import type { AssistantMessageMetadata } from '../../types/message';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import { admitSessionMemoryContext } from '../graph/sessionMemoryContext';
 import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../authority/modelTurnMemoryPolicyBinding';
@@ -94,11 +89,6 @@ export async function runOrchestratorGraphSession(params: {
     conversationId,
   );
   const runtimeContextNote = buildRuntimeContextNote();
-  const verifiedProcedureSession = await createVerifiedProcedureExecutionSession({
-    executionRunId: options.executionRunId,
-    memoryConversationId: sharedConversationId,
-    sourceThreadId: conversationId,
-  });
   const workflowTaskAnchor = (() => {
     if (options.workflowTaskAnchor) {
       if (
@@ -177,25 +167,11 @@ export async function runOrchestratorGraphSession(params: {
     consistencyBarrier: memoryConsistencyBarrier,
     livingMemory,
   });
-  let finalAssistant:
-    | Readonly<{ content: string; metadata?: AssistantMessageMetadata }>
-    | undefined;
   const graphCallbacks = {
     ...callbacks,
     onToolCallComplete: (toolCall: Parameters<typeof callbacks.onToolCallComplete>[0]) => {
       settleToolCallOutcome(toolCall);
       callbacks.onToolCallComplete(toolCall);
-    },
-    onAssistantMessage: (
-      content: string,
-      toolCalls?: Parameters<typeof callbacks.onAssistantMessage>[1],
-      providerReplay?: Parameters<typeof callbacks.onAssistantMessage>[2],
-      assistantMetadata?: AssistantMessageMetadata,
-    ) => {
-      if (assistantMetadata?.kind === 'final' && content.trim()) {
-        finalAssistant = { content, metadata: assistantMetadata };
-      }
-      callbacks.onAssistantMessage(content, toolCalls, providerReplay, assistantMetadata);
     },
   };
 
@@ -249,7 +225,6 @@ export async function runOrchestratorGraphSession(params: {
             },
           }
         : {}),
-      verifiedProcedureSession: verifiedProcedureSession ?? undefined,
       callbacks: graphCallbacks,
       compactionEngine,
       conversationId,
@@ -350,17 +325,11 @@ export async function runOrchestratorGraphSession(params: {
       yieldToUiFrame,
     });
   } catch {
-    verifiedProcedureSession?.markReconciliationRequired();
+    // The session has already recorded the failure in the graph (finishFailure); the
+    // terminal disposition below reports it from the graph snapshot.
   }
 
   const graphSnapshot = graph.getGraphSnapshot();
-  let pendingVerifiedProcedureObservation: PendingVerifiedProcedureObservation | null = null;
-  if (verifiedProcedureSession) {
-    pendingVerifiedProcedureObservation = await verifiedProcedureSession.sealGraphCandidate({
-      graphSnapshot,
-      finalAssistant,
-    });
-  }
   const terminalDisposition: OrchestratorTerminalDisposition =
     graphSnapshot.status === 'awaiting_review'
       ? 'final_candidate'
@@ -375,9 +344,5 @@ export async function runOrchestratorGraphSession(params: {
               : graphSnapshot.status === 'awaiting_user'
                 ? 'waiting'
                 : 'failed';
-  return {
-    terminalDisposition,
-    graphSnapshot,
-    ...(pendingVerifiedProcedureObservation ? { pendingVerifiedProcedureObservation } : {}),
-  };
+  return { terminalDisposition, graphSnapshot };
 }

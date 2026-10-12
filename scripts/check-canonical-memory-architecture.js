@@ -9,6 +9,11 @@ const defaultProjectRoot = path.resolve(__dirname, '..');
 const retiredArtifactCleanupPath = 'src/services/memory/retiredMemoryArtifacts.ts';
 const memoryServiceRoot = 'src/services/memory/';
 
+// A retired table may appear only as one entry of the deletion-only cleanup's table list.
+function isRetiredTableListEntry({ filePath, content }) {
+  return filePath === retiredArtifactCleanupPath && /^'memory_[a-z_]+',$/u.test(content);
+}
+
 // These modules own the low-level fact primitives themselves. Every product and
 // acceptance writer must use a contribution-backed mutation boundary.
 const bareFactMutationAllowedFiles = new Set([
@@ -31,6 +36,8 @@ const bannedFiles = [
   'src/services/memory/productExperienceObservationStore.ts',
   'src/services/memory/verifiedToolEffectExperience.ts',
   'src/services/memory/verifiedToolEffectExperienceLearning.ts',
+  'src/services/memory/verifiedProcedure/executionSession.ts',
+  'src/services/memory/verifiedProcedure/observationStore.ts',
 ];
 
 const bannedPatterns = [
@@ -48,10 +55,7 @@ const bannedPatterns = [
   {
     label: 'retired product-experience table',
     pattern: String.raw`\bmemory_product_experience_observations\b`,
-    allowedMatch: ({ filePath, content }) =>
-      filePath === retiredArtifactCleanupPath &&
-      content ===
-        "database.execSync('DROP TABLE IF EXISTS memory_product_experience_observations;');",
+    allowedMatch: isRetiredTableListEntry,
   },
   {
     label: 'retired single-effect experience API',
@@ -60,9 +64,12 @@ const bannedPatterns = [
   {
     label: 'retired chunk table',
     pattern: String.raw`\bmemory_chunks\b`,
-    allowedMatch: ({ filePath, content }) =>
-      filePath === retiredArtifactCleanupPath &&
-      content === "database.execSync('DROP TABLE IF EXISTS memory_chunks');",
+    allowedMatch: isRetiredTableListEntry,
+  },
+  {
+    label: 'retired verified-procedure table',
+    pattern: String.raw`\bmemory_verified_procedure_[a-z_]+\b`,
+    allowedMatch: isRetiredTableListEntry,
   },
   {
     label: 'retired Markdown memory directories',

@@ -1,4 +1,3 @@
-import { hashVerifiedProcedureProvenanceSync } from '../../src/services/memory/verifiedProcedure/provenanceHash';
 import { sha256HexUtf8 } from '../../src/utils/sha256';
 import { sha256HexUtf8Async } from '../../src/utils/sha256Async';
 
@@ -11,15 +10,9 @@ describe('synchronous SHA-256', () => {
     expect(sha256HexUtf8(value)).toBe(expected);
   });
 
-  it('matches the byte-oriented async digest for verified-procedure provenance input', async () => {
-    const sourceRunId = 'execution-run-withdrawal-1';
-    const expected = await sha256HexUtf8Async(
-      `kavi.verified-procedure.source-run.v1\u0000${sourceRunId}`,
-    );
-
-    expect(hashVerifiedProcedureProvenanceSync('source-run', sourceRunId)).toBe(
-      expected.toLowerCase(),
-    );
+  it('matches the byte-oriented async digest', async () => {
+    const domainSeparated = 'kavi.example.v1\u0000execution-run-withdrawal-1';
+    await expect(sha256HexUtf8Async(domainSeparated)).resolves.toBe(sha256HexUtf8(domainSeparated));
 
     const unicode = 'Kavi remembers across conversations 🧠';
     await expect(sha256HexUtf8Async(unicode)).resolves.toBe(sha256HexUtf8(unicode));

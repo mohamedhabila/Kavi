@@ -26,7 +26,6 @@ import { dispatchAuthorizedToolEffect } from '../../src/services/executionJourna
 import { closeMemoryDb, getMemoryDb } from '../../src/services/memory/database';
 import { initializeMemoryPolicyObservation } from '../../src/services/memory/policy';
 import { resetFactSchemaCacheForTests } from '../../src/services/memory/schema';
-import { captureVerifiedProcedureAuthoritySnapshot } from '../../src/services/memory/verifiedProcedure/observationAuthority';
 import {
   needsApprovalWithContext,
   requestToolApproval,
@@ -262,72 +261,6 @@ describe('tool effect memory authority', () => {
       expect(result).toMatchObject({ kind: 'executed', status: 'completed' });
       expect(controlChecks).toBeGreaterThanOrEqual(1);
       expect(executor).toHaveBeenCalledTimes(1);
-    } finally {
-      externalMemoryDb.close();
-    }
-  });
-
-  it('atomically rejects an effect when verified procedure evidence changes after the early check', async () => {
-    const memoryFence = captureCurrentModelTurnMemoryFence();
-    const procedureAuthority = captureVerifiedProcedureAuthoritySnapshot(
-      getMemoryDb(),
-      memoryFence.memoryAuthoritySnapshot.restrictiveRevision.memoryOwnerId,
-    );
-    if (!procedureAuthority) throw new Error('procedure_authority_unavailable');
-    const executor = jest.fn(async () => completedToolOutcome('{}'));
-    const externalMemoryDb = new Database(getMemoryDb().databasePath);
-    let controlChecks = 0;
-
-    try {
-      const result = await dispatchAuthorizedToolEffect(
-        {
-          conversationId: 'conversation-atomic-procedure-authority',
-          toolCallId: 'tool-call-atomic-procedure-authority',
-          toolName: 'write_file',
-          argumentsText: JSON.stringify({
-            path: 'reports/private.md',
-            content: 'procedure-derived action',
-          }),
-          context: { executionRunId: 'execution-run-atomic-procedure-authority' },
-          approvalState: 'not_required',
-          modelTurnMemoryPolicyBinding: buildModelTurnMemoryPolicyBinding({
-            ...memoryFence,
-            verifiedProcedureAuthoritySnapshot: procedureAuthority,
-          }),
-          authority: {
-            approvalGranted: () => true,
-            permissionGranted: () => true,
-            controlGranted: () => {
-              controlChecks += 1;
-              if (controlChecks === 1) {
-                externalMemoryDb
-                  .prepare(
-                    `UPDATE memory_verified_procedure_state
-                        SET restrictive_authority_revision = restrictive_authority_revision + 1,
-                            projection_revision = projection_revision + 1
-                      WHERE memory_owner_id = ?`,
-                  )
-                  .run(procedureAuthority.restrictiveRevision.memoryOwnerId);
-              }
-              return true;
-            },
-          },
-          execute: executor,
-        },
-        { now: () => 100 },
-      );
-
-      expect(result).toMatchObject({ kind: 'blocked', status: 'failed' });
-      expect(result.result).toContain('model_authority_changed');
-      expect(controlChecks).toBe(1);
-      expect(executor).not.toHaveBeenCalled();
-      expect(
-        getExecutionJournalDb().getFirstSync(
-          `SELECT r.status AS run_status, e.status AS effect_status
-             FROM execution_runs r
-             JOIN execution_effects e ON e.run_id = r.id`,
-        ),
-      ).toEqual({ run_status: 'cancelled', effect_status: 'cancelled' });
     } finally {
       externalMemoryDb.close();
     }

@@ -50,19 +50,31 @@ describe('retired memory artifact cleanup', () => {
   });
 
   it('removes retired tables at startup without initializing canonical memory', () => {
+    const retiredTables = [
+      'memory_chunks',
+      'memory_product_experience_observations',
+      'memory_verified_procedure_observations',
+      'memory_verified_procedure_run_invalidations',
+      'memory_verified_procedure_state',
+      'memory_extraction_cursor',
+    ];
     const database = SQLite.openDatabaseSync('kavi-memory.db');
-    database.execSync('CREATE TABLE memory_chunks (id TEXT PRIMARY KEY)');
-    database.execSync('CREATE TABLE memory_product_experience_observations (id TEXT PRIMARY KEY)');
+    for (const table of retiredTables) {
+      database.execSync(`CREATE TABLE ${table} (id TEXT PRIMARY KEY)`);
+    }
     database.closeSync();
 
     removeRetiredMemoryDatabaseArtifactsAtStartup();
 
     const inspected = SQLite.openDatabaseSync('kavi-memory.db');
     expect(
-      inspected.getFirstSync<{ name: string }>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('memory_chunks', 'memory_product_experience_observations')",
+      inspected.getAllSync<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${retiredTables
+          .map(() => '?')
+          .join(', ')})`,
+        ...retiredTables,
       ),
-    ).toBeNull();
+    ).toEqual([]);
     expect(
       inspected.getFirstSync<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_facts'",

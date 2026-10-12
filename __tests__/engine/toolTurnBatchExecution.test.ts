@@ -10,7 +10,6 @@ jest.mock('../../src/engine/toolExecution/toolCallLifecycle', () => ({
 
 const mockedExecuteToolCallLifecycle = jest.mocked(executeToolCallLifecycle);
 
-import { POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING } from '../../src/engine/authority/modelTurnMemoryPolicyBinding';
 import { createParams, readFileTool, tools, writeFileTool } from './helpers/toolTurnBatch';
 
 describe('toolTurnBatchExecution', () => {
@@ -47,56 +46,6 @@ describe('toolTurnBatchExecution', () => {
         status: 'completed',
       }),
     );
-  });
-
-  it('awaits the complete planned batch before any lifecycle dispatch', async () => {
-    const ordering: string[] = [];
-    let releasePlan!: () => void;
-    let markPlanStarted!: () => void;
-    const planStarted = new Promise<void>((resolve) => {
-      markPlanStarted = resolve;
-    });
-    const verifiedProcedureSession = {
-      observePlannedBatch: jest.fn(
-        () =>
-          new Promise<void>((resolve) => {
-            ordering.push('planned');
-            releasePlan = resolve;
-            markPlanStarted();
-          }),
-      ),
-    };
-    mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
-      ordering.push('executed');
-      expect(ordering).toEqual(['planned', 'executed']);
-      expect(params.batchIndex).toBe(0);
-      expect(params.verifiedProcedureSession).toBe(verifiedProcedureSession);
-      return {
-        toolCallId: params.tc.id,
-        effectiveToolName: params.tc.name,
-        result: '{}',
-        toolMessage: buildToolResultMessage({
-          idPrefix: 'tool',
-          toolCallId: params.tc.id,
-          content: '{}',
-          toolCall: { ...params.tc, status: 'completed' },
-        }),
-      };
-    });
-
-    const execution = executeAgentControlGraphToolBatch(createParams({ verifiedProcedureSession }));
-    await planStarted;
-    expect(ordering).toEqual(['planned']);
-    expect(mockedExecuteToolCallLifecycle).not.toHaveBeenCalled();
-    releasePlan();
-    await execution;
-
-    expect(verifiedProcedureSession.observePlannedBatch).toHaveBeenCalledWith({
-      iteration: 2,
-      executeInParallel: false,
-      memoryPolicyBinding: POLICY_INDEPENDENT_MODEL_TURN_MEMORY_BINDING,
-      toolCalls: [{ batchIndex: 0, toolCallId: 'tc-search', toolName: 'web_search' }],
-    });
   });
 
   it('propagates a lifecycle reconciliation barrier to graph outcome handling', async () => {

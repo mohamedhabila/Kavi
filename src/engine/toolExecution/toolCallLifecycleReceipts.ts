@@ -53,26 +53,3 @@ export async function appendExecutionReceipt(params: {
   attachExecutionReceipt({ lifecycle: params.lifecycle, toolCall: params.toolCall, receipt });
   return receipt;
 }
-
-export async function observeVerifiedProcedureRawOutcome(params: {
-  lifecycle: ToolExecutionLifecycleParams;
-  toolCall: ToolCall;
-  resultText: string;
-  receipt?: ToolEffectReceipt;
-  reconciliationRequired?: boolean;
-}): Promise<void> {
-  try {
-    await params.lifecycle.verifiedProcedureSession?.observeRawOutcome({
-      iteration: params.lifecycle.iteration,
-      batchIndex: params.lifecycle.batchIndex,
-      toolCallId: params.toolCall.id,
-      toolName: params.toolCall.name,
-      argumentsText: params.toolCall.arguments,
-      resultText: params.resultText,
-      receipt: params.receipt,
-      reconciliationRequired: params.reconciliationRequired,
-    });
-  } catch {
-    params.lifecycle.verifiedProcedureSession?.markReconciliationRequired();
-  }
-}

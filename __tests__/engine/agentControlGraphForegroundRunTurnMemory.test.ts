@@ -8,9 +8,6 @@ import {
   createProvider,
   createReadyPreflightResult,
 } from '../helpers/foregroundRunExecutionContextHarness';
-import type { PendingVerifiedProcedureObservation } from '../../src/services/memory/verifiedProcedure/executionSession';
-
-const mockCommitPendingVerifiedProcedureObservation = jest.fn();
 
 jest.mock('../../src/engine/orchestrator', () => ({
   runOrchestrator: jest.fn(),
@@ -18,11 +15,6 @@ jest.mock('../../src/engine/orchestrator', () => ({
 
 jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
   resolveForegroundRunPreflight: jest.fn(),
-}));
-
-jest.mock('../../src/services/memory/verifiedProcedure/executionSession', () => ({
-  commitPendingVerifiedProcedureObservation: (...args: unknown[]) =>
-    mockCommitPendingVerifiedProcedureObservation(...args),
 }));
 
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
@@ -46,12 +38,9 @@ describe('foreground turn capture', () => {
     jest.resetAllMocks();
   });
 
-  it.each([
-    ['agentic', 'run-1'],
-    ['chitchat', null],
-  ] as const)(
-    'commits %s procedure evidence with exact turn-memory lineage between durable completion and owner release',
-    async (mode, sourceRunId) => {
+  it.each(['agentic', 'chitchat'] as const)(
+    'captures the %s turn between durable completion and owner release',
+    async (mode) => {
       const conversation = createConversation({ mode });
       const provider = createProvider('target-provider', 'target-model');
       const context = createExecutionContext({
@@ -63,16 +52,11 @@ describe('foreground turn capture', () => {
       mockedResolveForegroundRunPreflight.mockResolvedValue(
         createReadyPreflightResult({ conversation, provider }),
       );
-      const pending = Object.freeze({}) as PendingVerifiedProcedureObservation;
       mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
         deliverFinalAssistantMessage(callbacks);
         callbacks.onDone();
-        return {
-          terminalDisposition: 'final_candidate',
-          pendingVerifiedProcedureObservation: pending,
-        };
+        return { terminalDisposition: 'final_candidate' };
       });
-      mockCommitPendingVerifiedProcedureObservation.mockResolvedValue({ status: 'recorded' });
 
       await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
@@ -82,28 +66,12 @@ describe('foreground turn capture', () => {
         conversation.id,
         context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,
       );
-      expect(mockCommitPendingVerifiedProcedureObservation).toHaveBeenCalledWith({
-        memoryLineage: {
-          sourceMessageId:
-            context.durability.createModelExecution.mock.calls[0][0].requestMessageId,
-          sourceRunId,
-          sourceTurnId:
-            context.durability.completeModelExecution.mock.calls[0][0].projectionMessageId,
-          taskId: null,
-        },
-        pending,
-        surface: 'foreground',
-        terminalObservedAt: expect.any(Number),
-      });
       expect(context.durability.completeModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
         recordConversationTurnMemory.mock.invocationCallOrder[0],
       );
       expect(recordConversationTurnMemory.mock.invocationCallOrder[0]).toBeLessThan(
-        mockCommitPendingVerifiedProcedureObservation.mock.invocationCallOrder[0],
+        context.durability.releaseModelProjection.mock.invocationCallOrder[0],
       );
-      expect(
-        mockCommitPendingVerifiedProcedureObservation.mock.invocationCallOrder[0],
-      ).toBeLessThan(context.durability.releaseModelProjection.mock.invocationCallOrder[0]);
     },
   );
 
@@ -239,17 +207,13 @@ describe('foreground turn capture', () => {
     mockedResolveForegroundRunPreflight.mockResolvedValue(
       createReadyPreflightResult({ conversation, provider }),
     );
-    const pending = Object.freeze({}) as PendingVerifiedProcedureObservation;
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       deliverFinalAssistantMessage(callbacks);
       callbacks.onAgentControlGraphStateChange?.(
         createInitialAgentControlGraphSnapshot({ status: 'failed' }),
       );
       callbacks.onDone();
-      return {
-        terminalDisposition: 'failed',
-        pendingVerifiedProcedureObservation: pending,
-      };
+      return { terminalDisposition: 'failed' };
     });
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
@@ -258,7 +222,6 @@ describe('foreground turn capture', () => {
     expect(context.durability.completeModelExecution).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' }),
     );
-    expect(mockCommitPendingVerifiedProcedureObservation).not.toHaveBeenCalled();
     expect(context.durability.releaseModelProjection).toHaveBeenCalledTimes(1);
   });
 

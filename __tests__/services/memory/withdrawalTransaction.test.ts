@@ -611,7 +611,6 @@ describe('atomic memory withdrawal', () => {
       retrievalTermStats: [],
       evidenceIds: seeded.evidenceIds,
       observationIds: [],
-      verifiedProcedureObservationIds: [],
       episodeIds: [seeded.targetEpisodeId],
       reflectionIds: [seeded.targetReflectionId, seeded.linkedMalformedReflectionId],
       workingBlocks: [{ label: 'active_focus', scopeKey: seeded.targetWorkingBlockScopeKey }],

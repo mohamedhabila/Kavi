@@ -16,7 +16,6 @@ export type SystemPromptSectionPurpose =
   | 'runtime_guidance'
   | 'safety'
   | 'skills'
-  | 'verified_procedure'
   | 'workflow_runtime'
   | 'workflow_task_anchor';
 

@@ -19,8 +19,6 @@ import {
   ensureSourceRetirementSchema,
   isSourceRetirementSchemaResetRequired,
 } from './sourceRetirementSchema';
-import { ensureVerifiedProcedureObservationSchema } from './verifiedProcedure/observationSchema';
-import { invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch } from './verifiedProcedure/observationAuthority';
 import {
   CLEARED_STRUCTURED_MEMORY_TABLES,
   FULL_RESET_DROPPED_RETIREMENT_PARENT_TRIGGERS,
@@ -318,7 +316,6 @@ export function ensureFactSchema(): void {
   ensureMigrationStateSchema(db);
   ensureMemoryVaultIdentitySchema(db);
   ensureRetrievalOutcomeSchema(db);
-  ensureVerifiedProcedureObservationSchema(db);
   // Must run before ensureEpisodeRetrievalIndexSchema: its full-rebuild path
   // selects memory_episodes.summary_kind, which only exists once this has run.
   ensureFactColumns(db);
@@ -555,10 +552,7 @@ export function clearStructuredMemoryDatabase(db: ReturnType<typeof getMemoryDb>
     ensureFactContributionSchema(database);
     ensureSourceRetirementSchema(database);
   });
-  runAfterMemoryTransactionCommit(() => {
-    invalidateRestrictiveMemoryAuthorityProcessEpoch();
-    invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch();
-  });
+  runAfterMemoryTransactionCommit(invalidateRestrictiveMemoryAuthorityProcessEpoch);
 }
 
 export function clearStructuredMemory(): void {

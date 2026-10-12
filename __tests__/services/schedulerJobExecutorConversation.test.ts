@@ -1,6 +1,5 @@
 import type { OrchestratorCallbacks } from '../../src/engine/orchestrator';
 import type { ToolCall } from '../../src/types/message';
-import type { PendingVerifiedProcedureObservation } from '../../src/services/memory/verifiedProcedure/executionSession';
 import {
   abortAllScheduledJobExecutions,
   beginModelProjectionIntent,
@@ -75,55 +74,6 @@ describe('scheduled job conversation transcript', () => {
     expect(transcript[2]).toMatchObject({ toolCallId: 'tool-call-1', isError: false });
     expect(transcript[3]).toMatchObject({ providerReplay: finalReplay });
     expect(findMockConversation('scheduled-conversation').modelProjectionOwner).toBeUndefined();
-  });
-
-  it('binds pending procedure learning to the scheduled occurrence and final assistant turn', async () => {
-    const pending = Object.freeze({}) as PendingVerifiedProcedureObservation;
-    const toolCall: ToolCall = {
-      id: 'calendar-list-for-procedure-lineage',
-      name: 'calendar_list',
-      arguments: '{}',
-      status: 'running',
-    };
-    mockRunOrchestrator.mockImplementationOnce(
-      async (_options: unknown, callbacks: OrchestratorCallbacks) => {
-        emitSchedulerToolTurn(callbacks, 'Checking the writable calendar.', [toolCall]);
-        callbacks.onToolCallStart?.(toolCall);
-        callbacks.onToolCallComplete?.({
-          ...toolCall,
-          status: 'completed',
-          result: '[{"id":"calendar-1","allowsModifications":true}]',
-        });
-        callbacks.onToolMessage?.(
-          schedulerToolMessageOutcome(
-            toolCall.id,
-            '[{"id":"calendar-1","allowsModifications":true}]',
-          ),
-        );
-        emitSchedulerFinal(callbacks, 'The scheduled event was created.');
-        callbacks.onDone?.();
-        return {
-          terminalDisposition: 'final_candidate',
-          pendingVerifiedProcedureObservation: pending,
-        };
-      },
-    );
-
-    const result = await executeJob();
-    const finalAssistant = findMockConversation('scheduled-conversation').messages.at(-1);
-    expect(finalAssistant).toMatchObject({
-      role: 'assistant',
-      content: 'The scheduled event was created.',
-    });
-    expect(result.pendingVerifiedProcedureCommit).toEqual({
-      observation: pending,
-      memoryLineage: {
-        sourceMessageId: 'scheduled:occurrence-job-1:user',
-        sourceRunId: 'attempt-job-1',
-        sourceTurnId: finalAssistant?.id,
-        taskId: 'attempt-job-1',
-      },
-    });
   });
 
   it('pairs a preflight-rejected tool result when tool start and completion are omitted', async () => {

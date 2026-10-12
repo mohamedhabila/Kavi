@@ -9,7 +9,6 @@ import { getLocalMemoryVaultOwnerId } from './memoryVaultIdentity';
 import { purgeAllRetiredCausalPayloadsForOwnerInTransaction } from './retiredCausalPayloadPurge';
 import { retireExactMemorySources } from './sourceRetirementCoordinator';
 import { USER_RESET_CLEARED_STRUCTURED_MEMORY_TABLES } from './structuredMemoryTableRegistry';
-import { invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch } from './verifiedProcedure/observationAuthority';
 import { advanceRestrictiveMemoryAuthorityInTransaction } from './memoryAuthority';
 
 const RESET_SOURCE_BATCH_SIZE = 256;
@@ -132,7 +131,6 @@ export function resetCanonicalMemoryForManagement(): void {
     runAfterMemoryTransactionCommit(checkpointMemoryDatabaseAfterSensitiveDeletion);
     clearDerivedMemory(db);
     advanceRestrictiveMemoryAuthorityInTransaction(db, memoryOwnerId);
-    runAfterMemoryTransactionCommit(invalidateRestrictiveVerifiedProcedureAuthorityProcessEpoch);
     clearEmbeddingCache();
     clearLocalSimilarityVectorCache();
     if (getEmbeddingCacheEntryCount() !== 0) {

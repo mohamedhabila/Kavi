@@ -1,5 +1,4 @@
 import { isMemoryReadEpochCurrent } from '../../../services/memory/policy';
-import { isVerifiedProcedureProjectionSnapshotDurablyCurrent } from '../../../services/memory/verifiedProcedure/observationAuthority';
 import { isRestrictiveMemoryAuthoritySnapshotDurablyCurrent } from '../../../services/memory/memoryAuthority';
 import { isMemoryValidityDeadlineCurrent } from '../../../services/memory/memoryValidityDeadline';
 import type { Message } from '../../../types/message';
@@ -23,11 +22,7 @@ export function isPreparedMemoryReadCurrent(
     !fence ||
     (isMemoryReadEpochCurrent(fence.readEpoch) &&
       isMemoryValidityDeadlineCurrent(fence.validUntil, now) &&
-      isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(fence.memoryAuthoritySnapshot) &&
-      (!fence.verifiedProcedureAuthoritySnapshot ||
-        isVerifiedProcedureProjectionSnapshotDurablyCurrent(
-          fence.verifiedProcedureAuthoritySnapshot,
-        )))
+      isRestrictiveMemoryAuthoritySnapshotDurablyCurrent(fence.memoryAuthoritySnapshot))
   );
 }
 

@@ -40,7 +40,6 @@ import {
   isCodeOwnedExecutionRunId,
   serializeExecutionRunEffectDispatch,
 } from './executionRunEffectBarrier';
-import { invalidateVerifiedProcedureObservationsForExecutionRun } from '../memory/verifiedProcedure/invalidation';
 import type { AuthorizedToolEffectExecutionClaim } from './authorizedToolEffectExecutionClaim';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import {
@@ -648,46 +647,34 @@ export async function dispatchAuthorizedToolEffect(
     };
   }
 
-  const result = await serializeExecutionRunEffectDispatch(
-    input.conversationId,
-    executionRunId,
-    async () => {
-      const barrier = inspectExecutionRunEffectBarrier(
-        input.conversationId,
-        executionRunId,
-        options,
-      );
-      if (barrier.kind === 'reconciliation_required') {
-        return {
-          kind: 'reconciliation_required' as const,
-          reason: 'execution_run_reconciliation_required' as const,
-          status: 'failed' as const,
-          result:
-            'Error: A prior tool effect in this execution requires reconciliation; do not retry automatically ' +
-            `(${barrier.blockingStatus}).`,
-          executorThrew: false as const,
-        };
-      }
-      if (barrier.kind !== 'clear') {
-        return {
-          kind: 'blocked' as const,
-          reason:
-            barrier.kind === 'identity_conflict'
-              ? ('execution_run_identity_conflict' as const)
-              : ('journal_unavailable' as const),
-          status: 'failed' as const,
-          result:
-            barrier.kind === 'identity_conflict'
-              ? 'Error: Tool effect was not executed because the execution-run identity conflicts with durable journal state.'
-              : 'Error: Tool effect was not executed because the durable execution journal is unavailable.',
-          executorThrew: false as const,
-        };
-      }
-      return dispatchAuthorizedToolEffectWithinBarrier(input, options);
-    },
-  );
-  if (result.kind === 'reconciliation_required') {
-    invalidateVerifiedProcedureObservationsForExecutionRun(executionRunId);
-  }
-  return result;
+  return serializeExecutionRunEffectDispatch(input.conversationId, executionRunId, async () => {
+    const barrier = inspectExecutionRunEffectBarrier(input.conversationId, executionRunId, options);
+    if (barrier.kind === 'reconciliation_required') {
+      return {
+        kind: 'reconciliation_required' as const,
+        reason: 'execution_run_reconciliation_required' as const,
+        status: 'failed' as const,
+        result:
+          'Error: A prior tool effect in this execution requires reconciliation; do not retry automatically ' +
+          `(${barrier.blockingStatus}).`,
+        executorThrew: false as const,
+      };
+    }
+    if (barrier.kind !== 'clear') {
+      return {
+        kind: 'blocked' as const,
+        reason:
+          barrier.kind === 'identity_conflict'
+            ? ('execution_run_identity_conflict' as const)
+            : ('journal_unavailable' as const),
+        status: 'failed' as const,
+        result:
+          barrier.kind === 'identity_conflict'
+            ? 'Error: Tool effect was not executed because the execution-run identity conflicts with durable journal state.'
+            : 'Error: Tool effect was not executed because the durable execution journal is unavailable.',
+        executorThrew: false as const,
+      };
+    }
+    return dispatchAuthorizedToolEffectWithinBarrier(input, options);
+  });
 }

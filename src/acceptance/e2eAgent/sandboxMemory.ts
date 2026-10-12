@@ -48,7 +48,6 @@ export const E2E_RESETTABLE_MEMORY_TABLES = [
   'memory_retrieval_events',
   'memory_retrieval_outcomes',
   'memory_tasks',
-  'memory_verified_procedure_observations',
   'memory_turns',
   'memory_working_blocks',
 ] as const;
