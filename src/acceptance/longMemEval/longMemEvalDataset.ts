@@ -20,7 +20,12 @@ export const LONGMEMEVAL_QUESTION_TYPES = [
 
 export type LongMemEvalQuestionType = (typeof LONGMEMEVAL_QUESTION_TYPES)[number];
 
-export type LongMemEvalTurn = Readonly<{ role: 'user' | 'assistant'; content: string }>;
+export type LongMemEvalTurn = Readonly<{
+  role: 'user' | 'assistant';
+  content: string;
+  /** LongMemEval marks the turns that hold the answer (`has_answer`). */
+  hasAnswer: boolean;
+}>;
 
 export type LongMemEvalSession = Readonly<{
   id: string;
@@ -70,12 +75,20 @@ function requireString(value: unknown, field: string): string {
 function parseTurn(value: unknown, where: string): LongMemEvalTurn | null {
   if (!value || typeof value !== 'object')
     throw new Error(`LongMemEval turn ${where} is malformed.`);
-  const { role, content } = value as { role?: unknown; content?: unknown };
+  const {
+    role,
+    content,
+    has_answer: hasAnswer,
+  } = value as {
+    role?: unknown;
+    content?: unknown;
+    has_answer?: unknown;
+  };
   if (role !== 'user' && role !== 'assistant') {
     throw new Error(`LongMemEval turn ${where} has role ${JSON.stringify(role)}.`);
   }
   if (typeof content !== 'string') throw new Error(`LongMemEval turn ${where} has no content.`);
-  return content.trim() ? { role, content } : null;
+  return content.trim() ? { role, content, hasAnswer: hasAnswer === true } : null;
 }
 
 function parseSessions(record: Record<string, unknown>, questionId: string): LongMemEvalSession[] {

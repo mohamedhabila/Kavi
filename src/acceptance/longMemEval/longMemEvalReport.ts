@@ -3,8 +3,9 @@
 // ---------------------------------------------------------------------------
 // One outcome per question and the summary the benchmark is judged by: accuracy overall
 // and averaged over question types (LongMemEval reports both), per type, on unanswerable
-// questions, how often an evidence session reached the memory section, how often the
-// model searched memory, and what the run cost in tokens and time.
+// questions, how often an evidence session and how many of the rounds that hold the answer
+// reached the memory section, how often the model searched memory, and what the run cost
+// in tokens and time.
 // ---------------------------------------------------------------------------
 
 import {
@@ -12,7 +13,11 @@ import {
   type LongMemEvalInstance,
   type LongMemEvalQuestionType,
 } from './longMemEvalDataset';
-import { sessionIndexOfHistoryMessage, type LongMemEvalArm } from './longMemEvalScenario';
+import {
+  historyMessageId,
+  sessionIndexOfHistoryMessage,
+  type LongMemEvalArm,
+} from './longMemEvalScenario';
 import type { E2EScenarioResult } from '../e2eAgent/types';
 
 export type LongMemEvalOutcome = Readonly<{
@@ -32,6 +37,8 @@ export type LongMemEvalOutcome = Readonly<{
   memorySearchCalls: number;
   /** Whether a round of an evidence session was in the memory section; null when not measured. */
   evidenceInPrompt: boolean | null;
+  /** Share of the rounds that hold the answer that were in the memory section; null when not measured. */
+  answerRoundRecall: number | null;
   errors: ReadonlyArray<string>;
 }>;
 
@@ -45,6 +52,8 @@ export type LongMemEvalSummary = Readonly<{
   byType: Readonly<Record<LongMemEvalQuestionType, Score>>;
   abstention: Score;
   evidenceInPromptRate: number | null;
+  /** Mean share of answer rounds that reached the memory section, over measured questions. */
+  answerRoundRecall: number | null;
   memorySearchRate: number | null;
   incomplete: number;
   totalTokens: number;
@@ -97,6 +106,42 @@ export function evidenceReachedMemoryPrompt(
   );
 }
 
+/**
+ * The rounds that hold the answer, each named by the history id of its user message (the id
+ * the memory section reports a past round by). An answer in a reply belongs to the round of
+ * the user message before it.
+ */
+function answerRoundIds(instance: LongMemEvalInstance): Set<string> {
+  const ids = new Set<string>();
+  instance.sessions.forEach((session, sessionIndex) => {
+    let roundUserIndex: number | null = null;
+    session.turns.forEach((turn, turnIndex) => {
+      if (turn.role === 'user') roundUserIndex = turnIndex;
+      if (turn.hasAnswer && roundUserIndex !== null) {
+        ids.add(historyMessageId(sessionIndex, roundUserIndex));
+      }
+    });
+  });
+  return ids;
+}
+
+/** Share of the rounds that hold the answer that any request's memory section held. */
+export function answerRoundRecall(
+  instance: LongMemEvalInstance,
+  result: E2EScenarioResult,
+): number | null {
+  const answerRounds = answerRoundIds(instance);
+  if (answerRounds.size === 0) return null;
+  const inPrompt = new Set(
+    result.turnTraces.flatMap((turn) => turn.memoryPrompt.builds.flatMap((build) => build.turnIds)),
+  );
+  return [...answerRounds].filter((id) => inPrompt.has(id)).length / answerRounds.size;
+}
+
+function mean(values: ReadonlyArray<number>): number | null {
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
 export function summarizeLongMemEval(
   outcomes: ReadonlyArray<LongMemEvalOutcome>,
 ): LongMemEvalSummary {
@@ -126,6 +171,11 @@ export function summarizeLongMemEval(
         .map((outcome) => outcome.evidenceInPrompt)
         .filter((value): value is boolean => value !== null),
     ),
+    answerRoundRecall: mean(
+      outcomes
+        .map((outcome) => outcome.answerRoundRecall)
+        .filter((value): value is number => value !== null),
+    ),
     memorySearchRate: rate(outcomes.map((outcome) => outcome.memorySearchCalls > 0)),
     incomplete: outcomes.filter((outcome) => !outcome.completed).length,
     totalTokens: tokens.reduce((sum, value) => sum + value, 0),
@@ -150,7 +200,7 @@ export function formatLongMemEvalSummary(summary: LongMemEvalSummary): string {
       return `  ${type}: ${typeScore.correct}/${typeScore.questions} = ${percent(typeScore.accuracy)}`;
     }),
     `  abstention: ${summary.abstention.correct}/${summary.abstention.questions} = ${percent(summary.abstention.accuracy)}`,
-    `  evidence in memory section: ${percent(summary.evidenceInPromptRate)}; memory_search used: ${percent(summary.memorySearchRate)}; incomplete: ${summary.incomplete}`,
+    `  evidence in memory section: ${percent(summary.evidenceInPromptRate)}; answer rounds in memory section: ${percent(summary.answerRoundRecall)}; memory_search used: ${percent(summary.memorySearchRate)}; incomplete: ${summary.incomplete}`,
     `  tokens: ${summary.totalTokens} total, ${summary.medianTokens ?? 'n/a'} median; cost ${summary.costUsd === null ? 'n/a' : `$${summary.costUsd.toFixed(4)}`}; duration median ${summary.medianDurationMs ?? 'n/a'} ms, p90 ${summary.p90DurationMs ?? 'n/a'} ms`,
   ];
   return lines.join('\n');

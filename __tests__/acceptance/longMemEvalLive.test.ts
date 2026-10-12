@@ -40,6 +40,7 @@ import {
   parseLongMemEvalJudgeLabel,
 } from '../../src/acceptance/longMemEval/longMemEvalJudge';
 import {
+  answerRoundRecall,
   evidenceReachedMemoryPrompt,
   formatLongMemEvalSummary,
   longMemEvalHypothesis,
@@ -164,6 +165,7 @@ describeLive('LongMemEval (live)', () => {
           memorySearchCalls: result.toolCalls.filter((call) => call.name === 'memory_search')
             .length,
           evidenceInPrompt: arm === 'memory' ? evidenceReachedMemoryPrompt(instance, result) : null,
+          answerRoundRecall: arm === 'memory' ? answerRoundRecall(instance, result) : null,
           errors: result.errors,
         };
         outcomes.push(outcome);

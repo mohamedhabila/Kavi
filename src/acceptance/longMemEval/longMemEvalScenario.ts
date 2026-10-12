@@ -21,7 +21,7 @@ export type LongMemEvalArm = (typeof LONGMEMEVAL_ARMS)[number];
 
 const HISTORY_MESSAGE_ID_PREFIX = 'lme';
 
-function historyMessageId(sessionIndex: number, turnIndex: number): string {
+export function historyMessageId(sessionIndex: number, turnIndex: number): string {
   return `${HISTORY_MESSAGE_ID_PREFIX}-${sessionIndex}-${turnIndex}`;
 }
 

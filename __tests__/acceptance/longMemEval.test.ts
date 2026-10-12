@@ -14,6 +14,7 @@ import {
   parseLongMemEvalJudgeLabel,
 } from '../../src/acceptance/longMemEval/longMemEvalJudge';
 import {
+  answerRoundRecall,
   evidenceReachedMemoryPrompt,
   formatLongMemEvalSummary,
   summarizeLongMemEval,
@@ -200,6 +201,7 @@ function outcome(overrides: Partial<LongMemEvalOutcome>): LongMemEvalOutcome {
     costUsd: 0.001,
     memorySearchCalls: 0,
     evidenceInPrompt: true,
+    answerRoundRecall: 1,
     errors: [],
     ...overrides,
   };
@@ -230,16 +232,64 @@ describe('LongMemEval results', () => {
     ).toBeNull();
   });
 
+  it('measures how many rounds that hold the answer reached the memory section', () => {
+    const withTurns = (turnIds: string[]) =>
+      ({
+        turnTraces: [
+          {
+            memoryPrompt: {
+              status: 'recorded',
+              builds: [{ itemIds: [], turnIds, chars: 1, durationMs: 1 }],
+            },
+          },
+        ],
+      }) as unknown as E2EScenarioResult;
+    const answerInUserTurn = parseLongMemEvalInstance(rawInstance());
+
+    expect(answerRoundRecall(answerInUserTurn, withTurns(['lme-0-0', 'lme-1-0']))).toBe(1);
+    expect(answerRoundRecall(answerInUserTurn, withTurns(['lme-1-0']))).toBe(0);
+
+    const answerInReply = parseLongMemEvalInstance(
+      rawInstance({
+        haystack_sessions: [
+          [{ role: 'user', content: 'Where did I park?' }],
+          [
+            { role: 'user', content: 'Which trail should I pick?' },
+            { role: 'assistant', content: 'Mount Rainier’s Skyline Trail.', has_answer: true },
+            { role: 'user', content: 'And for sourdough?', has_answer: true },
+          ],
+        ],
+      }),
+    );
+    expect(answerRoundRecall(answerInReply, withTurns(['lme-0-0']))).toBe(0.5);
+
+    const noAnswerMarked = parseLongMemEvalInstance(
+      rawInstance({
+        haystack_sessions: [
+          [{ role: 'user', content: 'Any tips for sourdough?' }],
+          [{ role: 'user', content: 'I just got back from hiking Mount Rainier!' }],
+        ],
+      }),
+    );
+    expect(answerRoundRecall(noAnswerMarked, withTurns(['lme-0-0']))).toBeNull();
+  });
+
   it('reports overall and task-averaged accuracy, abstention, retrieval and spend', () => {
     const summary = summarizeLongMemEval([
       outcome({ questionType: 'single-session-user', correct: true }),
-      outcome({ questionType: 'single-session-user', correct: false, evidenceInPrompt: false }),
+      outcome({
+        questionType: 'single-session-user',
+        correct: false,
+        evidenceInPrompt: false,
+        answerRoundRecall: 0,
+      }),
       outcome({
         questionType: 'knowledge-update',
         correct: true,
         abstention: true,
         memorySearchCalls: 2,
         evidenceInPrompt: null,
+        answerRoundRecall: null,
         durationMs: 3_000,
       }),
     ]);
@@ -250,6 +300,7 @@ describe('LongMemEval results', () => {
       taskAveragedAccuracy: 0.75,
       abstention: { questions: 1, correct: 1, accuracy: 1 },
       evidenceInPromptRate: 0.5,
+      answerRoundRecall: 0.5,
       memorySearchRate: 1 / 3,
       incomplete: 0,
       totalTokens: 300,
