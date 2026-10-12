@@ -225,6 +225,61 @@ describe('toolTurnExecution', () => {
     );
   });
 
+  // Traced on the GLM 5.3 Flash suite (e7f3-r1, organic-mobile-assistant-continuity turn 6):
+  // asked to move an event without a new time, the model asked for the time, and a review
+  // gate refused the question because an unrelated earlier catalog search had suggested
+  // other categories; the model searched again and re-asked the same question.
+  it('registers a clarification whatever earlier tool discovery suggested', async () => {
+    mockedDetectLoops.mockReturnValue({ loopDetected: false });
+    let blocker: string | undefined = 'not called';
+    mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
+      blocker = lifecycle.workflowToolCallBlocker(lifecycle.tc.name, lifecycle.tc.arguments);
+      return {
+        toolCallId: lifecycle.tc.id,
+        effectiveToolName: lifecycle.tc.name,
+        result: blocker ?? '{}',
+        toolMessage: createToolMessage(),
+      };
+    });
+    mockedExecuteToolExecutionBatch.mockImplementation(async (batch: any) => [
+      await batch.executePendingToolCall(batch.executableToolCalls[0], 0, {
+        previewCompletedToolNames: new Set(),
+      }),
+    ]);
+    const params = createParams({
+      toolCallHistory: [
+        {
+          name: 'tool_catalog',
+          arguments: '{"category":"workspace","query":"read file"}',
+          timestamp: 1,
+          status: 'completed',
+          result: JSON.stringify({
+            mode: 'search',
+            totalMatches: 0,
+            recovery: { searchWithoutCategory: true, suggestedCategories: ['files', 'calendar'] },
+          }),
+        },
+      ],
+      pendingToolCalls: [
+        createPendingToolCall({
+          id: 'tc-clarify',
+          name: 'request_clarification',
+          arguments: JSON.stringify({
+            missing_information: [
+              { key: 'new-start', required_for: 'execution', semantic_role: 'time' },
+            ],
+            question: 'What new date and time should the review move to?',
+          }),
+        }),
+      ],
+    });
+
+    await executeAgentControlGraphToolTurn(params);
+
+    expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+    expect(blocker).toBeUndefined();
+  });
+
   it.each([
     [
       'runs an effectful call with structured arguments',
