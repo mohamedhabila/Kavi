@@ -2064,8 +2064,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
       memory_remember: 'Mémoriser',
       memory_search: 'Rechercher dans la mémoire',
       mobile_ui_action: "Agir sur l'écran",
-      notification_cancel: 'Annuler la notification',
-      notification_schedule: 'Programmer une notification',
       notification_send: 'Envoyer une notification',
       open_url: 'Ouvrir le lien',
       pdf_read: 'Lire le PDF',

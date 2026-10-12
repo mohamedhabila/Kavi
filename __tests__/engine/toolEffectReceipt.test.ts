@@ -313,15 +313,13 @@ describe('ToolEffectReceipt', () => {
       },
     ],
     [
-      'scheduled notification',
-      'notification_schedule',
-      { status: 'notification_scheduled', id: 'notification-7' },
+      'scheduled reminder',
+      'reminder',
+      { status: 'reminder_created', reminder: { id: 'reminder-7' } },
       {
-        effectKind: 'notification.schedule',
+        effectKind: 'reminder.schedule',
         effectState: 'applied',
         verificationState: 'verified',
-        resource: { kind: 'notification', id: 'notification-7' },
-        operationHandle: { kind: 'notification_schedule', id: 'notification-7' },
       },
     ],
     [

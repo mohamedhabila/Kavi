@@ -24,7 +24,9 @@ const scenarioSourceFiles = [
   'src/acceptance/e2eAgent/benchmarkWorkspaceScenarios.ts',
   'src/acceptance/e2eAgent/directBenchmarkScenarios.ts',
 ];
-const allowedMocks = new Set(['expo-sqlite']);
+// Native modules Node lacks, replaced at the operating-system boundary: the database and
+// the notification scheduler. Product modules are never mocked in a live run.
+const allowedMocks = new Set(['expo-sqlite', 'expo-notifications']);
 const bannedScenarioFields = [
   'allowedTools',
   'requiredTools',

@@ -2015,8 +2015,6 @@ export const en: TranslationMap = {
       memory_remember: 'Remember',
       memory_search: 'Search Memory',
       mobile_ui_action: 'Use App Screen',
-      notification_cancel: 'Cancel Notification',
-      notification_schedule: 'Schedule Notification',
       notification_send: 'Send Notification',
       open_url: 'Open Link',
       pdf_read: 'Read PDF',

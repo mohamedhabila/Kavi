@@ -1941,8 +1941,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
       memory_remember: '記憶する',
       memory_search: '記憶を検索',
       mobile_ui_action: '画面を操作',
-      notification_cancel: '通知をキャンセル',
-      notification_schedule: '通知を予約',
       notification_send: '通知を送信',
       open_url: 'リンクを開く',
       pdf_read: 'PDF を読み取り',

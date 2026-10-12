@@ -36,11 +36,7 @@ import {
 import { HAPTIC_FEEDBACK_TOOL } from './haptics/definitions';
 import { LOCATION_CURRENT_TOOL } from './location/definitions';
 import { CAMERA_CLIP_TOOL, PHOTOS_PICK_TOOL, SCREEN_RECORD_TOOL } from './media/definitions';
-import {
-  NOTIFICATION_CANCEL_TOOL,
-  NOTIFICATION_SCHEDULE_TOOL,
-  NOTIFICATION_SEND_TOOL,
-} from './notifications/definitions';
+import { NOTIFICATION_SEND_TOOL } from './notifications/definitions';
 import {
   SHARE_CONTACT_TOOL,
   SHARE_FILE_TOOL,
@@ -80,8 +76,6 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   SHARE_TOOL,
   OPEN_URL_TOOL,
   NOTIFICATION_SEND_TOOL,
-  NOTIFICATION_SCHEDULE_TOOL,
-  NOTIFICATION_CANCEL_TOOL,
   DEVICE_STATUS_TOOL,
   DEVICE_INFO_TOOL,
   DEVICE_PERMISSIONS_TOOL,

@@ -257,7 +257,9 @@ describe('needsApproval', () => {
     expect(needsApprovalWithContext('clipboard_read', {})).toBe(true);
     expect(needsApprovalWithContext('photos_pick', { count: 3 })).toBe(true);
     expect(needsApprovalWithContext('screen_record', {})).toBe(true);
-    expect(needsApprovalWithContext('notification_cancel', { id: 'notification-id' })).toBe(true);
+    expect(needsApprovalWithContext('notification_send', { title: 'Ping', body: 'Now' })).toBe(
+      true,
+    );
   });
 
   it('allows safe https open_url calls but blocks non-web schemes', () => {

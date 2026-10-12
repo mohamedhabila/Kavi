@@ -79,11 +79,7 @@ describe('builtin executor tool catalog', () => {
       const parsed = parseCompletedToolOutcome(result);
 
       expect(parsed.category).toBe('notifications');
-      expect(parsed.tools.map((tool: any) => tool.name)).toEqual([
-        'notification_send',
-        'notification_schedule',
-        'notification_cancel',
-      ]);
+      expect(parsed.tools.map((tool: any) => tool.name)).toEqual(['notification_send', 'reminder']);
     });
 
     it('ignores unsupported capability filters without hiding category matches', async () => {

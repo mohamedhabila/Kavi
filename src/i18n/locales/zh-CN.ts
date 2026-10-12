@@ -1878,8 +1878,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       memory_remember: '记住',
       memory_search: '搜索记忆',
       mobile_ui_action: '操作屏幕',
-      notification_cancel: '取消通知',
-      notification_schedule: '安排通知',
       notification_send: '发送通知',
       open_url: '打开链接',
       pdf_read: '读取 PDF',

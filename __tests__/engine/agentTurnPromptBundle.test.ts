@@ -47,10 +47,10 @@ describe('buildAgentTurnPromptBundle', () => {
     const bundle = buildAgentTurnPromptBundle({
       ...baseParams,
       workflowRuntimePrompt:
-        '## Available Workflow Continuations\n- notification_schedule → notification_cancel',
+        '## Available Workflow Continuations\n- calendar_create_event → calendar_update_event',
     });
 
-    expect(bundle.enrichedSystemPrompt).toContain('notification_schedule → notification_cancel');
+    expect(bundle.enrichedSystemPrompt).toContain('calendar_create_event → calendar_update_event');
     const workflowSection = bundle.enrichedSystemPromptSections.find(
       (section) => section.purpose === 'workflow_runtime',
     );

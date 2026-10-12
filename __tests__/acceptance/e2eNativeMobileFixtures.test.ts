@@ -358,27 +358,6 @@ describe('E2E native mobile fixtures', () => {
     });
   });
 
-  it('routes notification schedule and cancel fixtures through executeToolInner', async () => {
-    const scheduleRaw = await executeToolInner(
-      'notification_schedule',
-      JSON.stringify({ title: 'E2E', body: 'Ping', delaySeconds: 60 }),
-      'conv-mobile-notification-e2e',
-    );
-    const scheduled = parseCompletedToolOutcome(scheduleRaw);
-    expect(scheduled.status).toBe('notification_scheduled');
-
-    const cancelRaw = await executeToolInner(
-      'notification_cancel',
-      JSON.stringify({ id: scheduled.id }),
-      'conv-mobile-notification-e2e',
-    );
-    expect(parseCompletedToolOutcome(cancelRaw)).toEqual({
-      status: 'notification_cancelled',
-      id: 'e2e-notification-scheduled',
-      cancelled: true,
-    });
-  });
-
   it('returns structural permission-denied evidence without marking the tool result as malformed', async () => {
     const raw = await executeToolInner('location_current', '{}', 'conv-mobile-permission-e2e');
     expect(raw.status).toBe('failed');

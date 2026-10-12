@@ -2022,8 +2022,6 @@ export const de: TranslationMap = mergeTranslations(en, {
       memory_remember: 'Merken',
       memory_search: 'Gedächtnis durchsuchen',
       mobile_ui_action: 'Bildschirm bedienen',
-      notification_cancel: 'Benachrichtigung abbrechen',
-      notification_schedule: 'Benachrichtigung planen',
       notification_send: 'Benachrichtigung senden',
       open_url: 'Link öffnen',
       pdf_read: 'PDF lesen',

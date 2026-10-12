@@ -103,6 +103,7 @@ jest.mock('../../src/engine/tools/definitions', () => ({
     { name: 'text_search', description: 'Search text in files' },
     { name: 'web_search', description: 'Search the web' },
     { name: 'web_fetch', description: 'Fetch a web page as clean text' },
+    { name: 'reminder', description: 'Create, list, update, or cancel a reminder' },
     { name: 'javascript', description: 'Run JavaScript' },
     { name: 'python', description: 'Run Python' },
     { name: 'browser_navigate', description: 'Navigate browser' },

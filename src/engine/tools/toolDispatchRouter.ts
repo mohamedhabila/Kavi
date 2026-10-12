@@ -80,8 +80,6 @@ export const NATIVE_TOOL_NAMES = new Set([
   'share',
   'open_url',
   'notification_send',
-  'notification_schedule',
-  'notification_cancel',
   'device_status',
   'device_info',
   'device_permissions',

@@ -65,14 +65,7 @@ describe('builtin-tool-catalogSearch', () => {
     const parsed = parseCompletedToolOutcome(result);
     const toolNames = parsed.tools.map((tool: { name: string }) => tool.name);
 
-    expect(toolNames).toEqual(
-      expect.arrayContaining([
-        'clipboard',
-        'share',
-        'notification_schedule',
-        'notification_cancel',
-      ]),
-    );
+    expect(toolNames).toEqual(expect.arrayContaining(['clipboard', 'share', 'reminder']));
   });
 
   it('ranks structurally related identifier tokens without natural-language task routes', () => {
@@ -190,16 +183,16 @@ describe('builtin-tool-catalogSearch', () => {
 
   it('publishes structural producer-consumer edges for dependent tool workflows', async () => {
     const result = await executeToolCatalog({
-      category: 'notifications',
-      query: 'schedule cancel notification',
+      category: 'calendar',
+      query: 'create update calendar event',
       capabilities: ['write'],
     });
     const parsed = parseCompletedToolOutcome(result);
 
     expect(parsed.workflowEdges).toContainEqual({
-      producer: 'notification_schedule',
-      consumer: 'notification_cancel',
-      resourceKinds: ['notification_id'],
+      producer: 'calendar_create_event',
+      consumer: 'calendar_update_event',
+      resourceKinds: ['calendar_event'],
       producerCallableNow: true,
       consumerCallableNow: true,
     });

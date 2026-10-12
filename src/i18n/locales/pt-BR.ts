@@ -2041,8 +2041,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       memory_remember: 'Memorizar',
       memory_search: 'Buscar na memória',
       mobile_ui_action: 'Usar a tela',
-      notification_cancel: 'Cancelar notificação',
-      notification_schedule: 'Agendar notificação',
       notification_send: 'Enviar notificação',
       open_url: 'Abrir link',
       pdf_read: 'Ler PDF',

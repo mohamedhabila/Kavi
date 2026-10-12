@@ -1876,8 +1876,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       memory_remember: '記住',
       memory_search: '搜尋記憶',
       mobile_ui_action: '操作畫面',
-      notification_cancel: '取消通知',
-      notification_schedule: '排程通知',
       notification_send: '傳送通知',
       open_url: '開啟連結',
       pdf_read: '讀取 PDF',

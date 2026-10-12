@@ -214,7 +214,7 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
       'share',
       'open_url',
       'notification_send',
-      'notification_schedule',
+      'reminder',
       'device_query',
       'photos_pick',
       'camera_clip',

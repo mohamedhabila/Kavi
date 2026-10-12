@@ -151,7 +151,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       'maps_open',
       'share',
       'notification_send',
-      'notification_schedule',
+      'reminder',
       'clipboard',
       'speak',
       'open_url',

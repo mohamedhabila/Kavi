@@ -64,9 +64,7 @@ describe('useToolPermissionsStore', () => {
     expect(useToolPermissionsStore.getState().requiresConfirmation('clipboard_read')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('photos_pick')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('screen_record')).toBe(true);
-    expect(useToolPermissionsStore.getState().requiresConfirmation('notification_cancel')).toBe(
-      true,
-    );
+    expect(useToolPermissionsStore.getState().requiresConfirmation('notification_send')).toBe(true);
   });
 
   it('requiresConfirmation returns false for non-dangerous tools', () => {

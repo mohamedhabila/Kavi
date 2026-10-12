@@ -308,13 +308,6 @@ jest.mock('../../src/engine/tools/native/executor', () => ({
         ),
       );
     }
-    if (name === 'notification_schedule') {
-      return Promise.resolve(
-        mockCompletedToolOutcome(
-          JSON.stringify({ status: 'notification_scheduled', id: 'notification-id' }),
-        ),
-      );
-    }
     return Promise.resolve(mockCompletedToolOutcome('{"status":"ok"}'));
   }),
 }));

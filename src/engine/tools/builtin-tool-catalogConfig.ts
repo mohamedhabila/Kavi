@@ -129,8 +129,8 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'Pick, inspect, edit, create, and share device contacts with privacy-first native flows.',
   },
   notifications: {
-    tools: ['notification_send', 'notification_schedule', 'notification_cancel'],
-    purpose: 'Send, schedule, and cancel local device notifications.',
+    tools: ['notification_send', 'reminder'],
+    purpose: 'Send local device notifications now, or schedule and cancel them as reminders.',
   },
   native: {
     tools: [
@@ -159,8 +159,6 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'share',
       'open_url',
       'notification_send',
-      'notification_schedule',
-      'notification_cancel',
       'device_query',
       'photos_pick',
       'camera_clip',
@@ -184,7 +182,7 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
     purpose: 'Remember, search and forget long-term memories and earlier conversations.',
   },
   automation: {
-    tools: ['cron', 'notification_send', 'notification_schedule'],
+    tools: ['cron', 'notification_send', 'reminder'],
     purpose: 'Create scheduled tasks, cron jobs, and user alerts.',
   },
   code: {

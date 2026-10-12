@@ -37,16 +37,10 @@ describe('tool invocation privacy presentation', () => {
         expected: { textLength: 15 },
       },
       {
-        toolName: 'notification_schedule',
-        args: { title: 'Call oncology', body: 'Ask about scan result', delaySeconds: 600 },
+        toolName: 'notification_send',
+        args: { title: 'Call oncology', body: 'Ask about scan result' },
         forbidden: ['Call oncology', 'scan result'],
-        expected: { hasTitle: true, hasBody: true, delaySeconds: 600 },
-      },
-      {
-        toolName: 'notification_cancel',
-        args: { id: 'private-notification-id' },
-        forbidden: ['private-notification-id'],
-        expected: { hasId: true },
+        expected: { hasTitle: true, hasBody: true },
       },
       {
         toolName: 'calendar_update_event',

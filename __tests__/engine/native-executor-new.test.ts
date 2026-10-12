@@ -85,7 +85,6 @@ import {
   executePhotosPick,
   executeScreenRecord,
 } from '../../src/engine/tools/native/media/executor';
-import { executeNotificationCancel } from '../../src/engine/tools/native/notifications/executor';
 import {
   completedToolContent,
   failedToolContent,
@@ -260,18 +259,6 @@ describe('Haptic Feedback Tool', () => {
   });
 });
 
-describe('Notification Cancel Tool', () => {
-  it('returns structured cancellation evidence', async () => {
-    const result = await executeNotificationCancel({ id: 'notification-id' });
-    const parsed = parseCompletedToolOutcome(result);
-    expect(parsed).toEqual({
-      status: 'notification_cancelled',
-      id: 'notification-id',
-      cancelled: true,
-    });
-  });
-});
-
 describe('Native Tool Dispatcher — New Tools', () => {
   it('routes device_status correctly', async () => {
     const result = await executeNativeTool('device_status', '{}');
@@ -320,11 +307,6 @@ describe('Native Tool Dispatcher — New Tools', () => {
   it('routes photos_pick through the system picker', async () => {
     const result = await executeNativeTool('photos_pick', '{"count":1}');
     expect(parseFailedToolOutcome(result)).toEqual({ status: 'cancelled' });
-  });
-
-  it('routes notification_cancel correctly', async () => {
-    const result = await executeNativeTool('notification_cancel', '{"id":"notification-id"}');
-    expect(parseCompletedToolOutcome(result).status).toBe('notification_cancelled');
   });
 
   it('continues to handle unknown tools', async () => {

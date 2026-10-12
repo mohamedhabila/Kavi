@@ -8,6 +8,10 @@ jest.mock('expo-sqlite', () => {
   const { makeExpoSqliteMock } = require('../helpers/expoSqliteShim');
   return makeExpoSqliteMock({ fileBacked: true });
 });
+// Scheduled notifications land in the native fixture state the rubrics read.
+jest.mock('expo-notifications', () =>
+  require('../../src/acceptance/e2eAgent/e2eNativeNotificationsModule').createE2ENotificationsModule(),
+);
 
 import { getThinkingParams } from '../../src/engine/thinking';
 import { LlmService } from '../../src/services/llm/LlmService';

@@ -505,19 +505,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         operationHandle: selector('notification_request', 'result', ['id']),
       },
     ),
-    notification_schedule: effectful(
-      'notification.schedule',
-      { notification_scheduled: VERIFIED },
-      {
-        resource: selector('notification', 'result', ['id']),
-        operationHandle: selector('notification_schedule', 'result', ['id']),
-      },
-    ),
-    notification_cancel: effectful(
-      'notification.cancel',
-      { notification_cancelled: VERIFIED },
-      { resource: selector('notification', 'result', ['id']) },
-    ),
     camera_clip: effectful('media.capture', { recorded: APPLIED, cancelled: CANCELLED }),
     screen_record: effectful('media.capture', {
       captured: APPLIED,

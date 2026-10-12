@@ -30,10 +30,6 @@ import {
   MAPS_OPEN_TOOL,
   SMS_COMPOSE_TOOL,
 } from '../../src/engine/tools/native/communication/definitions';
-import {
-  NOTIFICATION_CANCEL_TOOL,
-  NOTIFICATION_SCHEDULE_TOOL,
-} from '../../src/engine/tools/native/notifications/definitions';
 import { SHARE_TEXT_TOOL, SHARE_URL_TOOL } from '../../src/engine/tools/native/share/definitions';
 import {
   EXPO_EAS_CREATE_PROJECT_TOOL,
@@ -318,8 +314,6 @@ describe('tool capability contracts', () => {
         'clipboard_write',
         'clipboard_read',
         'share_text',
-        'notification_schedule',
-        'notification_cancel',
       ]),
     );
   });
@@ -371,13 +365,6 @@ describe('tool capability contracts', () => {
     expect(SHARE_TEXT_TOOL.contract?.consumes).toEqual([
       { kind: 'clipboard_text', required: false },
     ]);
-    expect(NOTIFICATION_SCHEDULE_TOOL.contract).toEqual(
-      expect.objectContaining({
-        produces: [{ kind: 'notification_id' }],
-        precedes: ['notification_cancel'],
-      }),
-    );
-    expect(NOTIFICATION_CANCEL_TOOL.contract?.consumes).toEqual([{ kind: 'notification_id' }]);
     expect(CALENDAR_EVENTS_TOOL.contract).toEqual(
       expect.objectContaining({
         produces: [{ kind: 'calendar_event' }],

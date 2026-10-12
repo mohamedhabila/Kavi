@@ -33,11 +33,7 @@ import {
 import { executeHapticFeedback } from './haptics/executor';
 import { executeLocationCurrent } from './location/executor';
 import { executeCameraClip, executePhotosPick, executeScreenRecord } from './media/executor';
-import {
-  executeNotificationCancel,
-  executeNotificationSchedule,
-  executeNotificationSend,
-} from './notifications/executor';
+import { executeNotificationSend } from './notifications/executor';
 import {
   executeShareContact,
   executeShareFile,
@@ -146,10 +142,6 @@ export async function executeNativeTool(
       return executeOpenUrl(args);
     case 'notification_send':
       return executeNotificationSend(args);
-    case 'notification_schedule':
-      return executeNotificationSchedule(args);
-    case 'notification_cancel':
-      return executeNotificationCancel(args);
     case 'device_status':
       return executeDeviceStatus();
     case 'device_info':

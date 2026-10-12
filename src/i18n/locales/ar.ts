@@ -2116,8 +2116,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
       memory_remember: 'حفظ في الذاكرة',
       memory_search: 'البحث في الذاكرة',
       mobile_ui_action: 'استخدام الشاشة',
-      notification_cancel: 'إلغاء الإشعار',
-      notification_schedule: 'جدولة إشعار',
       notification_send: 'إرسال إشعار',
       open_url: 'فتح الرابط',
       pdf_read: 'قراءة ملف PDF',

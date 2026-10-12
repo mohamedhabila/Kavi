@@ -470,20 +470,12 @@ function summarizeNativeTool(
       redactedArguments = { scheme };
       break;
     }
-    case 'notification_send':
-    case 'notification_schedule': {
+    case 'notification_send': {
       if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
       if (hasNonEmptyString(args.body)) pushDetail(details, 'toolApproval.details.bodyIncluded');
       redactedArguments = {
         hasTitle: hasNonEmptyString(args.title),
         hasBody: hasNonEmptyString(args.body),
-        delaySeconds: typeof args.delaySeconds === 'number' ? args.delaySeconds : undefined,
-      };
-      break;
-    }
-    case 'notification_cancel': {
-      redactedArguments = {
-        hasId: hasNonEmptyString(args.id),
       };
       break;
     }

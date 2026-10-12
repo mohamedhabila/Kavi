@@ -239,6 +239,17 @@ export function resetE2ENativeMobileFixtures(): void {
   resetE2ENativeMobileInvocationEvidence();
 }
 
+/** The operating system accepted a notification that fires `delaySeconds` from now. */
+export function recordE2ENotificationScheduled(delaySeconds: number): void {
+  e2eNativeFixtureState.notification.scheduled = true;
+  e2eNativeFixtureState.notification.delaySeconds = delaySeconds;
+}
+
+/** The operating system withdrew a notification it had scheduled. */
+export function recordE2ENotificationCancelled(): void {
+  e2eNativeFixtureState.notification.cancelled = true;
+}
+
 export function getE2ENativeMobileFixtureStateSnapshot(): E2ENativeMobileFixtureStateSnapshot {
   return JSON.parse(JSON.stringify(e2eNativeFixtureState)) as E2ENativeMobileFixtureStateSnapshot;
 }
@@ -612,22 +623,6 @@ async function executeE2ENativeMobileTool(
         id: 'e2e-notification-now',
         titleLength: typeof args.title === 'string' ? args.title.length : 0,
         bodyLength: typeof args.body === 'string' ? args.body.length : 0,
-      });
-    case 'notification_schedule':
-      e2eNativeFixtureState.notification.scheduled = true;
-      e2eNativeFixtureState.notification.delaySeconds =
-        typeof args.delaySeconds === 'number' ? Math.max(0, Math.floor(args.delaySeconds)) : 0;
-      return completedE2ENativeOutcome({
-        status: 'notification_scheduled',
-        id: 'e2e-notification-scheduled',
-        delaySeconds: e2eNativeFixtureState.notification.delaySeconds,
-      });
-    case 'notification_cancel':
-      e2eNativeFixtureState.notification.cancelled = true;
-      return completedE2ENativeOutcome({
-        status: 'notification_cancelled',
-        id: typeof args.id === 'string' ? args.id : 'e2e-notification-scheduled',
-        cancelled: true,
       });
     case 'photos_pick': {
       const requestedCount =

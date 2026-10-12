@@ -81,8 +81,6 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
     'clipboard',
     'share',
     'notification_send',
-    'notification_schedule',
-    'notification_cancel',
     'device_permissions',
     'photos_pick',
     'camera_clip',
