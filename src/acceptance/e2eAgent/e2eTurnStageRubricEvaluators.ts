@@ -192,20 +192,21 @@ export function evaluateE2ETurnStageRubric(
           detail: `turn ${rubric.turnIndex} clarification expectation is invalid`,
         };
       }
-      const clarificationCall = turn.toolCalls.find(
-        (call) => call.name === REQUEST_CLARIFICATION_TOOL_NAME,
-      );
-      const clarificationResult = clarificationCall
-        ? turn.toolResults.find(
+      // The clarification the turn recorded: a call the tool refused and the model then
+      // repaired does not count against it.
+      const recordedClarifications = turn.toolCalls
+        .filter((call) => call.name === REQUEST_CLARIFICATION_TOOL_NAME)
+        .map((call) =>
+          turn.toolResults.find(
             (result) =>
-              result.toolCallId === clarificationCall.id &&
+              result.toolCallId === call.id &&
               result.name === REQUEST_CLARIFICATION_TOOL_NAME &&
               !result.isError,
-          )
-        : undefined;
-      const clarification = clarificationResult
-        ? parseRequestClarificationToolResult(clarificationResult.content)
-        : undefined;
+          ),
+        )
+        .map((result) => (result ? parseRequestClarificationToolResult(result.content) : undefined))
+        .filter((parsed) => parsed !== undefined);
+      const clarification = recordedClarifications[recordedClarifications.length - 1];
       if (!clarification) {
         return {
           fixtureId,

@@ -233,6 +233,68 @@ describe('turn stage-attribution rubrics', () => {
     });
   });
 
+  it('grades the clarification a turn recorded after the tool refused an earlier call', () => {
+    const rubric = {
+      kind: 'turn_clarification',
+      turnIndex: 1,
+      requiredMissingInformation: [{ semanticRole: 'recipient' }],
+    } as const;
+    const question = 'Who should the message go to?';
+    const refused = JSON.stringify({
+      status: 'error',
+      code: 'missing_required_argument',
+      tool: 'request_clarification',
+      missingRequiredArguments: ['missing_information'],
+    });
+    const recorded = JSON.stringify(
+      buildRequestClarificationToolResult({
+        fields: [{ key: 'recipient', requiredFor: 'execution', semanticRole: 'recipient' }],
+        question,
+      }),
+    );
+    const result = buildResult(
+      buildTurn({
+        finalAssistant: { ...buildTurn().finalAssistant!, text: question },
+        toolCalls: [
+          {
+            id: 'tc-refused',
+            name: 'request_clarification',
+            arguments: JSON.stringify({ question }),
+          },
+          {
+            id: 'tc-recorded',
+            name: 'request_clarification',
+            arguments: JSON.stringify({
+              missing_information: [
+                { key: 'recipient', required_for: 'execution', semantic_role: 'recipient' },
+              ],
+              question,
+            }),
+          },
+        ],
+        toolResults: [
+          {
+            toolCallId: 'tc-refused',
+            name: 'request_clarification',
+            content: refused,
+            isError: true,
+          },
+          {
+            toolCallId: 'tc-recorded',
+            name: 'request_clarification',
+            content: recorded,
+            isError: false,
+          },
+        ],
+      }),
+    );
+
+    expect(evaluateE2ERubric(result, rubric)).toMatchObject({
+      passed: true,
+      detail: 'turn 1 clarification requested information: recipient:*',
+    });
+  });
+
   it('proves exact per-turn native invocation absence and detects an attempted update', () => {
     const rubric = {
       kind: 'turn_native_invocation_count',
