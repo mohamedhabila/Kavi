@@ -1100,13 +1100,13 @@ export const ar: TranslationMap = mergeTranslations(en, {
     disableLongTermMemory: 'تعطيل الذاكرة طويلة الأمد',
     disableLongTermMemoryHint:
       'عند التفعيل، تبقى المحادثات بدون ذاكرة ولا تُحفظ أي معلومات بين المحادثات.',
-    consolidationProvider: 'مزوّد توطيد الذاكرة',
+    consolidationProvider: 'نموذج الذاكرة',
     consolidationProviderHint:
-      'اختر كيف يُثرى Kavi الذاكرة بعد كل دور. يتسلسل الوضع التلقائي: الجهاز → الدردشة النشطة → الاستخراج البنيوي. الوضع البنيوي فقط يستمر في تسجيل الحلقات والتركيز.',
+      'يحدد النموذج الذي يقرأ كل جولة مكتملة ويحفظ ما يستحق التذكر. في الوضع التلقائي يُستخدم نموذج المحادثة النشط. عند الإيقاف لا يحفظ Kavi إلا ما يُطلب منه تذكره.',
     consolidationModeAuto: 'تلقائي',
     consolidationModeLocal: 'على الجهاز',
     consolidationModeActiveProvider: 'الدردشة النشطة',
-    consolidationModeOff: 'بنيوي فقط',
+    consolidationModeOff: 'إيقاف',
     compactionProvider: 'مزوّد ضغط السياق',
     compactionProviderHint:
       'نموذج اختياري أقل تكلفة لملخصات الضغط من المستوى 2/3. عند الإيقاف يستخدم Kavi ضغطًا هيكليًا حتميًا.',

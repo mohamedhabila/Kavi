@@ -1065,13 +1065,13 @@ export const de: TranslationMap = mergeTranslations(en, {
     disableLongTermMemory: 'Langzeitspeicher deaktivieren',
     disableLongTermMemoryHint:
       'Wenn aktiviert, bleiben Unterhaltungen zustandslos und es werden keine Fakten zwischen Chats gespeichert.',
-    consolidationProvider: 'Anbieter für Speicherkonsolidierung',
+    consolidationProvider: 'Modell für das Gedächtnis',
     consolidationProviderHint:
-      'Legt fest, wie Kavi Speicher nach jedem Zug anreichert. Auto nutzt On-Device → aktiver Chat → strukturelle Extraktion. Nur strukturell speichert weiter Episoden und Fokus.',
+      'Legt fest, welches Modell jede abgeschlossene Runde liest und speichert, was sich zu merken lohnt. Automatisch wird das aktive Chat-Modell verwendet. Ist dies ausgeschaltet, speichert Kavi nur, was es sich ausdrücklich merken soll.',
     consolidationModeAuto: 'Automatisch',
     consolidationModeLocal: 'On-Device',
     consolidationModeActiveProvider: 'Aktiver Chat',
-    consolidationModeOff: 'Nur strukturell',
+    consolidationModeOff: 'Aus',
     compactionProvider: 'Anbieter für Kontextverdichtung',
     compactionProviderHint:
       'Optional günstigeres Modell für Stufe-2/3-Zusammenfassungen. Aus = deterministische strukturelle Verdichtung.',

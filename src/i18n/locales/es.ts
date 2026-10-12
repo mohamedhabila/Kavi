@@ -1082,13 +1082,13 @@ export const es: TranslationMap = mergeTranslations(en, {
     disableLongTermMemory: 'Desactivar memoria a largo plazo',
     disableLongTermMemoryHint:
       'Cuando está activada, las conversaciones permanecen sin estado y no se recuerdan datos entre chats.',
-    consolidationProvider: 'Proveedor para consolidar memoria',
+    consolidationProvider: 'Modelo de memoria',
     consolidationProviderHint:
-      'Elige cómo Kavi enriquece la memoria tras cada turno. Auto encadena dispositivo → chat activo → extracción estructural. Solo estructural sigue guardando episodios y foco.',
+      'Elige qué modelo lee cada turno terminado y guarda lo que vale la pena recordar. En automático se usa el modelo del chat activo. Si está desactivado, Kavi solo guarda lo que se le pide recordar.',
     consolidationModeAuto: 'Automático',
     consolidationModeLocal: 'En dispositivo',
     consolidationModeActiveProvider: 'Chat activo',
-    consolidationModeOff: 'Solo estructural',
+    consolidationModeOff: 'Desactivado',
     compactionProvider: 'Proveedor de compactación de contexto',
     compactionProviderHint:
       'Modelo opcional más económico para resúmenes de compactación nivel 2/3. Desactivado = compactación estructural determinista.',

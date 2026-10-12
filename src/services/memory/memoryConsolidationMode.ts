@@ -51,7 +51,3 @@ export function resolveConsolidationProviderIdForMode(
   const trimmed = (consolidationProvider ?? '').trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-
-export function isMemoryConsolidationEnrichmentEnabled(mode: MemoryConsolidationMode): boolean {
-  return mode !== 'off';
-}

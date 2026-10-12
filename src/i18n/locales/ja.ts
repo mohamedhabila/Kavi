@@ -1031,13 +1031,13 @@ export const ja: TranslationMap = mergeTranslations(en, {
     disableLongTermMemory: '長期記憶を無効化',
     disableLongTermMemoryHint:
       '有効にすると、会話はステートレスとなり、チャット間で事実が記憶されません。',
-    consolidationProvider: 'メモリ統合プロバイダー',
+    consolidationProvider: 'メモリー用モデル',
     consolidationProviderHint:
-      '各ターン後のメモリ強化方法を選択します。Auto はオンデバイス → アクティブチャット → 構造抽出の順です。構造のみでもエピソードとフォーカスは記録されます。',
+      '完了した各ターンを読み、覚えておく価値のある内容を保存するモデルを選びます。自動ではアクティブなチャットモデルを使います。オフの場合、Kaviは覚えるよう頼まれた内容だけを保存します。',
     consolidationModeAuto: '自動',
     consolidationModeLocal: 'オンデバイス',
     consolidationModeActiveProvider: 'アクティブチャット',
-    consolidationModeOff: '構造のみ',
+    consolidationModeOff: 'オフ',
     compactionProvider: 'コンテキスト圧縮プロバイダー',
     compactionProviderHint:
       'ティア2/3圧縮要約用の低コストモデル（任意）。オフの場合は決定論的な構造圧縮を使用します。',

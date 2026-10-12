@@ -41,8 +41,9 @@ export interface AppSettings {
   systemPrompt: string;
   defaultConversationMode?: ConversationMode;
   /**
-   * Enrichment strategy for memory consolidation. `auto` cascades through
-   * dedicated provider → on-device → active chat → structural extraction.
+   * Which model extracts memories from finished turns: `auto` uses the active chat model,
+   * `local` an on-device model, `specific` the chosen provider, and `off` none (Kavi then
+   * saves only what it is asked to remember).
    */
   memoryConsolidationMode?: MemoryConsolidationMode;
   /**

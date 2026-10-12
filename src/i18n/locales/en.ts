@@ -1063,13 +1063,13 @@ export const en: TranslationMap = {
     disableLongTermMemory: 'Disable long-term memory',
     disableLongTermMemoryHint:
       'When on, conversations stay stateless and no facts are remembered across chats.',
-    consolidationProvider: 'Memory consolidation provider',
+    consolidationProvider: 'Memory model',
     consolidationProviderHint:
-      'Choose how Kavi enriches memory after each turn. Auto cascades on-device → active chat → structural extraction. Structural-only still records episodes and focus.',
+      'Choose which model reads each finished turn and saves what is worth remembering. Auto uses the active chat model. When off, Kavi saves only what it is asked to remember.',
     consolidationModeAuto: 'Auto',
     consolidationModeLocal: 'On-device',
     consolidationModeActiveProvider: 'Active chat',
-    consolidationModeOff: 'Structural only',
+    consolidationModeOff: 'Off',
     compactionProvider: 'Context compaction provider',
     compactionProviderHint:
       'Optional cheaper model for tier-2/tier-3 compaction summaries. When Off, Kavi uses deterministic structural compaction.',
