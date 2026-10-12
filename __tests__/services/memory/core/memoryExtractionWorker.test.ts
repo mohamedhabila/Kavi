@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { closeMemoryDb } from '../../../../src/services/memory/database';
 import { resetMemoryCoreSchemaCacheForTests } from '../../../../src/services/memory/core/memorySchema';
 import { searchMemoryItems } from '../../../../src/services/memory/core/memoryItemsStore';
+import { indexClosedTurn } from '../../../../src/services/memory/core/memoryTurnsStore';
 import {
   __resetMemoryExtractionWorkerForTests,
   cancelMemoryExtraction,
@@ -52,12 +53,9 @@ let clock = 1_000;
 
 function setup(call: jest.Mock, resolveModel: () => Promise<unknown> = async () => call) {
   clock = 1_000;
-  __resetMemoryExtractionWorkerForTests({
-    resolveModel: resolveModel as never,
-    readThread: (threadId) =>
-      threadId === 'conv-1' ? messages : threadId === 'conv-2' ? otherMessages : null,
-    now: () => clock,
-  });
+  __resetMemoryExtractionWorkerForTests({ resolveModel: resolveModel as never, now: () => clock });
+  indexClosedTurn({ conversationId: 'conv-1', messages, replyMessageId: 'a1' });
+  indexClosedTurn({ conversationId: 'conv-2', messages: otherMessages, replyMessageId: 'a9' });
 }
 
 beforeEach(() => {
@@ -82,7 +80,7 @@ describe('memory extraction worker', () => {
     const call = jest.fn(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
 
     expect(call).toHaveBeenCalledTimes(1);
@@ -94,7 +92,7 @@ describe('memory extraction worker', () => {
     setup(call);
     const lease = acquireMainInferenceLease('turn-1');
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
     expect(call).not.toHaveBeenCalled();
 
@@ -118,7 +116,7 @@ describe('memory extraction worker', () => {
       .mockImplementation(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
     expect(stored()).toEqual([]);
 
@@ -133,7 +131,7 @@ describe('memory extraction worker', () => {
     const call = jest.fn(async () => ADD_SARA);
     setup(call, async () => null);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
 
     expect(call).not.toHaveBeenCalled();
@@ -147,7 +145,7 @@ describe('memory extraction worker', () => {
       .mockImplementation(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
     expect(stored()).toEqual([]);
 
@@ -166,9 +164,9 @@ describe('memory extraction worker', () => {
     });
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
-    scheduleMemoryExtraction('conv-2', 'a9');
+    scheduleMemoryExtraction('conv-2');
     await settle();
 
     // conv-1 waits out its backoff; conv-2 runs meanwhile instead of re-trying conv-1 early.
@@ -186,7 +184,7 @@ describe('memory extraction worker', () => {
     const call = jest.fn(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     const idle = waitForMemoryExtractionIdle(60_000);
     await settle();
 
@@ -199,7 +197,7 @@ describe('memory extraction worker', () => {
     setup(call);
     const lease = acquireMainInferenceLease('turn-1');
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     const idle = waitForMemoryExtractionIdle(1_000);
     jest.advanceTimersByTime(1_000);
 
@@ -207,11 +205,11 @@ describe('memory extraction worker', () => {
     lease.release();
   });
 
-  it('drops a thread that keeps no memory and settles waiters', async () => {
+  it('settles waiters for a thread with no turns to extract', async () => {
     const call = jest.fn(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('side-thread', 'a1');
+    scheduleMemoryExtraction('conv-empty');
     const idle = waitForMemoryExtractionIdle(60_000);
     await settle();
 
@@ -228,7 +226,7 @@ describe('memory extraction worker', () => {
     );
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
     expect(call).toHaveBeenCalledTimes(1);
     const idle = waitForMemoryExtractionIdle(60_000);
@@ -247,9 +245,9 @@ describe('memory extraction worker', () => {
     const call = jest.fn(async () => ADD_SARA);
     setup(call);
 
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     const idle = waitForMemoryExtractionIdle(60_000);
-    scheduleMemoryExtraction('conv-1', 'a1');
+    scheduleMemoryExtraction('conv-1');
     await settle();
 
     await expect(idle).resolves.toBe(true);

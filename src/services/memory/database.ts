@@ -7,7 +7,7 @@ const MEMORY_DATABASE_NAME = 'kavi-memory.db';
  * by another generation is started over rather than migrated (pre-release: there are no
  * users' memories to carry forward). Bump it whenever a table changes shape.
  */
-export const MEMORY_DATABASE_SCHEMA_VERSION = 2;
+export const MEMORY_DATABASE_SCHEMA_VERSION = 3;
 
 let database: SQLite.SQLiteDatabase | null = null;
 

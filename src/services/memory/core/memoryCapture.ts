@@ -76,7 +76,7 @@ export function publishConversationTurnMemory(
   } catch (error) {
     logger.warn('Could not index the closed turn.', { error: String(error) });
   }
-  scheduleMemoryExtraction(thread.id, reply.id);
+  scheduleMemoryExtraction(thread.id);
 }
 
 /** Captures every turn closed since each thread's cursor: those a killed app never captured. */
@@ -85,17 +85,15 @@ export function catchUpMemoryCapture(conversations: ReadonlyArray<CaptureThread>
   for (const thread of conversations) {
     if (thread.isSideThread) continue;
     try {
-      const cursor = readCaptureCursor(thread.id);
-      let lastClosed: Message | null = null;
+      const indexedThroughAt = readCaptureCursor(thread.id)?.indexedThroughAt ?? 0;
       for (const message of thread.messages) {
-        if (!isClosedReply(message)) continue;
-        lastClosed = message;
-        if (message.timestamp > (cursor?.indexedThroughAt ?? 0)) {
+        if (isClosedReply(message) && message.timestamp > indexedThroughAt) {
           captureTurn(thread, message);
         }
       }
-      if (lastClosed && lastClosed.id !== cursor?.extractedThroughId) {
-        scheduleMemoryExtraction(thread.id, lastClosed.id);
+      const cursor = readCaptureCursor(thread.id);
+      if (cursor && cursor.indexedThroughAt > cursor.extractedThroughAt) {
+        scheduleMemoryExtraction(thread.id);
       }
     } catch (error) {
       logger.warn('Could not catch up on a thread.', { error: String(error) });
@@ -108,7 +106,7 @@ export function skipMemoryCaptureToNow(conversations: ReadonlyArray<CaptureThrea
   const now = Date.now();
   for (const thread of conversations) {
     const last = thread.messages[thread.messages.length - 1];
-    if (last) skipCaptureThrough(thread.id, last, now);
+    if (last) skipCaptureThrough(thread.id, last.timestamp, now);
   }
 }
 

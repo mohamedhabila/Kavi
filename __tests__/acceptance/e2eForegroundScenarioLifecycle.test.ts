@@ -128,10 +128,7 @@ it('rehydrates the production chat store, reopens memory and catches up on the c
   const memory = captureForegroundScenarioMemoryItems();
   expect(memory.items.map((item) => item.text)).toEqual(['Profile token RELAUNCH-PROFILE-73']);
   expect(memory.indexedTurnCount).toBe(1);
-  expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith(
-    'relaunch-conversation',
-    'assistant-before-relaunch',
-  );
+  expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith('relaunch-conversation');
   expect(readPersistedConversationIds()).toEqual(['relaunch-conversation']);
 
   useChatStore.getState().addMessage('relaunch-conversation', {

@@ -3,9 +3,9 @@
 TLA+ models of protocols whose correctness depends on interleavings that unit tests
 reach only by luck. Each model names the source it describes; change the two together.
 
-| Model                                  | Describes                                                                                            | Checks                                                                                                                                                                                           |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [MemoryCapture.tla](MemoryCapture.tla) | Turn capture, the capture cursor and the background extraction worker in `src/services/memory/core/` | A window is applied at most once; nothing said while memory was off is captured; a rewound turn leaves the past-turn index; every turn closed with memory on is eventually indexed and extracted |
+| Model                                  | Describes                                                                                            | Checks                                                                                                                                                                                                                                            |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [MemoryCapture.tla](MemoryCapture.tla) | Turn capture, the capture cursor and the background extraction worker in `src/services/memory/core/` | A window is applied at most once; nothing said while memory was off is captured; a rewound turn leaves the past-turn index; every turn closed with memory on is eventually indexed and extracted, also after it leaves the thread's live messages |
 
 ## Running
 
@@ -17,7 +17,9 @@ java -cp tla2tools.jar tlc2.TLC -deadlock -config MemoryCapture.cfg MemoryCaptur
 ```
 
 `-deadlock` is needed because a bounded run ends in states with nothing left to do.
-`MemoryCapture.cfg` checks the shipped design (`Design = "fixed"`, two concurrent drains,
-three turns, two memory toggles, one app kill, one rewind: 47,415 distinct states, all
-properties hold). Set `Design = "racy"` to reproduce the double extraction the model found
-when a drain marked itself running only after awaiting the model.
+`MemoryCapture.cfg` checks the shipped design (`Design = "fixed"`, `Source = "index"`, two
+concurrent drains, three turns, two memory toggles, one app kill, one rewind, one eviction:
+93,911 distinct states, all properties hold). Set `Design = "racy"` to reproduce the double
+extraction the model found when a drain marked itself running only after awaiting the model,
+or `Source = "thread"` to reproduce the lost extraction it found when a drain read the thread's
+live messages and a turn left them first.

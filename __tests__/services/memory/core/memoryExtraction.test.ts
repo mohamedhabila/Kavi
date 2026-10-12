@@ -15,13 +15,19 @@ import {
   MAX_EXTRACTION_FAILURES,
   parseExtractionReply,
   selectExtractionWindow,
-  type ExtractionMessage,
 } from '../../../../src/services/memory/core/memoryExtraction';
 import { readCaptureCursor } from '../../../../src/services/memory/core/memoryCaptureCursor';
+import {
+  indexClosedTurn,
+  listMemoryTurnsAfter,
+} from '../../../../src/services/memory/core/memoryTurnsStore';
+import type { Message } from '../../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-const conversation: ExtractionMessage[] = [
+type ThreadMessage = Pick<Message, 'id' | 'role' | 'content' | 'timestamp' | 'toolCalls'>;
+
+const conversation: ThreadMessage[] = [
   { id: 'u1', role: 'user', content: 'My sister Sara moved to Porto last month.', timestamp: 1 },
   { id: 't1', role: 'tool', content: '{"status":"ok"}', timestamp: 2 },
   { id: 'a1', role: 'assistant', content: 'Nice! Porto is lovely.', timestamp: 3 },
@@ -29,24 +35,24 @@ const conversation: ExtractionMessage[] = [
   { id: 'a2', role: 'assistant', content: 'You have not told me yet.', timestamp: 5 },
 ];
 
-function readThrough(id: string) {
-  const message = conversation.find((candidate) => candidate.id === id)!;
-  return { extractedThroughId: id, extractedThroughAt: message.timestamp };
+/** Indexes the rounds the replies `replyIds` closed, as capture does when each turn closes. */
+function indexTurns(messages: ThreadMessage[], replyIds: string[]): void {
+  for (const replyMessageId of replyIds) {
+    indexClosedTurn({ conversationId: 'conv-1', messages, replyMessageId });
+  }
+}
+
+function turnsAfter(afterAt: number) {
+  return listMemoryTurnsAfter({ conversationId: 'conv-1', afterAt, limit: 4 });
 }
 
 function reply(operations: unknown[]): string {
   return JSON.stringify({ operations });
 }
 
-function run(
-  call: (prompt: string) => Promise<string>,
-  signal = new AbortController().signal,
-  through = 'a2',
-) {
+function run(call: (prompt: string) => Promise<string>, signal = new AbortController().signal) {
   return extractConversationMemory({
     conversationId: 'conv-1',
-    messages: conversation,
-    closedThroughMessageId: through,
     call: (prompt) => call(prompt),
     signal,
     now: () => 1_000,
@@ -68,43 +74,38 @@ afterAll(() => {
 });
 
 describe('extraction window', () => {
-  it('takes the closed user and assistant rounds after the cursor, skipping tool output', () => {
-    expect(selectExtractionWindow(conversation, null, 'a2')).toEqual({
+  it('takes the indexed rounds after the cursor, oldest first', () => {
+    indexTurns(conversation, ['a1', 'a2']);
+
+    expect(selectExtractionWindow(turnsAfter(0))).toEqual({
       rounds: [
         'User: My sister Sara moved to Porto last month.\nAssistant: Nice! Porto is lovely.',
         'User: Remind me what she does?\nAssistant: You have not told me yet.',
       ],
       userText: 'My sister Sara moved to Porto last month.\nRemind me what she does?',
-      lastMessage: conversation[4],
+      throughAt: 5,
       lastUserMessageId: 'u2',
     });
-    expect(selectExtractionWindow(conversation, readThrough('a1'), 'a2')?.rounds).toHaveLength(1);
-    expect(selectExtractionWindow(conversation, readThrough('a2'), 'a2')).toBeNull();
+    expect(selectExtractionWindow(turnsAfter(3))?.rounds).toHaveLength(1);
+    expect(selectExtractionWindow(turnsAfter(5))).toBeNull();
   });
 
-  it('stops at the rounds a turn has closed', () => {
-    expect(selectExtractionWindow(conversation, null, 'a1')?.lastMessage.id).toBe('a1');
-  });
+  it('holds only the rounds indexed so far', () => {
+    indexTurns(conversation, ['a1']);
 
-  it('resumes after the cursor time when the message it read is gone', () => {
-    const rewound = conversation.filter((message) => message.id !== 'a1');
-
-    expect(
-      selectExtractionWindow(rewound, { extractedThroughId: 'a1', extractedThroughAt: 3 }, 'a2')
-        ?.rounds,
-    ).toEqual(['User: Remind me what she does?\nAssistant: You have not told me yet.']);
+    expect(selectExtractionWindow(turnsAfter(0))?.throughAt).toBe(3);
   });
 });
 
 describe('rounds the assistant managed itself', () => {
-  const managed: ExtractionMessage[] = [
+  const managed: ThreadMessage[] = [
     { id: 'u1', role: 'user', content: 'Remember that reviews last 30 minutes.', timestamp: 1 },
     {
       id: 'a1',
       role: 'assistant',
       content: '',
       timestamp: 2,
-      toolCalls: [{ name: 'memory_remember' }],
+      toolCalls: [{ id: 'call-1', name: 'memory_remember', arguments: '{}', status: 'completed' }],
     },
     { id: 't1', role: 'tool', content: '{"ok":true,"status":"saved"}', timestamp: 3 },
     { id: 'a1b', role: 'assistant', content: 'Saved.', timestamp: 4 },
@@ -113,20 +114,24 @@ describe('rounds the assistant managed itself', () => {
   ];
 
   it('are passed over but read past', () => {
-    expect(selectExtractionWindow(managed, null, 'a2')).toEqual({
+    indexTurns(managed, ['a1b', 'a2']);
+
+    expect(selectExtractionWindow(turnsAfter(0))).toEqual({
       rounds: ['User: My sister Sara moved to Porto.\nAssistant: Porto is lovely.'],
       userText: 'My sister Sara moved to Porto.',
-      lastMessage: managed[5],
+      throughAt: 6,
       lastUserMessageId: 'u2',
     });
-    expect(selectExtractionWindow(managed, null, 'a1b')).toMatchObject({
+    expect(selectExtractionWindow(turnsAfter(0).slice(0, 1))).toEqual({
       rounds: [],
-      lastMessage: managed[3],
+      userText: '',
+      throughAt: 4,
       lastUserMessageId: null,
     });
   });
 
   it('never reach the model, so what the assistant saved stays as it saved it', async () => {
+    indexTurns(managed, ['a1b']);
     const saved = addMemoryItem({
       text: 'Design reviews last 45 minutes',
       conversationId: 'conv-1',
@@ -135,20 +140,16 @@ describe('rounds the assistant managed itself', () => {
     const id = saved.status === 'created' ? saved.item.id : '';
     const call = jest.fn(async () => reply([{ op: 'update', id, text: 'update' }]));
 
-    await expect(
-      extractConversationMemory({
-        conversationId: 'conv-1',
-        messages: managed,
-        closedThroughMessageId: 'a1b',
-        call,
-        signal: new AbortController().signal,
-        now: () => 1_000,
-      }),
-    ).resolves.toEqual({ kind: 'extracted', added: 0, updated: 0, deleted: 0 });
+    await expect(run(call)).resolves.toEqual({
+      kind: 'extracted',
+      added: 0,
+      updated: 0,
+      deleted: 0,
+    });
 
     expect(call).not.toHaveBeenCalled();
     expect(memories('design reviews')).toEqual(['Design reviews last 45 minutes']);
-    expect(readCaptureCursor('conv-1')?.extractedThroughId).toBe('a1b');
+    expect(readCaptureCursor('conv-1')?.extractedThroughAt).toBe(4);
   });
 });
 
@@ -192,6 +193,10 @@ describe('extraction reply', () => {
 });
 
 describe('extraction run', () => {
+  beforeEach(() => {
+    indexTurns(conversation, ['a1', 'a2']);
+  });
+
   it('applies the operations and moves past the window', async () => {
     const call = jest.fn(async () =>
       reply([{ op: 'add', id: null, text: 'Sara (the user’s sister) lives in Porto' }]),
@@ -208,7 +213,6 @@ describe('extraction run', () => {
     await expect(run(call)).resolves.toEqual({ kind: 'idle' });
     expect(call).toHaveBeenCalledTimes(1);
     expect(readCaptureCursor('conv-1')).toMatchObject({
-      extractedThroughId: 'a2',
       extractedThroughAt: 5,
       extractionFailures: 0,
     });

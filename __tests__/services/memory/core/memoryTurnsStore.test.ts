@@ -13,6 +13,7 @@ import {
   deleteMemoryTurnsFromConversation,
   indexClosedTurn,
   indexMemoryTurn,
+  listMemoryTurnsAfter,
   searchMemoryTurns,
 } from '../../../../src/services/memory/core/memoryTurnsStore';
 import type { Message } from '../../../../src/types/message';
@@ -58,7 +59,9 @@ describe('past turns', () => {
         conversationId: 'conv-1',
         at: 10,
         text: 'User: Plan a weekend in Lisbon with my partner\nAssistant: Here is a two-day plan...',
+        userText: 'Plan a weekend in Lisbon with my partner',
         sensitive: false,
+        managesMemory: false,
       },
     ]);
   });
@@ -132,6 +135,24 @@ describe('past turn size', () => {
   });
 });
 
+describe('turns after a point', () => {
+  it('lists one conversation’s turns closed after it, oldest first, up to the limit', () => {
+    turn('conv-1', 'u3', 'Third question', 'Third answer.', 30);
+    turn('conv-1', 'u1', 'First question', 'First answer.', 10);
+    turn('conv-2', 'u9', 'Other thread', 'Other answer.', 15);
+    turn('conv-1', 'u2', 'Second question', 'Second answer.', 20);
+
+    const ids = (afterAt: number, limit: number) =>
+      listMemoryTurnsAfter({ conversationId: 'conv-1', afterAt, limit }).map(
+        (entry) => entry.userMessageId,
+      );
+
+    expect(ids(0, 10)).toEqual(['u1', 'u2', 'u3']);
+    expect(ids(10, 1)).toEqual(['u2']);
+    expect(ids(30, 10)).toEqual([]);
+  });
+});
+
 describe('closed turn indexing', () => {
   const steeredTurn: Message[] = [
     { id: 'u1', role: 'user', content: 'Book a table for Friday', timestamp: 1 },
@@ -160,8 +181,38 @@ describe('closed turn indexing', () => {
         conversationId: 'conv-1',
         at: 7,
         text: 'User: Plan a weekend in Lisbon\nInclude a day in Sintra\nAssistant: Day one Alfama, day two Sintra.',
+        userText: 'Plan a weekend in Lisbon\nInclude a day in Sintra',
         sensitive: false,
+        managesMemory: false,
       },
+    ]);
+  });
+
+  it('marks a round in which the assistant saved or forgot a memory itself', () => {
+    const managed: Message[] = [
+      { id: 'u1', role: 'user', content: 'Remember that I am vegetarian', timestamp: 1 },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 2,
+        toolCalls: [{ id: 'c1', name: 'memory_remember', arguments: '{}', status: 'completed' }],
+      },
+      { id: 't1', role: 'tool', content: '{"status":"saved"}', timestamp: 3 },
+      { id: 'a2', role: 'assistant', content: 'Saved: you are vegetarian.', timestamp: 4 },
+    ];
+
+    indexClosedTurn({ conversationId: 'conv-1', messages: managed, replyMessageId: 'a2' });
+    indexClosedTurn({ conversationId: 'conv-1', messages: steeredTurn, replyMessageId: 'a3' });
+
+    expect(
+      listMemoryTurnsAfter({ conversationId: 'conv-1', afterAt: 0, limit: 5 }).map((turn) => [
+        turn.userMessageId,
+        turn.managesMemory,
+      ]),
+    ).toEqual([
+      ['u1', true],
+      ['u2', false],
     ]);
   });
 

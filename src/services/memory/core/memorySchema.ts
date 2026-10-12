@@ -17,7 +17,8 @@
 // records which ids each request's memory section held. The capture cursor records, per
 // chat thread, how far turn indexing and background extraction have read, so a turn closed
 // while the app was killed is caught up on the next launch and one closed while memory was
-// off is never captured afterwards.
+// off is never captured afterwards. Extraction reads the indexed turns, not the thread, so
+// a round that has left the thread's live messages is still extracted.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -69,7 +70,9 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
       conversation_id TEXT NOT NULL,
       at INTEGER NOT NULL,
       text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND ${MEMORY_TURN_TEXT_MAX_CHARS}),
-      sensitive INTEGER NOT NULL DEFAULT 0 CHECK(sensitive IN (0, 1))
+      user_text TEXT NOT NULL CHECK(length(user_text) <= ${MEMORY_TURN_TEXT_MAX_CHARS}),
+      sensitive INTEGER NOT NULL DEFAULT 0 CHECK(sensitive IN (0, 1)),
+      manages_memory INTEGER NOT NULL DEFAULT 0 CHECK(manages_memory IN (0, 1))
     );
     CREATE INDEX IF NOT EXISTS idx_memory_turns_conversation
       ON memory_turns(conversation_id, at);
@@ -105,7 +108,6 @@ export function ensureMemoryCoreSchema(db: SQLite.SQLiteDatabase = getMemoryDb()
     CREATE TABLE IF NOT EXISTS memory_capture_cursor (
       thread_id TEXT PRIMARY KEY,
       indexed_through_at INTEGER NOT NULL DEFAULT 0,
-      extracted_through_id TEXT,
       extracted_through_at INTEGER NOT NULL DEFAULT 0,
       extraction_failures INTEGER NOT NULL DEFAULT 0 CHECK(extraction_failures >= 0),
       updated_at INTEGER NOT NULL

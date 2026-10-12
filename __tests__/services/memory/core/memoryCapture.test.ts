@@ -97,7 +97,7 @@ describe('publishing a closed turn', () => {
 
     expect(indexedTurns()).toEqual(['conv-1/u1']);
     expect(readCaptureCursor('conv-1')?.indexedThroughAt).toBe(11);
-    expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith('conv-1', 'a1');
+    expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith('conv-1');
   });
 
   it('is idempotent', () => {
@@ -128,7 +128,7 @@ describe('publishing a closed turn', () => {
 });
 
 describe('catching up after a launch', () => {
-  it('captures the turns closed after the cursor and queues the latest for extraction', () => {
+  it('captures the turns closed after the cursor and queues the thread for extraction', () => {
     publishConversationTurnMemory('conv-1', 'a1', [thread('conv-1', firstTurn)]);
     mockScheduleMemoryExtraction.mockClear();
 
@@ -139,13 +139,13 @@ describe('catching up after a launch', () => {
 
     expect(indexedTurns().sort()).toEqual(['conv-1/u1', 'conv-1/u2']);
     expect(readCaptureCursor('conv-1')?.indexedThroughAt).toBe(21);
-    expect(mockScheduleMemoryExtraction.mock.calls).toEqual([['conv-1', 'a2']]);
+    expect(mockScheduleMemoryExtraction.mock.calls).toEqual([['conv-1']]);
   });
 
   it('does not queue a thread extraction has already read', () => {
     const conversations = [thread('conv-1', firstTurn)];
     publishConversationTurnMemory('conv-1', 'a1', conversations);
-    recordExtractedThrough(getMemoryDb(), 'conv-1', firstTurn[1]!, 30);
+    recordExtractedThrough(getMemoryDb(), 'conv-1', firstTurn[1]!.timestamp, 30);
     mockScheduleMemoryExtraction.mockClear();
 
     catchUpMemoryCapture(conversations);
@@ -176,7 +176,7 @@ describe('turning memory on', () => {
     catchUpMemoryCapture([thread('conv-1', [...firstTurn, ...secondTurn])]);
 
     expect(indexedTurns()).toEqual(['conv-1/u2']);
-    expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith('conv-1', 'a2');
+    expect(mockScheduleMemoryExtraction).toHaveBeenCalledWith('conv-1');
   });
 });
 

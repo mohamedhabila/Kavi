@@ -1,27 +1,27 @@
 // ---------------------------------------------------------------------------
 // Kavi — Background memory extraction for one chat thread
 // ---------------------------------------------------------------------------
-// The capture cursor records the last message extraction has read. One run takes the
-// closed rounds after it, shows the model those rounds plus the stored memories they may
+// The capture cursor records the last indexed turn extraction has read. One run takes the
+// turns indexed after it, shows the model those rounds plus the stored memories they may
 // touch, and applies the add/update/delete operations it returns together with the cursor
 // advance, in one transaction (mem0's extract-then-update pipeline, LangMem's background
-// manager). Sensitive memories are shown too, so extraction updates them instead of
-// storing a duplicate; the conversation text already goes to the same provider.
+// manager). Rounds come from the past-turn index rather than the thread, so a round that
+// left the thread's live messages (the message cap, a context reset) is still extracted.
+// Sensitive memories are shown too, so extraction updates them instead of storing a
+// duplicate; the conversation text already goes to the same provider.
 //
 // Model-checked (docs/formal/MemoryCapture.tla): a window is applied at most once even
 // with concurrent drains, a foreground turn preempting a run costs nothing, and every turn
-// closed with memory on is eventually indexed and extracted. Only real failures count;
-// after MAX_EXTRACTION_FAILURES the window is skipped so one bad window never blocks the
-// thread's later turns.
+// closed with memory on is eventually indexed and extracted, also when it leaves the live
+// thread first. Only real failures count; after MAX_EXTRACTION_FAILURES the window is
+// skipped so one bad window never blocks the thread's later turns.
 // ---------------------------------------------------------------------------
 
-import type { Message, ToolCall } from '../../../types/message';
 import { getMemoryDb } from '../database';
 import {
   readCaptureCursor,
   recordExtractedThrough,
   recordExtractionFailure,
-  type MemoryCaptureCursor,
 } from './memoryCaptureCursor';
 import { ensureMemoryCoreSchema } from './memorySchema';
 import { applyMemoryOperations, searchMemoryItems, type MemoryOperation } from './memoryItemsStore';
@@ -30,22 +30,12 @@ import {
   type MemoryExtractionCall,
 } from './memoryExtractionModel';
 import { boundMemoryText } from './memoryText';
+import { listMemoryTurnsAfter, type MemoryTurn } from './memoryTurnsStore';
 
 export const MAX_EXTRACTION_FAILURES = 3;
 const EXTRACTION_WINDOW_MAX_ROUNDS = 4;
 const RELATED_MEMORY_LIMIT = 10;
 const ROUND_TEXT_MAX_CHARS = 4_000;
-
-export type ExtractionMessage = Pick<Message, 'id' | 'role' | 'content' | 'timestamp'> & {
-  toolCalls?: ReadonlyArray<Pick<ToolCall, 'name'>>;
-};
-
-/**
- * Tools through which the assistant itself decided what a round leaves in memory. Extraction
- * leaves such a round alone: one writer per round, so it cannot rewrite or duplicate what the
- * assistant just saved or forgot.
- */
-const MEMORY_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(['memory_remember', 'memory_forget']);
 
 export type MemoryExtractionOutcome =
   | { kind: 'idle' }
@@ -58,84 +48,24 @@ interface ExtractionWindow {
   /** Rounds for the model to read; empty when every round in the window managed its own memory. */
   rounds: string[];
   userText: string;
-  lastMessage: ExtractionMessage;
+  /** When the window's last turn closed: the cursor moves there once the window is applied. */
+  throughAt: number;
   lastUserMessageId: string | null;
 }
 
-interface ExtractionRound {
-  lines: string[];
-  userText: string;
-  userMessageId: string;
-  managesMemory: boolean;
-  lastMessage: ExtractionMessage;
-}
-
-function writesMemory(message: ExtractionMessage): boolean {
-  return (
-    message.role === 'assistant' &&
-    (message.toolCalls ?? []).some((call) => MEMORY_WRITE_TOOL_NAMES.has(call.name))
-  );
-}
-
-/** Index of the first message after the cursor: after its message, or after its time. */
-function firstUnreadIndex(
-  messages: ReadonlyArray<ExtractionMessage>,
-  cursor: Pick<MemoryCaptureCursor, 'extractedThroughId' | 'extractedThroughAt'> | null,
-): number {
-  if (!cursor?.extractedThroughId) return 0;
-  const index = messages.findIndex((message) => message.id === cursor.extractedThroughId);
-  if (index >= 0) return index + 1;
-  const after = messages.findIndex((message) => message.timestamp > cursor.extractedThroughAt);
-  return after < 0 ? messages.length : after;
-}
-
 /**
- * Up to EXTRACTION_WINDOW_MAX_ROUNDS closed rounds after the cursor, through
- * `closedThroughMessageId`. A round in which the assistant saved or forgot a memory itself is
- * passed over: the window still moves past it, but its text is not shown to the model.
+ * The window over `turns`, the next indexed turns after the cursor, oldest first. A round in
+ * which the assistant saved or forgot a memory itself is passed over: the window still moves
+ * past it, but its text is not shown to the model.
  */
-export function selectExtractionWindow(
-  messages: ReadonlyArray<ExtractionMessage>,
-  cursor: Pick<MemoryCaptureCursor, 'extractedThroughId' | 'extractedThroughAt'> | null,
-  closedThroughMessageId: string,
-): ExtractionWindow | null {
-  const end = messages.findIndex((message) => message.id === closedThroughMessageId);
-  if (end < 0) return null;
-  const rounds: ExtractionRound[] = [];
-  let current: ExtractionRound | null = null;
-  for (let index = firstUnreadIndex(messages, cursor); index <= end; index += 1) {
-    const message = messages[index]!;
-    if (current && writesMemory(message)) current.managesMemory = true;
-    const text = message.content.trim();
-    if ((message.role !== 'user' && message.role !== 'assistant') || !text) continue;
-    if (message.role === 'user') {
-      if (current) {
-        rounds.push(current);
-        if (rounds.length === EXTRACTION_WINDOW_MAX_ROUNDS) {
-          current = null;
-          break;
-        }
-      }
-      current = {
-        lines: [`User: ${text}`],
-        userText: text,
-        userMessageId: message.id,
-        managesMemory: false,
-        lastMessage: message,
-      };
-    } else if (current) {
-      current.lines.push(`Assistant: ${text}`);
-      current.lastMessage = message;
-    }
-  }
-  if (current) rounds.push(current);
-  const last = rounds[rounds.length - 1];
+export function selectExtractionWindow(turns: ReadonlyArray<MemoryTurn>): ExtractionWindow | null {
+  const last = turns[turns.length - 1];
   if (!last) return null;
-  const shown = rounds.filter((round) => !round.managesMemory);
+  const shown = turns.filter((turn) => !turn.managesMemory);
   return {
-    rounds: shown.map((round) => boundMemoryText(round.lines.join('\n'), ROUND_TEXT_MAX_CHARS)),
-    userText: shown.map((round) => round.userText).join('\n'),
-    lastMessage: last.lastMessage,
+    rounds: shown.map((turn) => boundMemoryText(turn.text, ROUND_TEXT_MAX_CHARS)),
+    userText: shown.map((turn) => turn.userText).join('\n'),
+    throughAt: last.at,
     lastUserMessageId: shown[shown.length - 1]?.userMessageId ?? null,
   };
 }
@@ -195,8 +125,6 @@ export function parseExtractionReply(reply: string): MemoryOperation[] {
 
 export async function extractConversationMemory(params: {
   conversationId: string;
-  messages: ReadonlyArray<ExtractionMessage>;
-  closedThroughMessageId: string;
   call: MemoryExtractionCall;
   signal: AbortSignal;
   now: () => number;
@@ -204,11 +132,20 @@ export async function extractConversationMemory(params: {
   const db = getMemoryDb();
   ensureMemoryCoreSchema(db);
   const cursor = readCaptureCursor(params.conversationId, db);
-  const window = selectExtractionWindow(params.messages, cursor, params.closedThroughMessageId);
+  const window = selectExtractionWindow(
+    listMemoryTurnsAfter(
+      {
+        conversationId: params.conversationId,
+        afterAt: cursor?.extractedThroughAt ?? 0,
+        limit: EXTRACTION_WINDOW_MAX_ROUNDS,
+      },
+      db,
+    ),
+  );
   if (!window) return { kind: 'idle' };
   if (window.rounds.length === 0) {
     // The assistant managed these rounds' memory itself: move past them without a call.
-    recordExtractedThrough(db, params.conversationId, window.lastMessage, params.now());
+    recordExtractedThrough(db, params.conversationId, window.throughAt, params.now());
     return { kind: 'extracted', added: 0, updated: 0, deleted: 0 };
   }
 
@@ -232,7 +169,7 @@ export async function extractConversationMemory(params: {
     const now = params.now();
     const failures = (cursor?.extractionFailures ?? 0) + 1;
     if (failures >= MAX_EXTRACTION_FAILURES) {
-      recordExtractedThrough(db, params.conversationId, window.lastMessage, now);
+      recordExtractedThrough(db, params.conversationId, window.throughAt, now);
       return { kind: 'skipped' };
     }
     recordExtractionFailure(db, params.conversationId, failures, now);
@@ -247,7 +184,7 @@ export async function extractConversationMemory(params: {
     sourceMessageId: window.lastUserMessageId,
     now,
     commit: (transactionDb) =>
-      recordExtractedThrough(transactionDb, params.conversationId, window.lastMessage, now),
+      recordExtractedThrough(transactionDb, params.conversationId, window.throughAt, now),
   });
   return { kind: 'extracted', ...counts };
 }

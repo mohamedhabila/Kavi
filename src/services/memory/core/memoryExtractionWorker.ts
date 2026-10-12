@@ -1,17 +1,17 @@
 // ---------------------------------------------------------------------------
 // Kavi — Background memory extraction worker
 // ---------------------------------------------------------------------------
-// A closed turn schedules its chat thread. The worker runs one thread at a time while no
-// foreground turn holds the model; a foreground turn starting aborts the run, which costs
-// nothing and resumes when the model is free again. A real failure is retried after a
-// growing delay until the window is skipped (see memoryExtraction.ts). One timer at most is
-// pending, so the worker never piles up work. Turning memory off cancels everything.
+// A closed turn schedules its chat thread; extraction reads the thread's indexed turns (see
+// memoryExtraction.ts). The worker runs one thread at a time while no foreground turn holds
+// the model; a foreground turn starting aborts the run, which costs nothing and resumes when
+// the model is free again. A real failure is retried after a growing delay until the window
+// is skipped. One timer at most is pending, so the worker never piles up work. Turning
+// memory off cancels everything.
 // ---------------------------------------------------------------------------
 
-import { useChatStore } from '../../../store/useChatStore';
 import { createLogger } from '../../../utils/logger';
 import { isMainInferenceActive, registerIngestionPreemptionHandler } from '../onDeviceGuards';
-import { extractConversationMemory, type ExtractionMessage } from './memoryExtraction';
+import { extractConversationMemory } from './memoryExtraction';
 import { resolveMemoryExtractionModel, type MemoryExtractionCall } from './memoryExtractionModel';
 
 const logger = createLogger('memory-extraction');
@@ -23,34 +23,26 @@ const EXTRACTION_MAX_WINDOWS_PER_RUN = 8;
 export interface MemoryExtractionWorkerDependencies {
   resolveModel: () => Promise<MemoryExtractionCall | null>;
   isForegroundActive: () => boolean;
-  /** The thread's messages, or null when it is gone or keeps no memory (a side thread). */
-  readThread: (threadId: string) => ReadonlyArray<ExtractionMessage> | null;
   now: () => number;
-}
-
-function readChatThread(threadId: string): ReadonlyArray<ExtractionMessage> | null {
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === threadId);
-  return conversation && !conversation.isSideThread ? conversation.messages : null;
 }
 
 const DEFAULT_DEPENDENCIES: MemoryExtractionWorkerDependencies = {
   resolveModel: resolveMemoryExtractionModel,
   isForegroundActive: isMainInferenceActive,
-  readThread: readChatThread,
   now: Date.now,
 };
 
 let dependencies = DEFAULT_DEPENDENCIES;
 interface PendingExtraction {
-  closedThroughMessageId: string;
+  /** Which schedule queued it: a run leaves the entry for a turn closed while it ran. */
+  scheduled: number;
   /** A failed thread waits until then; others run meanwhile. */
   notBefore: number;
 }
 
 /** Queued threads in schedule order. */
 const pending = new Map<string, PendingExtraction>();
+let schedules = 0;
 let running: AbortController | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let unsubscribePreemption: (() => void) | null = null;
@@ -68,10 +60,11 @@ function wakeAfter(delayMs: number): void {
   }, delayMs);
 }
 
-/** Queue extraction for a thread whose turn closed with `closedThroughMessageId`. */
-export function scheduleMemoryExtraction(threadId: string, closedThroughMessageId: string): void {
+/** Queue extraction for a thread whose turns were indexed. */
+export function scheduleMemoryExtraction(threadId: string): void {
+  schedules += 1;
   pending.delete(threadId);
-  pending.set(threadId, { closedThroughMessageId, notBefore: 0 });
+  pending.set(threadId, { scheduled: schedules, notBefore: 0 });
   ensurePreemptionHandler();
   if (!running) void drainMemoryExtraction();
 }
@@ -131,7 +124,7 @@ function earliestRetry(): number {
 /** Extracts one thread's queued windows. `controller` aborts it when a foreground turn starts. */
 async function extractThread(
   threadId: string,
-  closedThroughMessageId: string,
+  scheduled: number,
   controller: AbortController,
 ): Promise<'preempted' | 'done'> {
   const call = await dependencies.resolveModel();
@@ -139,16 +132,9 @@ async function extractThread(
     pending.clear();
     return 'done';
   }
-  const messages = dependencies.readThread(threadId);
-  if (!messages) {
-    pending.delete(threadId);
-    return 'done';
-  }
   for (let window = 0; window < EXTRACTION_MAX_WINDOWS_PER_RUN; window += 1) {
     const outcome = await extractConversationMemory({
       conversationId: threadId,
-      messages,
-      closedThroughMessageId,
       call,
       signal: controller.signal,
       now: dependencies.now,
@@ -158,15 +144,13 @@ async function extractThread(
       // Back of the queue with a delay, so other threads are not held behind it.
       pending.delete(threadId);
       pending.set(threadId, {
-        closedThroughMessageId,
+        scheduled,
         notBefore: dependencies.now() + EXTRACTION_RETRY_BASE_MS * outcome.failures,
       });
       return 'done';
     }
     if (outcome.kind === 'idle') {
-      if (pending.get(threadId)?.closedThroughMessageId === closedThroughMessageId) {
-        pending.delete(threadId);
-      }
+      if (pending.get(threadId)?.scheduled === scheduled) pending.delete(threadId);
       return 'done';
     }
   }
@@ -189,10 +173,10 @@ async function drainMemoryExtraction(): Promise<void> {
   // Claimed before the first await, so a second drain started meanwhile returns at once.
   const controller = new AbortController();
   running = controller;
-  const [threadId, { closedThroughMessageId }] = next;
+  const [threadId, { scheduled }] = next;
   let outcome: 'preempted' | 'done' = 'done';
   try {
-    outcome = await extractThread(threadId, closedThroughMessageId, controller);
+    outcome = await extractThread(threadId, scheduled, controller);
   } catch (error) {
     logger.error('Memory extraction failed unexpectedly.', error);
     pending.delete(threadId);

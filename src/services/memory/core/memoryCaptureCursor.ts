@@ -2,10 +2,9 @@
 // Kavi — How far memory has read each chat thread
 // ---------------------------------------------------------------------------
 // One row per thread: the time of the latest closed reply indexed as a past turn, and the
-// last message background extraction has read (id and time, so a deleted message does not
-// send extraction back to the start) with its consecutive real failures. Turning memory
-// on moves both past everything already in the thread, so nothing said while memory was
-// off is captured later.
+// time of the last indexed turn background extraction has read, with its consecutive real
+// failures. Turning memory on moves both past everything already in the thread, so nothing
+// said while memory was off is captured later.
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
@@ -15,7 +14,6 @@ import { ensureMemoryCoreSchema } from './memorySchema';
 export interface MemoryCaptureCursor {
   threadId: string;
   indexedThroughAt: number;
-  extractedThroughId: string | null;
   extractedThroughAt: number;
   extractionFailures: number;
 }
@@ -23,7 +21,6 @@ export interface MemoryCaptureCursor {
 interface MemoryCaptureCursorRow {
   thread_id: string;
   indexed_through_at: number;
-  extracted_through_id: string | null;
   extracted_through_at: number;
   extraction_failures: number;
 }
@@ -39,8 +36,7 @@ export function readCaptureCursor(
   db: SQLite.SQLiteDatabase = readyDb(),
 ): MemoryCaptureCursor | null {
   const row = db.getFirstSync<MemoryCaptureCursorRow>(
-    `SELECT thread_id, indexed_through_at, extracted_through_id, extracted_through_at,
-            extraction_failures
+    `SELECT thread_id, indexed_through_at, extracted_through_at, extraction_failures
        FROM memory_capture_cursor WHERE thread_id = ?`,
     threadId,
   );
@@ -48,7 +44,6 @@ export function readCaptureCursor(
     ? {
         threadId: row.thread_id,
         indexedThroughAt: row.indexed_through_at,
-        extractedThroughId: row.extracted_through_id,
         extractedThroughAt: row.extracted_through_at,
         extractionFailures: row.extraction_failures,
       }
@@ -69,25 +64,23 @@ export function recordTurnsIndexedThrough(threadId: string, at: number, now: num
   );
 }
 
-/** Extraction has read through `message`; inside the transaction that applied its result. */
+/** Extraction has read the turns through `at`; inside the transaction that applied its result. */
 export function recordExtractedThrough(
   db: SQLite.SQLiteDatabase,
   threadId: string,
-  message: { id: string; timestamp: number },
+  at: number,
   now: number,
 ): void {
   db.runSync(
     `INSERT INTO memory_capture_cursor
-         (thread_id, extracted_through_id, extracted_through_at, extraction_failures, updated_at)
-       VALUES (?, ?, ?, 0, ?)
+         (thread_id, extracted_through_at, extraction_failures, updated_at)
+       VALUES (?, ?, 0, ?)
        ON CONFLICT(thread_id) DO UPDATE SET
-         extracted_through_id = excluded.extracted_through_id,
          extracted_through_at = excluded.extracted_through_at,
          extraction_failures = 0,
          updated_at = excluded.updated_at`,
     threadId,
-    message.id,
-    message.timestamp,
+    at,
     now,
   );
 }
@@ -111,27 +104,20 @@ export function recordExtractionFailure(
   );
 }
 
-/** Moves indexing and extraction past `message`, so nothing before it is ever captured. */
-export function skipCaptureThrough(
-  threadId: string,
-  message: { id: string; timestamp: number },
-  now: number,
-): void {
+/** Moves indexing and extraction past `at`, so nothing said through then is ever captured. */
+export function skipCaptureThrough(threadId: string, at: number, now: number): void {
   readyDb().runSync(
     `INSERT INTO memory_capture_cursor
-         (thread_id, indexed_through_at, extracted_through_id, extracted_through_at,
-          extraction_failures, updated_at)
-       VALUES (?, ?, ?, ?, 0, ?)
+         (thread_id, indexed_through_at, extracted_through_at, extraction_failures, updated_at)
+       VALUES (?, ?, ?, 0, ?)
        ON CONFLICT(thread_id) DO UPDATE SET
          indexed_through_at = max(indexed_through_at, excluded.indexed_through_at),
-         extracted_through_id = excluded.extracted_through_id,
-         extracted_through_at = excluded.extracted_through_at,
+         extracted_through_at = max(extracted_through_at, excluded.extracted_through_at),
          extraction_failures = 0,
          updated_at = excluded.updated_at`,
     threadId,
-    message.timestamp,
-    message.id,
-    message.timestamp,
+    at,
+    at,
     now,
   );
 }
