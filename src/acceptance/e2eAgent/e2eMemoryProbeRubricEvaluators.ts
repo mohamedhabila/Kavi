@@ -125,12 +125,7 @@ function evaluateAnswer(
     );
   }
   const keys = Object.keys(answer).sort().join(',');
-  if (
-    (keys !== 'kind,requiredValues' && keys !== 'forbiddenValues,kind,requiredValues') ||
-    !hasUniqueCanonicalValues(answer.requiredValues) ||
-    (answer.forbiddenValues !== undefined && !hasUniqueCanonicalValues(answer.forbiddenValues)) ||
-    (answer.forbiddenValues ?? []).some((value) => answer.requiredValues.includes(value))
-  ) {
+  if (keys !== 'kind,requiredValues' || !hasUniqueCanonicalValues(answer.requiredValues)) {
     return invalidOutcome(
       fixtureId,
       `turn ${rubric.turnIndex} memory answer expectation is invalid`,
@@ -141,15 +136,6 @@ function evaluateAnswer(
     return invalidOutcome(
       fixtureId,
       `turn ${rubric.turnIndex} final response omitted required memory value`,
-    );
-  }
-  const surfacedForbidden = (answer.forbiddenValues ?? []).filter((value) =>
-    normalizedIncludes(text, value),
-  );
-  if (surfacedForbidden.length > 0) {
-    return invalidOutcome(
-      fixtureId,
-      `turn ${rubric.turnIndex} final response surfaced forbidden memory value`,
     );
   }
   return { fixtureId, passed: true };

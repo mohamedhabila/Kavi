@@ -371,7 +371,6 @@ export const DIRECT_BEAM_LONG_DIALOGUE_MULTI_PROBE: E2EScenario = {
       answer: {
         kind: 'fact_values',
         requiredValues: ['BEAM-ROUTE-A', 'BEAM-MEAL-NEW', 'BEAM-WINDOW-9', 'BEAM-CHANNEL-7'],
-        forbiddenValues: ['BEAM-MEAL-OLD'],
       },
     },
     {

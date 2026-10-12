@@ -55,7 +55,7 @@ const CAUSAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   {
     kind: 'turn_memory_answer',
     turnIndex: 3,
-    answer: { kind: 'fact_values', requiredValues: ['45'], forbiddenValues: ['30'] },
+    answer: { kind: 'fact_values', requiredValues: ['45'] },
   },
   {
     kind: 'turn_native_invocation_count',

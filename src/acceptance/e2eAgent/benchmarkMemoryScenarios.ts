@@ -224,7 +224,6 @@ export const BENCH_LONGMEM_KNOWLEDGE_UPDATE_RECALL: E2EScenario = {
       answer: {
         kind: 'fact_values',
         requiredValues: ['STATION-NEW-E2E'],
-        forbiddenValues: ['STATION-OLD-E2E'],
       },
     },
     {

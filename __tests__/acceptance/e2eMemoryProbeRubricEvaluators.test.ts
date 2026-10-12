@@ -147,7 +147,9 @@ describe('turn-scoped memory probe rubrics', () => {
     ).toMatchObject({ passed: false });
   });
 
-  it('rejects a stale value in either the answer or selected prompt memory', () => {
+  // LongMemEval judges a knowledge update correct when the answer names the previous value
+  // beside the updated one; what must not happen is the stale memory reaching the prompt.
+  it('accepts an answer that names the old value as superseded, not a stale selection', () => {
     const items = [
       item('stale', 'memory-subject preferred_station is STATION-OLD', { supersededBy: 'current' }),
       item('current', 'memory-subject preferred_station is STATION-NEW, replacing STATION-OLD'),
@@ -168,16 +170,9 @@ describe('turn-scoped memory probe rubrics', () => {
       evaluateE2ERubric(staleSelected, {
         kind: 'turn_memory_answer',
         turnIndex: 2,
-        answer: {
-          kind: 'fact_values',
-          requiredValues: ['STATION-NEW'],
-          forbiddenValues: ['STATION-OLD'],
-        },
+        answer: { kind: 'fact_values', requiredValues: ['STATION-NEW'] },
       }),
-    ).toMatchObject({
-      passed: false,
-      detail: 'turn 2 final response surfaced forbidden memory value',
-    });
+    ).toMatchObject({ passed: true });
     expect(evaluateE2ERubric(staleSelected, selection)).toMatchObject({
       passed: false,
       detail: 'turn 2 selected a forbidden memory item',

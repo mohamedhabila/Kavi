@@ -218,7 +218,6 @@ export type E2EMemoryProbeAnswerExpectation =
   | Readonly<{
       kind: 'fact_values';
       requiredValues: ReadonlyArray<string>;
-      forbiddenValues?: ReadonlyArray<string>;
     }>
   | Readonly<{
       kind: 'abstention';
