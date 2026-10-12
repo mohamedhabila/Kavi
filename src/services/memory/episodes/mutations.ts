@@ -158,10 +158,8 @@ function recordEpisodeInTransaction(input: RecordEpisodeInput): MemoryEpisode | 
           : Array.from(new Set(input.toolNames)).slice(0, 64),
       importance:
         input.importance === undefined ? persistedEpisode.importance : clamp01(input.importance),
-      // This generic write path never updates the provider vector — real
-      // provider embeddings are written only by the maintenance backfill
-      // (`providerEpisodeEmbeddingBackfill.ts`), which pairs the vector with
-      // its model/dimensions atomically. Preserve the persisted pairing here.
+      // This generic write path never updates the provider vector: it keeps the
+      // persisted vector paired with its model and dimensions.
       embedding: input.embedding === undefined ? persistedEpisode.embedding : input.embedding,
       embeddingModel: persistedEpisode.embeddingModel,
       embeddingDimensions: persistedEpisode.embeddingDimensions,
