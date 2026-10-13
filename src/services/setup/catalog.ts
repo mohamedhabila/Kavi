@@ -254,12 +254,7 @@ export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
       'Remote shell execution and SFTP-backed file operations on configured SSH targets.',
     tools: [
       'ssh_exec',
-      'ssh_list_directory',
-      'ssh_read_file',
-      'ssh_write_file',
-      'ssh_rename_path',
-      'ssh_delete_path',
-      'ssh_make_directory',
+      'ssh_fs',
     ],
   },
   {

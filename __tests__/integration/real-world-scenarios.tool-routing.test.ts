@@ -76,7 +76,7 @@ describe('Tool executor routing completeness', () => {
     }
   });
 
-  it('browser tool names cover all 19 expected tools', () => {
+  it('browser tool names cover all 17 expected tools', () => {
     const expectedBrowserTools = [
       'browser_launch',
       'browser_stop',
@@ -91,15 +91,13 @@ describe('Tool executor routing completeness', () => {
       'browser_wait',
       'browser_screenshot',
       'browser_snapshot',
-      'browser_console',
-      'browser_errors',
-      'browser_network',
+      'browser_inspect',
       'browser_cookies',
       'browser_storage',
       'browser_evaluate',
     ];
 
-    expect(expectedBrowserTools.length).toBe(19);
+    expect(expectedBrowserTools.length).toBe(17);
     // Each should NOT be parseable as MCP or skill
     for (const tool of expectedBrowserTools) {
       expect(parseMcpToolName(tool)).toBeNull();
@@ -143,12 +141,7 @@ describe('Tool executor routing completeness', () => {
       'audio_transcribe',
       'memory_search',
       'ssh_exec',
-      'ssh_list_directory',
-      'ssh_read_file',
-      'ssh_write_file',
-      'ssh_rename_path',
-      'ssh_delete_path',
-      'ssh_make_directory',
+      'ssh_fs',
       'tool_catalog',
       'poll_create',
       'speak',

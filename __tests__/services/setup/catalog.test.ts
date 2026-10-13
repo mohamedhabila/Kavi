@@ -1,3 +1,4 @@
+import { TOOL_DEFINITIONS } from '../../../src/engine/tools/definitions';
 import { TOOL_PERMISSION_GROUPS, orderToolsByGroup } from '../../../src/services/setup/catalog';
 import type { ToolDefinition } from '../../../src/types/tool';
 
@@ -10,6 +11,17 @@ function makeTool(name: string): ToolDefinition {
 }
 
 describe('setup catalog', () => {
+  it('names only registered tools, so every listed permission can be toggled', () => {
+    const registered = new Set(TOOL_DEFINITIONS.map((tool) => tool.name));
+
+    expect(
+      TOOL_PERMISSION_GROUPS.flatMap((group) =>
+        group.tools.filter((name) => !registered.has(name)).map((name) => `${group.id}/${name}`),
+      ),
+    ).toEqual([]);
+    expect(TOOL_PERMISSION_GROUPS.find((group) => group.id === 'ssh')?.tools).toContain('ssh_fs');
+  });
+
   it('lists image_edit in the media permission group', () => {
     const mediaGroup = TOOL_PERMISSION_GROUPS.find((group) => group.id === 'media');
 

@@ -107,12 +107,6 @@ function buildBrowserTraceDescription(name: string, args: any): string {
       return 'Take screenshot';
     case 'browser_snapshot':
       return 'Capture page snapshot';
-    case 'browser_console':
-      return 'Read console messages';
-    case 'browser_errors':
-      return 'Read page errors';
-    case 'browser_network':
-      return 'Read network requests';
     case 'browser_inspect':
       return `Inspect ${args.kind || 'console'}`;
     case 'browser_cookies':
@@ -255,21 +249,6 @@ async function executeBrowserToolInner(name: string, args: any): Promise<ToolRun
         );
       }
       return failedToolOutcome('Error: browser_inspect requires kind ∈ {console, errors, network}');
-    }
-    case 'browser_console': {
-      const result = await browserConsoleMessages(args.sessionId, { level: args.level });
-      return completedJsonToolOutcome(result);
-    }
-    case 'browser_errors': {
-      const result = await browserPageErrors(args.sessionId, { clear: args.clear });
-      return completedJsonToolOutcome(result);
-    }
-    case 'browser_network': {
-      const result = await browserNetworkRequests(args.sessionId, {
-        filter: args.filter,
-        clear: args.clear,
-      });
-      return completedJsonToolOutcome(result);
     }
     case 'browser_cookies': {
       const action = args.action || 'get';

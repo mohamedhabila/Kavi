@@ -280,30 +280,35 @@ export function summarizeToolCall(toolCall: ToolCall, t?: TranslateFn): string |
           : args.command
             ? `Running ${args.command}`
             : 'Running a remote command';
-      case 'ssh_read_file':
-        return t
-          ? args.path
-            ? t('toolCall.summaries.sshReadFilePath', { path: args.path })
-            : t('toolCall.summaries.sshReadFile')
-          : args.path
-            ? `Reading ${args.path}`
-            : 'Reading a remote file';
-      case 'ssh_write_file':
-        return t
-          ? args.path
-            ? t('toolCall.summaries.sshWriteFilePath', { path: args.path })
-            : t('toolCall.summaries.sshWriteFile')
-          : args.path
-            ? `Writing ${args.path}`
-            : 'Writing a remote file';
-      case 'ssh_list_directory':
-        return t
-          ? args.path
-            ? t('toolCall.summaries.sshListDirectoryPath', { path: args.path })
-            : t('toolCall.summaries.sshListDirectory')
-          : args.path
-            ? `Listing ${args.path}`
-            : 'Listing a remote directory';
+      case 'ssh_fs':
+        if (args.action === 'read') {
+          return t
+            ? args.path
+              ? t('toolCall.summaries.sshReadFilePath', { path: args.path })
+              : t('toolCall.summaries.sshReadFile')
+            : args.path
+              ? `Reading ${args.path}`
+              : 'Reading a remote file';
+        }
+        if (args.action === 'write') {
+          return t
+            ? args.path
+              ? t('toolCall.summaries.sshWriteFilePath', { path: args.path })
+              : t('toolCall.summaries.sshWriteFile')
+            : args.path
+              ? `Writing ${args.path}`
+              : 'Writing a remote file';
+        }
+        if (args.action === 'list') {
+          return t
+            ? args.path
+              ? t('toolCall.summaries.sshListDirectoryPath', { path: args.path })
+              : t('toolCall.summaries.sshListDirectory')
+            : args.path
+              ? `Listing ${args.path}`
+              : 'Listing a remote directory';
+        }
+        return null;
       case 'sessions_spawn': {
         if (t) {
           return args.name

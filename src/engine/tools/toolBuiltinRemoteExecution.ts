@@ -35,12 +35,6 @@ export const BUILTIN_REMOTE_TOOL_NAMES = new Set([
   'ssh_background_job_status',
   'ssh_background_job_wait',
   'ssh_fs',
-  'ssh_list_directory',
-  'ssh_read_file',
-  'ssh_write_file',
-  'ssh_rename_path',
-  'ssh_delete_path',
-  'ssh_make_directory',
   'expo_eas_create_project',
   'expo_eas_list_projects',
   'expo_eas_status',
@@ -96,18 +90,6 @@ export async function executeBuiltinRemoteTool(
           );
       }
     }
-    case 'ssh_list_directory':
-      return executeSshListDirectory(args);
-    case 'ssh_read_file':
-      return executeSshReadFile(args);
-    case 'ssh_write_file':
-      return executeSshWriteFile(args);
-    case 'ssh_rename_path':
-      return executeSshRenamePath(args);
-    case 'ssh_delete_path':
-      return executeSshDeletePath(args);
-    case 'ssh_make_directory':
-      return executeSshMakeDirectory(args);
     case 'expo_eas_create_project':
       return executeExpoEasCreateProject(args);
     case 'expo_eas_list_projects':

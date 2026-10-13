@@ -128,8 +128,8 @@ describe('executeToolInner — raw workspace and browser routing', () => {
     });
 
     const result = await executeTool(
-      'browser_network',
-      '{"sessionId":"browser-session-1"}',
+      'browser_inspect',
+      '{"sessionId":"browser-session-1","kind":"network"}',
       CONV_ID,
     );
     const parsed = JSON.parse(result.content);

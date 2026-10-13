@@ -99,7 +99,7 @@ describe('assessToolRisk', () => {
   });
 
   it('returns medium risk for ssh scope tools without command', () => {
-    const result = assessToolRisk('ssh_list_directory', {});
+    const result = assessToolRisk('ssh_fs', { action: 'list' });
     expect(result.level).toBe('medium');
   });
 
