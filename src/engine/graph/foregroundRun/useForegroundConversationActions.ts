@@ -5,7 +5,7 @@ import { waitForModelProjectionAvailability } from '../../../store/modelProjecti
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
-import type { Conversation } from '../../../types/conversation';
+import type { Conversation, ConversationMode } from '../../../types/conversation';
 import {
   rewindForegroundConversationRun,
   stopForegroundConversationRuns,
@@ -38,7 +38,7 @@ type UseForegroundConversationActionsParams = {
   clearComposerDraft: (draftKey: string) => void;
   clearForegroundRequestForConversation: (conversationId: string) => void;
   completeAgentRun: ChatStoreState['completeAgentRun'];
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   rewindUserMessageForResend: ChatStoreState['rewindUserMessageForResend'];
   editingMessageId: string | null;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;

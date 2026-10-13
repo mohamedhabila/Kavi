@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { SUPER_AGENT_PERSONA_ID } from '../../services/agents/personas';
 import { resolveConversationModel } from '../../services/llm/support/providerSupport';
-import type { Conversation } from '../../types/conversation';
+import type { Conversation, ConversationMode } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
 import {
   selectActiveConversationExecutionState,
@@ -12,7 +12,7 @@ type UseChatScreenConversationStateParams = {
   activeConversation?: Conversation;
   activeModel: string | null;
   activeProviderId: string | null;
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   hasForegroundRequest: boolean;
   hasActiveRecoveryOperation: boolean;
   hasLiveBackgroundWorker: boolean;
@@ -22,7 +22,7 @@ type UseChatScreenConversationStateParams = {
 type ChatScreenConversationState = {
   activeProvider?: LlmProviderConfig;
   currentModel: string | null;
-  effectiveMode: Conversation['mode'];
+  effectiveMode: ConversationMode;
   effectivePersonaId: string;
   executionState: ActiveConversationExecutionState;
   isAgenticMode: boolean;
@@ -48,8 +48,7 @@ export function useChatScreenConversationState(
     activeModel: params.activeModel,
   });
 
-  const effectiveMode =
-    params.activeConversation?.mode ?? params.defaultConversationMode ?? 'chitchat';
+  const effectiveMode = params.activeConversation?.mode ?? params.defaultConversationMode;
   const isAgenticMode = effectiveMode === 'agentic';
   const executionState = useMemo(
     () =>

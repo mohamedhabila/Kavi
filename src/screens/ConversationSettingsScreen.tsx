@@ -122,7 +122,7 @@ export const ConversationSettingsScreen: React.FC = () => {
 
   const conversationId = route.params?.conversationId ?? activeConversationId;
   const conversation = conversations.find((candidate) => candidate.id === conversationId);
-  const mode = conversation?.mode ?? defaultConversationMode ?? 'agentic';
+  const mode = conversation?.mode ?? defaultConversationMode;
   const provider = providers.find(
     (candidate) => candidate.id === (conversation?.providerId || activeProviderId),
   );

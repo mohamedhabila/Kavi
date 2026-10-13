@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
 // useChatScreenConversationState — effective mode fallback
 // ---------------------------------------------------------------------------
-// Covers only the conversation-mode fallback chain: an explicit conversation
-// mode wins, then the caller-supplied default, then chitchat (Phase 1 flipped
-// the ultimate fallback from 'agentic' to 'chitchat' so a brand-new chat
-// starts in chitchat mode by default).
+// Covers only the conversation-mode fallback: an explicit conversation mode wins, else
+// the caller's default (the settings store's defaultConversationMode, which always has
+// a value).
 
 import { renderHook } from '@testing-library/react-native';
 import { useChatScreenConversationState } from '../../../src/screens/chatScreen/useChatScreenConversationState';
@@ -15,7 +14,7 @@ function baseParams(overrides: Partial<Parameters<typeof useChatScreenConversati
     activeConversation: undefined,
     activeModel: null,
     activeProviderId: null,
-    defaultConversationMode: undefined as unknown as Conversation['mode'],
+    defaultConversationMode: 'chitchat' as const,
     hasForegroundRequest: false,
     hasActiveRecoveryOperation: false,
     hasLiveBackgroundWorker: false,
@@ -25,14 +24,7 @@ function baseParams(overrides: Partial<Parameters<typeof useChatScreenConversati
 }
 
 describe('useChatScreenConversationState effective mode fallback', () => {
-  it('falls back to chitchat when neither the conversation nor the caller default supplies a mode', () => {
-    const { result } = renderHook(() => useChatScreenConversationState(baseParams()));
-
-    expect(result.current.effectiveMode).toBe('chitchat');
-    expect(result.current.isAgenticMode).toBe(false);
-  });
-
-  it('uses the caller-supplied default conversation mode over the chitchat fallback', () => {
+  it('uses the default conversation mode when the conversation has none', () => {
     const { result } = renderHook(() =>
       useChatScreenConversationState(baseParams({ defaultConversationMode: 'agentic' })),
     );

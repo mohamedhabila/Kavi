@@ -12,12 +12,12 @@ export function isRegisteredSlashCommand(content: string | undefined): boolean {
 
 export function shouldTrackForegroundAgentRun(params: {
   conversationMode?: ConversationMode;
-  defaultConversationMode?: ConversationMode;
+  defaultConversationMode: ConversationMode;
   latestUserMessage?: Message;
   messageCount: number;
   reuseAgentRunId?: string;
 }): boolean {
-  const mode = params.conversationMode ?? params.defaultConversationMode ?? 'agentic';
+  const mode = params.conversationMode ?? params.defaultConversationMode;
   if (mode !== 'agentic') {
     return false;
   }

@@ -17,7 +17,7 @@ import { appSteeringQueue } from '../../engine/graph/foregroundRun/steeringQueue
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
 import { waitForModelProjectionAvailability } from '../../store/modelProjectionOwnership';
 import { useChatStore } from '../../store/useChatStore';
-import type { Conversation } from '../../types/conversation';
+import type { ConversationMode } from '../../types/conversation';
 import { generateId } from '../../utils/id';
 
 /** Surfaced when conversation-workspace attachment import fails during a scenario turn. */
@@ -35,7 +35,7 @@ export type ForegroundScenarioSendContextFactory = (
 export type CreateForegroundScenarioSendContextParams = {
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => void;
   context: ExecuteForegroundConversationRunParams['context'];
-  defaultMode: Conversation['mode'];
+  defaultMode: ConversationMode;
   /** The scenario's foreground requests, which a message sent during a run steers. */
   requests: ForegroundSteeringBinding['registry'];
   setChatError: (message: string | null) => void;

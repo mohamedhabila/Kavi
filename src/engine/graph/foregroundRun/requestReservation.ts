@@ -1,4 +1,8 @@
-import type { Conversation, ModelProjectionOwner } from '../../../types/conversation';
+import type {
+  Conversation,
+  ConversationMode,
+  ModelProjectionOwner,
+} from '../../../types/conversation';
 import { prepareAgentRunResumeForOrchestrator } from '../runResumePreparation';
 import { buildModelReadyMessages } from './modelReadyMessages';
 import type { RunChatOptions } from './contracts';
@@ -39,7 +43,7 @@ export async function reserveForegroundRunRequest(params: {
   conversation: Conversation | undefined;
   conversationId: string;
   createAssistantMessageId: () => string;
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   durability: ExecuteForegroundConversationRunParams['context']['durability'];
   foregroundRequestId: string;
   options?: RunChatOptions;

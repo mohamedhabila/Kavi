@@ -1,4 +1,4 @@
-import type { Conversation } from '../../../types/conversation';
+import type { Conversation, ConversationMode } from '../../../types/conversation';
 import type { ForegroundAgentRunCounters } from '../foregroundRunPhaseEffects';
 import {
   buildForegroundRunBootstrapSelection,
@@ -55,7 +55,7 @@ export function prepareForegroundRunRequestBootstrap(params: {
   claim: ForegroundRunRequestClaim;
   conversation: Conversation | undefined;
   createAssistantMessageId: () => string;
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   clarificationReplyAdmission?: ClarificationReplyAdmission;
   options?: RunChatOptions;
 }):

@@ -63,7 +63,7 @@ type StartAgentRunParams = {
 export function buildForegroundRunBootstrapSelection(params: {
   conversation?: Conversation;
   createAssistantMessageId: () => string;
-  defaultConversationMode?: ConversationMode;
+  defaultConversationMode: ConversationMode;
   reuseAgentRunId?: string;
   assistantDraftMode?: AssistantDraftMode;
   clarificationReplyAdmission?: ClarificationReplyAdmission;

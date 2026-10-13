@@ -15,7 +15,7 @@ import { getComposerDraftKey } from '../../../screens/chatComposerDrafts';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
-import type { Conversation } from '../../../types/conversation';
+import type { ConversationMode } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import { createTurnLatencyTimeline } from '../../turnLatencyTimeline';
 import { isRegisteredSlashCommand } from '../runTracking';
@@ -38,7 +38,7 @@ export type ForegroundConversationSendContext = {
   addMessage: ChatStoreState['addMessage'];
   attachmentWorkspaceImportFailedMessage: string;
   clearComposerDraft: (draftKey: string) => void;
-  defaultConversationMode: Conversation['mode'];
+  defaultConversationMode: ConversationMode;
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   generateId: () => string;
   getLiveActiveConversationId: () => string | null;
