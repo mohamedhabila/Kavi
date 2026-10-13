@@ -27,7 +27,7 @@ describe('normalizeBrowserToolResult(browser_snapshot) — snapshot excerpt grap
   }
 });
 
-describe('normalizeBrowserToolResult(browser_console) — message text grapheme safety', () => {
+describe('normalizeBrowserToolResult(browser_inspect) — console message text grapheme safety', () => {
   for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
     it(`never splits ${name} straddling the 240-char console message budget`, () => {
       const text = buildBoundaryStraddlingText(240, cluster, 50);
@@ -36,7 +36,7 @@ describe('normalizeBrowserToolResult(browser_console) — message text grapheme 
         messages: [{ type: 'log', text }],
       });
 
-      const result = normalizeBrowserToolResult('browser_console', raw);
+      const result = normalizeBrowserToolResult('browser_inspect', raw);
       const parsed = JSON.parse(result);
       const messageText = String(parsed.messages[0].text ?? '');
       expectGraphemeSafe(messageText);

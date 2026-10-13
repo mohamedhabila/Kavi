@@ -28,12 +28,8 @@ function normalizeBrowserSummary(name: string, payload: JsonRecord): string {
       return `Navigated browser target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}${typeof payload.url === 'string' ? ` to ${payload.url}` : ''}.`;
     case 'browser_snapshot':
       return `Captured browser snapshot for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
-    case 'browser_console':
-      return `Captured browser console output for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
-    case 'browser_errors':
-      return `Captured browser page errors for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
-    case 'browser_network':
-      return `Captured browser network activity for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
+    case 'browser_inspect':
+      return `Captured browser diagnostics for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
     case 'browser_cookies':
       return `Captured browser cookies for target ${typeof payload.targetId === 'string' ? payload.targetId : 'current'}.`;
     case 'browser_storage':
@@ -145,7 +141,7 @@ export function normalizeBrowserToolResult(name: string, rawResult: string): str
         });
       }
 
-      if (name === 'browser_console' && Array.isArray(parsed.messages)) {
+      if (name === 'browser_inspect' && Array.isArray(parsed.messages)) {
         const normalizedMessages = compactBrowserConsoleMessages(parsed.messages);
         const { items, omitted } = limitArray(normalizedMessages, MAX_BROWSER_MESSAGES);
         return JSON.stringify({
@@ -157,7 +153,7 @@ export function normalizeBrowserToolResult(name: string, rawResult: string): str
         });
       }
 
-      if (name === 'browser_errors' && Array.isArray(parsed.errors)) {
+      if (name === 'browser_inspect' && Array.isArray(parsed.errors)) {
         const normalizedErrors = compactBrowserPageErrors(parsed.errors);
         const { items, omitted } = limitArray(normalizedErrors, MAX_BROWSER_MESSAGES);
         return JSON.stringify({
@@ -169,7 +165,7 @@ export function normalizeBrowserToolResult(name: string, rawResult: string): str
         });
       }
 
-      if (name === 'browser_network' && Array.isArray(parsed.requests)) {
+      if (name === 'browser_inspect' && Array.isArray(parsed.requests)) {
         const normalizedRequests = compactBrowserRequests(parsed.requests);
         const { items, omitted } = limitArray(normalizedRequests, MAX_BROWSER_MESSAGES);
         const failedCount = normalizedRequests.filter(
