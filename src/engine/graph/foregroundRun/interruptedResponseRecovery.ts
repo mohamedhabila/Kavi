@@ -113,12 +113,12 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
   };
 
   if (outcome.resumePrompt && runId && params.resumeAgentRun) {
-    const recoveryBudget = consumeAutomaticRecovery('automatic interrupted-goal recovery');
+    const recoveryBudget = consumeAutomaticRecovery('automatic interrupted-run recovery');
     if (recoveryBudget !== 'consumed') {
       stopAutomaticRecovery(
         recoveryBudget === 'exhausted'
-          ? 'Automatic interrupted-goal recovery reached its persisted retry limit.'
-          : 'Automatic interrupted-goal recovery could not establish a safe resumable graph boundary.',
+          ? 'Automatic interrupted-run recovery reached its persisted retry limit.'
+          : 'Automatic interrupted-run recovery could not establish a safe resumable graph boundary.',
       );
       return;
     }

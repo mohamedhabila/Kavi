@@ -87,7 +87,7 @@ export function repairReadFileContinuationSummary(
 /**
  * Carry forward useful prior context without recursively nesting whole summary
  * envelopes. The newest tail is preferred because it contains the latest
- * state; exact user constraints and graph goals are preserved independently.
+ * state; exact user constraints and the plan are preserved independently.
  */
 export function normalizePriorCompactionContext(
   priorContext: string | undefined,

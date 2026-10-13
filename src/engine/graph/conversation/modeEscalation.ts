@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Kavi — Conversation Mode Escalation
 // ---------------------------------------------------------------------------
-// Chitchat is the cheap path: no graph goals, no delegation, and no authority over
-// the capabilities agentic orchestration owns (sub-agent sessions, goal mutation,
+// Chitchat is the cheap path: no plan, no delegation, and no authority over
+// the capabilities agentic orchestration owns (sub-agent sessions, the run's plan,
 // remote shells, build tooling, source control, browser automation, arbitrary code,
 // and open-world tools that can act on what they reach). Everyday actions such as
 // calendar, contacts, messaging, and reminders stay inside chitchat's authority.
@@ -11,7 +11,7 @@
 // chitchat's execution authority and tool surface (`isChitchatAuthorizedTool`): a
 // chitchat turn escalates only when it discovers a tool chitchat may not call. A
 // discovered tool chitchat may already call needs no escalation — escalating for it
-// would move the conversation onto the agentic surface and goal bootstrap for good,
+// would move the conversation onto the agentic surface for good,
 // at the cost of extra model turns, with no new authority actually needed.
 //
 // This module is pure. It records no state and performs no mutation.

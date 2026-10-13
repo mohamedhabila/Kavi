@@ -107,7 +107,7 @@ export function evaluateCompactionRecallOutcomes(
 ): AcceptanceMetricSummary {
   return buildPassRateSummary({
     metricId: 'compaction-recall',
-    label: 'Compacted summaries survive while graph goals stay current-turn only',
+    label: 'Compacted summaries survive while the plan stays current-turn only',
     outcomes,
     targetRate: COMPACTION_RECALL_MIN_PASS_RATE,
     comparator: 'min',

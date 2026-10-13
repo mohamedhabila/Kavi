@@ -45,7 +45,7 @@ describe('enrichToolResultWithSchemaRepair', () => {
       fieldPlacement:
         'Send required fields as top-level JSON properties in the next tool call arguments.',
       valueSource:
-        'Use values already present in the user request, graph goals, or prior tool outputs. Do not invent unavailable values.',
+        'Use values already present in the user request or prior tool outputs. Do not invent unavailable values.',
       sideEffectApplied: false,
     });
   });

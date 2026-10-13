@@ -138,7 +138,7 @@ export function buildRecoveredAgentRunStateAfterAppRestart(params: {
 
     const latestSummary =
       backgroundOutcome.status === 'cancelled'
-        ? 'Background workers were cancelled before the app restarted. Reopen the conversation to resume goal execution from the recovered state.'
+        ? 'Background workers were cancelled before the app restarted. Reopen the conversation to resume the work from the recovered state.'
         : 'Background workers failed before the app restarted. Reopen the conversation to continue with a different approach if needed.';
 
     return {
