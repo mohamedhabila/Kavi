@@ -15,6 +15,7 @@ import {
 } from './helpers/orchestratorToolFilterHarness';
 import { runOrchestrator } from '../../src/engine/orchestrator';
 import { MEMORY_DISABLED_RUNTIME_CAPABILITY } from '../../src/engine/prompts/memoryPolicyPrompt';
+import { useToolPermissionsStore } from '../../src/services/security/permissions';
 
 beforeEach(() => {
   resetOrchestratorToolFilterHarness();
@@ -82,6 +83,42 @@ describe('Orchestrator — toolFilter', () => {
       'web_fetch',
       'web_search',
     ]);
+  });
+
+  // A tool turned off in Settings used to stay on the surface and was refused only once
+  // called, costing the model a turn on "not allowed by your permission settings".
+  it('does not offer a tool the user turned off in Settings', async () => {
+    useToolPermissionsStore.getState().setPermission('web_fetch', false);
+    mockStreamMessage.mockReturnValueOnce(
+      makeStream(
+        [
+          { type: 'token', content: 'Done' },
+          { type: 'done', content: 'Done' },
+        ],
+        'text',
+      ),
+    );
+
+    try {
+      await runOrchestrator(
+        {
+          provider,
+          model: 'gpt-test',
+          conversationId: 'conv-permission-filter',
+          systemPrompt: 'Test',
+          messages: [makeMsg('user', 'Search the documentation and fetch the page')],
+          explicitToolSurfaceToolNames: ['web_search', 'web_fetch'],
+        },
+        makeCallbacks(),
+      );
+    } finally {
+      useToolPermissionsStore.getState().setPermission('web_fetch', true);
+    }
+
+    const [, streamOptions] = mockStreamMessage.mock.calls[0];
+    const offered = streamOptions.tools.map((tool: { name: string }) => tool.name);
+    expect(offered).toContain('web_search');
+    expect(offered).not.toContain('web_fetch');
   });
 
   it('cannot re-advertise disabled memory capabilities through caller tool selection', async () => {

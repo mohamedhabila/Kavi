@@ -14,6 +14,7 @@ import {
   resolveProviderModelSelection,
 } from '../../services/llm/support/providerSupport';
 import { mcpManager } from '../../services/mcp/manager';
+import { useToolPermissionsStore } from '../../services/security/permissions';
 import {
   filterToolsByInvocationPolicy,
   getSkillToolDefinitions,
@@ -304,7 +305,12 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
     startsAgentic ? 'agentic' : 'chitchat',
   );
-  const policyAuthorizedTools = filterToolsForMemoryPolicy(modeAuthorizedTools);
+  // A tool the user turned off in Settings is not offered at all; executeTool still refuses
+  // one called by name, as the authority on every call.
+  const permissions = useToolPermissionsStore.getState();
+  const policyAuthorizedTools = filterToolsForMemoryPolicy(modeAuthorizedTools).filter((tool) =>
+    permissions.isAllowed(tool.name),
+  );
   const catalogVisibleTools = params.toolFilter
     ? policyAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
     : policyAuthorizedTools;
