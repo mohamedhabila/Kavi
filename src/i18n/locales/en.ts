@@ -52,17 +52,7 @@ export const en: TranslationMap = {
   nav: {
     chat: 'Chat',
     assistant: 'Assistant',
-    chats: 'Chats',
     newChat: 'New chat',
-    recentChats: 'Recent chats',
-    seeAllChats: 'See all',
-    noRecentChats: 'No chats yet.',
-    searchChats: 'Search chats',
-    chatsEmptyTitle: 'No chats yet',
-    chatsEmptyHint: 'Your conversations will appear here after you start chatting.',
-    noChatMatches: 'No matching chats',
-    noChatMatchesHint: 'Try a different title or clear the search.',
-    clearChatSearch: 'Clear search',
     activity: 'Activity',
     library: 'Library',
     more: 'More',
@@ -1095,18 +1085,6 @@ export const en: TranslationMap = {
   },
 
   // ── Scheduler Screen ───────────────────────────────────────────────────
-  conversationActions: {
-    menuAccessibility: "Options for {title}",
-    rename: "Rename",
-    delete: "Delete",
-    renameTitle: "Rename chat",
-    renamePlaceholder: "Chat name",
-    deleteConfirmTitle: "Delete this chat?",
-    deleteConfirmMessage: "\"{title}\" and its messages will be deleted from this device, and Kavi will stop using it as a memory source.",
-    deleteWhileWorking: "Kavi is still working in this chat. Deleting it stops that work.",
-    deleting: "Deleting…",
-    deleteFailed: "This chat could not be deleted. Please try again.",
-  },
   reminders: {
     sectionTitle: "Reminders",
     next: "Next: {when}",

@@ -61,14 +61,6 @@ jest.mock('../../src/screens/ChatScreen', () => ({
   },
 }));
 
-jest.mock('../../src/screens/ChatsScreen', () => ({
-  ChatsScreen: () => {
-    const React = require('react');
-    const { View, Text } = require('react-native');
-    return React.createElement(View, null, React.createElement(Text, null, 'ChatsScreen'));
-  },
-}));
-
 jest.mock('../../src/screens/ConversationFilesScreen', () => ({
   ConversationFilesScreen: () => {
     const React = require('react');

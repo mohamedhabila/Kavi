@@ -8,7 +8,6 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatScreen } from '../screens/ChatScreen';
-import { ChatsScreen } from '../screens/ChatsScreen';
 import { ActivityScreen } from '../screens/ActivityScreen';
 import { LibraryScreen } from '../screens/LibraryScreen';
 import { MoreScreen } from '../screens/MoreScreen';
@@ -265,7 +264,6 @@ export const AppNavigator: React.FC = () => {
           }}
         >
           <Drawer.Screen name="Chat" component={ChatScreen} />
-          <Drawer.Screen name="Chats" component={ChatsScreen} />
           <Drawer.Screen name="Activity" component={ActivityScreen} />
           <Drawer.Screen name="Library" component={LibraryScreen} />
           <Drawer.Screen name="More" component={MoreScreen} />

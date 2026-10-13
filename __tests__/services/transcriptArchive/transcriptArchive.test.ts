@@ -11,7 +11,6 @@ import {
   _resetTranscriptArchiveStateForTests,
   countArchivedMessages,
   deleteAllArchivedMessages,
-  deleteArchivedConversation,
   drainPendingTranscriptArchive,
   isMessageArchivedOrQueued,
   loadAllArchivedMessages,
@@ -110,15 +109,12 @@ describe('transcript archive', () => {
     );
   });
 
-  it('removes a deleted conversation and every conversation on clear all', () => {
+  it('removes every conversation’s history on clear all', () => {
     archive('c1', [message(0)]);
     archive('c2', [message(1)]);
 
-    deleteArchivedConversation('c1');
-    expect(countArchivedMessages('c1')).toBe(0);
-    expect(countArchivedMessages('c2')).toBe(1);
-
     deleteAllArchivedMessages();
+    expect(countArchivedMessages('c1')).toBe(0);
     expect(countArchivedMessages('c2')).toBe(0);
   });
 
@@ -154,7 +150,7 @@ describe('transcript archive', () => {
     subscribeToTranscriptArchive((conversationId) => changed.push(conversationId));
 
     archive('c1', [message(0)]);
-    deleteArchivedConversation('c1');
+    deleteAllArchivedMessages();
 
     expect(changed).toEqual(['c1', 'c1']);
   });

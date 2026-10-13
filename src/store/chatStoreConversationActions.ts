@@ -1,19 +1,12 @@
 import type { StoreApi } from 'zustand';
 import { generateId } from '../utils/id';
 import { getDefaultConversationTitle } from '../utils/conversation';
-import { truncateGraphemesTo } from '../utils/graphemes';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { ChatState } from './chatStoreTypes';
 import { deleteConversationMemory } from '../services/memory/core/memoryCapture';
 import { createLogger } from '../utils/logger';
-import {
-  deleteAllArchivedMessages,
-  deleteArchivedConversation,
-} from '../services/transcriptArchive/transcriptArchive';
-
-/** A user-chosen chat name is a label, not content: bounded so a paste cannot become one. */
-export const MAX_CONVERSATION_TITLE_GRAPHEMES = 120;
+import { deleteAllArchivedMessages } from '../services/transcriptArchive/transcriptArchive';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
 type ChatStoreGet = StoreApi<ChatState>['getState'];
@@ -58,8 +51,6 @@ export function createConversationStoreActions(
   | 'createConversation'
   | 'getOrCreateCanonicalThread'
   | 'setActiveConversation'
-  | 'deleteConversation'
-  | 'renameConversation'
   | 'clearAllConversations'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
@@ -169,35 +160,6 @@ export function createConversationStoreActions(
 
     setActiveConversation: (id) => {
       set({ activeConversationId: id });
-      requestChatStorePersistenceCheckpoint();
-    },
-
-    deleteConversation: (id) => {
-      const matches = get().conversations.filter((conversation) => conversation.id === id);
-      if (matches.length > 1) {
-        throw new Error('conversation_delete_identity_invalid');
-      }
-      if (matches.length === 0) return;
-      deleteConversationMemory(id);
-      set((state) => ({
-        conversations: state.conversations.filter((c) => c.id !== id),
-        activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-      }));
-      removeArchivedHistory(() => deleteArchivedConversation(id));
-      requestChatStorePersistenceCheckpoint();
-    },
-
-    renameConversation: (id, title) => {
-      const nextTitle = truncateGraphemesTo(
-        title.replace(/\s+/gu, ' ').trim(),
-        MAX_CONVERSATION_TITLE_GRAPHEMES,
-      );
-      if (!nextTitle) return;
-      set((state) => ({
-        conversations: state.conversations.map((conversation) =>
-          conversation.id === id ? { ...conversation, title: nextTitle } : conversation,
-        ),
-      }));
       requestChatStorePersistenceCheckpoint();
     },
 

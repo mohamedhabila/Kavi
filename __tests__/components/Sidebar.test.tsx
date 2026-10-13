@@ -4,104 +4,7 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import { Sidebar } from '../../src/components/sidebar/Sidebar';
-
-// Mock stores
-const mockConversations = [
-  {
-    id: 'conv1',
-    title: 'First Chat',
-    messages: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    providerId: 'openai',
-    model: 'gpt-5.4',
-    usage: {
-      entries: [],
-      totalInput: 800,
-      totalOutput: 434,
-      totalCacheRead: 0,
-      totalCacheWrite: 0,
-      totalTokens: 1234,
-      totalCost: 0.0042,
-      totalCalls: 2,
-    },
-  },
-  {
-    id: 'conv2',
-    title: 'Second Chat',
-    messages: [],
-    createdAt: Date.now() - 86400000,
-    updatedAt: Date.now() - 86400000,
-    providerId: 'openai',
-    model: 'gpt-5.4',
-    usage: {
-      entries: [],
-      totalInput: 0,
-      totalOutput: 0,
-      totalCacheRead: 0,
-      totalCacheWrite: 0,
-      totalTokens: 0,
-      totalCost: 0,
-      totalCalls: 0,
-    },
-  },
-];
-
-const mockCreateConversation = jest.fn();
-const mockSetActiveConversation = jest.fn();
-const mockDeleteConversation = jest.fn();
-let mockActiveConversationId: string | null = 'conv1';
-let mockProviders = [
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    baseUrl: 'https://api.openai.com/v1',
-    apiKey: 'sk-test',
-    model: 'gpt-5.4',
-    enabled: true,
-  },
-];
-
-jest.mock('../../src/store/useChatStore', () => ({
-  useChatStore: (selector: (s: any) => any) => {
-    const state = {
-      conversations: mockConversations,
-      activeConversationId: mockActiveConversationId,
-      createConversation: mockCreateConversation,
-      setActiveConversation: mockSetActiveConversation,
-      deleteConversation: mockDeleteConversation,
-    };
-    return selector(state);
-  },
-}));
-
-jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: Object.assign(
-    (selector: (s: any) => any) =>
-      selector({
-        providers: mockProviders,
-        systemPrompt: 'You are helpful',
-        activeProviderId: 'openai',
-        activeModel: 'gpt-5.4',
-        disableLongTermMemory: false,
-        memoryConsolidationMode: 'auto',
-        consolidationProvider: null,
-      }),
-    {
-      getState: () => ({
-        providers: mockProviders,
-        systemPrompt: 'You are helpful',
-        activeProviderId: 'openai',
-        activeModel: 'gpt-5.4',
-        disableLongTermMemory: false,
-        memoryConsolidationMode: 'auto',
-        consolidationProvider: null,
-      }),
-    },
-  ),
-}));
 
 jest.mock('../../src/theme/useAppTheme', () => ({
   useAppTheme: () => ({
@@ -165,63 +68,19 @@ const defaultProps = {
 describe('Sidebar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockActiveConversationId = 'conv1';
-    mockProviders = [
-      {
-        id: 'openai',
-        name: 'OpenAI',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: 'sk-test',
-        model: 'gpt-5.4',
-        enabled: true,
-      },
-    ];
+  });
+
+  it('offers the one conversation, with no way to start or list others', () => {
+    const { getByTestId, queryByTestId, queryByText } = render(<Sidebar {...defaultProps} />);
+
+    expect(getByTestId('sidebar-assistant')).toBeTruthy();
+    expect(queryByTestId('sidebar-new-chat')).toBeNull();
+    expect(queryByText('Recent chats')).toBeNull();
   });
 
   it('should render the title', () => {
     const { getByText } = render(<Sidebar {...defaultProps} />);
     expect(getByText('Kavi')).toBeTruthy();
-  });
-
-  it('renders recent chats from the conversation store and marks the active chat', () => {
-    const { getByText, getByTestId } = render(<Sidebar {...defaultProps} />);
-    expect(getByText('First Chat')).toBeTruthy();
-    expect(getByText('Second Chat')).toBeTruthy();
-    expect(getByTestId('sidebar-recent-chat-conv1').props.accessibilityState).toEqual({
-      selected: true,
-    });
-  });
-
-  it('starts a new chat in one tap', () => {
-    const { getByTestId } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {});
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
-    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
-  });
-
-  it('starts an independent chat when no conversation is active', () => {
-    mockActiveConversationId = null;
-    const { getByTestId } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByTestId('sidebar-new-chat'));
-    expect(mockCreateConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4', {});
-  });
-
-  it('should route users to settings instead of starting a chat without a provider', () => {
-    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    mockProviders = [];
-
-    const { getByTestId } = render(<Sidebar {...defaultProps} />);
-    fireEvent.press(getByTestId('sidebar-new-chat'));
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Error',
-      'No provider configured. Go to Settings to add one.',
-    );
-    expect(mockCreateConversation).not.toHaveBeenCalled();
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Settings', {
-      destination: 'advanced-ai',
-    });
   });
 
   it('should navigate to settings', () => {
@@ -311,27 +170,6 @@ describe('Sidebar', () => {
     fireEvent.press(getByTestId('sidebar-assistant'));
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
-    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
-  });
-
-  it('opens the exact selected recent conversation', () => {
-    const { getByTestId } = render(<Sidebar {...defaultProps} />);
-
-    fireEvent.press(getByTestId('sidebar-recent-chat-conv2'));
-
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv2');
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chat');
-    expect(mockNavigation.closeDrawer).toHaveBeenCalled();
-  });
-
-  it('opens the complete Chats route from recent chats', () => {
-    const { getByTestId } = render(<Sidebar {...defaultProps} />);
-
-    const seeAll = getByTestId('sidebar-see-all-chats');
-    expect(seeAll.props.accessibilityLabel).toBe('See all');
-    fireEvent.press(seeAll);
-
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Chats');
     expect(mockNavigation.closeDrawer).toHaveBeenCalled();
   });
 

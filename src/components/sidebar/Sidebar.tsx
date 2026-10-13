@@ -3,10 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import React, { useCallback, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
-  Plus,
   Settings,
   Sparkles,
   ListChecks,
@@ -14,13 +13,9 @@ import {
   MoreHorizontal,
   type LucideIcon,
 } from 'lucide-react-native';
-import { SidebarRecentChats } from './SidebarRecentChats';
-import { useChatStore } from '../../store/useChatStore';
-import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppTheme, AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { resolveConversationStartSelection } from '../../services/llm/support/providerSupport';
 import { getRouteReturnTarget } from '../../navigation/useBackToChat';
 
 export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, state }) => {
@@ -28,14 +23,6 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const conversations = useChatStore((s) => s.conversations);
-  const activeId = useChatStore((s) => s.activeConversationId);
-  const createConversation = useChatStore((s) => s.createConversation);
-  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
-  const providers = useSettingsStore((s) => s.providers);
-  const systemPrompt = useSettingsStore((s) => s.systemPrompt);
-  const activeProviderId = useSettingsStore((s) => s.activeProviderId);
-  const activeModel = useSettingsStore((s) => s.activeModel);
   const currentRoute = state.routes[state.index];
   const currentRouteName = currentRoute?.name;
   const currentRouteParams =
@@ -89,56 +76,15 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
     },
   ];
 
-  const handleNew = () => {
-    const selection = resolveConversationStartSelection(providers, activeProviderId, activeModel);
-    if (!selection) {
-      Alert.alert(t('common.error'), t('chat.noProvider'));
-      navigation.navigate('Settings', { destination: 'advanced-ai' });
-      navigation.closeDrawer();
-      return;
-    }
-
-    const current = activeId
-      ? conversations.find((conversation) => conversation.id === activeId)
-      : undefined;
-    createConversation(selection.providerId, systemPrompt, selection.model || undefined, {
-      ...(current?.personaId ? { personaId: current.personaId } : {}),
-      ...(current?.mode ? { mode: current.mode } : {}),
-    });
-    navigation.navigate('Chat');
-    navigation.closeDrawer();
-  };
-
   const handleOpenChat = useCallback(() => {
     navigation.navigate('Chat');
     navigation.closeDrawer();
   }, [navigation]);
 
-  const handleSelectConversation = useCallback(
-    (conversationId: string) => {
-      if (!conversations.some((conversation) => conversation.id === conversationId)) {
-        return;
-      }
-      setActiveConversation(conversationId);
-      navigation.navigate('Chat');
-      navigation.closeDrawer();
-    },
-    [conversations, navigation, setActiveConversation],
-  );
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>{t('common.appName')}</Text>
-        <TouchableOpacity
-          style={styles.newBtn}
-          onPress={handleNew}
-          accessibilityRole="button"
-          accessibilityLabel={t('nav.newChat')}
-          testID="sidebar-new-chat"
-        >
-          <Plus size={22} color={colors.onPrimary} />
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
@@ -176,16 +122,6 @@ export const Sidebar: React.FC<DrawerContentComponentProps> = ({ navigation, sta
             {t('nav.assistant')}
           </Text>
         </TouchableOpacity>
-        <SidebarRecentChats
-          activeConversationId={activeId}
-          colors={colors}
-          conversations={conversations}
-          onSeeAll={() => {
-            navigation.navigate('Chats');
-            navigation.closeDrawer();
-          }}
-          onSelect={handleSelectConversation}
-        />
         <View style={styles.destinationGroup}>
           {groupedRoutes.map((route) => {
             const active = declaredParentRoute
@@ -257,14 +193,6 @@ const createStyles = (colors: AppPalette) =>
       fontSize: 20,
       fontWeight: '700',
       color: colors.text,
-    },
-    newBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.primary,
-      justifyContent: 'center',
-      alignItems: 'center',
     },
     list: {
       flex: 1,

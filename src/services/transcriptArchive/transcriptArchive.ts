@@ -253,16 +253,6 @@ function forgetConversation(conversationId: string): void {
   archivedOrQueuedIds.delete(conversationId);
 }
 
-/** Remove a deleted conversation's archived history. */
-export function deleteArchivedConversation(conversationId: string): void {
-  forgetConversation(conversationId);
-  getTranscriptArchiveDb().runSync(
-    'DELETE FROM archived_messages WHERE conversation_id = ?',
-    conversationId,
-  );
-  for (const listener of listeners) listener(conversationId);
-}
-
 /** Remove all archived history, as part of clearing every conversation. */
 export function deleteAllArchivedMessages(): void {
   const conversationIds = Array.from(archivedOrQueuedIds.keys());
