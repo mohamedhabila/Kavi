@@ -27,8 +27,10 @@ import {
 } from '../../src/acceptance/longMemEval/longMemEvalScenario';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import { closeMemoryDb } from '../../src/services/memory/database';
+import { readCaptureCursor } from '../../src/services/memory/core/memoryCaptureCursor';
 import { buildMemoryPromptSection } from '../../src/services/memory/core/memoryPrompt';
 import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
+import { listMemoryTurnsAfter } from '../../src/services/memory/core/memoryTurnsStore';
 import { installClockOffset } from '../helpers/clockOffset';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -168,6 +170,23 @@ describe('LongMemEval as a Kavi conversation', () => {
       prompt: 'Where did I go hiking last month?',
       execution: { route: 'production_auto' },
     });
+  });
+
+  it('leaves the imported history read, so extraction starts at the question', () => {
+    const instance = parseLongMemEvalInstance(rawInstance());
+    const history = buildLongMemEvalHistoryMessages(instance);
+
+    indexLongMemEvalHistory('thread-1', history);
+    const cursor = readCaptureCursor('thread-1');
+
+    expect(cursor?.extractedThroughAt).toBe(history[history.length - 1]!.timestamp);
+    expect(
+      listMemoryTurnsAfter({
+        conversationId: 'thread-1',
+        afterAt: cursor!.extractedThroughAt,
+        limit: 4,
+      }),
+    ).toEqual([]);
   });
 
   it('indexes each round on its session date, so the memory section recalls the evidence', () => {

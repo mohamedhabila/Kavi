@@ -6,11 +6,15 @@
 // Two arms put the history where the app would hold it:
 //   memory  — the history has left the request (an older stretch of the thread): its
 //             rounds are indexed by the app's own capture path and reach the model only
-//             through the memory section and memory_search.
+//             through the memory section and memory_search. Background extraction counts
+//             them as already read, as it would have read each one soon after it closed;
+//             extracting a whole history at question time would only add its cost (about
+//             125 extraction calls for one LongMemEval-S history) after the answer.
 //   context — the whole history is still in the thread the request carries: the
 //             long-context reference the memory arm is measured against.
 // ---------------------------------------------------------------------------
 
+import { skipCaptureThrough } from '../../services/memory/core/memoryCaptureCursor';
 import { indexClosedTurn } from '../../services/memory/core/memoryTurnsStore';
 import type { Message } from '../../types/message';
 import type { E2EScenario } from '../e2eAgent/types';
@@ -58,7 +62,10 @@ export function buildLongMemEvalHistoryMessages(instance: LongMemEvalInstance): 
   );
 }
 
-/** Indexes every round of the history under `conversationId`; returns how many were kept. */
+/**
+ * Indexes every round of the history under `conversationId` and moves the capture cursor past
+ * it, so extraction starts at the question; returns how many rounds were kept.
+ */
 export function indexLongMemEvalHistory(
   conversationId: string,
   messages: ReadonlyArray<Message>,
@@ -68,6 +75,8 @@ export function indexLongMemEvalHistory(
     if (message.role !== 'assistant') continue;
     if (indexClosedTurn({ conversationId, messages, replyMessageId: message.id })) indexed += 1;
   }
+  const last = messages[messages.length - 1];
+  if (last) skipCaptureThrough(conversationId, last.timestamp, Date.now());
   return indexed;
 }
 
