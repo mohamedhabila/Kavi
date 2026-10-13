@@ -5,6 +5,7 @@
 type ExpoFileSystemMock = {
   __resetStore?: () => void;
   __getStore?: () => Record<string, string | Uint8Array>;
+  File: new (uri: string) => { write: (content: string) => void };
 };
 
 type WorkspaceSeedFile = {
@@ -60,12 +61,18 @@ export function readWorkspaceRelativeFile(
   return decodeStoreValue(store[uri]);
 }
 
+/**
+ * Writes through the file API, so the file's folders exist the way they would on a device:
+ * a store entry with no parent directory was invisible to every tool that walks the
+ * workspace, such as the JavaScript tool's file bridge.
+ */
 export function writeWorkspaceRelativeFile(
   conversationId: string,
   relativePath: string,
   content: string,
 ): void {
-  getWorkspaceStore()[buildWorkspaceUri(conversationId, relativePath)] = content;
+  const { File } = getExpoFileSystemMock();
+  new File(buildWorkspaceUri(conversationId, relativePath)).write(content);
 }
 
 export function seedE2EWorkspaceSandbox(
