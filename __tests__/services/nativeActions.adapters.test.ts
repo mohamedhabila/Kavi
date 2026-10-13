@@ -88,7 +88,7 @@ import {
   openExternalUrl,
 } from '../../src/services/nativeActions/adapters/linking';
 import { composeEmail } from '../../src/services/nativeActions/adapters/mail';
-import { shareFile, shareText, shareUrl } from '../../src/services/nativeActions/adapters/share';
+import { shareFile, shareText } from '../../src/services/nativeActions/adapters/share';
 import { composeSms } from '../../src/services/nativeActions/adapters/sms';
 import {
   errorToNativeActionResult,
@@ -235,9 +235,6 @@ describe('native action adapters and helpers', () => {
 
     expect(await shareText({ text: '' })).toEqual(
       expect.objectContaining({ code: 'invalid_arguments' }),
-    );
-    expect(await shareUrl({ url: 'mailto:jane@example.com' })).toEqual(
-      expect.objectContaining({ code: 'disallowed_url_scheme' }),
     );
 
     mockSharingIsAvailable.mockResolvedValueOnce(false);

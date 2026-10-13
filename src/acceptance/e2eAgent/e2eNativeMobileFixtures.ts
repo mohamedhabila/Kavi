@@ -486,15 +486,6 @@ async function executeE2ENativeMobileTool(
         details: { targetKind },
       });
     }
-    case 'device_status':
-      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_STATUS_JSON);
-    case 'device_info':
-      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_INFO_JSON);
-    case 'device_permissions':
-      applyE2EPermissionFixtureState();
-      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_PERMISSIONS_JSON);
-    case 'device_health':
-      return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_HEALTH_JSON);
     case 'device_query': {
       const kind = typeof args.kind === 'string' ? args.kind.toLowerCase() : 'status';
       if (kind === 'status') return completedE2ENativeOutcome(E2E_FIXTURE_DEVICE_STATUS_JSON);
@@ -513,12 +504,10 @@ async function executeE2ENativeMobileTool(
         permission: E2E_NATIVE_PERMISSION_STATES.denied.location,
       });
     case 'contacts_search':
-    case 'contacts_search_full':
       e2eNativeFixtureState.contacts.resultCount = E2E_CONTACTS.length;
       e2eNativeFixtureState.contacts.lastQuery = typeof args.query === 'string' ? args.query : '';
       return completedE2ENativeOutcome(E2E_CONTACTS);
     case 'contacts_get':
-    case 'contacts_get_full':
       return completedE2ENativeOutcome(
         E2E_CONTACTS.find((contact) => contact.id === args.id) ?? null,
       );

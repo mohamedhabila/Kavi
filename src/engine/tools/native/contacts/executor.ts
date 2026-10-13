@@ -42,14 +42,3 @@ export async function executeContactsShare(args: {
 }): Promise<ToolRuntimeOutcome> {
   return executeStructuredNativeAction('contacts_share', args as Record<string, unknown>);
 }
-
-export async function executeContactsSearchFull(args: {
-  query: string;
-  limit?: number;
-}): Promise<ToolRuntimeOutcome> {
-  return executeStructuredNativeAction('contacts_search_full', args as Record<string, unknown>);
-}
-
-export async function executeContactsGetFull(args: { id: string }): Promise<ToolRuntimeOutcome> {
-  return executeStructuredNativeAction('contacts_get_full', args as Record<string, unknown>);
-}

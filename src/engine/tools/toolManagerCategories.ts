@@ -79,8 +79,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       'contacts_manage_access',
       'contacts_form',
       'contacts_share',
-      'contacts_search_full',
-      'contacts_get_full',
+      'contacts_search',
+      'contacts_get',
     ],
   },
   {
@@ -143,6 +143,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       'phone_call',
       'maps_open',
       'share_text',
+      'share_file',
       'notification_send',
       'reminder',
       'clipboard_read',

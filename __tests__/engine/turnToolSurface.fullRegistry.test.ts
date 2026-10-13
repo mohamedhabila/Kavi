@@ -40,7 +40,7 @@ describe('full-registry turn tool surface', () => {
 
     // Mutations stay behind discovery and approval.
     expect(names.has('calendar_create_event')).toBe(false);
-    expect(names.has('contacts_create')).toBe(false);
+    expect(names.has('contacts_form')).toBe(false);
     expect(names.has('sms_compose')).toBe(false);
     expect(names.has('notification_send')).toBe(false);
 
@@ -75,7 +75,7 @@ describe('full-registry turn tool surface', () => {
 
     expect(names.has('write_file')).toBe(true);
     expect(names.has('calendar_create_event')).toBe(false);
-    expect(names.has('contacts_create')).toBe(false);
+    expect(names.has('contacts_form')).toBe(false);
     expect(names.has('notification_send')).toBe(false);
     expect(selected.length).toBeLessThanOrEqual(30);
     expect(tokenEstimate).toBeLessThanOrEqual(6_000);

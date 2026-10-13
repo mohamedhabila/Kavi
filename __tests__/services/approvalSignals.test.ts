@@ -13,7 +13,7 @@ describe('approvalSignals', () => {
 
   it('classifies external runs structurally', () => {
     expect(getOperationalEvidenceKind({ sourceName: 'open_url' })).toBe('external_run');
-    expect(getOperationalEvidenceKind({ sourceName: 'share_url' })).toBe('external_run');
+    expect(getOperationalEvidenceKind({ sourceName: 'share_text' })).toBe('external_run');
     expect(getOperationalEvidenceKind({ sourceName: 'notification_send' })).toBe('external_run');
     expect(getOperationalEvidenceKind({ sourceName: 'expo_eas_workflow_status' })).toBe(
       'external_run',

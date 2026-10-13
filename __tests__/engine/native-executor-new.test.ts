@@ -1,7 +1,6 @@
 // ---------------------------------------------------------------------------
 // Tests for new native device tool executors:
-// device_status, device_info, device_permissions, device_health,
-// photos_pick, camera_clip, screen_record, haptic_feedback
+// device_query, photos_pick, camera_clip, screen_record
 // ---------------------------------------------------------------------------
 
 const mockGetStringAsync = jest.fn();
@@ -60,13 +59,6 @@ jest.mock('react-native-view-shot', () => ({
   captureScreen: jest.fn().mockRejectedValue(new Error('screen capture unavailable')),
 }));
 
-jest.mock('expo-haptics', () => ({
-  impactAsync: jest.fn().mockResolvedValue(undefined),
-  notificationAsync: jest.fn().mockResolvedValue(undefined),
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
-  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
-}));
-
 jest.mock('../../src/services/notifications/service', () => ({
   cancelLocalNotification: jest.fn().mockResolvedValue({ id: 'notification-id', cancelled: true }),
 }));
@@ -79,7 +71,6 @@ import {
   normalizeDeviceBatteryEvidence,
 } from '../../src/engine/tools/native/device/executor';
 import { executeNativeTool } from '../../src/engine/tools/native/executor';
-import { executeHapticFeedback } from '../../src/engine/tools/native/haptics/executor';
 import {
   executeCameraClip,
   executePhotosPick,
@@ -243,45 +234,22 @@ describe('Screen Record Tool', () => {
   });
 });
 
-describe('Haptic Feedback Tool', () => {
-  it('triggers haptic feedback (or degrades gracefully)', async () => {
-    const result = await executeHapticFeedback({ type: 'success' });
-    expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed).toEqual({ status: 'triggered', type: 'success' });
-    });
-  });
-
-  it('defaults to medium type', async () => {
-    const result = await executeHapticFeedback({});
-    expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed).toEqual({ status: 'triggered', type: 'medium' });
-    });
-  });
-});
-
 describe('Native Tool Dispatcher — New Tools', () => {
-  it('routes device_status correctly', async () => {
-    const result = await executeNativeTool('device_status', '{}');
-    expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed.battery).toBeDefined();
-    });
-  });
-
-  it('routes device_info correctly', async () => {
-    const result = await executeNativeTool('device_info', '{}');
-    expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed.platform).toBe('ios');
-    });
-  });
-
-  it('routes device_permissions correctly', async () => {
-    const result = await executeNativeTool('device_permissions', '{}');
-    expect(typeof completedToolContent(result)).toBe('string');
-  });
-
-  it('routes device_health correctly', async () => {
-    const result = await executeNativeTool('device_health', '{}');
-    expect(typeof completedToolContent(result)).toBe('string');
+  it('routes each device query kind', async () => {
+    expectNativeCompletionOrFailure(
+      await executeNativeTool('device_query', '{"kind":"info"}'),
+      (parsed) => {
+        expect(parsed.platform).toBe('ios');
+      },
+    );
+    expect(
+      typeof completedToolContent(
+        await executeNativeTool('device_query', '{"kind":"permissions"}'),
+      ),
+    ).toBe('string');
+    expect(
+      typeof completedToolContent(await executeNativeTool('device_query', '{"kind":"health"}')),
+    ).toBe('string');
   });
 
   it('defaults the canonical device query to status', async () => {
@@ -289,13 +257,6 @@ describe('Native Tool Dispatcher — New Tools', () => {
     expectNativeCompletionOrFailure(result, (parsed) => {
       expect(parsed.battery).toBeDefined();
       expect(parsed.network).toBeDefined();
-    });
-  });
-
-  it('routes haptic_feedback correctly', async () => {
-    const result = await executeNativeTool('haptic_feedback', '{"type":"light"}');
-    expectNativeCompletionOrFailure(result, (parsed) => {
-      expect(parsed).toEqual({ status: 'triggered', type: 'light' });
     });
   });
 
@@ -319,9 +280,7 @@ describe('Native Tool Dispatcher — New Tools', () => {
     controller.abort(new Error('backgrounded'));
 
     expect(
-      failedToolContent(
-        await executeNativeTool('haptic_feedback', '{"type":"light"}', controller.signal),
-      ),
+      failedToolContent(await executeNativeTool('device_query', '{}', controller.signal)),
     ).toBe('Error: Request cancelled');
   });
 });

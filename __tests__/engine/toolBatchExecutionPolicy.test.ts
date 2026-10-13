@@ -35,10 +35,7 @@ describe('tool batch execution policy', () => {
 
   it('does not parallelize canonical native tools with permission evidence dependencies', () => {
     expect(
-      shouldExecuteToolBatchInParallel([
-        { name: 'device_permissions' },
-        { name: 'location_current' },
-      ]),
+      shouldExecuteToolBatchInParallel([{ name: 'device_query' }, { name: 'location_current' }]),
     ).toBe(false);
   });
 

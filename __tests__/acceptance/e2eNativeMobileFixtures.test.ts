@@ -78,7 +78,7 @@ describe('E2E native mobile fixtures', () => {
   });
 
   it('returns deterministic permission-state fixtures for mobile-native benchmarks', async () => {
-    const outcome = await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
+    const outcome = await tryExecuteE2ENativeMobileTool('device_query', '{"kind":"permissions"}');
     expect(outcome).toEqual({
       status: 'completed',
       content: E2E_FIXTURE_DEVICE_PERMISSIONS_JSON,

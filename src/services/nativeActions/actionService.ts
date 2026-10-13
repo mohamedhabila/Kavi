@@ -12,7 +12,7 @@ import {
   viewContact,
 } from './adapters/contacts';
 import { openExternalUrl } from './adapters/linking';
-import { shareFile, shareText, shareUrl } from './adapters/share';
+import { shareFile, shareText } from './adapters/share';
 import { composeSms } from './adapters/sms';
 import {
   errorToNativeActionResult,
@@ -62,16 +62,12 @@ export async function executeNativeAction(
         return createContact(args as any);
       case 'contacts_share':
         return shareContact(args as any);
-      case 'contacts_search_full':
       case 'contacts_search':
         return searchContactsFull(args as any);
-      case 'contacts_get_full':
       case 'contacts_get':
         return getContactFull(args as any);
       case 'share_text':
         return shareText(args as any);
-      case 'share_url':
-        return shareUrl(args as any);
       case 'share_file':
         return shareFile(args as any);
       case 'open_url': {

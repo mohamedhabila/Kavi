@@ -116,7 +116,6 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'screen_record' ||
-    toolName === 'haptic_feedback' ||
     toolName === 'open_url' ||
     toolName.startsWith('share_') ||
     toolName.startsWith('notification_') ||
@@ -166,16 +165,12 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.contactsCreateTitle');
     case 'contacts_share':
       return i18n.t('toolApproval.actions.contactsShareTitle');
-    case 'contacts_search_full':
     case 'contacts_search':
       return i18n.t('toolApproval.actions.contactsSearchFullTitle');
-    case 'contacts_get_full':
     case 'contacts_get':
       return i18n.t('toolApproval.actions.contactsGetFullTitle');
     case 'share_text':
       return i18n.t('toolApproval.actions.shareTextTitle');
-    case 'share_url':
-      return i18n.t('toolApproval.actions.shareUrlTitle');
     case 'share_file':
       return i18n.t('toolApproval.actions.shareFileTitle');
     case 'open_url':
@@ -191,14 +186,27 @@ function getToolTitle(toolName: string): string {
   }
 }
 
+/**
+ * contacts_form opens the native view, edit or create form; its approval is presented as that
+ * form, under the `contacts_view` / `contacts_edit` / `contacts_create` keys below.
+ */
+function resolveNativePresentationName(toolName: string, args: Record<string, unknown>): string {
+  if (toolName !== 'contacts_form') return toolName;
+  const action = typeof args.action === 'string' ? args.action.trim().toLowerCase() : '';
+  return action === 'view' || action === 'edit' || action === 'create'
+    ? `contacts_${action}`
+    : toolName;
+}
+
 function summarizeNativeTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Pick<ToolInvocationPresentation, 'title' | 'description' | 'redactedArguments' | 'piiRedacted'> {
   const details: string[] = [];
   let redactedArguments: Record<string, unknown> = {};
+  const presentationName = resolveNativePresentationName(toolName, args);
 
-  switch (toolName) {
+  switch (presentationName) {
     case 'calendar_list': {
       redactedArguments = {};
       break;
@@ -335,7 +343,6 @@ function summarizeNativeTool(
     }
     case 'contacts_view':
     case 'contacts_share':
-    case 'contacts_get_full':
     case 'contacts_get': {
       pushDetail(details, 'toolApproval.details.contactReference');
       redactedArguments = { hasId: hasNonEmptyString(args.id) };
@@ -372,7 +379,6 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'contacts_search_full':
     case 'contacts_search': {
       pushDetail(details, 'toolApproval.details.queryIncluded');
       if (typeof args.limit === 'number')
@@ -406,19 +412,6 @@ function summarizeNativeTool(
       if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
       redactedArguments = {
         textLength: hasNonEmptyString(args.text) ? String(args.text).length : 0,
-        hasTitle: hasNonEmptyString(args.title),
-      };
-      break;
-    }
-    case 'share_url': {
-      const scheme = getUrlScheme(args.url);
-      if (scheme) pushDetail(details, 'toolApproval.details.scheme', { scheme });
-      if (hasNonEmptyString(args.message))
-        pushDetail(details, 'toolApproval.details.urlMessageIncluded');
-      if (hasNonEmptyString(args.title)) pushDetail(details, 'toolApproval.details.titleIncluded');
-      redactedArguments = {
-        scheme,
-        hasMessage: hasNonEmptyString(args.message),
         hasTitle: hasNonEmptyString(args.title),
       };
       break;
@@ -473,13 +466,6 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'device_status':
-    case 'device_info':
-    case 'device_permissions':
-    case 'device_health': {
-      redactedArguments = {};
-      break;
-    }
     case 'device_query': {
       redactedArguments = {
         kind: hasNonEmptyString(args.kind) ? String(args.kind).toLowerCase() : undefined,
@@ -509,12 +495,6 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'haptic_feedback': {
-      redactedArguments = {
-        type: hasNonEmptyString(args.type) ? String(args.type).toLowerCase() : undefined,
-      };
-      break;
-    }
     default: {
       pushDetail(details, 'toolApproval.details.providedArguments');
       redactedArguments = { argumentCount: Object.keys(args).length };
@@ -523,7 +503,7 @@ function summarizeNativeTool(
   }
 
   return {
-    title: toolName === 'reminder' ? getReminderTitle(args) : getToolTitle(toolName),
+    title: toolName === 'reminder' ? getReminderTitle(args) : getToolTitle(presentationName),
     description:
       details.length > 0
         ? `${details.join(' · ')}. ${i18n.t('toolApproval.redactedNotice')}`

@@ -197,15 +197,8 @@ const READ_ONLY_NATIVE_TOOLS = [
   'calendar_events',
   'clipboard_read',
   'contacts_pick',
-  'contacts_view',
   'contacts_search',
   'contacts_get',
-  'contacts_search_full',
-  'contacts_get_full',
-  'device_status',
-  'device_info',
-  'device_permissions',
-  'device_health',
   'device_query',
   'location_current',
   'photos_pick',
@@ -468,8 +461,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       'contact.access_update',
       nativeOutcomes({ updated: APPLIED, unchanged: NO_EFFECT }),
     ),
-    contacts_edit: effectful('contact.update', nativeOutcomes({ opened: HANDED_OFF })),
-    contacts_create: effectful('contact.create', nativeOutcomes({ opened: HANDED_OFF })),
     contacts_form: effectful(
       'unknown',
       {
@@ -484,7 +475,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     ),
     contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_text: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
-    share_url: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_file: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     notification_send: effectful(
       'notification.send',
@@ -499,7 +489,6 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       captured: APPLIED,
       screenshot_not_available: FAILED,
     }),
-    haptic_feedback: effectful('device.haptic', { triggered: APPLIED }),
   });
 
 export function getCodeOwnedToolEffectContract(

@@ -249,7 +249,7 @@ describe('needsApproval', () => {
   it('treats new communication and contacts tools as sensitive by default', () => {
     expect(needsApprovalWithContext('email_compose', {})).toBe(true);
     expect(needsApprovalWithContext('contacts_manage_access', {})).toBe(true);
-    expect(needsApprovalWithContext('contacts_search_full', { query: 'Jane' })).toBe(true);
+    expect(needsApprovalWithContext('contacts_search', { query: 'Jane' })).toBe(true);
     expect(needsApprovalWithContext('phone_call', { number: '+12125550101' })).toBe(true);
     expect(needsApprovalWithContext('calendar_events', {})).toBe(true);
     expect(needsApprovalWithContext('calendar_update_event', { id: 'event-1' })).toBe(true);

@@ -8,11 +8,8 @@ import {
   NativeActionResult,
   ShareFileArgs,
   ShareTextArgs,
-  ShareUrlArgs,
 } from '../types';
-import { normalizeRequiredString, normalizeUrlWithAllowlist } from '../validators';
-
-const WEB_URL_SCHEMES = new Set(['http', 'https']);
+import { normalizeRequiredString } from '../validators';
 
 type SharingModule = typeof import('expo-sharing');
 
@@ -63,25 +60,6 @@ export async function shareText(
     );
   } catch (error) {
     return errorToNativeActionResult(error, 'share_text_failed', 'Text sharing failed');
-  }
-}
-
-export async function shareUrl(
-  args: ShareUrlArgs,
-): Promise<NativeActionResult<Record<string, unknown>>> {
-  try {
-    const { url } = normalizeUrlWithAllowlist(args.url, WEB_URL_SCHEMES);
-    const message = args.message ? normalizeRequiredString(args.message, 'message') : undefined;
-    return shareWithNativeSheet(
-      {
-        ...(message ? { message } : {}),
-        url,
-      },
-      'Opened the native share sheet for a URL.',
-      args.title,
-    );
-  } catch (error) {
-    return errorToNativeActionResult(error, 'share_url_failed', 'URL sharing failed');
   }
 }
 

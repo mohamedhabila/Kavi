@@ -44,7 +44,7 @@ describe('TOOL_DEFINITIONS — full set', () => {
   });
 
   // Each of these did what single-purpose tools already did: `clipboard` (clipboard_read and
-  // clipboard_write), `share` (share_text, share_url, share_file, contacts_share) and
+  // clipboard_write), `share` (share_text, share_file, contacts_share) and
   // `share_contact` (contacts_share). Two ways to make one call is redundancy the model has
   // to choose between; on the GLM 5.3 Flash suite it called `clipboard` with no text, then
   // switched to clipboard_write.

@@ -228,7 +228,6 @@ export function getApprovalScope(toolName: string): ApprovalScope {
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'screen_record' ||
-    toolName === 'haptic_feedback' ||
     toolName.startsWith('share_') ||
     toolName === 'open_url' ||
     toolName.startsWith('notification_')

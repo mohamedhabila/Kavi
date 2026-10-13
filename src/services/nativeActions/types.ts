@@ -54,12 +54,6 @@ export interface ShareTextArgs {
   title?: string;
 }
 
-export interface ShareUrlArgs {
-  url: string;
-  message?: string;
-  title?: string;
-}
-
 export interface ShareFileArgs {
   fileUri: string;
   mimeType?: string;

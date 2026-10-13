@@ -107,11 +107,9 @@ import {
   executeContactsCreate,
   executeContactsEdit,
   executeContactsGet,
-  executeContactsGetFull,
   executeContactsManageAccess,
   executeContactsPick,
   executeContactsSearch,
-  executeContactsSearchFull,
   executeContactsShare,
   executeContactsView,
 } from '../../src/engine/tools/native/contacts/executor';
@@ -124,11 +122,7 @@ import {
 } from '../../src/engine/tools/native/communication/executor';
 import { executeNativeTool } from '../../src/engine/tools/native/executor';
 import { executeLocationCurrent } from '../../src/engine/tools/native/location/executor';
-import {
-  executeShareFile,
-  executeShareText,
-  executeShareUrl,
-} from '../../src/engine/tools/native/share/executor';
+import { executeShareFile, executeShareText } from '../../src/engine/tools/native/share/executor';
 import {
   failedToolContent,
   parseCompletedToolOutcome,
@@ -421,19 +415,15 @@ describe('typed native actions', () => {
     );
   });
 
-  it('supports full contact search and full contact read aliases', async () => {
-    const searched = parseCompletedToolOutcome(await executeContactsSearch({ query: 'Jane' }));
-    const fullSearch = parseCompletedToolOutcome(
-      await executeContactsSearchFull({ query: 'Jane', limit: 5 }),
+  it('searches contacts and reads one contact in full', async () => {
+    const searched = parseCompletedToolOutcome(
+      await executeContactsSearch({ query: 'Jane', limit: 5 }),
     );
     const fetched = parseCompletedToolOutcome(await executeContactsGet({ id: 'contact-1' }));
-    const fullFetch = parseCompletedToolOutcome(await executeContactsGetFull({ id: 'contact-1' }));
 
     expect(searched.status).toBe('completed');
-    expect(fullSearch.status).toBe('completed');
     expect(fetched.status).toBe('completed');
-    expect(fullFetch.status).toBe('completed');
-    expect(fullFetch.details.contact.company).toBe('Kavi');
+    expect(fetched.details.contact.company).toBe('Kavi');
   });
 
   it('shares contacts through the native contact flow', async () => {
@@ -444,23 +434,15 @@ describe('typed native actions', () => {
     expect(mockContactsShareContactAsync).toHaveBeenCalledWith('contact-1', 'Reach out');
   });
 
-  it('supports text, URL, and file share flows', async () => {
+  it('supports text and file share flows', async () => {
     const textResult = parseCompletedToolOutcome(await executeShareText({ text: 'Hello' }));
-    const urlResult = parseCompletedToolOutcome(
-      await executeShareUrl({ url: 'https://example.com', message: 'Read this' }),
-    );
     const fileResult = parseCompletedToolOutcome(
       await executeShareFile({ fileUri: 'file:///tmp/report.pdf', mimeType: 'application/pdf' }),
     );
 
     expect(textResult.status).toBe('handed_off');
-    expect(urlResult.status).toBe('handed_off');
     expect(fileResult.status).toBe('handed_off');
     expect(mockShare).toHaveBeenNthCalledWith(1, expect.objectContaining({ message: 'Hello' }));
-    expect(mockShare).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ message: 'Read this', url: 'https://example.com' }),
-    );
     expect(mockSharingShareAsync).toHaveBeenCalledWith(
       'file:///tmp/report.pdf',
       expect.objectContaining({ mimeType: 'application/pdf' }),

@@ -118,7 +118,7 @@ describe('evaluateE2ERubric', () => {
   it('checks native_fixture_state from deterministic native side effects', async () => {
     process.env.RUN_E2E_AGENT_EVAL = '1';
     const stateBefore = getE2ENativeMobileFixtureStateSnapshot();
-    await tryExecuteE2ENativeMobileTool('device_permissions', '{}');
+    await tryExecuteE2ENativeMobileTool('device_query', '{"kind":"permissions"}');
     const native = {
       stateBefore,
       stateAfter: getE2ENativeMobileFixtureStateSnapshot(),

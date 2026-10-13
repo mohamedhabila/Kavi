@@ -8,14 +8,6 @@ export async function executeShareText(args: {
   return executeStructuredNativeAction('share_text', args as Record<string, unknown>);
 }
 
-export async function executeShareUrl(args: {
-  url: string;
-  message?: string;
-  title?: string;
-}): Promise<ToolRuntimeOutcome> {
-  return executeStructuredNativeAction('share_url', args as Record<string, unknown>);
-}
-
 export async function executeShareFile(args: {
   fileUri: string;
   mimeType?: string;

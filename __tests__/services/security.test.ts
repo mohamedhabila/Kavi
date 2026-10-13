@@ -57,9 +57,7 @@ describe('useToolPermissionsStore', () => {
     expect(useToolPermissionsStore.getState().requiresConfirmation('contacts_manage_access')).toBe(
       true,
     );
-    expect(useToolPermissionsStore.getState().requiresConfirmation('contacts_search_full')).toBe(
-      true,
-    );
+    expect(useToolPermissionsStore.getState().requiresConfirmation('contacts_search')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('location_current')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('clipboard_read')).toBe(true);
     expect(useToolPermissionsStore.getState().requiresConfirmation('photos_pick')).toBe(true);

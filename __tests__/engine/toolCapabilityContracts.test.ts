@@ -20,16 +20,13 @@ import {
   CONTACTS_GET_TOOL,
   CONTACTS_SEARCH_TOOL,
 } from '../../src/engine/tools/native/contacts/definitions';
-import {
-  DEVICE_STATUS_TOOL,
-  DEVICE_PERMISSIONS_TOOL,
-} from '../../src/engine/tools/native/device/definitions';
+import { DEVICE_QUERY_TOOL } from '../../src/engine/tools/native/device/definitions';
 import { LOCATION_CURRENT_TOOL } from '../../src/engine/tools/native/location/definitions';
 import {
   MAPS_OPEN_TOOL,
   SMS_COMPOSE_TOOL,
 } from '../../src/engine/tools/native/communication/definitions';
-import { SHARE_TEXT_TOOL, SHARE_URL_TOOL } from '../../src/engine/tools/native/share/definitions';
+import { SHARE_FILE_TOOL, SHARE_TEXT_TOOL } from '../../src/engine/tools/native/share/definitions';
 import {
   EXPO_EAS_CREATE_PROJECT_TOOL,
   EXPO_EAS_WORKFLOW_WAIT_TOOL,
@@ -83,8 +80,8 @@ describe('tool capability contracts', () => {
     expect(CALENDAR_LIST_TOOL.contract).toBeDefined();
     expect(LOCATION_CURRENT_TOOL.contract).toBeDefined();
     expect(CLIPBOARD_WRITE_TOOL.contract).toBeDefined();
-    expect(SHARE_URL_TOOL.contract).toBeDefined();
-    expect(DEVICE_STATUS_TOOL.contract).toBeDefined();
+    expect(SHARE_FILE_TOOL.contract).toBeDefined();
+    expect(DEVICE_QUERY_TOOL.contract).toBeDefined();
     expect(SESSION_WAIT_TOOL.contract).toBeDefined();
     expect(WAIT_TOOL.contract).toBeDefined();
     expect(MEMORY_SEARCH_TOOL.contract).toBeDefined();
@@ -307,7 +304,7 @@ describe('tool capability contracts', () => {
 
     expect(toolNames).toEqual(
       expect.arrayContaining([
-        'device_permissions',
+        'device_query',
         'contacts_search',
         'contacts_get',
         'clipboard_write',
@@ -318,7 +315,7 @@ describe('tool capability contracts', () => {
   });
 
   it('declares native workflow producer-consumer contracts for current mobile chains', () => {
-    expect(DEVICE_PERMISSIONS_TOOL.contract).toEqual(
+    expect(DEVICE_QUERY_TOOL.contract).toEqual(
       expect.objectContaining({
         produces: expect.arrayContaining([
           { kind: 'permission_state', field: 'location.foreground' },
@@ -438,7 +435,9 @@ describe('tool capability contracts', () => {
   });
 
   it('resolves internal native names through canonical explicit contracts', () => {
-    expect(inferToolCapabilityDescriptor({ name: 'share_url', description: 'share_url' })).toEqual(
+    expect(
+      inferToolCapabilityDescriptor({ name: 'share_text', description: 'share_text' }),
+    ).toEqual(
       expect.objectContaining({
         category: 'communication',
         capabilities: ['write'],
@@ -448,7 +447,7 @@ describe('tool capability contracts', () => {
     );
 
     expect(
-      inferToolCapabilityDescriptor({ name: 'device_status', description: 'device_status' }),
+      inferToolCapabilityDescriptor({ name: 'device_query', description: 'device_query' }),
     ).toEqual(
       expect.objectContaining({
         category: 'device',

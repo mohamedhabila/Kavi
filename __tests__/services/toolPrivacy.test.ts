@@ -91,9 +91,6 @@ describe('tool invocation privacy presentation', () => {
   });
 
   it('keeps native permission and device queries structural', () => {
-    expect(JSON.parse(describeToolInvocation('device_permissions', {}).redactedArguments)).toEqual(
-      {},
-    );
     expect(
       JSON.parse(describeToolInvocation('device_query', { kind: 'permissions' }).redactedArguments),
     ).toEqual({ kind: 'permissions' });
@@ -105,6 +102,29 @@ describe('tool invocation privacy presentation', () => {
     ).toEqual({
       camera: 'front',
     });
+  });
+
+  it('presents a contacts form approval as the form it opens', () => {
+    const create = describeToolInvocation('contacts_form', {
+      action: 'create',
+      firstName: 'Jane',
+      phoneNumbers: [{ number: '+15550100' }],
+    });
+    expect(create.title).toBe('Create contact');
+    expect(create.description).toContain('prefilled contact fields included');
+    expect(JSON.parse(create.redactedArguments)).toEqual({
+      emailCount: 0,
+      phoneCount: 1,
+      hasNameFields: true,
+    });
+    expect(create.redactedArguments).not.toContain('Jane');
+
+    const edit = describeToolInvocation('contacts_form', { action: 'edit', id: 'c1' });
+    expect(edit.title).toBe('Edit contact');
+    expect(edit.description).toContain('contact reference included');
+    expect(describeToolInvocation('contacts_form', { action: 'view', id: 'c1' }).title).toBe(
+      'View contact',
+    );
   });
 
   it('titles the reminder approval dialog per action', () => {

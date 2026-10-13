@@ -345,7 +345,7 @@ describe('runForegroundScenario', () => {
 
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
     expect(toolFilter?.('memory_search')).toBe(false);
-    expect(toolFilter?.('device_info')).toBe(false);
+    expect(toolFilter?.('device_query')).toBe(false);
     expect(mockedRunOrchestrator.mock.calls[0][0]).toMatchObject({ disableTooling: true });
   });
 

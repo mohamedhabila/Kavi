@@ -3,7 +3,7 @@ import { nativeContract, RECOVERABLE_EXTERNAL_ERRORS } from '../shared';
 
 export const SHARE_TEXT_TOOL: ToolDefinition = {
   name: 'share_text',
-  description: 'Share plain text using the native share sheet.',
+  description: 'Share text, such as a message or a link, using the native share sheet.',
   input_schema: {
     type: 'object',
     properties: {
@@ -24,32 +24,6 @@ export const SHARE_TEXT_TOOL: ToolDefinition = {
     providesEvidence: ['external_run'],
     workflowStages: ['start_external_execution'],
     consumes: [{ kind: 'clipboard_text', required: false }],
-  }),
-};
-
-export const SHARE_URL_TOOL: ToolDefinition = {
-  name: 'share_url',
-  description: 'Share an HTTP or HTTPS URL using the native share sheet.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      url: { type: 'string', description: 'HTTP or HTTPS URL to share' },
-      message: { type: 'string', description: 'Optional message to include with the URL' },
-      title: { type: 'string', description: 'Optional share-sheet title' },
-    },
-    required: ['url'],
-  },
-  contract: nativeContract({
-    category: 'communication',
-    capabilities: ['write'],
-    resourceKinds: ['device'],
-    sideEffects: ['external_run'],
-    riskLevel: 'high',
-    permissionPrerequisites: ['share_sheet.available'],
-    recoverableErrors: [...RECOVERABLE_EXTERNAL_ERRORS],
-    riskHints: ['requires_approval'],
-    providesEvidence: ['external_run'],
-    workflowStages: ['start_external_execution'],
   }),
 };
 

@@ -9,11 +9,9 @@ import {
   executeContactsCreate,
   executeContactsEdit,
   executeContactsGet,
-  executeContactsGetFull,
   executeContactsManageAccess,
   executeContactsPick,
   executeContactsSearch,
-  executeContactsSearchFull,
   executeContactsShare,
   executeContactsView,
 } from './contacts/executor';
@@ -30,11 +28,10 @@ import {
   executeDevicePermissions,
   executeDeviceStatus,
 } from './device/executor';
-import { executeHapticFeedback } from './haptics/executor';
 import { executeLocationCurrent } from './location/executor';
 import { executeCameraClip, executePhotosPick, executeScreenRecord } from './media/executor';
 import { executeNotificationSend } from './notifications/executor';
-import { executeShareFile, executeShareText, executeShareUrl } from './share/executor';
+import { executeShareFile, executeShareText } from './share/executor';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../../types/toolRuntimeOutcome';
 
 export async function executeNativeTool(
@@ -73,12 +70,6 @@ export async function executeNativeTool(
       return executeContactsPick();
     case 'contacts_manage_access':
       return executeContactsManageAccess();
-    case 'contacts_view':
-      return executeContactsView(args);
-    case 'contacts_edit':
-      return executeContactsEdit(args);
-    case 'contacts_create':
-      return executeContactsCreate(args);
     case 'contacts_form': {
       const action = typeof args?.action === 'string' ? args.action.toLowerCase() : '';
       if (action === 'view') return executeContactsView(args);
@@ -91,10 +82,6 @@ export async function executeNativeTool(
     }
     case 'contacts_share':
       return executeContactsShare(args);
-    case 'contacts_search_full':
-      return executeContactsSearchFull(args);
-    case 'contacts_get_full':
-      return executeContactsGetFull(args);
     case 'contacts_search':
       return executeContactsSearch(args);
     case 'contacts_get':
@@ -107,22 +94,12 @@ export async function executeNativeTool(
       return executeClipboardWrite(args);
     case 'share_text':
       return executeShareText(args);
-    case 'share_url':
-      return executeShareUrl(args);
     case 'share_file':
       return executeShareFile(args);
     case 'open_url':
       return executeOpenUrl(args);
     case 'notification_send':
       return executeNotificationSend(args);
-    case 'device_status':
-      return executeDeviceStatus();
-    case 'device_info':
-      return executeDeviceInfo();
-    case 'device_permissions':
-      return executeDevicePermissions();
-    case 'device_health':
-      return executeDeviceHealth();
     case 'device_query': {
       const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : 'status';
       if (kind === 'status') return executeDeviceStatus();
@@ -140,8 +117,6 @@ export async function executeNativeTool(
       return executeCameraClip(args);
     case 'screen_record':
       return executeScreenRecord(args);
-    case 'haptic_feedback':
-      return executeHapticFeedback(args);
     default:
       return failedToolOutcome(`Error: unknown native tool "${name}"`, 'not_found');
   }
