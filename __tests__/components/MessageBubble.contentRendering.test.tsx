@@ -28,22 +28,6 @@ describe('MessageBubble content rendering', () => {
     expect(getByText('Styled answer')).toBeTruthy();
   });
 
-  it('should strip leaked internal Gemini history text from assistant rendering', () => {
-    const msg = makeMessage({
-      role: 'assistant',
-      content: [
-        'Previous internal tool call: tool_catalog (category="files").',
-        'Previous internal tool result: tool_catalog returned with structured tool catalog data.',
-        'Here is the real answer.',
-      ].join('\n'),
-    });
-    const { getByText, queryByText } = render(<MessageBubble message={msg} />);
-
-    expect(getByText('Here is the real answer.')).toBeTruthy();
-    expect(queryByText(/Previous internal tool call/)).toBeNull();
-    expect(queryByText(/Previous internal tool result/)).toBeNull();
-  });
-
   it('should render markdown through static elements instead of the markdown list wrapper', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Very long **markdown** reply' });
     const { getByText, queryByTestId } = render(<MessageBubble message={msg} />);

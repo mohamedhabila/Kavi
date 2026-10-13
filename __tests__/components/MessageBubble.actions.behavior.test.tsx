@@ -10,21 +10,6 @@ import {
 describe('MessageBubble actions', () => {
   installMessageBubbleTestHarness();
 
-  it('should strip leaked internal Gemini history text when copying assistant content', () => {
-    const msg = makeMessage({
-      role: 'assistant',
-      content: [
-        '[Historical context: assistant called tool "tool_catalog" with arguments {}]',
-        '[Historical context: tool "tool_catalog" returned: giant blob]',
-        'Clean answer.',
-      ].join('\n'),
-    });
-    const { getByTestId } = render(<MessageBubble message={msg} />);
-
-    fireEvent.press(getByTestId('icon-Copy').parent || getByTestId('icon-Copy'));
-    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('Clean answer.');
-  });
-
   it('should copy message content on copy press', () => {
     const msg = makeMessage({ content: 'Copy me' });
     const { getByTestId } = render(<MessageBubble message={msg} />);

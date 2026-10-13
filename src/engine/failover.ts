@@ -22,9 +22,7 @@ interface ActiveFailoverSelection {
 }
 
 function normalizeProviderModels(provider: LlmProviderConfig): string[] {
-  const explicit = provider.availableModels || [];
-  const legacy = Array.isArray((provider as any).models) ? (provider as any).models : [];
-  return Array.from(new Set([provider.model, ...explicit, ...legacy])).filter(
+  return Array.from(new Set([provider.model, ...(provider.availableModels || [])])).filter(
     (model): model is string => typeof model === 'string' && model.trim().length > 0,
   );
 }

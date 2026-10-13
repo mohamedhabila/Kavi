@@ -21,13 +21,10 @@ function makeToolCall(overrides: Partial<ToolCall> = {}): ToolCall {
 }
 
 describe('buildAssistantBubbleViewModel', () => {
-  it('builds visible content from sanitized assistant segments and keeps the latest active tool call', () => {
+  it('builds visible content from assistant segments and keeps the latest active tool call', () => {
     const model = buildAssistantBubbleViewModel({
       message: makeAssistantMessage({
-        content: [
-          'Previous internal tool call: read_file({"path":"README.md"})',
-          'Real answer.',
-        ].join('\n'),
+        content: 'Real answer.',
         reasoning: '…',
         toolCalls: [
           {

@@ -1,5 +1,5 @@
 import type { Message } from '../../../types/message';
-import { stripInternalAssistantTranscriptArtifacts } from '../../../utils/assistantTextSanitizer';
+import { normalizeAssistantTranscriptText } from '../../../utils/assistantTextSanitizer';
 import { mergeAssistantContinuationText } from './assistantContinuation';
 
 type ResumedAssistantDraft = Pick<Message, 'assistantMetadata' | 'content' | 'id' | 'reasoning'>;
@@ -39,12 +39,12 @@ export function createForegroundAssistantStreamController(params: {
   let lastCommittedContent = resumedDraftContent;
   let lastCommittedReasoning = resumedDraftReasoning;
   let lastPublishedContent = resumedDraftContent
-    ? stripInternalAssistantTranscriptArtifacts(resumedDraftContent)
+    ? normalizeAssistantTranscriptText(resumedDraftContent)
     : '';
   let lastPublishedReasoning = resumedDraftReasoning;
   let cachedVisibleContentSource = resumedDraftContent;
   let cachedVisibleContent = resumedDraftContent
-    ? stripInternalAssistantTranscriptArtifacts(resumedDraftContent)
+    ? normalizeAssistantTranscriptText(resumedDraftContent)
     : '';
   let startNextAssistantTurn = false;
   let checkpointTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,7 +57,7 @@ export function createForegroundAssistantStreamController(params: {
     }
 
     cachedVisibleContentSource = accumulatedContent;
-    cachedVisibleContent = stripInternalAssistantTranscriptArtifacts(accumulatedContent);
+    cachedVisibleContent = normalizeAssistantTranscriptText(accumulatedContent);
     return cachedVisibleContent;
   };
 
@@ -223,13 +223,13 @@ export function createForegroundAssistantStreamController(params: {
       const preserveExistingDraft =
         params.resumedAssistantDraft.assistantMetadata?.finishReason === 'terminal_review_pending';
       if (params.replaceResumedAssistantDraft) {
-        return stripInternalAssistantTranscriptArtifacts(content);
+        return normalizeAssistantTranscriptText(content);
       }
       const currentVisibleContent = getVisibleAssistantContent();
       const baselineContent =
         currentVisibleContent ||
-        stripInternalAssistantTranscriptArtifacts(params.resumedAssistantDraft.content ?? '');
-      const sanitizedIncomingContent = stripInternalAssistantTranscriptArtifacts(content);
+        normalizeAssistantTranscriptText(params.resumedAssistantDraft.content ?? '');
+      const sanitizedIncomingContent = normalizeAssistantTranscriptText(content);
 
       return mergeAssistantContinuationText(baselineContent, sanitizedIncomingContent, {
         preserveExistingPrefix: preserveExistingDraft,
@@ -255,7 +255,7 @@ export function createForegroundAssistantStreamController(params: {
           ? (params.resumedAssistantDraft.reasoning ?? '')
           : '';
       const baselineVisibleContent = baselineContent
-        ? stripInternalAssistantTranscriptArtifacts(baselineContent)
+        ? normalizeAssistantTranscriptText(baselineContent)
         : '';
       const shouldResetPersistedContent = lastCommittedContent !== baselineVisibleContent;
       const shouldResetPersistedReasoning = lastCommittedReasoning !== baselineReasoning;

@@ -96,36 +96,6 @@ describe('ChatScreen streaming presentation', () => {
     jest.useRealTimers();
   });
 
-  it('shows the first visible streamed token immediately after hidden internal prefix tokens', async () => {
-    jest.useFakeTimers();
-
-    const screen = render(<ChatScreen />);
-    fireEvent.changeText(screen.getByPlaceholderText('Message...'), 'Hidden prefix handling');
-    fireEvent.press(screen.getByTestId('icon-Send').parent || screen.getByTestId('icon-Send'));
-
-    await waitFor(() => {
-      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
-    });
-
-    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
-
-    act(() => {
-      callbacks.onToken('Previous internal tool call: tool_catalog');
-      callbacks.onToken(' (category="files").\n');
-      jest.advanceTimersByTime(24);
-    });
-
-    expect(screen.queryByText(/Previous internal tool call:/)).toBeNull();
-
-    act(() => {
-      callbacks.onToken('Visible answer');
-    });
-
-    expect(screen.getByText('Visible answer')).toBeTruthy();
-
-    jest.useRealTimers();
-  });
-
   it('does not render a synthetic inline reasoning block before reasoning output arrives', async () => {
     jest.useFakeTimers();
 
@@ -290,41 +260,6 @@ describe('ChatScreen streaming presentation', () => {
       'plan',
       expect.anything(),
       'run-1',
-    );
-
-    jest.useRealTimers();
-  });
-
-  it('strips internal Gemini tool-history lines before storing assistant content', async () => {
-    jest.useFakeTimers();
-
-    const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
-    fireEvent.changeText(getByPlaceholderText('Message...'), 'Sanitize output');
-    fireEvent.press(getByTestId('icon-Send').parent || getByTestId('icon-Send'));
-
-    await waitFor(() => {
-      expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
-    });
-
-    const [, callbacks] = mockRunOrchestrator.mock.calls[0];
-    mockUpdateMessage.mockClear();
-    const { act } = require('@testing-library/react-native');
-
-    act(() => {
-      callbacks.onAssistantMessage(
-        [
-          'Previous internal tool call: tool_catalog (category="files").',
-          'Previous internal tool result: tool_catalog returned with structured tool catalog data.',
-          'Answer after the failed tool.',
-        ].join('\n'),
-        [],
-      );
-    });
-
-    expect(mockUpdateMessage).toHaveBeenCalledWith(
-      'conv1',
-      expect.any(String),
-      'Answer after the failed tool.',
     );
 
     jest.useRealTimers();

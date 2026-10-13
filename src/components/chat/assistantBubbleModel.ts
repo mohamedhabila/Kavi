@@ -1,6 +1,6 @@
 import { Message, ToolCall } from '../../types/message';
 import {
-  stripInternalAssistantTranscriptArtifacts,
+  normalizeAssistantTranscriptText,
   stripRawProviderToolCallMarkupForDisplay,
 } from '../../utils/assistantTextSanitizer';
 import { mergeAttachmentLists } from '../../utils/messageAttachments';
@@ -83,7 +83,7 @@ function buildOrderedAssistantSegments(params: {
       ];
 
   return rawSegments.map((segment) => {
-    const sanitizedContent = stripInternalAssistantTranscriptArtifacts(segment.content || '');
+    const sanitizedContent = normalizeAssistantTranscriptText(segment.content || '');
     const content =
       segment.assistantMetadata?.kind === 'intermediate' && (segment.toolCalls?.length ?? 0) > 0
         ? stripRawProviderToolCallMarkupForDisplay(sanitizedContent)
