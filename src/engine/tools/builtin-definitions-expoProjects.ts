@@ -161,7 +161,7 @@ export const EXPO_EAS_BUILD_TOOL: ToolDefinition = {
     required: ['projectId'],
   },
   contract: expoContract({
-    category: 'expo_manual_actions',
+    category: 'expo',
     capabilities: ['deploy', 'monitor'],
     resourceKinds: ['expo_project', 'eas_workflow'],
     sideEffects: ['external_run'],
@@ -196,7 +196,7 @@ export const EXPO_EAS_UPDATE_TOOL: ToolDefinition = {
     required: ['projectId'],
   },
   contract: expoContract({
-    category: 'expo_manual_actions',
+    category: 'expo',
     capabilities: ['deploy', 'monitor'],
     resourceKinds: ['expo_project', 'eas_workflow'],
     sideEffects: ['external_run'],
@@ -228,7 +228,7 @@ export const EXPO_EAS_SUBMIT_TOOL: ToolDefinition = {
     required: ['projectId'],
   },
   contract: expoContract({
-    category: 'expo_manual_actions',
+    category: 'expo',
     capabilities: ['deploy', 'monitor'],
     resourceKinds: ['expo_project', 'eas_workflow'],
     sideEffects: ['external_run'],
@@ -262,7 +262,7 @@ export const EXPO_EAS_DEPLOY_WEB_TOOL: ToolDefinition = {
     required: ['projectId'],
   },
   contract: expoContract({
-    category: 'expo_manual_actions',
+    category: 'expo',
     capabilities: ['deploy', 'monitor'],
     resourceKinds: ['expo_project', 'eas_workflow'],
     sideEffects: ['external_run'],

@@ -7,9 +7,9 @@ import type { ToolDefinition } from '../../types/tool';
  * environment, or arbitrary code execution — capabilities a casual conversation has
  * no use for and that "no persona swap" depends on staying behind escalation:
  * spawning or coordinating sub-agent sessions (`sessions`), keeping the run's plan
- * (`plan`), a remote shell (`ssh`), native build tooling (`expo`,
- * `expo_manual_actions`), source control (`github`), full browser automation
- * (`browser`), and arbitrary code execution (`code`). Everyday actions — calendar,
+ * (`plan`), a remote shell (`ssh`), native build tooling (`expo`), source control
+ * (`github`), full browser automation (`browser`), and arbitrary code execution
+ * (`code`). Everyday actions — calendar,
  * contacts, messaging, web lookup, device state — live in every other category and
  * stay reachable. This is deliberately a category set, not a tool-name list: a
  * newly registered tool is classified by what it *is*, not by matching its name
@@ -20,7 +20,6 @@ const AGENTIC_ONLY_TOOL_CATEGORIES: ReadonlySet<string> = new Set([
   'plan',
   'ssh',
   'expo',
-  'expo_manual_actions',
   'github',
   'browser',
   'code',

@@ -1,13 +1,13 @@
 import { isLongTermMemoryEnabled } from '../../services/memory/policy';
 import type { ToolDefinition } from '../../types/tool';
 
-const MEMORY_CONTRACT_CATEGORIES = new Set(['memory', 'memory_search']);
+const MEMORY_CONTRACT_CATEGORY = 'memory';
 
 function isLongTermMemoryTool(tool: ToolDefinition): boolean {
   const contract = tool.contract;
   return (
     contract?.resourceKinds?.includes('memory') === true ||
-    (typeof contract?.category === 'string' && MEMORY_CONTRACT_CATEGORIES.has(contract.category))
+    contract?.category === MEMORY_CONTRACT_CATEGORY
   );
 }
 

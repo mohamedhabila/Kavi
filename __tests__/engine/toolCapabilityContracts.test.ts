@@ -515,7 +515,7 @@ describe('tool capability contracts', () => {
   it('uses explicit memory, pdf, tool catalog, and workflow ledger contracts for descriptor inference', () => {
     expect(inferToolCapabilityDescriptor(MEMORY_SEARCH_TOOL)).toEqual(
       expect.objectContaining({
-        category: 'memory_search',
+        category: 'memory',
         capabilities: ['discover', 'read'],
         resourceKinds: ['memory'],
         sideEffects: ['none'],

@@ -69,7 +69,7 @@ export const CAMERA_SNAP_TOOL: ToolDefinition = {
     required: [],
   },
   contract: {
-    category: 'device_media',
+    category: 'media',
     capabilities: ['read'],
     resourceKinds: ['device'],
     sideEffects: ['none'],
@@ -98,7 +98,7 @@ export const AUDIO_TRANSCRIBE_TOOL: ToolDefinition = {
     required: [],
   },
   contract: {
-    category: 'device_media',
+    category: 'media',
     capabilities: ['read', 'compute'],
     resourceKinds: ['device'],
     sideEffects: ['none'],

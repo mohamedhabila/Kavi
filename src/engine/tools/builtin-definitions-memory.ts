@@ -65,7 +65,7 @@ export const MEMORY_SEARCH_TOOL: ToolDefinition = {
     additionalProperties: false,
   },
   contract: {
-    category: 'memory_search',
+    category: 'memory',
     capabilities: ['discover', 'read'],
     resourceKinds: ['memory'],
     sideEffects: ['none'],
