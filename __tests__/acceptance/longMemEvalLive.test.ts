@@ -2,8 +2,9 @@
 // LongMemEval — live benchmark run (opt-in)
 // ---------------------------------------------------------------------------
 // Gated: RUN_LONGMEMEVAL=1, LONGMEMEVAL_DATA=<path to a LongMemEval JSON file> and the
-// selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context,
-// default memory), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_JUDGE_MODEL (default
+// selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context | window,
+// default memory), LONGMEMEVAL_WINDOW_TOKENS (the window arm's raw-history budget, default
+// 32000), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_JUDGE_MODEL (default
 // LongMemEval's reference judge), LONGMEMEVAL_OUT (results JSONL path). Run with TZ=UTC:
 // LongMemEval's dates carry no zone and are read as UTC.
 // ---------------------------------------------------------------------------
@@ -73,6 +74,14 @@ function selectedArm(): LongMemEvalArm {
   return arm as LongMemEvalArm;
 }
 
+function selectedWindowTokens(): number {
+  const tokens = Number(process.env.LONGMEMEVAL_WINDOW_TOKENS?.trim() || '32000');
+  if (!Number.isInteger(tokens) || tokens <= 0) {
+    throw new Error('LONGMEMEVAL_WINDOW_TOKENS must be a positive integer.');
+  }
+  return tokens;
+}
+
 function selectedInstances(): LongMemEvalInstance[] {
   const perType = Number(process.env.LONGMEMEVAL_PER_TYPE?.trim() || '10');
   const parsed: unknown = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
@@ -96,6 +105,7 @@ async function judgeAnswer(
 describeLive('LongMemEval (live)', () => {
   // A skipped describe still runs its body, so nothing is read unless the run is opted in.
   const arm: LongMemEvalArm = enabled ? selectedArm() : 'memory';
+  const windowTokens = enabled && arm === 'window' ? selectedWindowTokens() : 0;
   const instances = enabled ? selectedInstances() : [];
   const outPath =
     process.env.LONGMEMEVAL_OUT?.trim() || path.join('.artifacts', `longmemeval-${arm}.jsonl`);
@@ -133,11 +143,15 @@ describeLive('LongMemEval (live)', () => {
       async () => {
         const history = buildLongMemEvalHistoryMessages(instance);
         const restoreClock = installClockOffset(instance.askedAt - Date.now());
+        const scenario = buildLongMemEvalScenario(instance, arm, windowTokens);
+        const threadMessageIds = new Set(
+          (scenario.initialMessages ?? []).map((message) => message.id),
+        );
         let result;
         try {
-          result = await runE2EScenario(buildLongMemEvalScenario(instance, arm), {
+          result = await runE2EScenario(scenario, {
             provider,
-            ...(arm === 'memory'
+            ...(arm !== 'context'
               ? {
                   beforeTurns: ({ conversationId }: { conversationId: string }) => {
                     indexLongMemEvalHistory(conversationId, history);
@@ -161,11 +175,17 @@ describeLive('LongMemEval (live)', () => {
           completed: result.completed,
           durationMs: result.durationMs,
           totalTokens: result.usage.totalTokens + result.memoryUsage.totalTokens,
+          inputTokens: result.usage.inputTokens,
+          cacheReadTokens: result.usage.cacheReadTokens,
           costUsd: result.estimatedCost.usd,
           memorySearchCalls: result.toolCalls.filter((call) => call.name === 'memory_search')
             .length,
-          evidenceInPrompt: arm === 'memory' ? evidenceReachedMemoryPrompt(instance, result) : null,
-          answerRoundRecall: arm === 'memory' ? answerRoundRecall(instance, result) : null,
+          evidenceInPrompt:
+            arm === 'context'
+              ? null
+              : evidenceReachedMemoryPrompt(instance, result, threadMessageIds),
+          answerRoundRecall:
+            arm === 'context' ? null : answerRoundRecall(instance, result, threadMessageIds),
           errors: result.errors,
         };
         outcomes.push(outcome);

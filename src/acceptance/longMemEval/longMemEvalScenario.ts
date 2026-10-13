@@ -12,15 +12,20 @@
 //             125 extraction calls for one LongMemEval-S history) after the answer.
 //   context — the whole history is still in the thread the request carries: the
 //             long-context reference the memory arm is measured against.
+//   window  — the most recent stretch of the history, up to a token budget, is still in the
+//             thread and everything older has left it: every round is indexed, as capture
+//             indexes each round when it closes, and the older ones reach the model only
+//             through memory. It is how much raw history a request should keep.
 // ---------------------------------------------------------------------------
 
+import { estimateTokens } from '../../services/context/tokenCounter';
 import { skipCaptureThrough } from '../../services/memory/core/memoryCaptureCursor';
 import { indexClosedTurn } from '../../services/memory/core/memoryTurnsStore';
 import type { Message } from '../../types/message';
 import type { E2EScenario } from '../e2eAgent/types';
 import type { LongMemEvalInstance } from './longMemEvalDataset';
 
-export const LONGMEMEVAL_ARMS = ['memory', 'context'] as const;
+export const LONGMEMEVAL_ARMS = ['memory', 'context', 'window'] as const;
 export type LongMemEvalArm = (typeof LONGMEMEVAL_ARMS)[number];
 
 const HISTORY_MESSAGE_ID_PREFIX = 'lme';
@@ -80,16 +85,47 @@ export function indexLongMemEvalHistory(
   return indexed;
 }
 
+/**
+ * The most recent whole rounds of `messages` that fit in `maxTokens`, in order. A round is a
+ * user message and the replies after it; the window never starts on a reply.
+ */
+export function selectLongMemEvalWindow(
+  messages: ReadonlyArray<Message>,
+  maxTokens: number,
+): Message[] {
+  if (!Number.isFinite(maxTokens) || maxTokens <= 0) return [];
+  let start = messages.length;
+  let used = 0;
+  let roundTokens = 0;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    roundTokens += estimateTokens(messages[index]!.content);
+    if (messages[index]!.role !== 'user') continue;
+    if (used + roundTokens > maxTokens) break;
+    used += roundTokens;
+    roundTokens = 0;
+    start = index;
+  }
+  return messages.slice(start);
+}
+
 export function buildLongMemEvalScenario(
   instance: LongMemEvalInstance,
   arm: LongMemEvalArm,
+  windowTokens = 0,
 ): E2EScenario {
+  const history = arm === 'memory' ? [] : buildLongMemEvalHistoryMessages(instance);
+  const initialMessages =
+    arm === 'context'
+      ? history
+      : arm === 'window'
+        ? selectLongMemEvalWindow(history, windowTokens)
+        : [];
   return {
     id: `longmemeval-${instance.questionId}`,
     conversationId: 'longmemeval',
     contentClass: 'synthetic_public',
     prompt: instance.question,
     rubrics: [],
-    ...(arm === 'context' ? { initialMessages: buildLongMemEvalHistoryMessages(instance) } : {}),
+    ...(initialMessages.length > 0 ? { initialMessages } : {}),
   };
 }

@@ -34,10 +34,16 @@ export type LongMemEvalOutcome = Readonly<{
   totalTokens: number;
   /** Estimated spend in USD, or null when the provider's prices are unknown. */
   costUsd: number | null;
+  /** The conversation's input tokens, and how many of them were read from the provider cache. */
+  inputTokens: number;
+  cacheReadTokens: number;
   memorySearchCalls: number;
-  /** Whether a round of an evidence session was in the memory section; null when not measured. */
+  /**
+   * Whether a round of an evidence session reached the model, in the memory section or in the
+   * thread the request carried; null when not measured.
+   */
   evidenceInPrompt: boolean | null;
-  /** Share of the rounds that hold the answer that were in the memory section; null when not measured. */
+  /** Share of the rounds that hold the answer that reached the model either way; null when not measured. */
   answerRoundRecall: number | null;
   errors: ReadonlyArray<string>;
 }>;
@@ -58,6 +64,8 @@ export type LongMemEvalSummary = Readonly<{
   incomplete: number;
   totalTokens: number;
   medianTokens: number | null;
+  /** Median input tokens per question: how much each request carried. */
+  medianInputTokens: number | null;
   /** Summed estimated spend, or null when any question's price was unknown. */
   costUsd: number | null;
   medianDurationMs: number | null;
@@ -88,22 +96,34 @@ export function longMemEvalHypothesis(result: E2EScenarioResult): string {
   return result.turnTraces[result.turnTraces.length - 1]?.finalAssistant?.text ?? '';
 }
 
-/** Whether the memory section of any request held a round from an evidence session. */
+function roundIdsThatReachedModel(
+  result: E2EScenarioResult,
+  threadMessageIds: ReadonlySet<string>,
+): Set<string> {
+  return new Set([
+    ...threadMessageIds,
+    ...result.turnTraces.flatMap((turn) =>
+      turn.memoryPrompt.builds.flatMap((build) => build.turnIds),
+    ),
+  ]);
+}
+
+/**
+ * Whether a round from an evidence session reached the model: in any request's memory section,
+ * or among the history messages the thread carried (`threadMessageIds`).
+ */
 export function evidenceReachedMemoryPrompt(
   instance: LongMemEvalInstance,
   result: E2EScenarioResult,
+  threadMessageIds: ReadonlySet<string> = new Set(),
 ): boolean | null {
   if (instance.evidenceSessionIds.length === 0) return null;
   const evidence = new Set(instance.evidenceSessionIds);
-  return result.turnTraces.some((turn) =>
-    turn.memoryPrompt.builds.some((build) =>
-      build.turnIds.some((turnId) => {
-        const sessionIndex = sessionIndexOfHistoryMessage(turnId);
-        const session = sessionIndex === null ? undefined : instance.sessions[sessionIndex];
-        return session !== undefined && evidence.has(session.id);
-      }),
-    ),
-  );
+  return [...roundIdsThatReachedModel(result, threadMessageIds)].some((id) => {
+    const sessionIndex = sessionIndexOfHistoryMessage(id);
+    const session = sessionIndex === null ? undefined : instance.sessions[sessionIndex];
+    return session !== undefined && evidence.has(session.id);
+  });
 }
 
 /**
@@ -125,17 +145,16 @@ function answerRoundIds(instance: LongMemEvalInstance): Set<string> {
   return ids;
 }
 
-/** Share of the rounds that hold the answer that any request's memory section held. */
+/** Share of the rounds that hold the answer that reached the model, either way. */
 export function answerRoundRecall(
   instance: LongMemEvalInstance,
   result: E2EScenarioResult,
+  threadMessageIds: ReadonlySet<string> = new Set(),
 ): number | null {
   const answerRounds = answerRoundIds(instance);
   if (answerRounds.size === 0) return null;
-  const inPrompt = new Set(
-    result.turnTraces.flatMap((turn) => turn.memoryPrompt.builds.flatMap((build) => build.turnIds)),
-  );
-  return [...answerRounds].filter((id) => inPrompt.has(id)).length / answerRounds.size;
+  const reached = roundIdsThatReachedModel(result, threadMessageIds);
+  return [...answerRounds].filter((id) => reached.has(id)).length / answerRounds.size;
 }
 
 function mean(values: ReadonlyArray<number>): number | null {
@@ -180,6 +199,10 @@ export function summarizeLongMemEval(
     incomplete: outcomes.filter((outcome) => !outcome.completed).length,
     totalTokens: tokens.reduce((sum, value) => sum + value, 0),
     medianTokens: percentile(tokens, 0.5),
+    medianInputTokens: percentile(
+      outcomes.map((outcome) => outcome.inputTokens),
+      0.5,
+    ),
     costUsd: outcomes.every((outcome) => outcome.costUsd !== null)
       ? outcomes.reduce((sum, outcome) => sum + (outcome.costUsd ?? 0), 0)
       : null,
@@ -200,8 +223,8 @@ export function formatLongMemEvalSummary(summary: LongMemEvalSummary): string {
       return `  ${type}: ${typeScore.correct}/${typeScore.questions} = ${percent(typeScore.accuracy)}`;
     }),
     `  abstention: ${summary.abstention.correct}/${summary.abstention.questions} = ${percent(summary.abstention.accuracy)}`,
-    `  evidence in memory section: ${percent(summary.evidenceInPromptRate)}; answer rounds in memory section: ${percent(summary.answerRoundRecall)}; memory_search used: ${percent(summary.memorySearchRate)}; incomplete: ${summary.incomplete}`,
-    `  tokens: ${summary.totalTokens} total, ${summary.medianTokens ?? 'n/a'} median; cost ${summary.costUsd === null ? 'n/a' : `$${summary.costUsd.toFixed(4)}`}; duration median ${summary.medianDurationMs ?? 'n/a'} ms, p90 ${summary.p90DurationMs ?? 'n/a'} ms`,
+    `  evidence reached the model: ${percent(summary.evidenceInPromptRate)}; answer rounds that reached it: ${percent(summary.answerRoundRecall)}; memory_search used: ${percent(summary.memorySearchRate)}; incomplete: ${summary.incomplete}`,
+    `  tokens: ${summary.totalTokens} total, ${summary.medianTokens ?? 'n/a'} median, ${summary.medianInputTokens ?? 'n/a'} median input; cost ${summary.costUsd === null ? 'n/a' : `$${summary.costUsd.toFixed(4)}`}; duration median ${summary.medianDurationMs ?? 'n/a'} ms, p90 ${summary.p90DurationMs ?? 'n/a'} ms`,
   ];
   return lines.join('\n');
 }

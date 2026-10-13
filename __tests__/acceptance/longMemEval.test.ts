@@ -24,7 +24,9 @@ import {
   buildLongMemEvalHistoryMessages,
   buildLongMemEvalScenario,
   indexLongMemEvalHistory,
+  selectLongMemEvalWindow,
 } from '../../src/acceptance/longMemEval/longMemEvalScenario';
+import type { Message } from '../../src/types/message';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { readCaptureCursor } from '../../src/services/memory/core/memoryCaptureCursor';
@@ -172,6 +174,33 @@ describe('LongMemEval as a Kavi conversation', () => {
     expect(buildLongMemEvalScenario(instance, 'memory')).not.toHaveProperty('execution');
   });
 
+  it('keeps the most recent whole rounds that fit the window arm budget', () => {
+    const message = (id: string, role: Message['role'], words: number): Message => ({
+      id,
+      role,
+      content: Array.from({ length: words }, (_, index) => `word${index}`).join(' '),
+      timestamp: 0,
+    });
+    const history = [
+      message('u1', 'user', 400),
+      message('a1', 'assistant', 400),
+      message('u2', 'user', 40),
+      message('a2', 'assistant', 40),
+      message('u3', 'user', 40),
+      message('a3', 'assistant', 40),
+    ];
+
+    const window = selectLongMemEvalWindow(history, 400);
+    expect(window.map((entry) => entry.id)).toEqual(['u2', 'a2', 'u3', 'a3']);
+    expect(selectLongMemEvalWindow(history, 1)).toEqual([]);
+    expect(selectLongMemEvalWindow(history, 1_000_000)).toHaveLength(6);
+    expect(selectLongMemEvalWindow([message('a0', 'assistant', 5)], 1_000)).toEqual([]);
+
+    const instance = parseLongMemEvalInstance(rawInstance());
+    expect(buildLongMemEvalScenario(instance, 'window', 1_000_000).initialMessages).toHaveLength(4);
+    expect(buildLongMemEvalScenario(instance, 'window', 1)).not.toHaveProperty('initialMessages');
+  });
+
   it('leaves the imported history read, so extraction starts at the question', () => {
     const instance = parseLongMemEvalInstance(rawInstance());
     const history = buildLongMemEvalHistoryMessages(instance);
@@ -217,6 +246,8 @@ function outcome(overrides: Partial<LongMemEvalOutcome>): LongMemEvalOutcome {
     completed: true,
     durationMs: 1_000,
     totalTokens: 100,
+    inputTokens: 90,
+    cacheReadTokens: 0,
     costUsd: 0.001,
     memorySearchCalls: 0,
     evidenceInPrompt: true,
@@ -243,6 +274,8 @@ describe('LongMemEval results', () => {
 
     expect(evidenceReachedMemoryPrompt(instance, withTurns(['lme-0-0']))).toBe(true);
     expect(evidenceReachedMemoryPrompt(instance, withTurns(['lme-1-0']))).toBe(false);
+    // In the window arm the evidence can also reach the model in the thread itself.
+    expect(evidenceReachedMemoryPrompt(instance, withTurns([]), new Set(['lme-0-1']))).toBe(true);
     expect(
       evidenceReachedMemoryPrompt(
         parseLongMemEvalInstance(rawInstance({ answer_session_ids: [] })),
@@ -267,6 +300,7 @@ describe('LongMemEval results', () => {
 
     expect(answerRoundRecall(answerInUserTurn, withTurns(['lme-0-0', 'lme-1-0']))).toBe(1);
     expect(answerRoundRecall(answerInUserTurn, withTurns(['lme-1-0']))).toBe(0);
+    expect(answerRoundRecall(answerInUserTurn, withTurns([]), new Set(['lme-0-0']))).toBe(1);
 
     const answerInReply = parseLongMemEvalInstance(
       rawInstance({
