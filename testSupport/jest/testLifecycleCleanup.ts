@@ -39,3 +39,10 @@ afterEach(() => {
   ] as { exports?: { _resetTranscriptArchiveStateForTests?: () => void } } | undefined;
   archiveModule?.exports?._resetTranscriptArchiveStateForTests?.();
 });
+
+// Testing Library's async queries (findBy*, waitFor) give up after one second of wall time
+// by default, while jest allows each test 30. A full parallel run on a memory-constrained
+// machine stalls workers far longer than that: files that run in about 2 s alone took 22 to
+// 53 s, and UI tests failed while a debounce timer or a chain of mocked I/O had not yet
+// run. The async budget follows the test budget instead.
+require('@testing-library/react-native').configure({ asyncUtilTimeout: 10_000 });
