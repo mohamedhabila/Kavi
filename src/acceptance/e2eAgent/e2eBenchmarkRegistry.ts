@@ -523,7 +523,12 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   },
   'long-task-expense-report': {
     benchmarkFamilies: ['kavi-long-task', 'gaia-adapted'],
-    assessmentDimensions: ['task_completion', 'tool_usage', 'token_efficiency', 'outcome_validators'],
+    assessmentDimensions: [
+      'task_completion',
+      'tool_usage',
+      'token_efficiency',
+      'outcome_validators',
+    ],
   },
   'long-task-trip-organizer': {
     benchmarkFamilies: ['kavi-long-task', 'mobileworld-adapted'],
@@ -559,7 +564,12 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   },
   'long-task-feedback-triage': {
     benchmarkFamilies: ['kavi-long-task', 'agentbench-adapted'],
-    assessmentDimensions: ['task_completion', 'tool_usage', 'token_efficiency', 'outcome_validators'],
+    assessmentDimensions: [
+      'task_completion',
+      'tool_usage',
+      'token_efficiency',
+      'outcome_validators',
+    ],
   },
 };
 

@@ -13,28 +13,12 @@
 // and it counts only the conversation's own tool calls: a delegated worker's
 // calls are not in the tool-call budget, but its model calls are in the tokens.
 // ---------------------------------------------------------------------------
-import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
-import type { E2ERubric, E2EScenario, E2EWorkspaceSeedFile } from './types';
-
-function completedTurnRubrics(turnIndex: number): E2ERubric[] {
-  return [
-    { kind: 'turn_completion', turnIndex, field: 'execution', expected: true },
-    { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
-    { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: true },
-  ];
-}
-
-function budgetRubrics(scenarioId: string, referenceToolCalls: number): E2ERubric[] {
-  return [
-    { kind: 'graph_terminal_success' },
-    { kind: 'token_budget', maxTotalTokens: E2E_SCENARIO_TOKEN_BUDGETS[scenarioId] },
-    { kind: 'tool_call_budget', maxToolCalls: Math.ceil(referenceToolCalls * 1.5) },
-  ];
-}
-
-function fileContains(path: string, tokens: ReadonlyArray<string>): E2ERubric[] {
-  return tokens.map((contains) => ({ kind: 'workspace_file', path, contains }));
-}
+import {
+  completedTurnRubrics,
+  longTaskBudgetRubrics,
+  workspaceFileContains,
+} from './longTaskRubrics';
+import type { E2EScenario, E2EWorkspaceSeedFile } from './types';
 
 // --- Expense report --------------------------------------------------------
 
@@ -95,7 +79,7 @@ export const LONG_TASK_EXPENSE_REPORT: E2EScenario = {
   initialWorkspaceFiles: EXPENSE_FILES,
   rubrics: [
     ...completedTurnRubrics(0),
-    ...fileContains('reports/september-expenses.md', [
+    ...workspaceFileContains('reports/september-expenses.md', [
       '182',
       '102',
       '350',
@@ -104,7 +88,7 @@ export const LONG_TASK_EXPENSE_REPORT: E2EScenario = {
       'R-0907',
       'R-0909',
     ]),
-    ...budgetRubrics('long-task-expense-report', 16),
+    ...longTaskBudgetRubrics('long-task-expense-report', 16),
   ],
 };
 
@@ -166,7 +150,13 @@ export const LONG_TASK_TRIP_ORGANIZER: E2EScenario = {
   initialWorkspaceFiles: TRIP_FILES,
   rubrics: [
     ...completedTurnRubrics(0),
-    ...fileContains('trips/lisbon.md', ['KV7Q2', 'HTL-55821', 'CAR-30417', 'KV9M1', '14:25']),
+    ...workspaceFileContains('trips/lisbon.md', [
+      'KV7Q2',
+      'HTL-55821',
+      'CAR-30417',
+      'KV9M1',
+      '14:25',
+    ]),
     { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
     {
       kind: 'native_fixture_state',
@@ -180,7 +170,7 @@ export const LONG_TASK_TRIP_ORGANIZER: E2EScenario = {
     },
     { kind: 'native_fixture_state', path: 'sms.opened', expectedValue: 'true' },
     { kind: 'native_fixture_state', path: 'sms.recipientCount', expectedValue: '1' },
-    ...budgetRubrics('long-task-trip-organizer', 12),
+    ...longTaskBudgetRubrics('long-task-trip-organizer', 12),
   ],
 };
 
@@ -229,8 +219,8 @@ export const LONG_TASK_RESEARCH_BRIEF: E2EScenario = {
   })),
   rubrics: [
     ...completedTurnRubrics(0),
-    ...fileContains('briefs/home-battery.md', ['Recommendation: Hearthcell 10', 'N-11']),
-    ...budgetRubrics('long-task-research-brief', 14),
+    ...workspaceFileContains('briefs/home-battery.md', ['Recommendation: Hearthcell 10', 'N-11']),
+    ...longTaskBudgetRubrics('long-task-research-brief', 14),
   ],
 };
 
@@ -296,11 +286,11 @@ export const LONG_TASK_RESUME_INTERRUPTED: E2EScenario = {
   initialWorkspaceFiles: RECONCILE_FILES,
   rubrics: [
     ...completedTurnRubrics(0),
-    ...fileContains('out/reorder-list.csv', ['SKU-101,26', 'SKU-105,18', 'SKU-107,12']),
+    ...workspaceFileContains('out/reorder-list.csv', ['SKU-101,26', 'SKU-105,18', 'SKU-107,12']),
     { kind: 'workspace_file', path: 'out/reorder-list.csv', excludes: 'SKU-106' },
     { kind: 'workspace_file', path: 'out/summary.md', contains: 'Units to order: 93' },
     { kind: 'workspace_file', path: 'tasks/progress.md', excludes: '[ ]' },
-    ...budgetRubrics('long-task-resume-interrupted', 9),
+    ...longTaskBudgetRubrics('long-task-resume-interrupted', 9),
   ],
 };
 
@@ -371,9 +361,9 @@ export const LONG_TASK_PLAN_REVISION: E2EScenario = {
     ...completedTurnRubrics(0),
     ...completedTurnRubrics(1),
     { kind: 'turn_final_response_token', turnIndex: 0, token: 'Casa Brava' },
-    ...fileContains('plans/offsite-dinner.md', ['Venue: Lantern Room', '47']),
+    ...workspaceFileContains('plans/offsite-dinner.md', ['Venue: Lantern Room', '47']),
     { kind: 'workspace_file', path: 'plans/offsite-dinner.md', excludes: 'Venue: Casa Brava' },
-    ...budgetRubrics('long-task-plan-revision', 10),
+    ...longTaskBudgetRubrics('long-task-plan-revision', 10),
   ],
 };
 
@@ -438,16 +428,16 @@ export const LONG_TASK_FEEDBACK_TRIAGE: E2EScenario = {
   initialWorkspaceFiles: TRIAGE_FILES,
   rubrics: [
     ...completedTurnRubrics(0),
-    ...fileContains('feedback/summary.csv', [
+    ...workspaceFileContains('feedback/summary.csv', [
       'billing,5',
       'login,4',
       'performance,4',
       'feature-request,4',
       'praise,3',
     ]),
-    ...fileContains('feedback/urgent.md', ['fb-03', 'fb-11', 'fb-17']),
+    ...workspaceFileContains('feedback/urgent.md', ['fb-03', 'fb-11', 'fb-17']),
     { kind: 'workspace_file', path: 'feedback/urgent.md', excludes: 'fb-05' },
-    ...budgetRubrics('long-task-feedback-triage', 24),
+    ...longTaskBudgetRubrics('long-task-feedback-triage', 24),
   ],
 };
 
