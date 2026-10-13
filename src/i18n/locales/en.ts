@@ -52,7 +52,6 @@ export const en: TranslationMap = {
   nav: {
     chat: 'Chat',
     assistant: 'Assistant',
-    newChat: 'New chat',
     activity: 'Activity',
     library: 'Library',
     more: 'More',
@@ -72,8 +71,7 @@ export const en: TranslationMap = {
     remoteWork: 'Remote Work',
     terminal: 'Terminal',
     codeEditor: 'Code Editor',
-    browserSessions: 'Browser',
-    newConversation: 'New Conversation',  },
+    browserSessions: 'Browser',  },
 
   navigationHub: {
     libraryIntro:

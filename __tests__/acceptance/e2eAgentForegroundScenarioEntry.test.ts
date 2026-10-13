@@ -15,6 +15,7 @@ import { buildAssistantMessageMetadata } from '../../src/utils/assistantMessageM
 
 jest.mock('../../src/engine/orchestrator', () => ({ runOrchestrator: jest.fn() }));
 jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  bindConversationFocus: jest.fn(),
   cancelMemoryExtraction: jest.fn(),
   scheduleMemoryExtraction: jest.fn(),
   waitForMemoryExtractionIdle: jest.fn(async () => true),

@@ -5,6 +5,7 @@ jest.mock('expo-sqlite', () => {
 
 const mockCancelMemoryExtraction = jest.fn();
 jest.mock('../../src/services/memory/core/memoryExtractionWorker', () => ({
+  bindConversationFocus: jest.fn(),
   cancelMemoryExtraction: (...args: unknown[]) => mockCancelMemoryExtraction(...args),
   scheduleMemoryExtraction: jest.fn(),
 }));

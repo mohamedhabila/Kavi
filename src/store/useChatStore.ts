@@ -12,6 +12,7 @@ import { persist } from 'zustand/middleware';
 import { STORAGE_KEYS } from '../constants/storage';
 import { createThrottledJSONStorage } from './throttledStorage';
 import { drainPendingTranscriptArchive } from '../services/transcriptArchive/transcriptArchive';
+import { bindConversationFocus } from '../services/memory/core/memoryExtractionWorker';
 import { partializeChatPersistState } from './chatPersistence';
 import { createAgentRunStoreActions } from './agentRuns/storeActions';
 import { createConversationStoreActions } from './chatStoreConversationActions';
@@ -50,3 +51,13 @@ export const useChatStore = create<ChatState>()(
     },
   ),
 );
+
+bindConversationFocus({
+  read: (conversationId) =>
+    useChatStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === conversationId)
+      ?.title.trim() || null,
+  apply: (conversationId, focus) =>
+    useChatStore.getState().setConversationFocus(conversationId, focus),
+});

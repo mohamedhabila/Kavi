@@ -4,6 +4,7 @@
 // Idle reset, export, conversation search, folders/tags.
 
 import type { Conversation } from '../../types/conversation';
+import { resolveConversationDisplayTitle } from '../agents/conversationDisplayTitle';
 import type { Message } from '../../types/message';
 import { mergeChronologically } from '../../utils/messageChronology';
 import { unrefTimerIfSupported } from '../../utils/timers';
@@ -38,7 +39,7 @@ export function exportConversationAsMarkdown(
   earlierMessages: ReadonlyArray<Message> = [],
 ): string {
   const lines: string[] = [];
-  lines.push(`# ${conversation.title}`);
+  lines.push(`# ${resolveConversationDisplayTitle(conversation)}`);
   lines.push(`\n_Created: ${new Date(conversation.createdAt).toLocaleString()}_\n`);
 
   for (const msg of mergeChronologically(earlierMessages, conversation.messages)) {

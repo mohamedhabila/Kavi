@@ -90,4 +90,5 @@ jest.mock('../../src/services/agents/store', () => ({
 jest.mock('../../src/services/agents/registry', () => ({
   getAvailablePersonasForConfig: () => mockPersonas,
   getAvailablePersonas: () => mockPersonas,
+  getPersona: (personaId: string) => mockPersonas.find((persona) => persona.id === personaId),
 }));

@@ -51,7 +51,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
   nav: {
     chat: 'チャット',
     assistant: 'アシスタント',
-    newChat: '新しいチャット',
     activity: 'アクティビティ',
     library: 'ライブラリ',
     more: 'その他',
@@ -71,8 +70,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
     remoteWork: 'リモート作業',
     terminal: 'ターミナル',
     codeEditor: 'コードエディター',
-    browserSessions: 'ブラウザー',
-    newConversation: '新しい会話',  },
+    browserSessions: 'ブラウザー',  },
   navigationHub: {
     libraryIntro: 'Kaviが記憶している内容や、一緒に作成したファイルと作成物を探せます。',
     memoryAndCreations: '記憶と作成物',

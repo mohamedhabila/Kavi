@@ -98,7 +98,6 @@ describe('useChatStore persistence checkpoints', () => {
         content: 'Hello world',
       }),
     );
-    expect(persisted.state.conversations[0].title).toBe('Hello world');
   });
 
   it('loads a run persisted with the retired run plan without it', () => {

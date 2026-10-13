@@ -45,8 +45,9 @@ const MEMORY_EXTRACTION_OUTPUT_SCHEMA: StructuredOutputOptions = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['operations'],
+    required: ['focus', 'operations'],
     properties: {
+      focus: { type: ['string', 'null'] },
       operations: {
         type: 'array',
         maxItems: MEMORY_EXTRACTION_MAX_OPERATIONS,

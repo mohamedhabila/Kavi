@@ -51,7 +51,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
   nav: {
     chat: '聊天',
     assistant: '助手',
-    newChat: '新对话',
     activity: '动态',
     library: '资源库',
     more: '更多',
@@ -71,8 +70,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     remoteWork: '远程工作',
     terminal: '终端',
     codeEditor: '代码编辑器',
-    browserSessions: '浏览器',
-    newConversation: '新对话',  },
+    browserSessions: '浏览器',  },
   navigationHub: {
     libraryIntro: '查找 Kavi 记住的内容，以及与你共同创建的文件和互动成果。',
     memoryAndCreations: '记忆与创作',

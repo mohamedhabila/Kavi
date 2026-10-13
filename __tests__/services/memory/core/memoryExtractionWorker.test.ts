@@ -9,6 +9,7 @@ import { searchMemoryItems } from '../../../../src/services/memory/core/memoryIt
 import { indexClosedTurn } from '../../../../src/services/memory/core/memoryTurnsStore';
 import {
   __resetMemoryExtractionWorkerForTests,
+  bindConversationFocus,
   cancelMemoryExtraction,
   EXTRACTION_IDLE_POLL_MS,
   EXTRACTION_RETRY_BASE_MS,
@@ -68,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   __resetMemoryExtractionWorkerForTests();
+  bindConversationFocus(null);
   jest.useRealTimers();
 });
 
@@ -85,6 +87,25 @@ describe('memory extraction worker', () => {
 
     expect(call).toHaveBeenCalledTimes(1);
     expect(stored()).toEqual(['Sara (the user’s sister) lives in Porto']);
+  });
+
+  it('shows the conversation the focus extraction names', async () => {
+    const focus = new Map([['conv-1', 'Weekend plans']]);
+    bindConversationFocus({
+      read: (threadId) => focus.get(threadId) ?? null,
+      apply: (threadId, next) => focus.set(threadId, next),
+    });
+    const call = jest.fn(async (prompt: string) => {
+      expect(prompt).toContain('Current focus of the conversation: Weekend plans');
+      return JSON.stringify({ focus: 'Family news', operations: [] });
+    });
+    setup(call);
+
+    scheduleMemoryExtraction('conv-1');
+    await settle();
+
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(focus.get('conv-1')).toBe('Family news');
   });
 
   it('waits while a foreground turn holds the model', async () => {

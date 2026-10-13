@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { createStyles } from '../ChatScreen.styles';
 import type { AppPalette } from '../../theme/useAppTheme';
+import { resolveConversationDisplayTitle } from '../../services/agents/conversationDisplayTitle';
 import type { Conversation } from '../../types/conversation';
 import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
 
@@ -67,7 +68,7 @@ function ConversationMenuRow({ Icon, label, onPress, props, testID }: MenuRowPro
 
 export function ChatScreenHeader(props: ChatScreenHeaderProps) {
   const [menuVisible, setMenuVisible] = useState(false);
-  const title = props.activeConversation?.title || props.t('nav.newChat');
+  const title = resolveConversationDisplayTitle(props.activeConversation);
   const status = props.isConversationBusy
     ? props.t('chat.headerStatusWorking')
     : props.t('chat.headerStatusReady');

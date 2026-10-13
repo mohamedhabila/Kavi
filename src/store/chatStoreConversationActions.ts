@@ -1,6 +1,5 @@
 import type { StoreApi } from 'zustand';
 import { generateId } from '../utils/id';
-import { getDefaultConversationTitle } from '../utils/conversation';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { Conversation } from '../types/conversation';
@@ -37,7 +36,7 @@ export function buildConversation(params: {
   const workspaceTargetId = resolveConversationWorkspaceTargetId();
   return {
     id: generateId(),
-    title: getDefaultConversationTitle(),
+    title: '',
     messages: [],
     providerId: params.providerId,
     modelOverride: params.modelOverride,
@@ -80,6 +79,7 @@ export function createConversationStoreActions(
   | 'clearChatHistory'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
+  | 'setConversationFocus'
 > {
   return {
     ensureConversation: (providerId, systemPrompt, modelOverride) => {
@@ -144,6 +144,15 @@ export function createConversationStoreActions(
             : c.personaEvents;
           return { ...c, personaId, personaEvents };
         }),
+      }));
+      requestChatStorePersistenceCheckpoint();
+    },
+
+    setConversationFocus: (conversationId, focus) => {
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId && c.title !== focus ? { ...c, title: focus } : c,
+        ),
       }));
       requestChatStorePersistenceCheckpoint();
     },

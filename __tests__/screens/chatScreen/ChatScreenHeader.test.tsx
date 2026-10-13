@@ -37,7 +37,6 @@ const translations: Record<string, string> = {
   'common.close': 'Close',
   'nav.developerAndRemoteWork': 'Developer & remote work',
   'nav.filesAndCreations': 'Files & creations',
-  'nav.newChat': 'New chat',
 };
 
 const t = (key: string) => translations[key] ?? key;
@@ -71,19 +70,23 @@ function createProps(overrides: Record<string, unknown> = {}) {
 describe('ChatScreenHeader', () => {
   it('keeps the primary header compact and reports truthful idle status', () => {
     const props = createProps();
-    const { getByText, getByTestId, queryByTestId, queryByText } = render(
-      <ChatScreenHeader {...props} />,
-    );
+    const { getByText, getByTestId, queryByTestId } = render(<ChatScreenHeader {...props} />);
 
     expect(getByTestId('chat-compact-header')).toBeTruthy();
     expect(getByText(conversation.title)).toBeTruthy();
     expect(getByText('Ready')).toBeTruthy();
     expect(queryByTestId('model-selector-trigger')).toBeNull();
-    expect(queryByText('Agent')).toBeNull();
-    expect(queryByText('Chitchat')).toBeNull();
 
     fireEvent.press(getByTestId('chat-open-menu'));
     expect(props.onOpenMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('goes by the assistant persona name until memory names a focus', () => {
+    const { getByText } = render(
+      <ChatScreenHeader {...createProps({ activeConversation: { ...conversation, title: '' } })} />,
+    );
+
+    expect(getByText('Kavi')).toBeTruthy();
   });
 
   it('uses the verified busy state for the header status', () => {

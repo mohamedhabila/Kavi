@@ -1,4 +1,7 @@
-import { createForegroundCommandResultController } from '../../src/engine/graph/foregroundRun/commandResultController';
+import {
+  buildForegroundConversationExportFileName,
+  createForegroundCommandResultController,
+} from '../../src/engine/graph/foregroundRun/commandResultController';
 import type { Conversation } from '../../src/types/conversation';
 
 const mockExportConversationAsMarkdown = jest.fn(() => '# Exported');
@@ -130,5 +133,19 @@ describe('foreground command result controller', () => {
 
     expect(mockExportConversationAsMarkdown).not.toHaveBeenCalled();
     expect(mockShareTextExport).not.toHaveBeenCalled();
+  });
+});
+
+describe('export file name', () => {
+  it('keeps the letters of any script and joins the words', () => {
+    expect(buildForegroundConversationExportFileName('Weekend in Porto')).toBe(
+      'Weekend_in_Porto.md',
+    );
+    expect(buildForegroundConversationExportFileName('رحلة إلى بورتو')).toBe('رحلة_إلى_بورتو.md');
+    expect(buildForegroundConversationExportFileName('週末の旅行')).toBe('週末の旅行.md');
+  });
+
+  it('names an untitled export generically', () => {
+    expect(buildForegroundConversationExportFileName(' ?! ')).toBe('conversation.md');
   });
 });

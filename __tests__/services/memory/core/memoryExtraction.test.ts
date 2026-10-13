@@ -46,13 +46,18 @@ function turnsAfter(afterAt: number) {
   return listMemoryTurnsAfter({ conversationId: 'conv-1', afterAt, limit: 4 });
 }
 
-function reply(operations: unknown[]): string {
-  return JSON.stringify({ operations });
+function reply(operations: unknown[], focus: string | null = null): string {
+  return JSON.stringify({ focus, operations });
 }
 
-function run(call: (prompt: string) => Promise<string>, signal = new AbortController().signal) {
+function run(
+  call: (prompt: string) => Promise<string>,
+  signal = new AbortController().signal,
+  currentFocus: string | null = null,
+) {
   return extractConversationMemory({
     conversationId: 'conv-1',
+    currentFocus,
     call: (prompt) => call(prompt),
     signal,
     now: () => 1_000,
@@ -145,6 +150,7 @@ describe('rounds the assistant managed itself', () => {
       added: 0,
       updated: 0,
       deleted: 0,
+      focus: null,
     });
 
     expect(call).not.toHaveBeenCalled();
@@ -165,11 +171,33 @@ describe('extraction reply', () => {
           { op: 'rename', id: 'mem_3', text: 'x' },
         ]),
       ),
-    ).toEqual([
-      { op: 'add', text: 'Sara lives in Porto' },
-      { op: 'update', id: 'mem_1', text: 'Sara lives in Lisbon' },
-      { op: 'delete', id: 'mem_2' },
-    ]);
+    ).toEqual({
+      operations: [
+        { op: 'add', text: 'Sara lives in Porto' },
+        { op: 'update', id: 'mem_1', text: 'Sara lives in Lisbon' },
+        { op: 'delete', id: 'mem_2' },
+      ],
+      focus: null,
+    });
+  });
+
+  it('reads a new focus, keeping its words and dropping stray whitespace', () => {
+    expect(parseExtractionReply(reply([], '  Porto   apartment\nsearch ')).focus).toBe(
+      'Porto apartment search',
+    );
+    expect(parseExtractionReply(reply([], 'بحث عن شقة')).focus).toBe('بحث عن شقة');
+  });
+
+  it('keeps the current focus when the reply names none', () => {
+    expect(parseExtractionReply(reply([], null)).focus).toBeNull();
+    expect(parseExtractionReply(reply([], '   ')).focus).toBeNull();
+    expect(parseExtractionReply(JSON.stringify({ operations: [] })).focus).toBeNull();
+  });
+
+  it('bounds a focus a model wrote at length', () => {
+    const focus = parseExtractionReply(reply([], 'word '.repeat(40))).focus ?? '';
+    expect(focus.length).toBeLessThanOrEqual(60);
+    expect(focus.startsWith('word word')).toBe(true);
   });
 
   it('rejects a reply that is not the operations object', () => {
@@ -180,14 +208,23 @@ describe('extraction reply', () => {
   });
 
   it('shows the model the stored memories it may update', () => {
-    expect(buildExtractionPrompt(['User: hi'], [{ id: 'mem_1', text: 'Likes tea' }])).toContain(
-      '- mem_1: Likes tea',
-    );
+    expect(
+      buildExtractionPrompt(['User: hi'], [{ id: 'mem_1', text: 'Likes tea' }], null),
+    ).toContain('- mem_1: Likes tea');
   });
 
   it('states the shape of an operation, so a model does not put the op name in its text', () => {
-    expect(buildExtractionPrompt(['User: hi'], [])).toContain(
+    expect(buildExtractionPrompt(['User: hi'], [], null)).toContain(
       '"text": the memory statement itself (null for delete)',
+    );
+  });
+
+  it('shows the current focus, so the model keeps it unless the subject moved on', () => {
+    expect(buildExtractionPrompt(['User: hi'], [], 'Porto apartment search')).toContain(
+      'Current focus of the conversation: Porto apartment search',
+    );
+    expect(buildExtractionPrompt(['User: hi'], [], null)).toContain(
+      'Current focus of the conversation: (none)',
     );
   });
 });
@@ -207,6 +244,7 @@ describe('extraction run', () => {
       added: 1,
       updated: 0,
       deleted: 0,
+      focus: null,
     });
     expect(memories()).toEqual(['Sara (the user’s sister) lives in Porto']);
 
@@ -216,6 +254,19 @@ describe('extraction run', () => {
       extractedThroughAt: 5,
       extractionFailures: 0,
     });
+  });
+
+  it('names the focus the conversation moved to', async () => {
+    await expect(
+      run(
+        async (prompt) => {
+          expect(prompt).toContain('Current focus of the conversation: Weekend plans');
+          return reply([], 'Family news');
+        },
+        new AbortController().signal,
+        'Weekend plans',
+      ),
+    ).resolves.toMatchObject({ kind: 'extracted', focus: 'Family news' });
   });
 
   it('updates a stored memory the conversation changed', async () => {

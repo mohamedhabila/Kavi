@@ -1,6 +1,5 @@
 import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
-import { isPlaceholderTitle } from '../../utils/conversation';
 import { createLogger } from '../../utils/logger';
 import type { NotificationRouteData } from './service';
 
@@ -93,10 +92,7 @@ export function startRunCompletionNotifications(deps: {
       // One notice per conversation: a newer run's notice replaces an unread older one.
       identifier: `chat-run-completed:${conversationId}`,
       title: deps.t(NOTICE_TITLE_KEYS[notice]),
-      body:
-        conversation.title.trim() && !isPlaceholderTitle(conversation.title)
-          ? conversation.title.trim()
-          : deps.t('notifications.runOpenConversation'),
+      body: conversation.title.trim() || deps.t('notifications.runOpenConversation'),
       data: { screen: 'Chat', conversationId, source: 'chat_run_completed' },
     });
   };

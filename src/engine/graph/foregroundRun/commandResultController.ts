@@ -1,9 +1,11 @@
+import { resolveConversationDisplayTitle } from '../../../services/agents/conversationDisplayTitle';
 import { exportConversationAsMarkdown } from '../../../services/session/manager';
 import { loadAllArchivedMessages } from '../../../services/transcriptArchive/transcriptArchive';
 import { shareTextExport } from '../../../services/share/localShare';
 import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import { generateId } from '../../../utils/id';
+import { truncateGraphemesTo } from '../../../utils/graphemes';
 import { createLogger } from '../../../utils/logger';
 
 const logger = createLogger('ForegroundCommandResult');
@@ -51,8 +53,12 @@ function buildCommandResultLogEntry(result: ForegroundCommandResult): Conversati
   };
 }
 
+/** A file name from the conversation's title in any script; letters and digits are kept. */
 export function buildForegroundConversationExportFileName(title: string): string {
-  const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
+  const sanitizedTitle = truncateGraphemesTo(
+    title.replace(/[^\p{L}\p{M}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, ''),
+    50,
+  );
   return `${sanitizedTitle || 'conversation'}.md`;
 }
 
@@ -90,7 +96,9 @@ export function createForegroundCommandResultController(params: {
         const earlierMessages = loadArchivedHistoryForExport(conversation);
         await shareTextExport({
           content: exportConversationAsMarkdown(conversation, earlierMessages),
-          fileName: buildForegroundConversationExportFileName(conversation.title),
+          fileName: buildForegroundConversationExportFileName(
+            resolveConversationDisplayTitle(conversation),
+          ),
           dialogTitle: params.exportDialogTitle,
           mimeType: 'text/markdown',
         });

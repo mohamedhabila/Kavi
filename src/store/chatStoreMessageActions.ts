@@ -1,7 +1,6 @@
 import type { StoreApi } from 'zustand';
 import type { Message, ToolCall } from '../types/message';
 import { generateId } from '../utils/id';
-import { generateConversationTitle, isPlaceholderTitle } from '../utils/conversation';
 import { findMatchingToolCallIndexWithinMessage } from '../utils/toolCallMatching';
 import {
   cloneAttachments,
@@ -81,15 +80,12 @@ export function createMessageStoreActions(
               ? { toolCalls: message.toolCalls.map(stripUntrustedToolEffectReceipts) }
               : {}),
           };
-          const shouldAutoTitle =
-            message.role === 'user' && !!message.content?.trim() && isPlaceholderTitle(c.title);
           const nextMessages = capMessages(
             [...c.messages, newMessage],
             getProtectedExecutionMessageIds(c),
           );
           return {
             ...c,
-            title: shouldAutoTitle ? generateConversationTitle(message.content) : c.title,
             messages: nextMessages,
             updatedAt: timestamp,
           };

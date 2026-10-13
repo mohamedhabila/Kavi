@@ -8,6 +8,7 @@ import { ModelSelector } from '../components/chat/ModelSelector';
 import { PersonaSelector } from '../components/chat/PersonaSelector';
 import { ChatScreenTelemetryPanel } from './chatScreen/ChatScreenTelemetryPanel';
 import { createStyles as createChatStyles } from './ChatScreen.styles';
+import { resolveConversationDisplayTitle } from '../services/agents/conversationDisplayTitle';
 import { DEFAULT_PERSONA_ID } from '../services/agents/personas';
 import { resolveConversationModel } from '../services/llm/support/providerSupport';
 import { useBackToChat } from '../navigation/useBackToChat';
@@ -139,7 +140,7 @@ export const ConversationSettingsScreen: React.FC = () => {
         testID="conversation-settings-scroll"
       >
         <Text style={styles.conversationTitle} numberOfLines={2}>
-          {conversation.title}
+          {resolveConversationDisplayTitle(conversation)}
         </Text>
 
         {isLoading ? (

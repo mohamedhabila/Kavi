@@ -6,7 +6,8 @@
 // the model; a foreground turn starting aborts the run, which costs nothing and resumes when
 // the model is free again. A real failure is retried after a growing delay until the window
 // is skipped. One timer at most is pending, so the worker never piles up work. Turning
-// memory off cancels everything.
+// memory off cancels everything. The thread's focus travels through a binding the chat
+// registers, so memory never imports the chat store.
 // ---------------------------------------------------------------------------
 
 import { createLogger } from '../../../utils/logger';
@@ -33,6 +34,20 @@ const DEFAULT_DEPENDENCIES: MemoryExtractionWorkerDependencies = {
 };
 
 let dependencies = DEFAULT_DEPENDENCIES;
+
+/** How extraction reads a thread's current focus and hands back a new one. */
+export interface ConversationFocusBinding {
+  read: (threadId: string) => string | null;
+  apply: (threadId: string, focus: string) => void;
+}
+
+let focusBinding: ConversationFocusBinding | null = null;
+
+/** Lets the chat show the focus extraction names as the thread's title. */
+export function bindConversationFocus(binding: ConversationFocusBinding | null): void {
+  focusBinding = binding;
+}
+
 interface PendingExtraction {
   /** Which schedule queued it: a run leaves the entry for a turn closed while it ran. */
   scheduled: number;
@@ -135,11 +150,13 @@ async function extractThread(
   for (let window = 0; window < EXTRACTION_MAX_WINDOWS_PER_RUN; window += 1) {
     const outcome = await extractConversationMemory({
       conversationId: threadId,
+      currentFocus: focusBinding?.read(threadId) ?? null,
       call,
       signal: controller.signal,
       now: dependencies.now,
     });
     if (outcome.kind === 'preempted') return 'preempted';
+    if (outcome.kind === 'extracted' && outcome.focus) focusBinding?.apply(threadId, outcome.focus);
     if (outcome.kind === 'failed') {
       // Back of the queue with a delay, so other threads are not held behind it.
       pending.delete(threadId);

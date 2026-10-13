@@ -62,6 +62,8 @@ export interface ChatState {
   clearChatHistory: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
   updatePersonaInConversation: (conversationId: string, personaId: string) => void;
+  /** Shows what the conversation is about now as its title. */
+  setConversationFocus: (conversationId: string, focus: string) => void;
   addMessage: (
     conversationId: string,
     message: Omit<Message, 'timestamp' | 'id'> & {

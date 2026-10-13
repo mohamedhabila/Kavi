@@ -22,7 +22,7 @@ describe('useChatStore', () => {
       expect(conv.messages[0].timestamp).toBeGreaterThan(0);
     });
 
-    it('should auto-title from the first user message', () => {
+    it('never makes the first message the title of an endless conversation', () => {
       const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         role: 'user',
@@ -30,22 +30,18 @@ describe('useChatStore', () => {
       });
 
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
-      expect(conv.title).toBe('What is the weather today?');
+      expect(conv.title).toBe('');
     });
 
-    it('should not re-title after first message', () => {
+    it('shows the focus memory names as the title', () => {
       const convId = addConversation('p1', 's');
-      useChatStore.getState().addMessage(convId, {
-        role: 'user',
-        content: 'First message',
-      });
-      useChatStore.getState().addMessage(convId, {
-        role: 'user',
-        content: 'Second message',
-      });
+      const otherId = addConversation('p1', 's', undefined, { activate: false });
 
-      const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
-      expect(conv.title).toBe('First message');
+      useChatStore.getState().setConversationFocus(convId, 'Weekend in Porto');
+
+      const conversations = useChatStore.getState().conversations;
+      expect(conversations.find((c) => c.id === convId)?.title).toBe('Weekend in Porto');
+      expect(conversations.find((c) => c.id === otherId)?.title).toBe('');
     });
 
     it('should use custom id if provided', () => {

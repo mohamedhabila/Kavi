@@ -51,7 +51,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
   nav: {
     chat: '聊天',
     assistant: '助理',
-    newChat: '新對話',
     activity: '動態',
     library: '資料庫',
     more: '更多',
@@ -71,8 +70,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     remoteWork: '遠端工作',
     terminal: '終端',
     codeEditor: '程式碼編輯器',
-    browserSessions: '瀏覽器',
-    newConversation: '新對話',  },
+    browserSessions: '瀏覽器',  },
   navigationHub: {
     libraryIntro: '尋找 Kavi 記住的內容，以及與你共同建立的檔案和互動成果。',
     memoryAndCreations: '記憶與創作',

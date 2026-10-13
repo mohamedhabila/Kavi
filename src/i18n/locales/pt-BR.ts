@@ -51,7 +51,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
   nav: {
     chat: 'Chat',
     assistant: 'Assistente',
-    newChat: 'Nova conversa',
     activity: 'Atividade',
     library: 'Biblioteca',
     more: 'Mais',
@@ -71,8 +70,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     remoteWork: 'Trabalho remoto',
     terminal: 'Terminal',
     codeEditor: 'Editor de código',
-    browserSessions: 'Navegador',
-    newConversation: 'Nova conversa',  },
+    browserSessions: 'Navegador',  },
   navigationHub: {
     libraryIntro: 'Encontre o que Kavi lembra e os arquivos ou criações que produziu com você.',
     memoryAndCreations: 'Memória e criações',
