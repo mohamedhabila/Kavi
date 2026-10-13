@@ -426,7 +426,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     newProvider: 'Adicionar provedor',
     providerName: 'Nome',
     providerNamePlaceholder: 'Nome do provedor',
-    defaultSystemPrompt: 'Você é um assistente pessoal de IA útil com acesso a ferramentas.',
     baseUrl: 'URL base',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'Chave API',

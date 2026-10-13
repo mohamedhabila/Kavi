@@ -418,7 +418,6 @@ export const en: TranslationMap = {
     newProvider: 'Add Provider',
     providerName: 'Name',
     providerNamePlaceholder: 'Provider name',
-    defaultSystemPrompt: 'You are a helpful personal AI assistant with access to tools.',
     baseUrl: 'Base URL',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'API Key',

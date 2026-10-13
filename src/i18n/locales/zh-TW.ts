@@ -393,7 +393,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     newProvider: '新增供應商',
     providerName: '名稱',
     providerNamePlaceholder: '供應商名稱',
-    defaultSystemPrompt: '你是一個有用的個人 AI 助理，並且可以使用工具。',
     baseUrl: '基礎 URL',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'API 金鑰',

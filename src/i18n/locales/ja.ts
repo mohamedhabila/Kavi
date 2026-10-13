@@ -398,7 +398,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     newProvider: 'プロバイダーを追加',
     providerName: '名前',
     providerNamePlaceholder: 'プロバイダー名',
-    defaultSystemPrompt: 'あなたはツールにアクセスできる役立つ個人用 AI アシスタントです。',
     baseUrl: 'ベース URL',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'API キー',

@@ -461,7 +461,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     newProvider: 'إضافة مزود',
     providerName: 'الاسم',
     providerNamePlaceholder: 'اسم المزود',
-    defaultSystemPrompt: 'أنت مساعد ذكاء اصطناعي شخصي مفيد لديه إمكانية الوصول إلى الأدوات.',
     baseUrl: 'رابط الخادم',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'مفتاح API',

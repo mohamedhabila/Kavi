@@ -189,7 +189,6 @@ const mockTranslate = (key: string, params?: Record<string, string>) => {
       'conversationFiles.fileNotFoundMessage': '(file not found)',
       'conversationFiles.unreadableFileMessage': '(unable to read file — may be binary)',
       'conversationFiles.shareFileFailed': 'Unable to share this file right now.',
-      'settings.defaultSystemPrompt': 'Default system prompt',
     }[key] ?? key;
 
   return Object.entries(params ?? {}).reduce(

@@ -431,7 +431,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     newProvider: 'Agregar proveedor',
     providerName: 'Nombre',
     providerNamePlaceholder: 'Nombre del proveedor',
-    defaultSystemPrompt: 'Eres un asistente personal de IA útil con acceso a herramientas.',
     baseUrl: 'URL base',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'Clave API',

@@ -414,8 +414,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     newProvider: 'Anbieter hinzufügen',
     providerName: 'Name',
     providerNamePlaceholder: 'Anbietername',
-    defaultSystemPrompt:
-      'Sie sind ein hilfreicher persönlicher KI-Assistent mit Zugriff auf Tools.',
     baseUrl: 'Basis-URL',
     baseUrlPlaceholder: 'https://api.openai.com/v1',
     apiKey: 'API-Schlüssel',
