@@ -297,7 +297,7 @@ describe('code-owned tool effect policy', () => {
     const javascript = TOOL_DEFINITIONS.find((tool) => tool.name === 'javascript');
     const python = TOOL_DEFINITIONS.find((tool) => tool.name === 'python');
     expect(javascript?.contract?.riskHints).not.toContain('idempotent');
-    expect(python?.contract?.riskHints).toEqual(['open_world', 'requires_approval']);
+    expect(python?.contract?.riskHints).toEqual(['open_world']);
   });
 
   it('never treats external execution as replay-safe without reconciliation', () => {
