@@ -4,7 +4,7 @@ import {
   isValidModelProjectionOwner,
   modelProjectionOwnersEqual,
 } from '../utils/modelProjectionOwner';
-import { capMessages } from './chatStoreHelpers';
+import { applyHistoryWindow } from './conversationHistoryWindow';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { useChatStore } from './useChatStore';
 import { unrefTimerIfSupported } from '../utils/timers';
@@ -152,7 +152,8 @@ export function claimModelProjection(input: {
     const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
     protectedMessageIds.add(input.owner.requestMessageId);
     protectedMessageIds.add(input.owner.assistantMessageId);
-    const messages = capMessages(
+    const messages = applyHistoryWindow(
+      conversation.id,
       [
         ...conversation.messages,
         ...messagesBeforeAssistant,

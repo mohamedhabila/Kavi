@@ -2,10 +2,7 @@ import type { AssistantMessageMetadata, Message, ToolCall } from '../types/messa
 import type { Attachment } from '../types/attachment';
 import type { Conversation } from '../types/conversation';
 import { resolveWorkspaceTargetId } from '../services/workspaces/config';
-import { selectMessagesForPersistence } from './chatMessagePersistenceSelection';
 import { useSettingsStore } from './useSettingsStore';
-
-export const MAX_MESSAGES_PER_CONVERSATION = 500;
 
 export function resolveConversationWorkspaceTargetId(
   workspaceTargetId?: string,
@@ -17,21 +14,6 @@ export function resolveConversationWorkspaceTargetId(
       defaultWorkspaceTargetId: settings.defaultWorkspaceTargetId,
       workspaceTargets: settings.workspaceTargets,
     }) || undefined
-  );
-}
-
-export function capMessages(
-  messages: Message[],
-  protectedMessageIds: ReadonlySet<string> = new Set(),
-): Message[] {
-  if (messages.length <= MAX_MESSAGES_PER_CONVERSATION) {
-    return messages;
-  }
-
-  return selectMessagesForPersistence(
-    messages,
-    MAX_MESSAGES_PER_CONVERSATION,
-    protectedMessageIds,
   );
 }
 

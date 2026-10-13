@@ -6,16 +6,13 @@ import {
   MAX_PERSISTED_LOG_DETAIL_CHARS,
   MAX_PERSISTED_LOG_ENTRIES,
   MAX_PERSISTED_LOG_TITLE_CHARS,
-  MAX_PERSISTED_MESSAGES,
   MAX_PERSISTED_REASONING_MESSAGES,
   MAX_PERSISTED_SYSTEM_PROMPT_CHARS,
 } from './chatPersistenceLimits';
 import { sanitizeAgentRun } from './chatPersistenceAgentRuns';
-import { selectMessagesForPersistence } from './chatMessagePersistenceSelection';
 import { sanitizeMessage } from './chatPersistenceMessages';
 import { truncateText } from './chatPersistencePrimitives';
 import { sanitizeUsage } from './chatPersistenceUsage';
-import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
 import {
   isMessageArchivedOrQueued,
   noteEvictedMessages,
@@ -35,11 +32,8 @@ function sanitizeLogEntry(entry: ConversationLogEntry): ConversationLogEntry {
 }
 
 export function sanitizeConversationForPersistence(conversation: Conversation): Conversation {
-  const messages = selectMessagesForPersistence(
-    conversation.messages ?? [],
-    MAX_PERSISTED_MESSAGES,
-    getProtectedExecutionMessageIds(conversation),
-  );
+  // The live history window already bounds the messages (conversationHistoryWindow).
+  const messages = conversation.messages ?? [];
   const replayStart = Math.max(0, messages.length - MAX_PERSISTED_EXACT_REPLAY_MESSAGES);
   const reasoningStart = Math.max(0, messages.length - MAX_PERSISTED_REASONING_MESSAGES);
   return {
@@ -65,9 +59,9 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
 }
 
 /**
- * Hand messages leaving a conversation's live window to the transcript archive, in the form
- * they had when they left. They are written before the commit that omits them, so a
- * conversation the person keeps using does not lose its older history.
+ * Hand messages leaving a conversation's live history to the transcript archive, in the
+ * form they had when they left. The archive is written before the commit that omits them,
+ * so a conversation the person keeps using does not lose its older history.
  */
 export function archiveLeavingMessages(
   conversationId: string,
@@ -80,17 +74,6 @@ export function archiveLeavingMessages(
       .map((message) =>
         sanitizeMessage(message, { preserveReplay: false, preserveReasoning: false }),
       ),
-  );
-}
-
-/** Archives the messages a persisted projection leaves out. */
-function archiveEvictedMessages(conversation: Conversation, persisted: Conversation): void {
-  const messages = conversation.messages ?? [];
-  if (messages.length <= persisted.messages.length) return;
-  const keptIds = new Set(persisted.messages.map((message) => message.id));
-  archiveLeavingMessages(
-    conversation.id,
-    messages.filter((message) => !keptIds.has(message.id)),
   );
 }
 
@@ -107,7 +90,6 @@ export function partializeChatPersistState<
 
       const sanitized = sanitizeConversationForPersistence(conversation);
       persistedConversationProjectionCache.set(conversation, sanitized);
-      archiveEvictedMessages(conversation, sanitized);
       return sanitized;
     }),
     activeConversationId: state.activeConversationId,

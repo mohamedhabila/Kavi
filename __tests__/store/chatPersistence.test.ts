@@ -380,7 +380,7 @@ describe('chatPersistence', () => {
     expect(graph?.audit[0].iteration).toBe(24);
   });
 
-  it('caps very large persisted conversations while preserving the anchored replay tail', () => {
+  it('persists every live message of a long conversation, replay kept for the newest', () => {
     const messages = Array.from({ length: 650 }, (_, index) =>
       makeMessage(index, {
         role: index === 0 ? 'user' : 'assistant',
@@ -391,12 +391,11 @@ describe('chatPersistence', () => {
 
     const persisted = sanitizeConversationForPersistence(makeConversation({ messages }));
 
-    expect(persisted.messages).toHaveLength(500);
-    expect(persisted.messages[0].id).toBe('msg-0');
-    expect(persisted.messages[1].id).toBe('msg-151');
-    expect(persisted.messages[491].providerReplay).toBeUndefined();
-    expect(persisted.messages[492].providerReplay).toEqual({ openaiResponseId: 'resp-642' });
-    expect(persisted.messages[499].providerReplay).toEqual({ openaiResponseId: 'resp-649' });
+    // The live history window bounds the messages; persistence keeps all of them.
+    expect(persisted.messages).toHaveLength(650);
+    expect(persisted.messages[641].providerReplay).toBeUndefined();
+    expect(persisted.messages[642].providerReplay).toEqual({ openaiResponseId: 'resp-642' });
+    expect(persisted.messages[649].providerReplay).toEqual({ openaiResponseId: 'resp-649' });
   });
 
   it('round-trips effect receipts through restart serialization without raw payload duplication', () => {

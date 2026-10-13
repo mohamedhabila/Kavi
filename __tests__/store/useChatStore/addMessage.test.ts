@@ -82,35 +82,25 @@ describe('useChatStore', () => {
       expect(conv2.messages).toHaveLength(0);
     });
 
-    it('should cap messages at 500, preserving the first message', () => {
+    it('keeps a long chat of short messages live, however many there are', () => {
       const convId = addConversation('p1', 's');
 
-      // Add first (system/greeting) message
-      useChatStore.getState().addMessage(convId, {
-        id: 'first-msg',
-        role: 'user',
-        content: 'Hello, this is the first message',
-      });
-
-      // Add 500 more messages to exceed the cap (501 total before cap)
-      for (let i = 1; i <= 500; i++) {
+      // The live history is bounded by tokens, not by a message count.
+      for (let i = 0; i < 2_000; i++) {
         useChatStore.getState().addMessage(convId, {
           id: `msg-${i}`,
-          role: i % 2 === 0 ? 'assistant' : 'user',
+          role: i % 2 === 0 ? 'user' : 'assistant',
           content: `Message ${i}`,
         });
       }
 
       const conv = useChatStore.getState().conversations.find((c) => c.id === convId)!;
-      expect(conv.messages).toHaveLength(500);
-      // First message is always preserved
-      expect(conv.messages[0].id).toBe('first-msg');
-      expect(conv.messages[0].content).toBe('Hello, this is the first message');
-      // The oldest intermediate messages are dropped; last message is the most recent
-      expect(conv.messages[conv.messages.length - 1].id).toBe('msg-500');
+      expect(conv.messages).toHaveLength(2_000);
+      expect(conv.messages[0].id).toBe('msg-0');
+      expect(conv.messages[conv.messages.length - 1].id).toBe('msg-1999');
     });
 
-    it('should not cap when under 500 messages', () => {
+    it('keeps a short conversation as it is', () => {
       const convId = addConversation('p1', 's');
 
       for (let i = 0; i < 10; i++) {

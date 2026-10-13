@@ -6,7 +6,7 @@
 // touch, and applies the add/update/delete operations it returns together with the cursor
 // advance, in one transaction (mem0's extract-then-update pipeline, LangMem's background
 // manager). Rounds come from the past-turn index rather than the thread, so a round that
-// left the thread's live messages (the message cap, a context reset) is still extracted.
+// left the thread's live messages (the history window, a context reset) is still extracted.
 // Sensitive memories are shown too, so extraction updates them instead of storing a
 // duplicate; the conversation text already goes to the same provider. The same call names
 // the thread's current focus, which the chat shows as its title, so a natural title costs

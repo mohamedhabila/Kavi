@@ -3,7 +3,7 @@ import type { Conversation } from '../types/conversation';
 import type { Message } from '../types/message';
 import { normalizePersistedAgentRun } from './agentRuns/shared';
 import { sanitizeConversationForPersistence } from './chatPersistence';
-import { capMessages } from './chatStoreHelpers';
+import { applyHistoryWindow } from './conversationHistoryWindow';
 import type { ChatState } from './chatStoreTypes';
 import { isValidModelProjectionOwner } from '../utils/modelProjectionOwner';
 import { getProtectedExecutionMessageIds } from './chatExecutionMessageProtection';
@@ -47,7 +47,8 @@ function normalizePersistedConversation(conversation: Conversation): Conversatio
   };
   return sanitizeConversationForPersistence({
     ...normalizedConversation,
-    messages: capMessages(
+    messages: applyHistoryWindow(
+      normalizedConversation.id,
       normalizedConversation.messages,
       getProtectedExecutionMessageIds(normalizedConversation),
     ),

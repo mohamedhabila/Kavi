@@ -8,8 +8,8 @@
 (* catches up on turns closed while the app was killed; turning memory on  *)
 (* moves both marks past everything said while it was off; a rewound turn  *)
 (* leaves the index. A turn can leave the thread's live messages for the   *)
-(* transcript archive (the message cap, a context reset) and stays in the  *)
-(* index. Extraction runs in drains: a drain checks that no run is in      *)
+(* transcript archive (the history window, a context reset) and stays in   *)
+(* the index. Extraction runs in drains: a drain checks that no run is in  *)
 (* flight, awaits the model (an interleaving point), reads the cursor,     *)
 (* calls the model and applies the window with the cursor advance in one   *)
 (* transaction. Several drains can start: one per schedule, one per idle   *)
@@ -200,7 +200,7 @@ Rewind ==
                    readTo, toggles, kills, evicted, evictions>>
 
 \* The oldest live turn leaves the thread's live messages for the transcript archive (the
-\* message cap, or the user resetting the context); it stays in the past-turn index.
+\* history window, or the user resetting the context); it stays in the past-turn index.
 Evict ==
     /\ alive /\ evictions < MaxEvictions /\ \E t \in 1..turns : Live(t)
     /\ LET t == CHOOSE t \in 1..turns : Live(t) /\ \A u \in 1..(t-1) : ~Live(u) IN

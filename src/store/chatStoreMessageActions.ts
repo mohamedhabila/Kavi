@@ -12,7 +12,6 @@ import {
   areAssistantMessageMetadataEqual,
   areAttachmentsEqual,
   areToolCallsEqual,
-  capMessages,
   updateConversationById,
   updateConversationMessageById,
 } from './chatStoreHelpers';
@@ -26,6 +25,7 @@ import {
 } from './chatExecutionMessageProtection';
 import { selectDurableCompactionMessages } from './chatConversationCompaction';
 import { archiveLeavingMessages } from './chatPersistence';
+import { applyHistoryWindow } from './conversationHistoryWindow';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
 
 type ChatStoreSet = StoreApi<ChatState>['setState'];
@@ -80,7 +80,8 @@ export function createMessageStoreActions(
               ? { toolCalls: message.toolCalls.map(stripUntrustedToolEffectReceipts) }
               : {}),
           };
-          const nextMessages = capMessages(
+          const nextMessages = applyHistoryWindow(
+            c.id,
             [...c.messages, newMessage],
             getProtectedExecutionMessageIds(c),
           );
@@ -100,17 +101,24 @@ export function createMessageStoreActions(
           state.conversations,
           conversationId,
           (conversation) => {
-            const protectedMessageIds = getProtectedExecutionMessageIds(conversation);
-            const nextMessages = capMessages(
-              preserveProtectedExecutionMessages(
-                conversation,
-                selectDurableCompactionMessages(conversation, messages),
-              ),
-              protectedMessageIds,
+            const compacted = preserveProtectedExecutionMessages(
+              conversation,
+              selectDurableCompactionMessages(conversation, messages),
             );
-            if (nextMessages.length === 0) {
+            if (compacted.length === 0) {
               return conversation;
             }
+            const nextMessages = applyHistoryWindow(
+              conversation.id,
+              compacted,
+              getProtectedExecutionMessageIds(conversation),
+            );
+            // The rounds a summary replaced leave the live history, not the transcript.
+            const keptIds = new Set(nextMessages.map((message) => message.id));
+            archiveLeavingMessages(
+              conversation.id,
+              conversation.messages.filter((message) => !keptIds.has(message.id)),
+            );
 
             return {
               ...conversation,

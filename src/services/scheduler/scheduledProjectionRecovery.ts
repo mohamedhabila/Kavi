@@ -1,5 +1,6 @@
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
-import { capMessages } from '../../store/chatStoreHelpers';
+import { getProtectedExecutionMessageIds } from '../../store/chatExecutionMessageProtection';
+import { applyHistoryWindow } from '../../store/conversationHistoryWindow';
 import { mutateOwnedModelProjection } from '../../store/modelProjectionOwnership';
 import { useChatStore } from '../../store/useChatStore';
 import type { ModelProjectionOwner } from '../../types/conversation';
@@ -82,7 +83,11 @@ function settleRecoveredProjection(lease: ScheduledProjectionLease): boolean {
         kind: 'applied',
         conversation: {
           ...conversation,
-          messages: capMessages([...conversation.messages, recoveredAssistant]),
+          messages: applyHistoryWindow(
+            conversation.id,
+            [...conversation.messages, recoveredAssistant],
+            getProtectedExecutionMessageIds(conversation),
+          ),
           updatedAt: Math.max(conversation.updatedAt, recoveredAssistant.timestamp),
         },
         value: true,

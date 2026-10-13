@@ -4,7 +4,6 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { partializeChatPersistState } from '../../src/store/chatPersistence';
-import { MAX_PERSISTED_MESSAGES } from '../../src/store/chatPersistenceLimits';
 import { _setPersistedGenerationBoundaryHookForTests } from '../../src/store/persistedFileGenerations';
 import {
   _resetThrottledStorageStateForTests,
@@ -16,15 +15,15 @@ import {
   _resetTranscriptArchiveStateForTests,
   countArchivedMessages,
   drainPendingTranscriptArchive,
-  loadArchivedMessagesPage,
   noteEvictedMessages,
 } from '../../src/services/transcriptArchive/transcriptArchive';
 import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
 
 // A conversation persisted only its newest ~500 messages; older ones were dropped at save
-// time, so a person who kept one conversation lost its history after a restart. The
-// messages leaving the window are now archived, durably, before the save that omits them.
+// time, so a person who kept one conversation lost its history after a restart. The live
+// history window now moves leaving messages to the archive (historyWindowArchive.test.ts),
+// durably, before the save that omits them; a save itself drops nothing.
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 const expoFileSystemMock = jest.requireMock('expo-file-system') as { __resetStore: () => void };
@@ -64,44 +63,15 @@ afterAll(() => {
   closeTranscriptArchiveDb();
 });
 
-describe('history leaving the persisted window', () => {
-  it('is archived instead of dropped', () => {
-    const conversation = conversationWith(MAX_PERSISTED_MESSAGES + 3);
-
+describe('a save', () => {
+  it('keeps every live message and archives none of them', () => {
     const persisted = partializeChatPersistState({
-      conversations: [conversation],
+      conversations: [conversationWith(600)],
       activeConversationId: 'c1',
     }).conversations[0]!;
     drainPendingTranscriptArchive();
 
-    expect(persisted.messages).toHaveLength(MAX_PERSISTED_MESSAGES);
-    const evicted = loadArchivedMessagesPage({ conversationId: 'c1', limit: 10 }).messages;
-    // The window always keeps the first message, then the newest that fit.
-    expect(evicted.map((message) => message.id)).toEqual(['m-1', 'm-2', 'm-3']);
-  });
-
-  it('archives only what newly leaves the window as the conversation grows', () => {
-    partializeChatPersistState({
-      conversations: [conversationWith(MAX_PERSISTED_MESSAGES + 3)],
-      activeConversationId: 'c1',
-    });
-    drainPendingTranscriptArchive();
-    partializeChatPersistState({
-      conversations: [conversationWith(MAX_PERSISTED_MESSAGES + 4)],
-      activeConversationId: 'c1',
-    });
-    drainPendingTranscriptArchive();
-
-    expect(countArchivedMessages('c1')).toBe(4);
-  });
-
-  it('archives nothing while the conversation fits the window', () => {
-    partializeChatPersistState({
-      conversations: [conversationWith(20)],
-      activeConversationId: 'c1',
-    });
-    drainPendingTranscriptArchive();
-
+    expect(persisted.messages).toHaveLength(600);
     expect(countArchivedMessages('c1')).toBe(0);
   });
 });
