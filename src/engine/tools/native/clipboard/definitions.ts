@@ -17,7 +17,7 @@ export const CLIPBOARD_READ_TOOL: ToolDefinition = {
     riskLevel: 'high',
     permissionPrerequisites: ['clipboard.read'],
     recoverableErrors: [...RECOVERABLE_DEVICE_READ_ERRORS],
-    riskHints: ['read_only', 'idempotent'],
+    riskHints: ['read_only', 'idempotent', 'requires_approval'],
     providesEvidence: ['verification'],
     workflowStages: ['inspect_resource', 'verify_evidence'],
     consumes: [{ kind: 'clipboard_text' }],

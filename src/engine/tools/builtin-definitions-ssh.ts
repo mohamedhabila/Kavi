@@ -32,6 +32,7 @@ export const SSH_EXEC_TOOL: ToolDefinition = {
     capabilities: ['write', 'verify'],
     resourceKinds: ['ssh_host'],
     sideEffects: ['remote_mutation'],
+    riskHints: ['requires_approval'],
     providesEvidence: ['verification', 'external_run'],
   },
 };

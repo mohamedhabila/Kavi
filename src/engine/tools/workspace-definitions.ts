@@ -58,6 +58,7 @@ export const WORKSPACE_LAUNCH_BROWSER_TOOL: ToolDefinition = {
     capabilities: ['write', 'verify'],
     resourceKinds: ['conversation_workspace', 'browser'],
     sideEffects: ['external_run'],
+    riskHints: ['requires_approval'],
     providesEvidence: ['external_run', 'verification'],
     workflowStages: ['start_external_execution', 'verify_evidence'],
   },

@@ -13,7 +13,7 @@ export const LOCATION_CURRENT_TOOL: ToolDefinition = {
     riskLevel: 'high',
     permissionPrerequisites: ['location.foreground'],
     recoverableErrors: [...RECOVERABLE_DEVICE_READ_ERRORS],
-    riskHints: ['read_only', 'idempotent'],
+    riskHints: ['read_only', 'idempotent', 'requires_approval'],
     providesEvidence: ['verification'],
     workflowStages: ['inspect_resource', 'verify_evidence'],
     consumes: [{ kind: 'permission_state', field: 'location.foreground' }],

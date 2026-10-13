@@ -36,10 +36,18 @@ function normalizeTool(skillId: string, tool: SkillToolDefinition): SkillToolDef
   // A tool's own `contract` (e.g. a `runtimeRequirements` gate for a secret it needs)
   // is merged over the skill's default rather than replacing it outright, so declaring
   // one field never silently drops the others (category, capabilities, sideEffects, ...).
+  // The default's read-only, idempotent hints describe an effect-free tool, so a tool that
+  // declares its own effects never inherits them: they once marked GitHub branch and pull
+  // request creation read-only.
+  const declaresEffects = tool.contract?.sideEffects?.some((effect) => effect !== 'none');
   return {
     ...tool,
     contract: tool.contract
-      ? { ...defaultEffectFreeContract(skillId), ...tool.contract }
+      ? {
+          ...defaultEffectFreeContract(skillId),
+          ...(declaresEffects ? { riskHints: [] } : {}),
+          ...tool.contract,
+        }
       : defaultEffectFreeContract(skillId),
   };
 }

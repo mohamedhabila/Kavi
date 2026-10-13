@@ -498,9 +498,7 @@ export function needsApprovalWithContext(
   }
 
   const sensitiveAction = requiresActionApproval(toolName, args);
-  if (!policy.requireApproval) {
-    return sensitiveAction || policy.alwaysApproveTools.includes(toolName);
-  }
+  if (!policy.requireApproval) return sensitiveAction;
   if (policy.autoApproveTools.includes(toolName) && !sensitiveAction) return false;
   return true;
 }

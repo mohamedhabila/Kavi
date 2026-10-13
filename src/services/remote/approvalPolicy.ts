@@ -1,3 +1,6 @@
+import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
+import { analyzeCommandRisk } from './approvalRisk';
+
 export interface PersonaPolicyOverride {
   personaId: string;
   /** Additional tools that always require approval for this persona. */
@@ -11,9 +14,7 @@ export interface PersonaPolicyOverride {
 export interface ApprovalPolicy {
   /** If true, all remote tool calls require approval. */
   requireApproval: boolean;
-  /** Tool names that always require approval regardless of policy. */
-  alwaysApproveTools: string[];
-  /** Tool names that never require approval. */
+  /** Tool names "review every tool request" still lets through without asking. */
   autoApproveTools: string[];
   /** Approval timeout in milliseconds. A request still pending then expires; it is never approved. */
   timeoutMs: number;
@@ -23,51 +24,6 @@ export interface ApprovalPolicy {
 
 export const DEFAULT_POLICY: ApprovalPolicy = {
   requireApproval: false,
-  alwaysApproveTools: [
-    'ssh_exec',
-    'workspace_launch_browser',
-    'workspace_delegate_task',
-    'browser_navigate',
-    'browser_click',
-    'browser_type',
-    'browser_press_key',
-    'browser_hover',
-    'browser_select',
-    'browser_drag',
-    'browser_evaluate',
-    'browser_upload',
-    'browser_download',
-    'browser_fill_form',
-    'browser_dialog',
-    'expo_eas_build',
-    'expo_eas_update',
-    'expo_eas_submit',
-    'expo_eas_deploy_web',
-    'calendar_list',
-    'calendar_events',
-    'calendar_create_event',
-    'calendar_update_event',
-    'email_compose',
-    'sms_compose',
-    'phone_call',
-    'maps_open',
-    'contacts_pick',
-    'contacts_manage_access',
-    'contacts_form',
-    'contacts_share',
-    'contacts_search',
-    'contacts_get',
-    'location_current',
-    'clipboard_read',
-    'share_text',
-    'share_file',
-    'clipboard_write',
-    'notification_send',
-    'photos_pick',
-    'camera_clip',
-    'screen_record',
-    'memory_forget',
-  ],
   autoApproveTools: [
     'web_search',
     'web_fetch',
@@ -87,11 +43,24 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
   personaOverrides: [],
 };
 
+let approvalRequiredToolNames: ReadonlySet<string> | undefined;
+
+/** A built-in tool needs approval when its contract says so. */
+function contractRequiresApproval(toolName: string): boolean {
+  approvalRequiredToolNames ??= new Set(
+    TOOL_DEFINITIONS.filter((tool) => tool.contract?.riskHints?.includes('requires_approval')).map(
+      (tool) => tool.name,
+    ),
+  );
+  return approvalRequiredToolNames.has(toolName);
+}
+
+/**
+ * Whether a call is sensitive enough to ask the user first. The tool's contract decides
+ * (`riskHints: ['requires_approval']`); the cases below depend on the call's arguments.
+ */
 export function requiresActionApproval(toolName: string, args?: Record<string, unknown>): boolean {
   if (toolName.startsWith('mcp__')) {
-    return true;
-  }
-  if (DEFAULT_POLICY.alwaysApproveTools.includes(toolName)) {
     return true;
   }
 
@@ -122,7 +91,7 @@ export function requiresActionApproval(toolName: string, args?: Record<string, u
       // could silently start requiring approval for reminders again.
       return false;
     default:
-      return false;
+      return contractRequiresApproval(toolName);
   }
 }
 
@@ -133,4 +102,3 @@ export function buildAllowlistKey(toolName: string, args?: Record<string, unknow
   }
   return toolName;
 }
-import { analyzeCommandRisk } from './approvalRisk';
