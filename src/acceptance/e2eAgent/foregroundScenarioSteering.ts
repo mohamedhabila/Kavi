@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../store/useChatStore';
+import { selectForegroundScenarioTurnMessages } from './foregroundScenarioDriverRuntime';
 import type { ForegroundScenarioSteerDirective } from './foregroundScenarioDriverTypes';
 
 export type ForegroundScenarioSteer = {
@@ -13,18 +14,19 @@ export type ForegroundScenarioSteer = {
   settle: () => Promise<void>;
 };
 
-function countToolResults(conversationId: string, messageStartIndex: number): number {
+function countToolResults(conversationId: string, userMessageId: string): number {
   const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversationId);
-  return (conversation?.messages ?? [])
-    .slice(messageStartIndex)
-    .filter((message) => message.role === 'tool').length;
+  return selectForegroundScenarioTurnMessages(conversation?.messages ?? [], userMessageId).filter(
+    (message) => message.role === 'tool',
+  ).length;
 }
 
 export function scheduleForegroundScenarioSteer(params: {
   conversationId: string;
-  messageStartIndex: number;
+  /** The turn's own user message; tool results are counted from it on. */
+  userMessageId: string;
   steer: ForegroundScenarioSteerDirective;
   send: (text: string) => Promise<void>;
 }): ForegroundScenarioSteer {
@@ -37,8 +39,7 @@ export function scheduleForegroundScenarioSteer(params: {
   const check = () => {
     if (sending) return;
     if (
-      countToolResults(params.conversationId, params.messageStartIndex) <
-      params.steer.afterToolResults
+      countToolResults(params.conversationId, params.userMessageId) < params.steer.afterToolResults
     ) {
       return;
     }

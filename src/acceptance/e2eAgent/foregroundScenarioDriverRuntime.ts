@@ -102,6 +102,19 @@ export function createSeedConversation(input: ForegroundScenarioDriverInput): Co
   };
 }
 
+/**
+ * A turn's messages: its user message and everything after it. Found by id, not by the
+ * length the conversation had before the turn, because the live window may move older
+ * messages to the archive while the turn runs.
+ */
+export function selectForegroundScenarioTurnMessages(
+  messages: ReadonlyArray<Message>,
+  userMessageId: string,
+): Message[] {
+  const start = messages.findIndex((message) => message.id === userMessageId);
+  return start < 0 ? [] : messages.slice(start);
+}
+
 export function resolveForegroundScenarioFinalAssistant(
   messages: ReadonlyArray<Message>,
 ): Readonly<{

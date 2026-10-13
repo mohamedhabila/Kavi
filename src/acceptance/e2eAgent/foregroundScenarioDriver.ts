@@ -32,6 +32,7 @@ import {
   ensureForegroundScenarioStoresHydrated,
   resolveForegroundScenarioFinalAssistant,
   resolveForegroundScenarioTurnRun,
+  selectForegroundScenarioTurnMessages,
 } from './foregroundScenarioDriverRuntime';
 import { validateForegroundScenarioInput } from './foregroundScenarioInputValidation';
 import { scheduleForegroundScenarioSteer } from './foregroundScenarioSteering';
@@ -198,7 +199,6 @@ async function runScenarioIsolated(
             run.controlGraph?.status === 'awaiting_user' &&
             run.controlGraph.pendingUserInput !== undefined,
         )?.id ?? null;
-      const messageStartIndex = before.messages.length;
       const usageBefore = before.usage;
       const userMessageId = generateId();
       runtime.resetChatError();
@@ -229,7 +229,7 @@ async function runScenarioIsolated(
       const steer = turn.steer
         ? scheduleForegroundScenarioSteer({
             conversationId: currentConversationId,
-            messageStartIndex,
+            userMessageId,
             steer: turn.steer,
             send: (text) =>
               executeForegroundConversationSend({
@@ -334,7 +334,10 @@ async function runScenarioIsolated(
         priorRunIds,
         awaitingUserRunIdBeforeTurn,
       );
-      const turnMessages = conversation.messages.slice(messageStartIndex);
+      const turnMessages = selectForegroundScenarioTurnMessages(
+        conversation.messages,
+        userMessageId,
+      );
       const persistedUserMessage = turnMessages.find(
         (message) => message.id === userMessageId && message.role === 'user',
       );
