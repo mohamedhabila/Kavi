@@ -11,10 +11,6 @@ import type {
   EnsureConversationOptions,
 } from '../foregroundRun/executionTypes';
 import type { ResolvedFinalizationProviderContext } from '../foregroundRun/contracts';
-import {
-  resolveConversationModeForPersona,
-  resolveConversationPersonaForMode,
-} from './modeTransitions';
 
 type ChatStoreState = ReturnType<typeof useChatStore.getState>;
 type SettingsStoreState = ReturnType<typeof useSettingsStore.getState>;
@@ -27,8 +23,6 @@ type UseConversationGraphControllerParams = {
   activeConversationId: string | null;
   activeModel: string | null;
   activeProviderId: string | null;
-  effectiveMode: Conversation['mode'];
-  effectivePersonaId: string;
   ensureStoredConversation: ChatStoreState['ensureConversation'];
   noProviderMessage: string;
   providers: SettingsStoreState['providers'];
@@ -36,7 +30,6 @@ type UseConversationGraphControllerParams = {
   setChatError: (message: string | null) => void;
   setLastUsedModel: SettingsStoreState['setLastUsedModel'];
   systemPrompt: string;
-  updateModeInConversation: ChatStoreState['updateModeInConversation'];
   updateModelInConversation: ChatStoreState['updateModelInConversation'];
   updatePersonaInConversation: ChatStoreState['updatePersonaInConversation'];
 };
@@ -45,7 +38,6 @@ export function useConversationGraphController(params: UseConversationGraphContr
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   handleModelSelect: (providerId: string, model: string) => void;
   handlePersonaSelect: (personaId: string) => void;
-  handleToggleMode: () => void;
   resolveConversationFinalizationContext: ResolveConversationFinalizationContext;
   resolveConversationFinalizationContextRef: MutableRefObject<ResolveConversationFinalizationContext | null>;
 } {
@@ -74,10 +66,7 @@ export function useConversationGraphController(params: UseConversationGraphContr
       }
 
       const model = options?.model ?? selection?.model ?? undefined;
-      return params.ensureStoredConversation(providerId, params.systemPrompt, model, {
-        personaId: options?.personaId,
-        mode: options?.mode,
-      });
+      return params.ensureStoredConversation(providerId, params.systemPrompt, model);
     },
     [params, resolveConversationStartDefaults],
   );
@@ -87,17 +76,8 @@ export function useConversationGraphController(params: UseConversationGraphContr
       return;
     }
 
-    ensureConversation({
-      personaId: params.effectivePersonaId,
-      mode: params.effectiveMode,
-      reportMissingProvider: false,
-    });
-  }, [
-    ensureConversation,
-    params.activeConversationId,
-    params.effectiveMode,
-    params.effectivePersonaId,
-  ]);
+    ensureConversation({ reportMissingProvider: false });
+  }, [ensureConversation, params.activeConversationId]);
 
   const resolveConversationFinalizationContext = useCallback(
     async (conversation: Conversation) => {
@@ -146,56 +126,17 @@ export function useConversationGraphController(params: UseConversationGraphContr
 
   const handlePersonaSelect = useCallback(
     (personaId: string) => {
-      const nextMode = resolveConversationModeForPersona(personaId);
-      let conversationId = params.activeConversationId;
-      if (!conversationId) {
-        conversationId = ensureConversation({
-          personaId,
-          mode: nextMode,
-          reportMissingProvider: true,
-        });
-        if (!conversationId) {
-          return;
-        }
-      }
-
-      params.updatePersonaInConversation(conversationId, personaId);
-      params.updateModeInConversation(conversationId, nextMode);
+      const conversationId =
+        params.activeConversationId ?? ensureConversation({ reportMissingProvider: true });
+      if (conversationId) params.updatePersonaInConversation(conversationId, personaId);
     },
     [ensureConversation, params],
   );
-
-  const handleToggleMode = useCallback(() => {
-    const nextMode = params.effectiveMode === 'agentic' ? 'chitchat' : 'agentic';
-    let conversationId = params.activeConversationId;
-    if (!conversationId) {
-      conversationId = ensureConversation({
-        personaId: resolveConversationPersonaForMode({ nextMode }),
-        mode: nextMode,
-        reportMissingProvider: true,
-      });
-      if (!conversationId) {
-        return;
-      }
-    }
-
-    const currentConversation = useChatStore
-      .getState()
-      .conversations.find((candidate) => candidate.id === conversationId);
-    const nextPersonaId = resolveConversationPersonaForMode({
-      conversationPersonaId: currentConversation?.personaId,
-      nextMode,
-    });
-
-    params.updateModeInConversation(conversationId, nextMode);
-    params.updatePersonaInConversation(conversationId, nextPersonaId, { recordEvent: false });
-  }, [ensureConversation, params]);
 
   return {
     ensureConversation,
     handleModelSelect,
     handlePersonaSelect,
-    handleToggleMode,
     resolveConversationFinalizationContext,
     resolveConversationFinalizationContextRef,
   };

@@ -41,7 +41,6 @@ const mockChatStoreState = {
   conversations: [] as any[],
   activeConversationId: 'active-conversation',
   ensureConversation: jest.fn(),
-  updateModeInConversation: jest.fn(),
   updatePersonaInConversation: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
@@ -164,7 +163,6 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       activeModel: 'gpt-5.4',
       providers: [mockProvider],
       systemPrompt: 'You are helpful.',
-      defaultConversationMode: 'agentic',
       thinkingLevel: 'medium',
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
@@ -208,7 +206,7 @@ beforeEach(() => {
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
   mockChatStoreState.ensureConversation.mockImplementation(
-    (providerId, systemPrompt, modelOverride, options) => {
+    (providerId, systemPrompt, modelOverride) => {
       const existing =
         mockChatStoreState.conversations.find(
           (conversation) => conversation.id === mockChatStoreState.activeConversationId,
@@ -222,9 +220,7 @@ beforeEach(() => {
         modelOverride,
         messages: [],
       });
-      if (options?.activate !== false) {
-        mockChatStoreState.activeConversationId = id;
-      }
+      mockChatStoreState.activeConversationId = id;
       return id;
     },
   );
@@ -523,7 +519,6 @@ describe('initializeServices', () => {
       providerId: 'openai',
       systemPrompt: 'You are helpful.',
       modelOverride: 'gpt-4o-mini',
-      mode: 'chitchat',
       personaId: 'travel-guide',
       messages: [],
     };
@@ -538,16 +533,14 @@ describe('initializeServices', () => {
       }),
       expect.anything(),
     );
-    expect(mockChatStoreState.updateModeInConversation).not.toHaveBeenCalled();
     expect(mockChatStoreState.updatePersonaInConversation).not.toHaveBeenCalled();
     expect(mockChatStoreState.updateModelInConversation).not.toHaveBeenCalled();
     expect(mockChatStoreState.conversations[0]).toMatchObject({
-      mode: 'chitchat',
       personaId: 'travel-guide',
       modelOverride: 'gpt-4o-mini',
     });
   });
-  it('creates the one conversation in the default mode when none exists yet', async () => {
+  it('creates the one conversation when none exists yet', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
@@ -556,10 +549,9 @@ describe('initializeServices', () => {
       'openai',
       'You are helpful.',
       'gpt-5.4',
-      { mode: 'agentic', personaId: 'super-agent' },
     );
     expect(mockRunOrchestrator).toHaveBeenCalledWith(
-      expect.objectContaining({ conversationId: 'conv-1', personaId: 'super-agent' }),
+      expect.objectContaining({ conversationId: 'conv-1', personaId: undefined }),
       expect.anything(),
     );
     expect(mockChatStoreState.updateModelInConversation).not.toHaveBeenCalled();

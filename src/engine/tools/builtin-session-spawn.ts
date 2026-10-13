@@ -202,6 +202,7 @@ export async function executeSessionSpawn(
       workerTools,
       linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: settings.mediaUnderstandingEnabled,
+      thinkingLevel: settings.thinkingLevel,
     });
 
     if (args.waitForCompletion) {

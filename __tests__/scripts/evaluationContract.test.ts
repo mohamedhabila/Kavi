@@ -38,7 +38,6 @@ type MutableCasePack = {
     }>;
     metricIds: string[];
     families: string[];
-    modeTransitions: string[];
   }>;
 };
 
@@ -253,20 +252,14 @@ describe('evaluation contract', () => {
     );
   });
 
-  it('requires every representative family and four concrete mode transitions', () => {
+  it('requires every representative family', () => {
     const incomplete = clone(developmentPack) as MutableCasePack;
     incomplete.cases.forEach((caseEntry) => {
       caseEntry.families = caseEntry.families.filter((family: string) => family !== 'delegation');
-      caseEntry.modeTransitions = caseEntry.modeTransitions.filter(
-        (transition: string) => transition !== 'agentic_to_agentic',
-      );
     });
 
     expect(validateEvaluationCasePack(incomplete, contract, schema)).toEqual(
-      expect.arrayContaining([
-        'pack.cases: must include the representative family delegation',
-        'pack.cases: must include the mode transition agentic_to_agentic',
-      ]),
+      expect.arrayContaining(['pack.cases: must include the representative family delegation']),
     );
   });
 

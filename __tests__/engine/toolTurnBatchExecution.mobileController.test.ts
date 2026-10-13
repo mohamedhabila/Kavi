@@ -25,6 +25,7 @@ function params(
       apiKey: 'test-key',
       baseUrl: 'https://provider.invalid',
       enabled: true,
+      model: 'model-1',
     },
     activeModel: 'model-1',
     memoryConversationId: 'conversation-mobile-1',

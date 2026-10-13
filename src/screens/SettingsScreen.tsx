@@ -102,7 +102,6 @@ export const SettingsScreen: React.FC = () => {
   const linkUnderstandingEnabled = useSettingsStore((s) => s.linkUnderstandingEnabled);
   const mediaUnderstandingEnabled = useSettingsStore((s) => s.mediaUnderstandingEnabled);
   const maxLinks = useSettingsStore((s) => s.maxLinks);
-  const defaultConversationMode = useSettingsStore((s) => s.defaultConversationMode);
   const addProvider = useSettingsStore((s) => s.addProvider);
   const updateProvider = useSettingsStore((s) => s.updateProvider);
   const removeProvider = useSettingsStore((s) => s.removeProvider);
@@ -114,7 +113,6 @@ export const SettingsScreen: React.FC = () => {
   const setLinkUnderstandingEnabled = useSettingsStore((s) => s.setLinkUnderstandingEnabled);
   const setMediaUnderstandingEnabled = useSettingsStore((s) => s.setMediaUnderstandingEnabled);
   const setMaxLinks = useSettingsStore((s) => s.setMaxLinks);
-  const setDefaultConversationMode = useSettingsStore((s) => s.setDefaultConversationMode);
   const disableLongTermMemory = useSettingsStore((s) => s.disableLongTermMemory === true);
   const setDisableLongTermMemory = useSettingsStore((s) => s.setDisableLongTermMemory);
   const consolidationProviderId = useSettingsStore((s) => s.consolidationProvider ?? null);
@@ -451,8 +449,6 @@ export const SettingsScreen: React.FC = () => {
                 setMaxLinks={setMaxLinks}
                 mediaUnderstandingEnabled={mediaUnderstandingEnabled}
                 setMediaUnderstandingEnabled={setMediaUnderstandingEnabled}
-                defaultConversationMode={defaultConversationMode}
-                setDefaultConversationMode={setDefaultConversationMode}
                 thinkingLevel={thinkingLevel}
                 thinkingLevelOptions={thinkingLevelOptions}
                 setThinkingLevel={setThinkingLevel}

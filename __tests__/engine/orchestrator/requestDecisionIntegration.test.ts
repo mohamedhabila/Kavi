@@ -12,7 +12,7 @@ import {
 describe('orchestrator request decision integration', () => {
   it('uses the code-owned wait decision for an explicit background-only resume', async () => {
     jest.mocked(getPersona).mockReturnValue({
-      id: 'super-agent',
+      id: 'default',
       name: 'Agent',
       description: 'Agentic assistant',
       systemPrompt: '',
@@ -34,7 +34,7 @@ describe('orchestrator request decision integration', () => {
       provider: makeProvider(),
       model: 'gpt-5.4',
       conversationId: 'conv-request-wait-resume',
-      personaId: 'super-agent',
+      personaId: 'default',
       systemPrompt: 'You are helpful',
       messages: [
         {

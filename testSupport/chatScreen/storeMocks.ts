@@ -16,7 +16,6 @@ export const mockAddToolCall = jest.fn();
 export const mockUpdateToolCallStatus = jest.fn();
 export const mockUpdateMessageEffect = jest.fn();
 export const mockUpdatePersonaInConversation = jest.fn();
-export const mockUpdateModeInConversation = jest.fn();
 export const mockRecordConversationUsage = jest.fn();
 export const mockAddConversationLog = jest.fn();
 export const mockStartAgentRun = jest.fn();
@@ -57,7 +56,6 @@ jest.mock('../../src/store/useChatStore', () => {
     recordAgentRunEvidence: mockRecordAgentRunEvidence,
     updateModelInConversation: mockUpdateModelInConversation,
     updatePersonaInConversation: mockUpdatePersonaInConversation,
-    updateModeInConversation: mockUpdateModeInConversation,
   });
 
   const useChatStore = (selector: (s: any) => any) => selector(getState());
@@ -77,7 +75,6 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
-      defaultConversationMode: mockChatScreenState.defaultConversationMode,
       setActiveProviderAndModel: mockSetActiveProviderAndModel,
       setLastUsedModel: mockSetLastUsedModel,
     };

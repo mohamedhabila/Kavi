@@ -274,13 +274,7 @@ describe('useSettingsStore preference settings', () => {
     expect(useSettingsStore.getState().maxLinks).toBe(10);
   });
 
-  it('updates the default conversation mode', () => {
-    useSettingsStore.getState().setDefaultConversationMode('chitchat');
-    expect(useSettingsStore.getState().defaultConversationMode).toBe('chitchat');
-  });
-
-  it('defaults to chitchat and toggles developer mode', () => {
-    expect(useSettingsStore.getState().defaultConversationMode).toBe('chitchat');
+  it('defaults developer mode off and toggles it', () => {
     expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
 
     useSettingsStore.getState().setDeveloperModeEnabled(true);

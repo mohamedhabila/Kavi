@@ -101,7 +101,6 @@ export const ChatScreen: React.FC = () => {
     completeAgentRun,
     updateModelInConversation,
     updatePersonaInConversation,
-    updateModeInConversation,
   } = chatSlice;
 
   const settingsSlice = useSettingsStore(useShallow(selectChatScreenSettingsSlice));
@@ -116,7 +115,6 @@ export const ChatScreen: React.FC = () => {
     linkUnderstandingEnabled,
     mediaUnderstandingEnabled,
     maxLinks,
-    defaultConversationMode,
   } = settingsSlice;
 
   const [chatError, setChatError] = useState<string | null>(null);
@@ -197,27 +195,18 @@ export const ChatScreen: React.FC = () => {
     shouldAutoFollowRef,
     updateAutoFollowState,
   } = useChatScrollController({ flatListRef });
-  const {
-    activeProvider,
-    currentModel,
-    effectiveMode,
-    effectivePersonaId,
-    executionState,
-    isAgenticMode,
-    isConversationBusy,
-    supportsVision,
-  } = useChatScreenConversationState({
-    activeConversation: activeConversation ?? undefined,
-    activeModel,
-    activeProviderId,
-    defaultConversationMode,
-    hasActiveRecoveryOperation,
-    hasForegroundRequest: activeConversationId
-      ? activeForegroundConversationIds.has(activeConversationId)
-      : false,
-    hasLiveBackgroundWorker,
-    providers,
-  });
+  const { activeProvider, currentModel, executionState, isConversationBusy, supportsVision } =
+    useChatScreenConversationState({
+      activeConversation: activeConversation ?? undefined,
+      activeModel,
+      activeProviderId,
+      hasActiveRecoveryOperation,
+      hasForegroundRequest: activeConversationId
+        ? activeForegroundConversationIds.has(activeConversationId)
+        : false,
+      hasLiveBackgroundWorker,
+      providers,
+    });
   const conversationStartSelection = useMemo(
     () =>
       resolveConversationStartSelection(
@@ -268,8 +257,6 @@ export const ChatScreen: React.FC = () => {
     activeConversationId,
     activeModel,
     activeProviderId,
-    effectiveMode,
-    effectivePersonaId,
     ensureStoredConversation,
     noProviderMessage: t('chat.noProvider'),
     providers,
@@ -277,7 +264,6 @@ export const ChatScreen: React.FC = () => {
     setChatError,
     setLastUsedModel,
     systemPrompt,
-    updateModeInConversation,
     updateModelInConversation,
     updatePersonaInConversation,
   });
@@ -431,7 +417,6 @@ export const ChatScreen: React.FC = () => {
       chatNoApiKeyMessage: t('chat.noApiKey'),
       chatNoModelMessage: t('chat.noModel'),
       chatNoProviderMessage: t('chat.noProvider'),
-      defaultConversationMode,
       exportDialogTitle: t('chat.exportConversation'),
       linkUnderstandingEnabled,
       maxLinks,
@@ -480,14 +465,12 @@ export const ChatScreen: React.FC = () => {
     clearComposerDraft,
     clearForegroundRequestForConversation,
     completeAgentRun,
-    defaultConversationMode,
     rewindUserMessageForResend,
     editingMessageId,
     ensureAgentRunFinalResponse,
     ensureConversation,
     forceNextScrollRef,
     generateId,
-    isAgenticMode,
     pendingAgentRunAsyncResumesRef,
     pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,

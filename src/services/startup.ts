@@ -45,7 +45,6 @@ import {
   resolveEnabledProvider,
   resolveProviderApiKey,
 } from './llm/support/providerSupport';
-import { resolveConversationPersonaForMode } from '../engine/graph/conversation/modeTransitions';
 import { createAgentControlGraphTerminalOutcomeTracker } from '../engine/graph/terminalOutcome';
 import { initializeDurableRecoveryLifecycle } from './executionJournal/durableRecoveryLifecycle';
 import {
@@ -153,10 +152,8 @@ async function registerStartupHooks(): Promise<void> {
           provider: { ...provider, apiKey },
           model,
           conversationId: `hook-${Date.now()}`,
-          personaId: resolveConversationPersonaForMode({
-            nextMode: settings.defaultConversationMode,
-          }),
           executionRunId: hookExecutionRunId,
+          thinkingLevel: settings.thinkingLevel,
           agentRunId,
           systemPrompt:
             settings.systemPrompt ||

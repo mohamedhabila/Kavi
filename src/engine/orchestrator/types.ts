@@ -106,7 +106,8 @@ export interface OrchestratorOptions {
   temperature?: number;
   signal?: AbortController;
   thinkingLevel?: ThinkingLevel;
-  personaId: string;
+  /** The conversation's chosen persona; absent for the default assistant. */
+  personaId?: string;
   allProviders?: LlmProviderConfig[];
   enableCompaction?: boolean;
   enableFailover?: boolean;

@@ -85,8 +85,6 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       return ['goal_state_bug'];
     case 'worker_result_token':
       return ['execution_failure'];
-    case 'turn_route':
-      return ['execution_route_failure'];
     case 'turn_completion':
       if (turnCompletionField === 'final_response') {
         return ['final_response_failure'];

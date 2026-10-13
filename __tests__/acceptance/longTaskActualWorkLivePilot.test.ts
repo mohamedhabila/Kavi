@@ -273,7 +273,6 @@ describeLivePilot('long task — real substantive architecture audit', () => {
         conversationId,
         conversationTitle: 'Long-running architecture audit',
         systemPrompt: useSettingsStore.getState().systemPrompt,
-        defaultMode: 'agentic',
         scenarioTimeoutMs: 32 * MINUTE_MS,
         memoryTimeoutMs: 30_000,
         maxTokens: 4_096,
@@ -285,8 +284,6 @@ describeLivePilot('long task — real substantive architecture audit', () => {
         },
         turns: [
           {
-            route: 'forced_agentic',
-            selectedMode: 'agentic',
             timeoutMs: 3 * MINUTE_MS,
             allowedToolNames: ['sessions_spawn'],
             content: primaryPrompt,
@@ -294,8 +291,6 @@ describeLivePilot('long task — real substantive architecture audit', () => {
           {
             delayBeforeMs: INITIAL_MONITOR_DELAY_MS,
             lifecycleBefore: 'app_relaunch',
-            route: 'forced_agentic',
-            selectedMode: 'agentic',
             timeoutMs: 24 * MINUTE_MS,
             allowedToolNames: [
               'sessions_spawn',
@@ -308,8 +303,6 @@ describeLivePilot('long task — real substantive architecture audit', () => {
             content: continuationPrompt,
           },
           {
-            route: 'forced_agentic',
-            selectedMode: 'agentic',
             timeoutMs: 2 * MINUTE_MS,
             allowedToolNames: ['read_file'],
             content: finalReviewPrompt,

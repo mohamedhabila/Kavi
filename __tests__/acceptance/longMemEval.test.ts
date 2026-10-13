@@ -168,8 +168,8 @@ describe('LongMemEval as a Kavi conversation', () => {
     expect(buildLongMemEvalScenario(instance, 'memory')).not.toHaveProperty('initialMessages');
     expect(buildLongMemEvalScenario(instance, 'memory')).toMatchObject({
       prompt: 'Where did I go hiking last month?',
-      execution: { route: 'production_auto' },
     });
+    expect(buildLongMemEvalScenario(instance, 'memory')).not.toHaveProperty('execution');
   });
 
   it('leaves the imported history read, so extraction starts at the question', () => {

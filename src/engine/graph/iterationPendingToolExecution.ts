@@ -51,7 +51,6 @@ export async function executePreparedAgentControlGraphPendingToolTurn(params: {
     toolFilter: params.iterationParams.toolRuntime.toolFilter,
     pendingAsyncMonitorToolNames: params.modelTurnPreparation.pendingAsyncMonitorToolNames,
     groundedRequestScopedTools: params.modelTurnPreparation.preparedTurn.selectedTools,
-    authorizedToolNames: params.modelTurnPreparation.authorizedToolNames,
     getGraphSnapshot: params.iterationParams.graph.getGraphSnapshot,
     completedWorkflowToolNames: params.iterationParams.graph.completedWorkflowToolNames,
     lastPendingAsyncSignature: params.runtime.lastPendingAsyncSignature,

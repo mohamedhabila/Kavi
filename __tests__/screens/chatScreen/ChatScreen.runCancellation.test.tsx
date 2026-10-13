@@ -176,7 +176,6 @@ describe('ChatScreen run cancellation', () => {
   });
 
   it('clears the streaming indicator when stopping an in-flight response', async () => {
-    mockChatScreenState.defaultConversationMode = 'chitchat';
     mockRunOrchestrator.mockImplementationOnce(
       async (options: any) =>
         await new Promise<void>((resolve) => {

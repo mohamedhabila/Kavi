@@ -127,37 +127,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     ]);
   });
 
-  it('keeps an unscoped chitchat turn closed over external state', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: [...tools, ...resourceFlowTools],
-      conversationMode: 'chitchat',
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: true,
-    });
-
-    // Chitchat stays closed over agentic-only categories and open-world mutation, but
-    // an everyday action — web lookup, calendar, contacts, messaging — is exactly what
-    // this mode is used for and none of it costs a round-trip to become reachable.
-    expect(selected.map((tool) => tool.name)).toEqual([
-      'memory_remember',
-      'memory_search',
-      'web_search',
-      'web_fetch',
-      'calendar_create_event',
-      'contacts_search',
-      'sms_compose',
-      'tool_catalog',
-      'tool_describe',
-    ]);
-  });
-
-  it('keeps an unrequested tool off the surface until activation, even one chitchat is authorized to call', () => {
+  it('keeps an unrequested tool off the surface until activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      conversationMode: 'chitchat',
       pendingAsyncMonitorToolNames: new Set<string>(),
       observedToolNames: [],
       recentContinuationToolNames: new Set<string>(),
@@ -167,55 +139,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const names = new Set(selected.map((tool) => tool.name));
     expect(names.has('contacts_search')).toBe(true);
-    // contacts_get is chitchat-authorized (category `contacts`) but was never activated
-    // and is not part of the default core, so discovery still gates it.
+    // contacts_get was never activated and is not part of the default core, so
+    // discovery still gates it.
     expect(names.has('contacts_get')).toBe(false);
-  });
-
-  it('keeps browser automation off the chitchat surface even after catalog activation', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      conversationMode: 'chitchat',
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>([
-        'read_file',
-        'write_file',
-        'browser_navigate',
-        'browser_snapshot',
-        'memory_remember',
-      ]),
-      includeToolCatalog: true,
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    // workspace_files is not an agentic-only category, so a local read or write both
-    // stay authorized and, once activated, stay on the surface.
-    expect(names.has('read_file')).toBe(true);
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('memory_remember')).toBe(true);
-    // browser is an agentic-only category regardless of the individual tool's own
-    // side effects — even a read-only snapshot call stays behind escalation.
-    expect(names.has('browser_navigate')).toBe(false);
-    expect(names.has('browser_snapshot')).toBe(false);
-  });
-
-  it('honors deliberate chitchat pins without broadening catalog mutation authority', () => {
-    const selected = resolveTurnToolSurface({
-      allTools: tools,
-      conversationMode: 'chitchat',
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      explicitToolSurfaceToolNames: ['write_file'],
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(['browser_navigate']),
-      includeToolCatalog: true,
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has('write_file')).toBe(true);
-    expect(names.has('browser_navigate')).toBe(false);
   });
 
   it('loads the discovered category tools on the turn after tool_catalog', async () => {

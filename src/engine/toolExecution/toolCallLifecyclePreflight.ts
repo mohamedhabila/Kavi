@@ -93,23 +93,6 @@ function isOnGroundedToolSurface(
   return tools.some((tool) => resolveRegisteredToolName(tool.name) === toolName);
 }
 
-/**
- * Whether the run may execute this tool at all.
- *
- * An absent set means the caller does not model authority separately — every registered
- * tool that reached here is permitted, which is what the run allowlist and memory policy
- * above have already established.
- */
-function isAuthorizedForRun(
-  toolName: string,
-  authorizedToolNames: ToolExecutionLifecycleParams['authorizedToolNames'],
-): boolean {
-  if (!authorizedToolNames || authorizedToolNames.size === 0) {
-    return true;
-  }
-  return authorizedToolNames.has(toolName);
-}
-
 /** Supplies the registered contract so an unadvertised call is still schema-checked. */
 function withRegisteredToolDefinition(
   toolName: string,
@@ -192,36 +175,6 @@ export function resolveToolCallPreflight(
       notifyBlocked: true,
       notifyStart: true,
       notifyComplete: true,
-    });
-  }
-
-  /**
-   * Authority decides whether a call runs. Advertisement decides only what the model saw.
-   *
-   * These used to be the same list, so a registered, permitted tool that this turn had
-   * not happened to advertise was refused outright — and the refusal named `tool_catalog`
-   * as the way back. That treats the previous turn's guess about what would be needed as
-   * though it were knowledge. It is not: which capability a task needs becomes clear while
-   * doing the task. Traced on-device, a study needing Monte Carlo called `python`, was
-   * told to discover it first, and the discovery call never returned — so a capability the
-   * run held throughout became permanently unreachable and the run failed.
-   *
-   * Now an unadvertised call simply runs. Nothing is loosened: the run allowlist above
-   * still refuses, memory policy still refuses, chitchat still refuses through
-   * `authorizedToolNames` — a real restriction, since that mode exists so a casual
-   * conversation cannot mutate state — and side-effectful tools still take the approval
-   * path. What is gone is a refusal that protected nothing and cost a round-trip, or the
-   * whole run, every time the work turned out to need something unforeseen.
-   */
-  if (!isAuthorizedForRun(canonicalToolCall.name, params.authorizedToolNames)) {
-    return completePreflightFailure({
-      lifecycle: params,
-      effectiveToolCall: canonicalToolCall,
-      idPrefix: params.idPrefixes.filtered,
-      content: buildUnauthorizedToolResult(canonicalToolCall.name),
-      failureKind: 'tool_filter',
-      preflightBlockedKind: 'tool_filter',
-      notifyBlocked: true,
     });
   }
 

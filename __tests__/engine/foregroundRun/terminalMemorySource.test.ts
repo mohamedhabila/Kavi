@@ -40,11 +40,7 @@ function trackedRun(overrides: Partial<AgentRun> = {}): AgentRun {
   };
 }
 
-function conversation(params: {
-  messages: Message[];
-  mode?: Conversation['mode'];
-  runs?: AgentRun[];
-}): Conversation {
+function conversation(params: { messages: Message[]; runs?: AgentRun[] }): Conversation {
   return {
     id: 'conversation',
     title: 'Conversation',
@@ -53,16 +49,14 @@ function conversation(params: {
     systemPrompt: '',
     createdAt: 1,
     updatedAt: 2,
-    ...(params.mode ? { mode: params.mode } : {}),
     ...(params.runs ? { agentRuns: params.runs } : {}),
   };
 }
 
 describe('resolveForegroundTerminalMemorySource', () => {
-  it('returns the replacement final from the exact tracked agentic run', () => {
+  it('returns the replacement final from the exact tracked run', () => {
     const replacement = finalAssistant('assistant-replacement', 13);
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun()],
       messages: [
         { id: 'user-current', role: 'user', content: 'Do it', timestamp: 10 },
@@ -83,7 +77,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
 
   it('skips a yielded projection while its tracked run remains running', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'running' })],
       messages: [
         { id: 'user-current', role: 'user', content: 'Wait for it', timestamp: 10 },
@@ -103,7 +96,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
 
   it('skips a complete-looking fallback while the tracked run remains open', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'running' })],
       messages: [
         { id: 'user-current', role: 'user', content: 'Wait for it', timestamp: 10 },
@@ -121,9 +113,8 @@ describe('resolveForegroundTerminalMemorySource', () => {
     ).toBeUndefined();
   });
 
-  it('throws when a terminal successful agentic run has no exact final projection', () => {
+  it('throws when a terminal successful tracked run has no exact final projection', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [
         trackedRun({
           controlGraph: { status: 'finalized' } as AgentRun['controlGraph'],
@@ -150,7 +141,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
   it('publishes an exact complete final even when the foreground run failed', () => {
     const complete = finalAssistant('assistant-complete', 11);
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'failed' })],
       messages: [{ id: 'user-current', role: 'user', content: 'Current', timestamp: 10 }, complete],
     });
@@ -167,7 +157,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
 
   it('skips a failed run whose latest owning projection is incomplete', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'failed' })],
       messages: [
         { id: 'user-current', role: 'user', content: 'Current', timestamp: 10 },
@@ -188,7 +177,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
 
   it('skips an incomplete source when terminal review succeeded after the run failed', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'failed' })],
       messages: [
         { id: 'user-current', role: 'user', content: 'Current', timestamp: 10 },
@@ -208,7 +196,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
 
   it('never publishes a cancelled foreground turn', () => {
     const value = conversation({
-      mode: 'agentic',
       runs: [trackedRun({ status: 'cancelled' })],
       messages: [
         { id: 'user-current', role: 'user', content: 'Current', timestamp: 10 },
@@ -229,7 +216,6 @@ describe('resolveForegroundTerminalMemorySource', () => {
   it('returns only the exact closed assistant identity for an untracked turn', () => {
     const current = finalAssistant('assistant-current', 4);
     const value = conversation({
-      mode: 'chitchat',
       messages: [
         { id: 'user-prior', role: 'user', content: 'Prior', timestamp: 1 },
         finalAssistant('assistant-prior', 2),
@@ -252,7 +238,7 @@ describe('resolveForegroundTerminalMemorySource', () => {
     const current = finalAssistant('assistant-current', 4);
     const resolve = (messages: Message[], id = current.id) =>
       resolveForegroundTerminalMemorySource({
-        conversation: conversation({ mode: 'chitchat', messages }),
+        conversation: conversation({ messages }),
         currentAssistantMessageId: id,
         status: 'succeeded',
       });
@@ -287,23 +273,7 @@ describe('resolveForegroundTerminalMemorySource', () => {
     ).toBe(current);
   });
 
-  it('supports an untracked agentic turn without requiring a synthetic run', () => {
-    const current = finalAssistant('assistant-current', 4);
-    const value = conversation({
-      mode: 'agentic',
-      messages: [{ id: 'user-current', role: 'user', content: '...', timestamp: 3 }, current],
-    });
-
-    expect(
-      resolveForegroundTerminalMemorySource({
-        conversation: value,
-        currentAssistantMessageId: current.id,
-        status: 'succeeded',
-      }),
-    ).toBe(current);
-  });
-
-  it('skips a successful chitchat turn whose exact current assistant is not closed', () => {
+  it('skips a successful untracked turn whose exact current assistant is not closed', () => {
     const value = conversation({
       messages: [
         { id: 'user-prior', role: 'user', content: 'Prior', timestamp: 1 },
@@ -322,9 +292,8 @@ describe('resolveForegroundTerminalMemorySource', () => {
     ).toBeUndefined();
   });
 
-  it('skips an incomplete chitchat source after foreground failure', () => {
+  it('skips an incomplete untracked source after foreground failure', () => {
     const value = conversation({
-      mode: 'chitchat',
       messages: [
         { id: 'user-current', role: 'user', content: 'Current', timestamp: 3 },
         finalAssistant('assistant-current', 4, 'incomplete'),

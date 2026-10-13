@@ -28,7 +28,7 @@ const makeConv = (
   messages,
   createdAt: Date.now() - 100000,
   updatedAt: Date.now(),
-  model: 'gpt-5.4',
+  modelOverride: 'gpt-5.4',
   providerId: 'p1',
   ...overrides,
 });

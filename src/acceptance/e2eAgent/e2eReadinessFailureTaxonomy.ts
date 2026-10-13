@@ -31,7 +31,6 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
   'min_user_turns',
-  'turn_route',
   'turn_completion',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
@@ -53,7 +52,6 @@ const FAILURE_CATEGORIES: ReadonlyArray<E2EReadinessFailureCategory> = [
   'wrong_args',
   'missing_clarification',
   'permission_failure',
-  'execution_route_failure',
   'execution_failure',
   'final_response_failure',
   'goal_state_bug',
@@ -153,8 +151,6 @@ function rubricFailureCategories(
       return ['goal_state_bug'];
     case 'worker_result_token':
       return ['execution_failure'];
-    case 'turn_route':
-      return ['execution_route_failure'];
     case 'turn_completion':
       return turnCompletionField === 'final_response'
         ? ['final_response_failure']

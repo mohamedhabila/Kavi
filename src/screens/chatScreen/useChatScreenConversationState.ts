@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
-import { SUPER_AGENT_PERSONA_ID } from '../../services/agents/personas';
 import { resolveConversationModel } from '../../services/llm/support/providerSupport';
-import type { Conversation, ConversationMode } from '../../types/conversation';
+import type { Conversation } from '../../types/conversation';
 import type { LlmProviderConfig } from '../../types/provider';
 import {
   selectActiveConversationExecutionState,
@@ -12,7 +11,6 @@ type UseChatScreenConversationStateParams = {
   activeConversation?: Conversation;
   activeModel: string | null;
   activeProviderId: string | null;
-  defaultConversationMode: ConversationMode;
   hasForegroundRequest: boolean;
   hasActiveRecoveryOperation: boolean;
   hasLiveBackgroundWorker: boolean;
@@ -22,10 +20,7 @@ type UseChatScreenConversationStateParams = {
 type ChatScreenConversationState = {
   activeProvider?: LlmProviderConfig;
   currentModel: string | null;
-  effectiveMode: ConversationMode;
-  effectivePersonaId: string;
   executionState: ActiveConversationExecutionState;
-  isAgenticMode: boolean;
   isConversationBusy: boolean;
   supportsVision: boolean;
 };
@@ -48,8 +43,6 @@ export function useChatScreenConversationState(
     activeModel: params.activeModel,
   });
 
-  const effectiveMode = params.activeConversation?.mode ?? params.defaultConversationMode;
-  const isAgenticMode = effectiveMode === 'agentic';
   const executionState = useMemo(
     () =>
       selectActiveConversationExecutionState(
@@ -68,18 +61,12 @@ export function useChatScreenConversationState(
     ],
   );
   const isConversationBusy = executionState.isBusy;
-  const effectivePersonaId = isAgenticMode
-    ? SUPER_AGENT_PERSONA_ID
-    : params.activeConversation?.personaId || 'default';
   const supportsVision = activeProvider?.modelCapabilities?.[currentModel]?.vision ?? false;
 
   return {
     activeProvider,
     currentModel,
-    effectiveMode,
-    effectivePersonaId,
     executionState,
-    isAgenticMode,
     isConversationBusy,
     supportsVision,
   };

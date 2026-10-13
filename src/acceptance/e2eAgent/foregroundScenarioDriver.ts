@@ -25,7 +25,6 @@ import {
   completeForegroundScenarioMemoryPromptCapture,
 } from './foregroundScenarioMemoryItemsEvidence';
 import {
-  applyForegroundScenarioRoute,
   buildForegroundScenarioCompletionSnapshot,
   buildForegroundScenarioUsageDelta,
   createForegroundScenarioRuntime,
@@ -51,12 +50,10 @@ export type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
   ForegroundScenarioDriverResult,
-  ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioLifecycleBoundary,
   ForegroundScenarioLifecycleSnapshot,
   ForegroundScenarioNativeEvidenceSnapshot,
-  ForegroundScenarioRouteDirective,
   ForegroundScenarioTurnInput,
   ForegroundScenarioTurnSnapshot,
   ForegroundScenarioUserSnapshot,
@@ -126,8 +123,7 @@ async function runScenarioIsolated(
       activeProviderId: input.provider.id,
       activeModel: input.provider.model,
       systemPrompt: input.systemPrompt,
-      defaultConversationMode: input.defaultMode,
-      thinkingLevel: 'minimal',
+      thinkingLevel: 'medium',
       disableLongTermMemory: input.disableLongTermMemory ?? false,
       memoryConsolidationMode: 'active_provider',
       consolidationProvider: null,
@@ -189,12 +185,6 @@ async function runScenarioIsolated(
       });
       const nativeStateBefore = getE2ENativeMobileFixtureStateSnapshot();
       const nativeInvocationStart = getE2ENativeMobileInvocationSnapshots().length;
-      const route = applyForegroundScenarioRoute(
-        currentConversationId,
-        turn.route,
-        input.defaultMode,
-        turn.selectedMode,
-      );
       const before = useChatStore
         .getState()
         .conversations.find((candidate) => candidate.id === currentConversationId);
@@ -364,9 +354,9 @@ async function runScenarioIsolated(
       const completion = buildForegroundScenarioCompletionSnapshot({
         error: turnError,
         finalAssistant,
-        route,
         run,
         timedOut,
+        userMessage: persistedUserMessage,
       });
       turnSnapshots.push(
         cloneAndFreeze({
@@ -388,7 +378,6 @@ async function runScenarioIsolated(
             capture: memoryPromptCapture,
             memoryConversationId: memoryScope.memoryConversationId,
           }),
-          route: { directive: turn.route, ...route },
           run,
           timedOut,
           turnIndex,

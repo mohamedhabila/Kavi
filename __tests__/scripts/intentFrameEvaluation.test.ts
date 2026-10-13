@@ -63,8 +63,8 @@ describe('evaluator-only intent frame', () => {
       eligibilityFailures: [],
       counts: {
         cases: 6,
-        fieldLabels: 60,
-        scorable: 58,
+        fieldLabels: 54,
+        scorable: 52,
         ambiguous: 1,
         unscorable: 1,
       },
@@ -81,6 +81,7 @@ describe('evaluator-only intent frame', () => {
         candidateCapturePhase: 'pre_execution',
       },
     });
+    expect(INTENT_FRAME_FIELDS).not.toContain('requestedMode');
     expect(result.report.fields.map((field: any) => field.field)).toEqual(INTENT_FRAME_FIELDS);
     expect(result.report.fields).toEqual(
       expect.arrayContaining([
@@ -101,15 +102,22 @@ describe('evaluator-only intent frame', () => {
           f1: 1,
         }),
         expect.objectContaining({
-          field: 'requestedMode',
-          truePositive: 4,
-          falsePositive: 2,
-          falseNegative: 2,
-          f1: 2 / 3,
+          field: 'missingInformation',
+          truePositive: 5,
+          falsePositive: 1,
+          falseNegative: 1,
+          f1: 5 / 6,
+        }),
+        expect.objectContaining({
+          field: 'requestedAction',
+          truePositive: 5,
+          falsePositive: 1,
+          falseNegative: 1,
+          f1: 5 / 6,
         }),
       ]),
     );
-    expect(result.report.macroF1).toBeCloseTo(14 / 15, 12);
+    expect(result.report.macroF1).toBeCloseTo(26 / 27, 12);
     expect(result.report.coverage.languages).toHaveLength(6);
     expect(result.report.coverage.productAreas).toHaveLength(6);
     expect(validateIntentFrameReport(result.report, schema)).toEqual([]);
@@ -263,14 +271,14 @@ describe('evaluator-only intent frame', () => {
     expect(result.report.eligibilityFailures).toEqual(
       expect.arrayContaining(['invalid_contract', 'duplicate_case', 'invalid_none_atom']),
     );
-    expect(result.report.fields).toHaveLength(10);
+    expect(result.report.fields).toHaveLength(9);
     expect(result.reportFailures).toEqual([]);
   });
 
   it('detects report denominator, coverage, metric, ordering, and eligibility edits', () => {
     const report = clone(aggregate(loadFixture()).report);
     report.claimEligible = false;
-    report.counts.fieldLabels = 59;
+    report.counts.fieldLabels = 53;
     report.fields[0].coverageRate = 1 / 6;
     report.fields[0].f1 = 0.25;
     [report.fields[0], report.fields[1]] = [report.fields[1], report.fields[0]];

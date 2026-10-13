@@ -14,7 +14,6 @@ const ALL_FAMILIES = [
   'open_loops',
   'procedure_learning',
   'failure_learning',
-  'cross_mode_transfer',
   'interference',
   'abstention',
   'appropriate_silence',
@@ -60,19 +59,6 @@ function writeJson(filePath, value) {
   return sha256(bytes);
 }
 
-function modeName(mode) {
-  return mode === 'forced_chitchat' ? 'chitchat' : 'agentic';
-}
-
-function deriveTransitions(steps) {
-  const turns = steps.filter((step) => step.kind === 'user_turn');
-  const transitions = new Set();
-  for (let index = 1; index < turns.length; index += 1) {
-    transitions.add(`${modeName(turns[index - 1].mode)}_to_${modeName(turns[index].mode)}`);
-  }
-  return [...transitions];
-}
-
 function buildLongSteps(clock) {
   const steps = [];
   let userIndex = 0;
@@ -81,13 +67,12 @@ function buildLongSteps(clock) {
     clock.value = new Date(clock.value.getTime() + minutes * 60 * 1000);
     return clock.value.toISOString();
   };
-  const user = (mode, minutes = 1) => {
+  const user = (minutes = 1) => {
     userIndex += 1;
     steps.push({
       id: `u-${String(userIndex).padStart(2, '0')}`,
       kind: 'user_turn',
       at: advance(minutes),
-      mode,
       message: `Original synthetic longitudinal interaction ${userIndex}.`,
     });
   };
@@ -101,26 +86,26 @@ function buildLongSteps(clock) {
     });
   };
 
-  user('forced_chitchat');
-  user('forced_chitchat');
+  user();
+  user();
   lifecycle('context_reset');
-  user('forced_agentic');
+  user();
   lifecycle('app_background');
-  user('forced_chitchat');
+  user();
   lifecycle('app_kill');
   lifecycle('app_relaunch');
-  user('forced_agentic');
+  user();
   lifecycle('device_reboot');
-  user('forced_agentic');
+  user();
   lifecycle('network_offline');
-  user('forced_agentic');
+  user();
   lifecycle('network_online');
-  user('forced_agentic');
+  user();
   lifecycle('provider_change');
-  user('forced_agentic');
-  while (userIndex < 13) user('forced_agentic');
-  user('forced_agentic', 31 * 24 * 60);
-  while (userIndex < 16) user('forced_agentic');
+  user();
+  while (userIndex < 13) user();
+  user(31 * 24 * 60);
+  while (userIndex < 16) user();
   return steps;
 }
 
@@ -132,7 +117,6 @@ function buildSimpleSteps(clock, turnCount, caseIndex) {
       id: `u-${String(index + 1).padStart(2, '0')}`,
       kind: 'user_turn',
       at: clock.value.toISOString(),
-      mode: caseIndex % 2 === 0 ? 'forced_agentic' : 'forced_chitchat',
       message: `Original synthetic interaction ${caseIndex + 1}.${index + 1}.`,
     });
   }
@@ -152,7 +136,6 @@ function buildCases(split) {
       title: `Private synthetic longitudinal case ${index + 1}`,
       controlKind: index === 0 ? 'positive' : index === 1 ? 'negative' : 'mixed',
       families: index === 0 ? ALL_FAMILIES : [ALL_FAMILIES[index % ALL_FAMILIES.length]],
-      modeTransitions: deriveTransitions(steps),
       fixtures: [],
       steps,
       assertions: [

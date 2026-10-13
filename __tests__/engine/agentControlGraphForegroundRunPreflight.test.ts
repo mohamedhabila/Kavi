@@ -25,7 +25,6 @@ function createConversation(): Conversation {
   return {
     id: 'conv1',
     title: 'Test',
-    mode: 'agentic',
     messages: [],
     providerId: 'provider-1',
     createdAt: 1,

@@ -29,7 +29,6 @@ const SCENARIO: E2EScenario = {
   id: 'private-evidence-scenario',
   conversationId: 'private-evidence-conversation',
   contentClass: 'private',
-  execution: { initialMode: 'agentic', route: 'production_auto' },
   prompt: 'PRIVATE-REQUEST-SENTINEL',
   rubrics: [{ kind: 'memory_item', contains: ['private-subject', 'PRIVATE-RUBRIC-SENTINEL'] }],
 };
@@ -73,11 +72,6 @@ function buildPrivateResult(): E2EScenarioResult {
           messageId: 'private-user-message',
           text: 'PRIVATE-USER-SENTINEL',
           timestamp: 1,
-        },
-        route: {
-          directive: 'production_auto',
-          mode: 'agentic',
-          personaId: 'private-custom-persona',
         },
         finalAssistant: {
           messageId: 'private-assistant-message',
@@ -145,17 +139,17 @@ describe('private E2E scenario evidence', () => {
     });
     const serialized = JSON.stringify(evidence);
 
-    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v10');
+    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v11');
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
     expect(evidence.provenance).toEqual(PRIVATE_PROVENANCE);
     expect(evidence.scenario.requestedTurns).toEqual([
       {
         text: 'PRIVATE-REQUEST-SENTINEL',
-        route: 'production_auto',
         lifecycleBefore: null,
-        selectedMode: null,
       },
     ]);
+    expect(evidence.scenario).not.toHaveProperty('execution');
+    expect(evidence.result.turns[0]).not.toHaveProperty('route');
     expect(evidence.result.turns[0]?.lifecycleBefore).toBeNull();
     expect(evidence.result.turns[0]?.memoryPrompt).toEqual(result.turnTraces[0]?.memoryPrompt);
     expect(evidence.result.estimatedCost).toEqual({ status: 'available', usd: 0.125 });
@@ -188,9 +182,7 @@ describe('private E2E scenario evidence', () => {
         userTurns: [
           {
             content: 'PRIVATE-REQUEST-SENTINEL',
-            route: 'forced_chitchat',
             lifecycleBefore: 'app_relaunch',
-            selectedMode: 'chitchat',
           },
         ],
       },
@@ -203,7 +195,6 @@ describe('private E2E scenario evidence', () => {
 
     expect(evidence.scenario.requestedTurns[0]).toMatchObject({
       lifecycleBefore: 'app_relaunch',
-      selectedMode: 'chitchat',
     });
     expect(evidence.result.turns[0]?.lifecycleBefore).toEqual(lifecycleBefore);
   });

@@ -75,7 +75,7 @@ describe('foreground run supersession', () => {
   });
 
   it('does not surface a wait error from a request that is no longer current', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -139,7 +139,6 @@ describe('foreground run supersession', () => {
       }),
     };
     const conversation = createConversation({
-      mode: 'agentic',
       activeAgentRunId: waitingRun.id,
       agentRuns: [waitingRun],
       messages: [
@@ -211,7 +210,7 @@ describe('foreground run supersession', () => {
   });
 
   it('lets the newest turn win while the old claimed projection is creating its journal', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -296,7 +295,6 @@ describe('foreground run supersession', () => {
       },
     };
     const conversation = createConversation({
-      mode: 'agentic',
       activeAgentRunId: runningRun.id,
       agentRuns: [runningRun],
     });

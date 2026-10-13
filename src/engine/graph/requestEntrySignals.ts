@@ -3,7 +3,6 @@ import {
   type RequestContinuation,
   type RequestFrame,
   type RequestInputKind,
-  type RequestMode,
 } from '../../services/agents/requestFrame';
 
 export function normalizeRequestText(value: string | undefined): string {
@@ -20,7 +19,6 @@ function requestInputKind(textPresent: boolean, attachmentCount: number): Reques
 export function buildGraphEntryRequestFrame(params: {
   text: string | undefined;
   attachmentCount: number;
-  mode: RequestMode;
   continuation: RequestContinuation;
 }): RequestFrame {
   const normalized = normalizeRequestText(params.text);
@@ -34,7 +32,6 @@ export function buildGraphEntryRequestFrame(params: {
       : ({ action: 'act', reason: 'actionable_input' } as const);
   return {
     version: REQUEST_FRAME_VERSION,
-    mode: params.mode,
     input: {
       kind,
       attachmentCount: params.attachmentCount,

@@ -2,11 +2,10 @@ import type { Message } from '../../types/message';
 import type { RequestContinuation, RequestFrame } from '../../services/agents/requestFrame';
 import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getUserMessagePromptContent } from '../prompts/orchestratorPromptSections';
-import { selectAgentControlGraphModelContextMessages } from './modelContext';
+import { sanitizeGraphOwnedModelContextMessages } from './modelContextSanitization';
 import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
 type PrepareAgentControlGraphRequestContextParams = {
-  graphOwnedRun: boolean;
   memoryScopedMessages: ReadonlyArray<Message>;
   continuation: RequestContinuation;
   workflowScopeUserMessageId?: string;
@@ -39,17 +38,12 @@ export function prepareAgentControlGraphRequestContext(
     text: lastUserMessageText,
     attachmentCount:
       filterModelVisibleAttachments(requestContextLastUserMessage?.attachments)?.length ?? 0,
-    mode: params.graphOwnedRun ? 'agentic' : 'chitchat',
     continuation: params.continuation,
   });
   const workflowCandidateRequest = requestFrame.decision.action === 'act';
-  const graphOwnedModelContextMessages =
-    params.graphOwnedRun && workflowCandidateRequest
-      ? selectAgentControlGraphModelContextMessages({
-          memoryScopedMessages: [...params.memoryScopedMessages],
-          graphOwnedRun: params.graphOwnedRun,
-        })
-      : [...params.memoryScopedMessages];
+  const graphOwnedModelContextMessages = workflowCandidateRequest
+    ? sanitizeGraphOwnedModelContextMessages(params.memoryScopedMessages)
+    : [...params.memoryScopedMessages];
   const requestContextUserMessages = selectUserMessages(graphOwnedModelContextMessages);
   const hasWorkflowScopeAnchor =
     workflowCandidateRequest && normalizedWorkflowScopeUserMessageId

@@ -37,7 +37,7 @@ const LONG_RUN_DIRECT_SCENARIO_IDS = [
   'direct-mobileworld-long-horizon-personalization',
 ] as const;
 
-const PRODUCT_ROUTE_SCENARIO_IDS = new Set([
+const PRODUCT_CONTINUITY_SCENARIO_IDS = new Set([
   'profile-correction-chitchat',
   'preference-to-calendar-action',
   'agent-outcome-to-chitchat',
@@ -81,16 +81,15 @@ describe('E2E scenario taxonomy', () => {
     }
   });
 
-  it('keeps every pre-longitudinal scenario explicitly on the agentic product route', () => {
+  it('declares no execution route and keeps lifecycle boundaries to product continuity flows', () => {
     for (const scenario of ALL_SCENARIOS) {
-      if (PRODUCT_ROUTE_SCENARIO_IDS.has(scenario.id)) continue;
-      expect(scenario.execution).toEqual({
-        initialMode: 'agentic',
-        route: 'forced_agentic',
-      });
+      expect(scenarioRecord(scenario)).not.toHaveProperty('execution');
       for (const turn of scenario.userTurns ?? []) {
-        expect(turn.route ?? scenario.execution.route).toBe('forced_agentic');
-        expect(turn.lifecycleBefore).toBeUndefined();
+        expect(turnRecord(turn)).not.toHaveProperty('route');
+        expect(turnRecord(turn)).not.toHaveProperty('selectedMode');
+        if (!PRODUCT_CONTINUITY_SCENARIO_IDS.has(scenario.id)) {
+          expect(turn.lifecycleBefore).toBeUndefined();
+        }
       }
     }
   });

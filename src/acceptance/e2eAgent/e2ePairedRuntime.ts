@@ -173,9 +173,6 @@ function buildConditionRunOptions(
     scenarioTimeoutMs: invariant.budget.scenarioTimeoutMs,
     perTurnTimeoutMs: invariant.budget.perTurnTimeoutMs,
     memoryTimeoutMs: invariant.budget.memoryTimeoutMs,
-    ...(conditionPlan.conditionConfig.routeOverride
-      ? { routeOverride: conditionPlan.conditionConfig.routeOverride }
-      : {}),
     disableLongTermMemory: conditionPlan.conditionConfig.memoryMode === 'off',
     enableCompaction: conditionPlan.conditionConfig.contextMode !== 'full_context',
     conversationIdSuffix,

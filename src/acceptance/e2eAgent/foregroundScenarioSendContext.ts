@@ -17,7 +17,6 @@ import { appSteeringQueue } from '../../engine/graph/foregroundRun/steeringQueue
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
 import { waitForModelProjectionAvailability } from '../../store/modelProjectionOwnership';
 import { useChatStore } from '../../store/useChatStore';
-import type { ConversationMode } from '../../types/conversation';
 import { generateId } from '../../utils/id';
 
 /** Surfaced when conversation-workspace attachment import fails during a scenario turn. */
@@ -35,7 +34,6 @@ export type ForegroundScenarioSendContextFactory = (
 export type CreateForegroundScenarioSendContextParams = {
   abortForegroundRequestForConversation: (conversationId: string, reason?: string) => void;
   context: ExecuteForegroundConversationRunParams['context'];
-  defaultMode: ConversationMode;
   /** The scenario's foreground requests, which a message sent during a run steers. */
   requests: ForegroundSteeringBinding['registry'];
   setChatError: (message: string | null) => void;
@@ -56,11 +54,9 @@ export function createForegroundScenarioSendContextFactory(
     attachmentWorkspaceImportFailedMessage: E2E_ATTACHMENT_IMPORT_FAILED_MESSAGE,
     // No composer surface in acceptance runs; the chat screen clears its draft here.
     clearComposerDraft: () => {},
-    defaultConversationMode: params.defaultMode,
     ensureConversation: params.context.helpers.ensureConversation,
     generateId,
     getLiveActiveConversationId: () => activeConversationId,
-    isAgenticMode: params.defaultMode === 'agentic',
     // Scroll affordance is chat-screen only.
     markNextScrollForced: () => {},
     releaseConversationWrite: (conversationId) => {

@@ -82,7 +82,7 @@ jest.mock('../../src/services/commands/builtins', () => ({
   getCommand: jest.fn().mockReturnValue(null),
 }));
 jest.mock('../../src/services/agents/personas', () => ({
-  SUPER_AGENT_PERSONA_ID: 'super-agent',
+  DEFAULT_PERSONA_ID: 'default',
   resolvePersonaSystemPrompt: jest.fn((_p: any, prompt: string) => prompt),
   resolvePersonaModel: jest.fn((_p: any, providerId: string, model: string) => ({
     providerId,
@@ -154,19 +154,6 @@ function runOrchestrator(
       ? { ...options, explicitToolSurfaceToolNames: fixtureToolNames }
       : options,
     callbacks,
-  );
-}
-
-function useSuperAgentPersona(): void {
-  (getPersona as jest.Mock).mockImplementation((personaId: string) =>
-    personaId === 'super-agent'
-      ? {
-          id: 'super-agent',
-          name: 'SuperAgent',
-          description: 'Test graph orchestrator',
-          systemPrompt: 'Use the agent control graph.',
-        }
-      : undefined,
   );
 }
 
@@ -399,7 +386,6 @@ export {
   mockSendMessage,
   makeProvider,
   allowTools,
-  useSuperAgentPersona,
   makeCallbacks,
   expectTerminalGraphBeforeDone,
   expectFinalCandidateGraphBeforeDone,

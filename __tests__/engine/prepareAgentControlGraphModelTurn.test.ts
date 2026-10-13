@@ -128,7 +128,7 @@ function createBaseParams() {
     activeProvider: {
       id: 'provider-openai',
       name: 'openai',
-      kind: 'openai',
+      kind: 'remote' as const,
       baseUrl: 'https://api.openai.com/v1',
       apiKey: 'test',
       enabled: true,
@@ -136,7 +136,6 @@ function createBaseParams() {
     },
     allTools: [writeTool],
     completedWorkflowToolNames: new Set<string>(),
-    startsAgentic: true,
     iteration: 3,
     maxTokens: 4096,
     promptContextSupport: {
@@ -147,7 +146,6 @@ function createBaseParams() {
     requestFrame: buildGraphEntryRequestFrame({
       text: 'Run the task',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     }),
     thinkingLevel: 'low' as const,
@@ -217,7 +215,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       requestFrame: buildGraphEntryRequestFrame({
         text: '',
         attachmentCount: 0,
-        mode: 'agentic',
         continuation: 'new',
       }),
       turnDirectives: {
@@ -253,7 +250,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       const requestFrame = buildGraphEntryRequestFrame({
         text: 'Run the task',
         attachmentCount: 0,
-        mode: 'agentic',
         continuation: 'new',
       });
 
@@ -358,7 +354,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       requestFrame: buildGraphEntryRequestFrame({
         text: 'Run the task',
         attachmentCount: 0,
-        mode: 'agentic',
         continuation: 'new',
       }),
       promptContextSupport: {
@@ -405,7 +400,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     );
   });
 
-  it('exposes stable agentic primitives without prompt-language routing', async () => {
+  it('exposes stable delegation primitives without prompt-language routing', async () => {
     mockedPlanIterationModel.mockReturnValue({
       model: 'gpt-5-mini',
       maxTokens: 1024,

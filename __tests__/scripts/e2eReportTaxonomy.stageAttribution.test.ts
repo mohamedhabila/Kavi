@@ -32,7 +32,6 @@ function buildFailedEntry(failureId: string): Record<string, unknown> {
 
 describe('E2E report stage-attribution taxonomy', () => {
   it.each([
-    ['fixture:turn-0:turn_route', 'turn_route', 'execution_route_failure'],
     ['fixture:turn-0:turn_completion:execution', 'turn_completion', 'execution_failure'],
     ['fixture:turn-0:turn_completion:agent_run', 'turn_completion', 'execution_failure'],
     ['fixture:turn-0:turn_completion:final_response', 'turn_completion', 'final_response_failure'],
@@ -80,7 +79,6 @@ describe('E2E report stage-attribution taxonomy', () => {
       }),
     );
     for (const rubricKind of [
-      'turn_route',
       'turn_completion',
       'turn_lifecycle_boundary',
       'turn_clarification',
@@ -90,7 +88,6 @@ describe('E2E report stage-attribution taxonomy', () => {
       expect(publicPolicy.RUBRIC_KINDS.has(rubricKind)).toBe(true);
     }
     for (const category of [
-      'execution_route_failure',
       'execution_failure',
       'final_response_failure',
       'memory_write_failure',
@@ -98,6 +95,8 @@ describe('E2E report stage-attribution taxonomy', () => {
     ]) {
       expect(publicPolicy.FAILURE_CATEGORIES.has(category)).toBe(true);
     }
+    expect(publicPolicy.RUBRIC_KINDS.has('turn_route')).toBe(false);
+    expect(publicPolicy.FAILURE_CATEGORIES.has('execution_route_failure')).toBe(false);
   });
 
   it('preserves field-scoped completion identity and category in the public report', () => {

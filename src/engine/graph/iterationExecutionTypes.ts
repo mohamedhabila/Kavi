@@ -64,8 +64,6 @@ export interface AgentControlGraphIterationRuntimeState {
   /** What the run read from memory for its prompt. */
   memory: SessionMemoryRead;
   consecutivePendingAsyncNoToolTurns: number;
-  /** Set once this run escalated out of chitchat; later iterations keep agentic authority. */
-  escalatedToAgentic?: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
   /**
@@ -178,7 +176,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   emitPendingAsyncOperationsChange?: () => void;
   failoverState: FailoverState | null;
   graph: GraphIterationBindings;
-  isSuperAgent: boolean;
   /**
    * True only for a foreground interactive run (a person waiting on the screen);
    * never for a delegated worker, scheduled job, or other background run. Bounds
@@ -192,12 +189,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   maxToolIterations: number;
   maxTokens: number;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
-  /** Persists the conversation's escalation out of chitchat so later turns start agentic. */
-  onConversationModeEscalated?: (params: {
-    conversationId: string;
-    reason: string;
-    blockedToolNames: ReadonlyArray<string>;
-  }) => void;
   onFinalizationHeld?: (params: {
     iteration: number;
     holdReason: string;

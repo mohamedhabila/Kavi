@@ -33,7 +33,6 @@ describe('orchestrator request memory read', () => {
       activeProvider: provider,
       callbacks: {},
       conversationId: 'source-thread-1',
-      graphOwnedRun: false,
       internalUserMessageCount: 0,
       linkUnderstandingEnabled: false,
       logger: { devLog: jest.fn(), devWarn: jest.fn() },
@@ -49,7 +48,6 @@ describe('orchestrator request memory read', () => {
     expect(result.memory).toBe(MEMORY_READ);
     expect(result.currentUserMessage).toEqual({ id: 'user-current', text: 'Continue.' });
     expect(result.requestFrame).toMatchObject({
-      mode: 'chitchat',
       input: { kind: 'text' },
       continuation: 'new',
       decision: { action: 'act' },
@@ -62,7 +60,6 @@ describe('orchestrator request memory read', () => {
       activeProvider: provider,
       callbacks: {},
       conversationId: 'source-thread-1',
-      graphOwnedRun: false,
       internalUserMessageCount: 0,
       linkUnderstandingEnabled: false,
       logger: { devLog: jest.fn(), devWarn: jest.fn() },
@@ -105,7 +102,6 @@ describe('orchestrator request memory read', () => {
       activeProvider: provider,
       callbacks: {},
       conversationId: 'source-thread-1',
-      graphOwnedRun: true,
       internalUserMessageCount: 1,
       linkUnderstandingEnabled: false,
       logger: { devLog: jest.fn(), devWarn: jest.fn() },

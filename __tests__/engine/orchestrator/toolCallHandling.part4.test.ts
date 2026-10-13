@@ -8,7 +8,6 @@ import {
   mockStreamMessage,
   makeProvider,
   allowTools,
-  useSuperAgentPersona,
   makeCallbacks,
   createStreamGenerator,
   type OrchestratorOptions,
@@ -290,7 +289,6 @@ describe('Orchestrator', () => {
     });
 
     it('forces a final text-only turn after sessions_yield reports no running workers remain', async () => {
-      useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
         content: JSON.stringify({
@@ -325,7 +323,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv1',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           {

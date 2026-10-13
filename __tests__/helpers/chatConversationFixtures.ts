@@ -1,6 +1,5 @@
 import { buildConversation } from '../../src/store/chatStoreConversationActions';
 import { useChatStore } from '../../src/store/useChatStore';
-import type { ConversationMode } from '../../src/types/conversation';
 
 /**
  * Adds a conversation to the chat store, built as the app builds its one conversation. Tests
@@ -10,14 +9,13 @@ export function addConversation(
   providerId: string,
   systemPrompt: string,
   modelOverride?: string,
-  options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
+  options?: { activate?: boolean; personaId?: string },
 ): string {
   const conversation = buildConversation({
     providerId,
     systemPrompt,
     modelOverride,
     personaId: options?.personaId,
-    mode: options?.mode,
   });
   useChatStore.setState((state) => ({
     conversations: [conversation, ...state.conversations],

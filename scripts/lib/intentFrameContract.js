@@ -15,7 +15,6 @@ const INTENT_FRAME_FIELDS = Object.freeze([
   'preferences',
   'missingInformation',
   'requestedAction',
-  'requestedMode',
   'approvalRisk',
   'temporalRequirements',
   'successCriteria',

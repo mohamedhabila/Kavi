@@ -225,7 +225,6 @@ describeLivePilot('long task — real foreground-chat wall-clock pilot', () => {
         conversationId,
         conversationTitle: 'Fifteen-minute continuity check',
         systemPrompt: useSettingsStore.getState().systemPrompt,
-        defaultMode: 'agentic',
         scenarioTimeoutMs: INTER_TURN_DELAY_MS + 12 * MINUTE_MS,
         memoryTimeoutMs: 30_000,
         maxTokens: 3_072,
@@ -242,16 +241,12 @@ describeLivePilot('long task — real foreground-chat wall-clock pilot', () => {
         ],
         turns: [
           {
-            route: 'forced_agentic',
-            selectedMode: 'agentic',
             timeoutMs: 3 * MINUTE_MS,
             content: `Start one background delegated worker named \`fifteen-minute-continuity-check\` and reply as soon as it is running; do not block this chat until it finishes. Give that worker only the \`wait\` tool; it must not receive file or mutation tools. Its task is: call \`wait\` with the identical arguments \`{"ms":${WAIT_DURATION_MS}}\` exactly ${REQUIRED_WAIT_COUNT} times sequentially, never in parallel. Do not add a reason or any other argument. Count only successful tool results and do not finish early. After the final wait completes, return exactly the marker \`${COMPLETION_MARKER}\` and the completed wait count; do not create any artifact. Use \`sessions_spawn\` with background execution; do not wait for completion in this first reply.`,
           },
           {
             delayBeforeMs: INTER_TURN_DELAY_MS,
             lifecycleBefore: 'app_relaunch',
-            route: 'forced_agentic',
-            selectedMode: 'agentic',
             timeoutMs: 5 * MINUTE_MS,
             content: `Resume from the persisted chat. Check the existing \`fifteen-minute-continuity-check\` worker; do not start another worker. If it is still running, wait for that same session to finish. Retrieve its final output. Only after it confirms the exact marker \`${COMPLETION_MARKER}\` and ${REQUIRED_WAIT_COUNT} completed sequential waits, write exactly one JSON artifact at \`${ARTIFACT_PATH}\` containing \`${JSON.stringify({ marker: COMPLETION_MARKER, completedSequentialWaits: REQUIRED_WAIT_COUNT, status: 'verified' })}\`. Read that file back exactly once, verify those fields, and report the verified result.`,
           },

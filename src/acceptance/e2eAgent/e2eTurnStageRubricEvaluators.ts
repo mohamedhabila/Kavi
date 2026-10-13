@@ -22,7 +22,6 @@ type E2ETurnStageRubric = Extract<
   E2ERubric,
   {
     kind:
-      | 'turn_route'
       | 'turn_completion'
       | 'turn_lifecycle_boundary'
       | 'turn_final_response_token'
@@ -70,9 +69,7 @@ function hasValidCompletionExpectation(rubric: E2ETurnCompletionRubric): boolean
   if (!TURN_COMPLETION_FIELDS.has(rubric.field)) {
     return false;
   }
-  return rubric.field === 'agent_run'
-    ? typeof rubric.expected === 'boolean' || rubric.expected === null
-    : typeof rubric.expected === 'boolean';
+  return typeof rubric.expected === 'boolean';
 }
 
 export function evaluateE2ETurnStageRubric(
@@ -99,16 +96,6 @@ export function evaluateE2ETurnStageRubric(
   }
 
   switch (rubric.kind) {
-    case 'turn_route':
-      if (turn.route.directive !== rubric.directive || turn.route.mode !== rubric.mode) {
-        return {
-          fixtureId,
-          passed: false,
-          detail: `turn ${rubric.turnIndex} route ${turn.route.directive}/${turn.route.mode} (expected ${rubric.directive}/${rubric.mode})`,
-        };
-      }
-      return { fixtureId, passed: true };
-
     case 'turn_completion': {
       const completion = turn.completion;
       const actual =

@@ -5,7 +5,6 @@ import { ConversationSettingsScreen } from '../../src/screens/ConversationSettin
 
 const mockNavigate = jest.fn();
 const mockBackToChat = jest.fn();
-const mockUpdateMode = jest.fn();
 const mockUpdateModel = jest.fn();
 const mockUpdatePersona = jest.fn();
 const mockSetActiveProviderAndModel = jest.fn();
@@ -19,7 +18,6 @@ const mockConversation: any = {
   providerId: 'provider-1',
   modelOverride: 'model-1',
   personaId: 'default',
-  mode: 'agentic',
   systemPrompt: '',
   createdAt: 1,
   updatedAt: 1,
@@ -29,7 +27,6 @@ const mockChatState = {
   conversations: [mockConversation],
   activeConversationId: 'conversation-1',
   isLoading: false,
-  updateModeInConversation: mockUpdateMode,
   updateModelInConversation: mockUpdateModel,
   updatePersonaInConversation: mockUpdatePersona,
 };
@@ -46,7 +43,6 @@ const mockSettingsState = {
   ],
   activeModel: 'model-1',
   activeProviderId: 'provider-1',
-  defaultConversationMode: 'agentic',
   setActiveProviderAndModel: mockSetActiveProviderAndModel,
   setLastUsedModel: mockSetLastUsedModel,
 };
@@ -92,13 +88,13 @@ jest.mock('../../src/components/chat/ModelSelector', () => {
 jest.mock('../../src/components/chat/PersonaSelector', () => {
   const { Text, TouchableOpacity } = require('react-native');
   return {
-    PersonaSelector: ({ disabled, onSelect }: any) => (
+    PersonaSelector: ({ disabled, onSelect, selectedPersonaId }: any) => (
       <TouchableOpacity
         disabled={disabled}
         onPress={() => onSelect('writer')}
         testID="mock-persona-selector"
       >
-        <Text>Default</Text>
+        <Text>{selectedPersonaId}</Text>
       </TouchableOpacity>
     ),
   };
@@ -127,14 +123,8 @@ jest.mock('../../src/theme/useAppTheme', () => ({
 const translations: Record<string, string> = {
   'chat.advancedAiModel': 'AI model override',
   'chat.advancedAiModelHint': 'Optional model setting',
-  'chat.answerOnlyMode': 'Answer only',
-  'chat.answerOnlyModeDescription': 'Responds without tools.',
-  'chat.assistantBehavior': 'Assistant behavior',
-  'chat.assistantBehaviorHint': 'Choose tool behavior.',
   'chat.assistantStyle': 'Assistant style',
   'chat.assistantStyleHint': 'Choose a response style.',
-  'chat.automaticMode': 'Automatic',
-  'chat.automaticModeDescription': 'Uses tools when useful.',
   'chat.conversationSettings': 'Conversation settings',
   'chat.hideUsageDetails': 'Hide usage details',
   'chat.logsEmpty': 'No logs yet.',
@@ -154,43 +144,29 @@ describe('ConversationSettingsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = { conversationId: 'conversation-1' };
-    mockConversation.mode = 'agentic';
     mockConversation.personaId = 'default';
     mockConversation.logs = undefined;
     mockConversation.usage = undefined;
     mockChatState.isLoading = false;
   });
 
-  it('presents engine behavior in familiar user-facing language', () => {
-    const { getByTestId, getByText, queryByText } = render(<ConversationSettingsScreen />);
+  it('always offers the assistant style picker, selecting the default persona when none is set', () => {
+    mockConversation.personaId = undefined;
+    const { getByTestId, getByText } = render(<ConversationSettingsScreen />);
 
-    expect(getByText('Automatic')).toBeTruthy();
-    expect(getByText('Answer only')).toBeTruthy();
-    expect(queryByText('Agent')).toBeNull();
-    expect(queryByText('Chitchat')).toBeNull();
-    expect(getByTestId('conversation-mode-automatic').props.accessibilityLabel).toBe('Automatic');
-    expect(getByTestId('conversation-mode-automatic').props.accessibilityHint).toBe(
-      'Uses tools when useful.',
-    );
-    expect(getByTestId('conversation-mode-automatic').props.accessibilityState).toEqual({
-      disabled: false,
-      selected: true,
-    });
+    expect(getByTestId('conversation-style-section')).toBeTruthy();
+    expect(getByText('Assistant style')).toBeTruthy();
+    expect(getByText('default')).toBeTruthy();
   });
 
-  it('maps Answer only to the internal chitchat mode and safe default style', () => {
-    const { getByTestId } = render(<ConversationSettingsScreen />);
+  it("selects the conversation's chosen persona", () => {
+    mockConversation.personaId = 'researcher';
+    const { getByText } = render(<ConversationSettingsScreen />);
 
-    fireEvent.press(getByTestId('conversation-mode-answer-only'));
-
-    expect(mockUpdateMode).toHaveBeenCalledWith('conversation-1', 'chitchat');
-    expect(mockUpdatePersona).toHaveBeenCalledWith('conversation-1', 'default', {
-      recordEvent: false,
-    });
+    expect(getByText('researcher')).toBeTruthy();
   });
 
-  it('keeps response style contextual to Answer only behavior', () => {
-    mockConversation.mode = 'chitchat';
+  it('applies a selected response style to the conversation', () => {
     const { getByTestId } = render(<ConversationSettingsScreen />);
 
     fireEvent.press(getByTestId('mock-persona-selector'));

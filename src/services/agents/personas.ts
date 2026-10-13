@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Kavi — Multi-Agent Personas
+// Kavi — Personas
 // ---------------------------------------------------------------------------
-// Per-conversation agent configuration with optional persona routing.
-// Includes the SuperAgent (orchestrator) persona for agentic-first mode.
+// A persona is the assistant's identity and tone (and optionally its model and
+// thinking level). How the agent operates — tools, plans, workers — is the
+// code-owned runtime guidance every persona shares.
 
 export interface AgentPersona {
   id: string;
@@ -17,55 +18,14 @@ export interface AgentPersona {
   icon?: string;
 }
 
-// ── SuperAgent constants ─────────────────────────────────────────────────
-/** Canonical persona ID for the SuperAgent. Use this instead of hardcoded 'super-agent' strings. */
-export const SUPER_AGENT_PERSONA_ID = 'super-agent';
-
-/** Canonical persona ID for the general-purpose assistant used outside agentic mode. */
+/** Canonical persona ID for the default assistant. */
 export const DEFAULT_PERSONA_ID = 'default';
 
-// ── SuperAgent system prompt ─────────────────────────────────────────────
-// The orchestrator prompt that makes multi-agent decomposition the default.
-
-export const SUPER_AGENT_SYSTEM_PROMPT = `You are SuperAgent, a mobile everyday-task orchestrator.
-
-Reply to the user in the language of their latest message. Never narrate your internal tools, goals, workers, sessions, or other mechanics to the user; report outcomes and blockers in plain terms.
-
-Use tools and workers only when they materially improve completion.
-
-## Agent Contract
-- Low-signal or underspecified request: use request_clarification when available to register the missing semantic fields and ask one concrete question; do not plan, delegate, invent work, or combine clarification with another tool call.
-- Unreasonable scope/process: say why, narrow to the smallest sensible scope, then proceed.
-- Fresh/live/status claims: use runtime time context and verify with tools when freshness matters.
-- Trivial Q&A and one-shot lookups: answer directly, optionally with one focused verification tool.
-- Everyday work is first-class: communication, scheduling, reminders, files, web/device actions, errands, and home planning. Use the highest-leverage tool that directly fits the next work unit; for explicit, self-contained delegation, launch the worker directly instead of preflighting with supervisor tools; otherwise delegate only for named gaps.
-- Work with several steps: keep a short plan with update_plan in the same response as your first action, one step in_progress at a time, marking steps completed as they finish; do not emit a formal workstream plan before the first tool call unless the user explicitly asks for one. Skip the plan for a request one step answers.
-- If the next step is clear, start acting and keep any short pre-tool explanation concise.
-- Source-grounded work: inspect user-designated files or attachments first; read back artifacts before claiming exact content or counts.
-- When using sessions_spawn, pass a focused prompt; omit tools unless you need to narrow the worker's scope—the tools field is a strict security allowlist, not a task plan.
-- Verify worker status and deliverables. Use sessions_wait when blocked on worker output. For one recoverable gap, use one focused sessions_send continuation; never duplicate it or trust claimed success. Use sessions_output or sessions_history only when needed.
-- Do not repeat unchanged discovery, status, list, or search calls; each retry must close a named gap.
-- Use memory tools only for durable verified facts, not progress.
-- For live information and provider comparisons, prefer web_search or web_fetch, cite source names/URLs, and qualify unsupported metrics or superlatives.
-- Use python as a capability bridge only when first-class tools are insufficient. Use tool_catalog only when the exposed tool surface is insufficient for the next step.
-- Final delivery requires verified completion or a clearly stated blocker.`;
-
-export const SUPER_AGENT_PERSONA: AgentPersona = {
-  id: SUPER_AGENT_PERSONA_ID,
-  name: 'SuperAgent',
-  description:
-    'Autonomous task orchestrator — researches, plans, delegates to sub-agents, monitors, and reports',
-  systemPrompt: SUPER_AGENT_SYSTEM_PROMPT,
-  thinkingLevel: 'medium',
-  icon: '🧠',
-};
-
 export const BUILT_IN_PERSONAS: AgentPersona[] = [
-  SUPER_AGENT_PERSONA,
   {
     id: DEFAULT_PERSONA_ID,
     name: 'Kavi',
-    description: 'Personal assistant for everyday life (chitchat mode)',
+    description: 'Personal assistant for everyday life',
     systemPrompt: [
       "You are Kavi, a personal assistant on the user's phone.",
       '',
@@ -135,10 +95,7 @@ export function getPersona(id: string): AgentPersona | undefined {
  * code-owned runtime guidance section (tool policy, language mirroring, no narrating
  * mechanics) is rendered separately and always applies regardless of which prompt
  * wins here. `default` is resolved the same way as every other persona so that
- * editing it in the agent roster actually takes effect. An existing install's old
- * generic one-liner was migrated to an empty system prompt (settings schema v16), so
- * this replacement is migration-safe: an untouched install falls straight through to
- * the persona's own prompt exactly as before.
+ * editing it in the agent roster actually takes effect.
  */
 export function resolvePersonaSystemPrompt(
   persona: AgentPersona | undefined,

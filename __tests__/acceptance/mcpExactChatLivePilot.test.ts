@@ -294,7 +294,6 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
           conversationTitle: 'Trip Ledger pickup note',
           systemPrompt:
             'You are a careful general mobile assistant. Use connected integrations when needed, preserve user constraints, and verify changed state before claiming completion.',
-          defaultMode: 'agentic',
           scenarioTimeoutMs: 4 * 60 * 1_000,
           timeoutMs: 2 * 60 * 1_000,
           maxTokens: 4_096,
@@ -305,15 +304,11 @@ describeLivePilot('MCP integration — exact foreground chat', () => {
               content:
                 `In my Trip Ledger integration, read booking ${TARGET_BOOKING_ID} and tell me its current pickup note. ` +
                 'Do not change anything.',
-              route: 'production_auto',
-              selectedMode: 'agentic',
             },
             {
               content:
                 `Now set the pickup note on that same booking to exactly "${TARGET_PICKUP_NOTE}", then read it back. ` +
                 'Tell me it is done only if the read-back matches. Do not change any other record.',
-              route: 'production_auto',
-              selectedMode: 'agentic',
             },
           ],
         });

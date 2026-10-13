@@ -70,7 +70,7 @@ jest.mock('../../src/services/commands/builtins', () => ({
 }));
 
 jest.mock('../../src/services/agents/personas', () => ({
-  SUPER_AGENT_PERSONA_ID: 'super-agent',
+  DEFAULT_PERSONA_ID: 'default',
   resolvePersonaSystemPrompt: jest.fn((_persona: any, prompt: string) => prompt),
   resolvePersonaModel: jest.fn((_persona: any, providerId: string, model: string) => ({
     providerId,

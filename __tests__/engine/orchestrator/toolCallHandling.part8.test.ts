@@ -10,7 +10,6 @@ import {
   makeProvider,
   makeCallbacks,
   createStreamGenerator,
-  useSuperAgentPersona,
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
@@ -117,12 +116,11 @@ describe('Orchestrator', () => {
       ).toBe(false);
     });
 
-    it('keeps agentic catalog and browser tools available after a catalog search', async () => {
+    it('keeps catalog and browser tools available after a catalog search', async () => {
       // browser_* tools are gated behind developer mode, like the other device/workspace
       // control tools; this test exercises catalog-driven browser tool discovery itself,
       // so it opts in explicitly rather than exercising the (separately tested) default gate.
       useSettingsStore.setState({ developerModeEnabled: true });
-      useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
         content: JSON.stringify({
@@ -164,7 +162,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv1',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         toolFilter: (toolName) =>
           ['tool_catalog', 'browser_navigate', 'browser_snapshot', 'browser_click'].includes(

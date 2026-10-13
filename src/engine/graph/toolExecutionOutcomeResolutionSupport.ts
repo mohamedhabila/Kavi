@@ -46,7 +46,6 @@ export function buildClarificationRequestUnderstanding(params: {
 
   const baseFrame: RequestFrame = {
     version: REQUEST_FRAME_VERSION,
-    mode: routing.mode,
     input: {
       kind: routing.inputKind,
       attachmentCount: routing.attachmentCount,

@@ -54,7 +54,6 @@ const SCENARIO: E2EScenario = {
   id: 'paired-runtime-scenario',
   conversationId: 'paired-runtime-conversation',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'production_auto' },
   prompt: 'Complete the paired runtime scenario.',
   userTurns: [{ content: 'Complete the paired runtime scenario.' }],
   rubrics: [{ kind: 'min_user_turns', min: 1 }],
@@ -162,9 +161,9 @@ describe('paired E2E runtime coordinator', () => {
       'completed',
       'completed',
     ]);
-    expect(executeCondition.mock.calls[0][0].runOptions.routeOverride).toBeUndefined();
+    expect(executeCondition.mock.calls[0][0].runOptions).not.toHaveProperty('routeOverride');
     expect(executeCondition.mock.calls[0][0].runOptions.disableLongTermMemory).toBe(true);
-    expect(executeCondition.mock.calls[1][0].runOptions.routeOverride).toBe('production_auto');
+    expect(executeCondition.mock.calls[1][0].runOptions).not.toHaveProperty('routeOverride');
     expect(executeCondition.mock.calls[1][0].runOptions.disableLongTermMemory).toBe(false);
     expect(executeCondition.mock.calls[0][0].runOptions.conversationIdSuffix).not.toBe(
       executeCondition.mock.calls[1][0].runOptions.conversationIdSuffix,

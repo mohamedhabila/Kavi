@@ -97,7 +97,6 @@ export function resolveGraphEntryRequestDecision(params: {
   toolAuthority: RequestDecisionToolAuthority;
 }): RequestFrame {
   if (
-    params.frame.mode === 'agentic' &&
     params.frame.continuation === 'resume_waiting_user' &&
     params.graphSnapshot?.pendingUserInput
   ) {
@@ -116,11 +115,7 @@ export function resolveGraphEntryRequestDecision(params: {
       awaitingExternalOperation: false,
     });
   }
-  if (
-    params.frame.mode !== 'agentic' ||
-    params.frame.continuation !== 'resume_waiting_async' ||
-    !params.graphSnapshot
-  ) {
+  if (params.frame.continuation !== 'resume_waiting_async' || !params.graphSnapshot) {
     return params.frame;
   }
 

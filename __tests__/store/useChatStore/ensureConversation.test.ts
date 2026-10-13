@@ -4,13 +4,8 @@ import { addConversation } from '../../helpers/chatConversationFixtures';
 // Kavi is one conversation: whatever asks for it gets the same one.
 describe('ensureConversation', () => {
   it('creates the conversation once and returns it to every later caller', () => {
-    const first = useChatStore.getState().ensureConversation('openai', 'system', 'gpt-x', {
-      mode: 'chitchat',
-    });
-    const second = useChatStore.getState().ensureConversation('openrouter', 'other', 'glm', {
-      personaId: 'super-agent',
-      mode: 'agentic',
-    });
+    const first = useChatStore.getState().ensureConversation('openai', 'system', 'gpt-x');
+    const second = useChatStore.getState().ensureConversation('openrouter', 'other', 'glm');
 
     expect(second).toBe(first);
     expect(useChatStore.getState().conversations).toHaveLength(1);
@@ -18,8 +13,8 @@ describe('ensureConversation', () => {
       id: first,
       providerId: 'openai',
       modelOverride: 'gpt-x',
-      mode: 'chitchat',
     });
+    expect(useChatStore.getState().conversations[0].personaId).toBeUndefined();
     expect(useChatStore.getState().activeConversationId).toBe(first);
   });
 

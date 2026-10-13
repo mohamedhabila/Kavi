@@ -13,7 +13,6 @@ import {
   type ForegroundRunRequestClaim,
   type ForegroundRunRequestBootstrapResult,
 } from './requestBootstrap';
-import { resolveForegroundConversationExecutionContext } from './executionContext';
 import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
 import { modelProjectionOwnerForForegroundLease } from '../../../services/executionJournal/foregroundModelExecutionJournal';
 import type { ForegroundModelExecutionLease } from '../../../services/executionJournal/foregroundModelExecutionTypes';
@@ -126,7 +125,6 @@ async function executeReservedForegroundConversationRun(
     conversation: runConversation,
     conversationId,
     createAssistantMessageId: context.helpers.createId,
-    defaultConversationMode: context.state.defaultConversationMode,
     durability: context.durability,
     foregroundRequestId,
     options,
@@ -187,7 +185,6 @@ async function executeReservedForegroundConversationRun(
       claim: requestClaim,
       conversation: runConversation,
       conversationId,
-      defaultConversationMode: context.state.defaultConversationMode,
       durability: context.durability,
       foregroundRequestId,
       isCurrentRunInvocation,
@@ -225,10 +222,6 @@ async function executeReservedForegroundConversationRun(
   }
 
   const { finalizationProviderContext, model, provider, providerWithApiKey } = preflight;
-  const executionContext = resolveForegroundConversationExecutionContext({
-    conversation: runConversation,
-    defaultConversationMode: context.state.defaultConversationMode,
-  });
   let bootstrapResult: ForegroundRunRequestBootstrapResult;
   try {
     bootstrapResult = completeForegroundRunRequestBootstrap({
@@ -461,7 +454,7 @@ async function executeReservedForegroundConversationRun(
       modelState: {
         providerId: provider.id,
         model,
-        personaId: executionContext.personaId,
+        personaId: runConversation?.personaId,
         systemPrompt: resolvedSystemPrompt,
         maxTokens: options?.maxTokens,
         enableCompaction: options?.enableCompaction ?? true,
@@ -545,7 +538,7 @@ async function executeReservedForegroundConversationRun(
           messages: orchestratorMessages,
           maxTokens: options?.maxTokens,
           signal: abortController,
-          personaId: executionContext.personaId,
+          personaId: runConversation?.personaId,
           executionRunId: foregroundRequestId,
           allProviders: context.state.providers.map((candidate) => ({ ...candidate })),
           enableCompaction: options?.enableCompaction ?? true,

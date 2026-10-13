@@ -52,7 +52,6 @@ function projectRouting(
     status: 'known',
     source: 'request_frame',
     value: {
-      mode: frame.mode,
       inputKind: frame.input.kind,
       attachmentCount: frame.input.attachmentCount,
       continuation: frame.continuation,
@@ -230,7 +229,7 @@ export function renderRequestUnderstandingPromptSection(
   if (projection.routing.status === 'known') {
     const route = projection.routing.value;
     lines.push(
-      `- mode=${route.mode}; continuation=${route.continuation}; input=${route.inputKind}; attachments=${route.attachmentCount}; decision=${route.decisionAction}; reason=${route.decisionReason}`,
+      `- continuation=${route.continuation}; input=${route.inputKind}; attachments=${route.attachmentCount}; decision=${route.decisionAction}; reason=${route.decisionReason}`,
     );
   } else {
     lines.push(`- ${renderFieldStatus(projection.routing)}`);
@@ -301,7 +300,6 @@ function nonNegativeInteger(value: unknown): number | undefined {
 }
 
 const FIELD_STATUSES = new Set<RequestUnderstandingFieldStatus>(['known', 'unknown', 'conflict']);
-const ROUTING_MODES = new Set<RequestUnderstandingRouting['mode']>(['chitchat', 'agentic']);
 const INPUT_KINDS = new Set<RequestUnderstandingRouting['inputKind']>([
   'empty',
   'text',
@@ -363,7 +361,6 @@ function normalizeRoutingSnapshot(
   const attachmentCount = nonNegativeInteger(record.attachmentCount);
   if (
     record.status !== 'known' ||
-    !ROUTING_MODES.has(record.mode as RequestUnderstandingRouting['mode']) ||
     !INPUT_KINDS.has(record.inputKind as RequestUnderstandingRouting['inputKind']) ||
     attachmentCount === undefined ||
     !CONTINUATIONS.has(record.continuation as RequestUnderstandingRouting['continuation']) ||
@@ -374,7 +371,6 @@ function normalizeRoutingSnapshot(
   }
   return {
     status: 'known',
-    mode: record.mode as RequestUnderstandingRouting['mode'],
     inputKind: record.inputKind as RequestUnderstandingRouting['inputKind'],
     attachmentCount,
     continuation: record.continuation as RequestUnderstandingRouting['continuation'],

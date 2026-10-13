@@ -8,7 +8,6 @@ import {
   mockStreamMessage,
   makeProvider,
   allowTools,
-  useSuperAgentPersona,
   makeCallbacks,
   createStreamGenerator,
   type OrchestratorOptions,
@@ -17,7 +16,6 @@ import {
 describe('Orchestrator', () => {
   describe('Tool call handling part 7', () => {
     it('does not accept a final answer while tracked background sessions are still running', async () => {
-      useSuperAgentPersona();
       (executeTool as jest.Mock)
         .mockResolvedValueOnce(
           JSON.stringify({
@@ -74,7 +72,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv-background-join',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           {
@@ -278,7 +275,6 @@ describe('Orchestrator', () => {
     });
 
     it('re-prompts stalled no-tool turns with async hold guidance without auto-scheduling monitor tools', async () => {
-      useSuperAgentPersona();
       (executeTool as jest.Mock)
         .mockResolvedValueOnce(
           JSON.stringify({
@@ -335,7 +331,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv-background-hold-stall',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           {

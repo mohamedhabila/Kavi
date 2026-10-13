@@ -20,7 +20,6 @@ describe('agent control graph request context', () => {
     ];
 
     const context = prepareAgentControlGraphRequestContext({
-      graphOwnedRun: true,
       memoryScopedMessages: messages,
       continuation: 'new',
       workflowScopeUserMessageId: 'u-current',
@@ -45,7 +44,6 @@ describe('agent control graph request context', () => {
     ];
 
     const context = prepareAgentControlGraphRequestContext({
-      graphOwnedRun: true,
       memoryScopedMessages: messages,
       continuation: 'new',
       workflowScopeUserMessageId: 'missing-user',
@@ -57,7 +55,6 @@ describe('agent control graph request context', () => {
 
   it('keeps request context focused on the active user message', () => {
     const context = prepareAgentControlGraphRequestContext({
-      graphOwnedRun: true,
       memoryScopedMessages: [msg('u-current', 'user', 'Continue the task')],
       continuation: 'resume',
       workflowScopeUserMessageId: 'u-current',
@@ -68,15 +65,13 @@ describe('agent control graph request context', () => {
 
   it('keeps standalone literal-token requests on the normal workflow path', () => {
     const context = prepareAgentControlGraphRequestContext({
-      graphOwnedRun: true,
       memoryScopedMessages: [msg('u-direct', 'user', 'CHECKNO42')],
       continuation: 'new',
       workflowScopeUserMessageId: 'u-direct',
     });
 
     expect(context.requestFrame).toMatchObject({
-      version: 2,
-      mode: 'agentic',
+      version: 3,
       input: { kind: 'text', attachmentCount: 0 },
       continuation: 'new',
       requiredInformation: [],
@@ -99,7 +94,6 @@ describe('agent control graph request context', () => {
     ];
 
     const context = prepareAgentControlGraphRequestContext({
-      graphOwnedRun: true,
       memoryScopedMessages: [userMessage],
       continuation: 'new',
       workflowScopeUserMessageId: 'u-attachment',

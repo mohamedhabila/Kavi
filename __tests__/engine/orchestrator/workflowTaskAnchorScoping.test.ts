@@ -2,11 +2,10 @@
 // Tests - Orchestrator: workflow task anchor scoping
 // ---------------------------------------------------------------------------
 // The anchor protects task fidelity across long, delegation-capable execution.
-// It must never appear for chitchat, and among agentic runs it should appear
-// only when the run can delegate (sessions_spawn on its surface) or is itself a
-// delegated worker (recognized here by the absence of workflowScopeUserMessageId,
-// which every interactive foreground chat turn carries but a worker run never
-// sets — see subAgentOrchestratorRun.ts).
+// It should appear only when the run can delegate (sessions_spawn on its
+// surface) or is itself a delegated worker (recognized here by the absence of
+// workflowScopeUserMessageId, which every interactive foreground chat turn
+// carries but a worker run never sets — see subAgentOrchestratorRun.ts).
 // ---------------------------------------------------------------------------
 
 import {
@@ -15,7 +14,6 @@ import {
   makeProvider,
   makeCallbacks,
   createStreamGenerator,
-  useSuperAgentPersona,
   allowTools,
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
@@ -34,37 +32,14 @@ function okStream() {
 
 describe('Orchestrator', () => {
   describe('workflow task anchor scoping', () => {
-    it('never attaches the anchor to a chitchat turn', async () => {
+    it('omits the anchor for a plain turn that cannot delegate', async () => {
       mockStreamMessage.mockImplementationOnce(okStream);
 
       const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-chitchat',
-        systemPrompt: 'You are helpful',
-        workflowScopeUserMessageId: 'msg1',
-        messages: [
-          { id: 'msg1', role: 'user', content: 'What time is it in Tokyo?', timestamp: Date.now() },
-        ],
-      };
-
-      await runOrchestrator(options, callbacks);
-
-      const apiMessages = mockStreamMessage.mock.calls[0][0];
-      expect(apiMessages[0].content).not.toContain(ANCHOR_HEADING);
-    });
-
-    it('omits the anchor for a plain agentic turn that cannot delegate', async () => {
-      useSuperAgentPersona();
-      mockStreamMessage.mockImplementationOnce(okStream);
-
-      const callbacks = makeCallbacks();
-      const options: OrchestratorOptions = {
-        provider: makeProvider(),
-        model: 'gpt-5.4',
-        conversationId: 'conv-agentic-no-delegation',
-        personaId: 'super-agent',
+        conversationId: 'conv-no-delegation',
         systemPrompt: 'You are helpful',
         // A real interactive chat turn always carries this.
         workflowScopeUserMessageId: 'msg1',
@@ -111,16 +86,14 @@ describe('Orchestrator', () => {
       );
     }
 
-    it('attaches the anchor on later turns when sessions_spawn is on the agentic turn surface', async () => {
-      useSuperAgentPersona();
+    it('attaches the anchor on later turns when sessions_spawn is on the turn surface', async () => {
       toolCallThenFinalTextStreams();
 
       const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-agentic-can-delegate',
-        personaId: 'super-agent',
+        conversationId: 'conv-can-delegate',
         systemPrompt: 'You are helpful',
         workflowScopeUserMessageId: 'msg1',
         toolFilter: allowTools(['sessions_spawn', 'sessions_wait', 'web_search']),
@@ -142,7 +115,6 @@ describe('Orchestrator', () => {
     });
 
     it('attaches the anchor on later turns for a delegated worker run even without sessions_spawn on its surface', async () => {
-      useSuperAgentPersona();
       toolCallThenFinalTextStreams();
 
       const callbacks = makeCallbacks();
@@ -150,7 +122,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv-worker',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         // Worker runs never set workflowScopeUserMessageId (see subAgentOrchestratorRun.ts).
         // The worker's own strict tool allowlist deliberately omits sessions_spawn.

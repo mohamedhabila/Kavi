@@ -4,10 +4,8 @@ import type {
   AgentRunStatus,
   AgentRunTerminalReason,
 } from '../../types/agentRun';
-import type { ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus } from '../../types/message';
 import type { RequestUnderstandingRouting } from '../../types/requestUnderstanding';
-import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
 import type { E2ERubric } from './types';
 
 function completeEnum<All extends string>() {
@@ -15,26 +13,6 @@ function completeEnum<All extends string>() {
     values: Values & (Exclude<All, Values[number]> extends never ? unknown : never),
   ): Values => values;
 }
-
-export const E2E_PUBLIC_ROUTE_DIRECTIVES = completeEnum<ForegroundScenarioRouteDirective>()([
-  'production_auto',
-  'forced_chitchat',
-  'forced_agentic',
-]);
-
-export const E2E_PUBLIC_CONVERSATION_MODES = completeEnum<ConversationMode>()([
-  'agentic',
-  'chitchat',
-]);
-
-export const E2E_PUBLIC_BUILT_IN_PERSONA_IDS = [
-  'super-agent',
-  'default',
-  'coder',
-  'researcher',
-  'writer',
-  'planner',
-] as const;
 
 export const E2E_PUBLIC_ASSISTANT_STATUSES = completeEnum<AssistantCompletionStatus | 'missing'>()([
   'complete',
@@ -107,7 +85,6 @@ export const E2E_PUBLIC_RUBRIC_KINDS = completeEnum<E2ERubric['kind']>()([
   'turn_memory_answer',
   'turn_memory_selection',
   'turn_native_invocation_count',
-  'turn_route',
   'turn_tool_call_count',
   'worker_result_token',
   'workspace_file',

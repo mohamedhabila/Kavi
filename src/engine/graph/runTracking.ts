@@ -1,4 +1,3 @@
-import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getCommand } from '../../services/commands/builtins';
@@ -10,18 +9,11 @@ export function isRegisteredSlashCommand(content: string | undefined): boolean {
   return command ? getCommand(command.name) !== undefined : false;
 }
 
+/** Every foreground turn that acts is a tracked agent run; a slash command or an empty turn is not. */
 export function shouldTrackForegroundAgentRun(params: {
-  conversationMode?: ConversationMode;
-  defaultConversationMode: ConversationMode;
   latestUserMessage?: Message;
-  messageCount: number;
   reuseAgentRunId?: string;
 }): boolean {
-  const mode = params.conversationMode ?? params.defaultConversationMode;
-  if (mode !== 'agentic') {
-    return false;
-  }
-
   if (params.reuseAgentRunId?.trim()) {
     return true;
   }
@@ -34,7 +26,6 @@ export function shouldTrackForegroundAgentRun(params: {
     text: params.latestUserMessage?.content,
     attachmentCount:
       filterModelVisibleAttachments(params.latestUserMessage?.attachments)?.length ?? 0,
-    mode: 'agentic',
     continuation: 'new',
   });
 

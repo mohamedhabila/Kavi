@@ -21,7 +21,6 @@ const MINI_SCENARIO: E2EScenario = {
   id: 'causal-memory-contract-test',
   conversationId: 'causal-memory-contract-test-conversation',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'chitchat', route: 'production_auto' },
   prompt: 'Use remembered context in a fresh conversation.',
   rubrics: [
     { kind: 'min_user_turns', min: 1 },
@@ -117,15 +116,14 @@ describe('paired causal-memory scenario and contract', () => {
     expect(lookupE2EScenarioBenchmarkMeta(scenario.id).benchmarkFamilies).toEqual(['kavi-core']);
     expect(scenario.userTurns?.[2]).toMatchObject({
       lifecycleBefore: 'context_reset',
-      selectedMode: 'agentic',
     });
     const prompt = scenario.userTurns?.map((turn) => turn.content).join('\n') ?? '';
     expect(prompt).not.toContain('default_meeting_duration_minutes');
     expect(prompt).not.toContain('subject `');
     expect(validateE2EPairedCausalMemoryContract(scenario)).toEqual(scenario.pairedEvaluation);
     expect(scenario.pairedEvaluation).toMatchObject({
-      neutralRubricIndexes: Array.from({ length: 23 }, (_value, index) => index),
-      causalRubricIndexes: Array.from({ length: 10 }, (_value, index) => index + 23),
+      neutralRubricIndexes: Array.from({ length: 19 }, (_value, index) => index),
+      causalRubricIndexes: Array.from({ length: 10 }, (_value, index) => index + 19),
     });
     const neutralRubrics = scenario.pairedEvaluation!.neutralRubricIndexes.map(
       (index) => scenario.rubrics[index],

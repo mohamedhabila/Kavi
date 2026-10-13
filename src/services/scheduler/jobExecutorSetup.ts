@@ -10,8 +10,6 @@ import {
 import type { CronJob } from '../cron/types';
 import { hasCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 import { NonRetryableSchedulerExecutionError } from './executionError';
-import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
-import { resolveForegroundConversationExecutionContext } from '../../engine/graph/foregroundRun/executionContext';
 
 export async function resolveScheduledExecutionProvider(job: CronJob) {
   const settings = useSettingsStore.getState();
@@ -90,37 +88,18 @@ export function resolveScheduledExecutionConversation(params: {
     chatState.conversations.some((conversation) => conversation.id === job.retryConversationId)
       ? job.retryConversationId
       : undefined) ??
-    ensureScheduledConversation({ provider, model, systemPrompt });
+    chatState.ensureConversation(provider.id, systemPrompt, model);
   return { chatState: useChatStore.getState(), conversationId };
 }
 
-/** Creates the one conversation the way the chat screen does when none exists yet. */
-function ensureScheduledConversation(params: {
-  provider: LlmProviderConfig;
-  model: string;
-  systemPrompt: string;
-}): string {
-  const mode = useSettingsStore.getState().defaultConversationMode;
+/**
+ * A scheduled run is a turn in the conversation: it runs with the conversation's persona, as a
+ * foreground turn does, and leaves the persona and model alone.
+ */
+export function resolveScheduledExecutionPersona(conversationId: string): string | undefined {
   return useChatStore
     .getState()
-    .ensureConversation(params.provider.id, params.systemPrompt, params.model, {
-      mode,
-      personaId: resolveConversationPersonaForMode({ nextMode: mode }),
-    });
-}
-
-/**
- * A scheduled run is a turn in the conversation: it runs with the persona a foreground turn
- * would use and leaves the conversation's persona and model alone. Like any turn, it can
- * escalate a chitchat conversation to agentic when it discovers a tool chitchat may not call.
- */
-export function resolveScheduledExecutionPersona(conversationId: string): string {
-  return resolveForegroundConversationExecutionContext({
-    conversation: useChatStore
-      .getState()
-      .conversations.find((conversation) => conversation.id === conversationId),
-    defaultConversationMode: useSettingsStore.getState().defaultConversationMode,
-  }).personaId;
+    .conversations.find((conversation) => conversation.id === conversationId)?.personaId;
 }
 
 export function resolveScheduledOccurrenceCompletedOutput(params: {

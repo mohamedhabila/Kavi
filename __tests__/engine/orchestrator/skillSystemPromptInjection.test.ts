@@ -48,14 +48,14 @@ describe('Orchestrator', () => {
       expect(apiMessages[0].content).toContain("a personal assistant on the user's phone");
     });
 
-    it('keeps the SuperAgent runtime system prompt product-neutral', async () => {
+    it('keeps the runtime system prompt product-neutral', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
@@ -72,9 +72,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-superagent-runtime-prompt',
+        conversationId: 'conv-runtime-prompt',
         systemPrompt: '',
-        personaId: 'super-agent',
+        personaId: 'default',
         messages: [
           {
             id: 'msg1',
@@ -96,14 +96,14 @@ describe('Orchestrator', () => {
       expect(apiMessages[0].content).toContain("a personal assistant on the user's phone");
     });
 
-    it('keeps the SuperAgent runtime prompt compact while preserving graph-critical contracts', async () => {
+    it('keeps the runtime prompt compact while preserving graph-critical contracts', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
@@ -121,9 +121,9 @@ describe('Orchestrator', () => {
         {
           provider: makeProvider(),
           model: 'gpt-5.4',
-          conversationId: 'conv-superagent-lean-prompt',
+          conversationId: 'conv-lean-prompt',
           systemPrompt: 'You are helpful',
-          personaId: 'super-agent',
+          personaId: 'default',
           messages: [
             {
               id: 'msg1',

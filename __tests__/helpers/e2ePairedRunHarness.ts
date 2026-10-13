@@ -34,7 +34,6 @@ export const OPTED_OUT_MEMORY_PROMPT: ForegroundScenarioMemoryPromptEvidence = {
 export function buildPairedTurnTrace(
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence,
   overrides: Readonly<{
-    route?: Pick<E2EScenarioTurnTrace['route'], 'directive' | 'mode'>;
     turnIndex?: number;
   }> = {},
 ): E2EScenarioTurnTrace {
@@ -43,10 +42,6 @@ export function buildPairedTurnTrace(
     turnIndex: overrides.turnIndex ?? 0,
     lifecycleBefore: null,
     user: { messageId: 'user-1', text: 'test prompt', timestamp: 1 },
-    route: {
-      ...(overrides.route ?? { directive: 'production_auto', mode: 'chitchat' }),
-      personaId: 'default',
-    },
     finalAssistant: {
       messageId: 'assistant-1',
       text: 'test response',

@@ -101,7 +101,7 @@ describe('paired public report projection', () => {
     }
   });
 
-  it('reports control-only, diagnostic-only, and forced-route-only accidental successes', () => {
+  it('reports control-only and diagnostic-only accidental successes', () => {
     const controlOnly = buildE2EPairedPublicReport(
       runtime([
         completedCondition({ condition: 'memory_off', rubricPassed: 1, rubricTotal: 1 }),
@@ -122,14 +122,6 @@ describe('paired public report projection', () => {
       ]),
     );
     expect(diagnostics(diagnosticOnly)).toEqual(['reference_only_pass', 'diagnostic_only_pass']);
-
-    const forcedOnly = buildE2EPairedPublicReport(
-      runtime([
-        completedCondition({ condition: 'forced_agentic', rubricPassed: 1, rubricTotal: 1 }),
-        completedCondition({ condition: 'production_auto', rubricPassed: 0, rubricTotal: 1 }),
-      ]),
-    );
-    expect(diagnostics(forcedOnly)).toEqual(['reference_only_pass', 'forced_route_only_pass']);
   });
 
   it('publishes infrastructure categories and hashes but no private failure prose', () => {
@@ -251,31 +243,42 @@ describe('paired public report projection', () => {
         ]),
       ),
     ).toThrow('invalid paired assessment');
-
-    expect(() =>
-      buildE2EPairedPublicReport(
-        runtime([
-          completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
-          completedCondition({
-            condition: 'production_auto',
-            rubricPassed: 1,
-            rubricTotal: 1,
-            userTurnCount: 1,
-            turnTraces: [
-              buildPairedTurnTrace(recordedMemoryPrompt()),
-              buildPairedTurnTrace(recordedMemoryPrompt()),
-            ],
-          }),
-        ]),
-      ),
-    ).toThrow('route evidence exceeds the user-turn count');
   });
 
-  it('does not make a memory observation from a paired route score', () => {
+  it('withholds task deltas when a condition traces more turns than the user sent', () => {
     const report = buildE2EPairedPublicReport(
       runtime([
         completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
-        completedCondition({ condition: 'forced_agentic', rubricPassed: 1, rubricTotal: 1 }),
+        completedCondition({
+          condition: 'production_auto',
+          rubricPassed: 1,
+          rubricTotal: 1,
+          userTurnCount: 1,
+          turnTraces: [
+            buildPairedTurnTrace(recordedMemoryPrompt()),
+            buildPairedTurnTrace(recordedMemoryPrompt()),
+          ],
+        }),
+      ]),
+    );
+
+    expect(report.validForDeltaClaims).toBe(false);
+    expect(report.pairedDelta).toBeNull();
+    expect(report.conditions[1]).toMatchObject({
+      metrics: { turnTraceIndexCoverage: 'incomplete' },
+    });
+    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
+  });
+
+  it('does not make a memory observation from a paired diagnostic score', () => {
+    const report = buildE2EPairedPublicReport(
+      runtime([
+        completedCondition({ condition: 'memory_off', rubricPassed: 0, rubricTotal: 1 }),
+        completedCondition({
+          condition: 'diagnostic_full_context',
+          rubricPassed: 1,
+          rubricTotal: 1,
+        }),
       ]),
     );
     expect(report.memoryPairedObservation).toEqual({
@@ -315,12 +318,6 @@ describe('paired public report projection', () => {
       metrics: {
         userTurnCount: 1,
         turnTraceIndexCoverage: 'complete',
-        routeDirectiveCounts: {
-          production_auto: 1,
-          forced_chitchat: 0,
-          forced_agentic: 0,
-        },
-        conversationModeCounts: { chitchat: 1, agentic: 0 },
         memory: {
           turnStatusCounts: { recorded: 0, missing: 0, optOut: 1 },
           buildCount: 0,
@@ -333,12 +330,6 @@ describe('paired public report projection', () => {
       metrics: {
         userTurnCount: 1,
         turnTraceIndexCoverage: 'complete',
-        routeDirectiveCounts: {
-          production_auto: 1,
-          forced_chitchat: 0,
-          forced_agentic: 0,
-        },
-        conversationModeCounts: { chitchat: 1, agentic: 0 },
         memory: {
           turnStatusCounts: { recorded: 1, missing: 0, optOut: 0 },
           buildCount: 1,
@@ -348,38 +339,9 @@ describe('paired public report projection', () => {
         },
       },
     });
+    expect(report.conditions[1]).not.toHaveProperty('metrics.routeDirectiveCounts');
+    expect(report.conditions[1]).not.toHaveProperty('metrics.conversationModeCounts');
     expect(report.memoryPairedObservation.status).toBe('positive_delta');
-  });
-
-  it('invalidates a memory observation when the control uses a forced route', () => {
-    const report = buildE2EPairedPublicReport(
-      runtime([
-        completedCondition({
-          condition: 'memory_off',
-          rubricPassed: 0,
-          rubricTotal: 1,
-          turnTraces: [
-            buildPairedTurnTrace(OPTED_OUT_MEMORY_PROMPT, {
-              route: { directive: 'forced_chitchat', mode: 'chitchat' },
-            }),
-          ],
-        }),
-        completedCondition({ condition: 'production_auto', rubricPassed: 1, rubricTotal: 1 }),
-      ]),
-    );
-
-    expect(report.validForDeltaClaims).toBe(false);
-    expect(report.pairedDelta).toBeNull();
-    expect(report.memoryPairedObservation.status).toBe('invalid_instrumentation');
-    expect(report.conditions[0]).toMatchObject({
-      metrics: {
-        routeDirectiveCounts: {
-          production_auto: 0,
-          forced_chitchat: 1,
-          forced_agentic: 0,
-        },
-      },
-    });
   });
 
   it('invalidates memory observations when memory evidence is absent', () => {

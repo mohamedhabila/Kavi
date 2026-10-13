@@ -9,23 +9,9 @@ import {
 describe('organic mobile-assistant continuity scenario', () => {
   const scenario = ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO;
 
-  it('keeps one nine-turn conversation on production routing while the user changes modes', () => {
-    expect(scenario.execution).toEqual({ initialMode: 'chitchat', route: 'production_auto' });
+  it('keeps one nine-turn conversation across two real app relaunches', () => {
+    expect(scenario as unknown as Record<string, unknown>).not.toHaveProperty('execution');
     expect(scenario.userTurns).toHaveLength(9);
-    expect(
-      scenario.userTurns?.every((turn) => (turn.route ?? 'production_auto') === 'production_auto'),
-    ).toBe(true);
-    expect(scenario.userTurns?.map((turn) => turn.selectedMode ?? null)).toEqual([
-      null,
-      null,
-      null,
-      'agentic',
-      'chitchat',
-      null,
-      'agentic',
-      'agentic',
-      'chitchat',
-    ]);
     expect(scenario.userTurns?.map((turn) => turn.lifecycleBefore ?? null)).toEqual([
       null,
       null,
@@ -39,38 +25,19 @@ describe('organic mobile-assistant continuity scenario', () => {
     ]);
   });
 
-  it('attributes settled turns to production_auto and preserves the paused clarification', () => {
-    const expectedModes = [
-      'chitchat',
-      'chitchat',
-      'chitchat',
-      'agentic',
-      'chitchat',
-      'chitchat',
-      'agentic',
-      'agentic',
-      'chitchat',
-    ] as const;
-
-    expectedModes.forEach((mode, turnIndex) => {
-      if (turnIndex === 6) return;
+  it('expects a completed run for every settled turn and preserves the paused clarification', () => {
+    for (let turnIndex = 0; turnIndex < 9; turnIndex += 1) {
+      if (turnIndex === 6) continue;
       expect(scenario.rubrics).toEqual(
         expect.arrayContaining([
-          { kind: 'turn_route', turnIndex, directive: 'production_auto', mode },
           { kind: 'turn_completion', turnIndex, field: 'execution', expected: true },
           { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
-          {
-            kind: 'turn_completion',
-            turnIndex,
-            field: 'agent_run',
-            expected: mode === 'agentic' ? true : null,
-          },
+          { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: true },
         ]),
       );
-    });
+    }
     expect(scenario.rubrics).toEqual(
       expect.arrayContaining([
-        { kind: 'turn_route', turnIndex: 6, directive: 'production_auto', mode: 'agentic' },
         { kind: 'turn_completion', turnIndex: 6, field: 'execution', expected: false },
         { kind: 'turn_completion', turnIndex: 6, field: 'final_response', expected: true },
         { kind: 'turn_completion', turnIndex: 6, field: 'agent_run', expected: false },

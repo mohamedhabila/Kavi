@@ -571,7 +571,6 @@
         "open_loops",
         "procedure_learning",
         "failure_learning",
-        "cross_mode_transfer",
         "interference",
         "abstention",
         "appropriate_silence",
@@ -583,20 +582,6 @@
         "memory_safety",
         "long_task_recovery"
       ]
-    },
-    "modeTransition": {
-      "type": "string",
-      "enum": [
-        "chitchat_to_chitchat",
-        "chitchat_to_agentic",
-        "agentic_to_chitchat",
-        "agentic_to_agentic",
-        "either_to_either"
-      ]
-    },
-    "turnMode": {
-      "type": "string",
-      "enum": ["production_auto", "forced_chitchat", "forced_agentic"]
     },
     "structuralTarget": {
       "type": "string",
@@ -648,7 +633,7 @@
     "userTurnStep": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "at", "mode", "message"],
+      "required": ["id", "kind", "at", "message"],
       "properties": {
         "id": {
           "$ref": "#/$defs/safeId"
@@ -659,9 +644,6 @@
         "at": {
           "type": "string",
           "format": "date-time"
-        },
-        "mode": {
-          "$ref": "#/$defs/turnMode"
         },
         "message": {
           "type": "string",
@@ -779,7 +761,6 @@
         "title",
         "controlKind",
         "families",
-        "modeTransitions",
         "fixtures",
         "steps",
         "assertions",
@@ -802,14 +783,6 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/klaeFamily"
-          },
-          "minItems": 1,
-          "uniqueItems": true
-        },
-        "modeTransitions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/modeTransition"
           },
           "minItems": 1,
           "uniqueItems": true

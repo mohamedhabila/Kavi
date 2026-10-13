@@ -22,7 +22,12 @@ export async function runBootOnLaunchIfPresent(): Promise<void> {
     const apiKey = await resolveProviderApiKey(provider);
     if (providerRequiresApiKey(provider) && !apiKey) return;
 
-    const result = await runBootOnce({ ...provider, apiKey }, settings.providers, model);
+    const result = await runBootOnce(
+      { ...provider, apiKey },
+      settings.providers,
+      model,
+      settings.thinkingLevel,
+    );
     if (result.status === 'failed') {
       console.warn('[startup] BOOT.md execution failed:', result.reason || 'unknown failure');
       await sendLocalNotification({

@@ -24,7 +24,6 @@ function surfaceNames(params: {
   observed?: string[];
   activated?: string[];
   recent?: string[];
-  conversationMode?: 'chitchat';
 }): string[] {
   return resolveTurnToolSurface({
     allTools,
@@ -33,7 +32,6 @@ function surfaceNames(params: {
     recentContinuationToolNames: new Set(params.recent ?? []),
     activatedCatalogToolNames: new Set(params.activated ?? []),
     includeToolCatalog: true,
-    ...(params.conversationMode ? { conversationMode: params.conversationMode } : {}),
   }).map((tool) => tool.name);
 }
 
@@ -68,13 +66,6 @@ describe('the recovery the off-surface refusal names actually works', () => {
 });
 
 describe('activation grants availability, never new authority', () => {
-  it('still refuses a side-effectful non-memory tool activated in chitchat', () => {
-    // Unchanged: discovery proves a tool exists, not that chat may mutate state with it.
-    expect(
-      surfaceNames({ activated: ['python'], conversationMode: 'chitchat' }),
-    ).not.toContain('python');
-  });
-
   it('does not put a tool on the surface merely because it was observed', () => {
     // Incidental continuation is still governed by the completion rules; only an
     // explicit activation is durable.

@@ -3,11 +3,10 @@ import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntry
 import { createInitialAgentRunControlGraphState } from '../../src/services/agents/agentControlGraphState';
 import type { RequestFrame } from '../../src/services/agents/requestFrame';
 
-function frame(overrides: Partial<Pick<RequestFrame, 'mode' | 'continuation'>> = {}): RequestFrame {
+function frame(overrides: Partial<Pick<RequestFrame, 'continuation'>> = {}): RequestFrame {
   return buildGraphEntryRequestFrame({
     text: 'Continue the existing work',
     attachmentCount: 0,
-    mode: overrides.mode ?? 'agentic',
     continuation: overrides.continuation ?? 'resume_waiting_async',
   });
 }
@@ -234,7 +233,6 @@ describe('graph entry request decision signals', () => {
     const symbolFrame = buildGraphEntryRequestFrame({
       text: '...',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'resume_waiting_async',
     });
 
@@ -243,10 +241,8 @@ describe('graph entry request decision signals', () => {
     });
   });
 
-  it.each([
-    { label: 'new user turn', requestFrame: frame({ continuation: 'new' }) },
-    { label: 'concurrent chitchat', requestFrame: frame({ mode: 'chitchat' }) },
-  ])('does not inherit stale async authority into a $label', ({ requestFrame }) => {
+  it('does not inherit stale async authority into a new user turn', () => {
+    const requestFrame = frame({ continuation: 'new' });
     expect(decide({ requestFrame, available: [], allowed: [] })).toBe(requestFrame);
     expect(requestFrame).toMatchObject({
       requiredInformation: [],

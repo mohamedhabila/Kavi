@@ -9,7 +9,6 @@ import {
   mockStreamMessage,
   makeProvider,
   allowTools,
-  useSuperAgentPersona,
   makeCallbacks,
   createStreamGenerator,
   type OrchestratorOptions,
@@ -18,7 +17,6 @@ import {
 describe('Orchestrator', () => {
   describe('Tool call handling part 5', () => {
     it('hands control back without polling after an explicit non-blocking sessions_spawn launch', async () => {
-      useSuperAgentPersona();
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
         content: JSON.stringify({
@@ -60,7 +58,6 @@ describe('Orchestrator', () => {
         provider: makeProvider(),
         model: 'gpt-5.4',
         conversationId: 'conv1',
-        personaId: 'super-agent',
         systemPrompt: 'You are helpful',
         messages: [
           {
@@ -148,7 +145,7 @@ describe('Orchestrator', () => {
       );
     });
 
-    it('keeps session coordination tools out of trivial direct SuperAgent turns', async () => {
+    it('keeps session coordination tools out of trivial direct turns', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
@@ -157,9 +154,9 @@ describe('Orchestrator', () => {
       };
 
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
       skillsModule.getSkillToolDefinitions.mockReturnValueOnce([
         {
@@ -216,9 +213,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-super-agent-direct-weather',
+        conversationId: 'conv-direct-weather',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         messages: [
           {
             id: 'msg1',
@@ -259,9 +256,9 @@ describe('Orchestrator', () => {
       };
 
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
       skillsModule.getSkillToolDefinitions.mockReturnValueOnce([
         {
@@ -318,9 +315,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-super-agent-resume-weather',
+        conversationId: 'conv-resume-weather',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         internalUserMessageCount: 1,
         messages: [
           {
@@ -360,7 +357,7 @@ describe('Orchestrator', () => {
       expect(systemPromptMessage.content).toContain(
         'Runtime: mobile (React Native / Expo), channel mobile-app.',
       );
-      expect(getSkillSystemPrompts).toHaveBeenCalledWith('conv-super-agent-resume-weather');
+      expect(getSkillSystemPrompts).toHaveBeenCalledWith('conv-resume-weather');
     });
   });
 });

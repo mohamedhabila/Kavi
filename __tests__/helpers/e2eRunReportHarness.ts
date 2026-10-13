@@ -22,7 +22,7 @@ export function buildFixtureTurnTrace(
     turnIndex: 0,
     lifecycleBefore: null,
     user: { messageId: 'user-1', text: 'test prompt', timestamp: 1 },
-    route: { directive: 'production_auto', mode: 'chitchat', personaId: 'default' },
+    route: { directive: 'production_auto', personaId: 'default' },
     finalAssistant: {
       messageId: 'assistant-1',
       text: 'test response',

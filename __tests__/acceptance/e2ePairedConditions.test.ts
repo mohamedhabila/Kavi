@@ -37,18 +37,14 @@ function makeScenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
     id: 'paired-scenario',
     conversationId: 'paired-conversation',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'production_auto' },
     threadTitle: 'Synthetic paired thread',
     prompt: 'Complete the paired scenario.',
     userTurns: [
       {
         content: 'Remember the first constraint.',
-        route: 'production_auto',
-        selectedMode: 'chitchat',
       },
       {
         content: 'Use the constraint after relaunch.',
-        route: 'production_auto',
         lifecycleBefore: 'app_relaunch',
       },
     ],
@@ -84,31 +80,26 @@ function makeCondition(
 }
 
 describe('paired E2E condition contract', () => {
-  it('exposes only the five declared condition labels and canonical behavior', () => {
+  it('exposes only the three declared condition labels and canonical behavior', () => {
     expect(E2E_PAIRED_CONDITIONS).toEqual([
       'production_auto',
-      'forced_chitchat',
-      'forced_agentic',
       'memory_off',
       'diagnostic_full_context',
     ]);
 
     const invariant = makeInvariant();
-    expect(makeCondition('production_auto', invariant).conditionConfig).toMatchObject({
-      routeOverride: 'production_auto',
+    expect(makeCondition('production_auto', invariant).conditionConfig).toEqual({
       memoryMode: 'production',
       contextMode: 'production',
     });
-    expect(makeCondition('forced_chitchat', invariant).conditionConfig.routeOverride).toBe(
-      'forced_chitchat',
-    );
-    expect(makeCondition('forced_agentic', invariant).conditionConfig.routeOverride).toBe(
-      'forced_agentic',
-    );
-    expect(makeCondition('memory_off', invariant).conditionConfig.memoryMode).toBe('off');
-    expect(makeCondition('diagnostic_full_context', invariant).conditionConfig.contextMode).toBe(
-      'full_context',
-    );
+    expect(makeCondition('memory_off', invariant).conditionConfig).toEqual({
+      memoryMode: 'off',
+      contextMode: 'production',
+    });
+    expect(makeCondition('diagnostic_full_context', invariant).conditionConfig).toEqual({
+      memoryMode: 'production',
+      contextMode: 'full_context',
+    });
   });
 
   it('canonicalizes the tool surface and freezes the entire invariant', () => {
@@ -119,8 +110,11 @@ describe('paired E2E condition contract', () => {
     expect(Object.isFrozen(invariant.provider)).toBe(true);
     expect(Object.isFrozen(invariant.scenarioInput.userTurns)).toBe(true);
     expect(Object.isFrozen(invariant.budget)).toBe(true);
-    expect(invariant.scenarioInput.userTurns[0]?.selectedMode).toBe('chitchat');
-    expect(invariant.scenarioInput.userTurns[1]?.selectedMode).toBeNull();
+    expect(invariant.scenarioInput).not.toHaveProperty('execution');
+    expect(invariant.scenarioInput.userTurns).toEqual([
+      { content: 'Remember the first constraint.', lifecycleBefore: null },
+      { content: 'Use the constraint after relaunch.', lifecycleBefore: 'app_relaunch' },
+    ]);
   });
 
   it('never serializes provider credentials, private endpoints, or local locators', () => {

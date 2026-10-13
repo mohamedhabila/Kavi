@@ -21,7 +21,6 @@ import type {
   Conversation,
   ConversationLogKind,
   ConversationLogLevel,
-  ConversationMode,
 } from '../types/conversation';
 import type { ConversationUsageSource, TokenUsage } from '../types/usage';
 import type { SubAgentSnapshot } from '../types/subAgent';
@@ -58,21 +57,11 @@ export interface ChatState {
    * Kavi is one conversation: returns it (the active one, else the most recent) and makes it
    * active, creating it only when there is none.
    */
-  ensureConversation: (
-    providerId: string,
-    systemPrompt: string,
-    modelOverride?: string,
-    options?: { personaId?: string; mode?: ConversationMode },
-  ) => string;
+  ensureConversation: (providerId: string, systemPrompt: string, modelOverride?: string) => string;
   /** Deletes the chat transcript; what Kavi remembers about the user stays. */
   clearChatHistory: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
-  updatePersonaInConversation: (
-    conversationId: string,
-    personaId: string,
-    options?: { recordEvent?: boolean },
-  ) => void;
-  updateModeInConversation: (conversationId: string, mode: ConversationMode) => void;
+  updatePersonaInConversation: (conversationId: string, personaId: string) => void;
   addMessage: (
     conversationId: string,
     message: Omit<Message, 'timestamp' | 'id'> & {

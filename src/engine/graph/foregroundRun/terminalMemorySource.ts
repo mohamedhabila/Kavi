@@ -19,7 +19,7 @@ function resolveExactTrackedRun(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-function resolveAgenticTerminalMemorySource(params: {
+function resolveTrackedRunTerminalMemorySource(params: {
   conversation: TerminalMemoryConversation;
   runId: string | undefined;
   status: Exclude<ForegroundRunTerminalStatus, 'cancelled'>;
@@ -85,7 +85,7 @@ export function resolveForegroundTerminalMemorySource(params: {
     throw new Error('foreground_terminal_memory_conversation_unavailable');
   }
   if (params.runId) {
-    return resolveAgenticTerminalMemorySource({
+    return resolveTrackedRunTerminalMemorySource({
       conversation: params.conversation,
       runId: params.runId,
       status: params.status,

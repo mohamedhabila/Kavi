@@ -1,14 +1,13 @@
 import type { Message, ToolCall } from '../../types/message';
 import type { SubAgentActivityEntry, SubAgentConfig, SubAgentSnapshot } from '../../types/subAgent';
 import type { TokenUsage } from '../../types/usage';
-import type { LlmProviderConfig } from '../../types/provider';
+import type { LlmProviderConfig, ThinkingLevelPreference } from '../../types/provider';
 import type { OrchestratorRunResult } from '../../engine/orchestrator';
 import { resolveSubAgentMaxTokens } from '../context/tokenOptimization';
 import {
   createSubAgentOrchestratorCallbacks,
   type SubAgentExecutionRuntimeState,
 } from './subAgentOrchestratorCallbacks';
-import { SUPER_AGENT_PERSONA_ID } from './personas';
 import {
   hasExplicitSubAgentMaxIterations,
   resolveSubAgentGraphIterationBudget,
@@ -55,6 +54,7 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
   toolFilter?: (toolName: string) => boolean;
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;
+  thinkingLevel?: ThinkingLevelPreference;
   explicitToolSelectionRejectedMessage?: string;
   subAgent: TAgent;
   config: SubAgentConfig;
@@ -133,8 +133,8 @@ export async function runSubAgentOrchestratorLoop<TAgent extends SubAgentSnapsho
       model: params.model,
       conversationId: params.sessionId,
       memoryConversationId: params.sessionId,
-      personaId: SUPER_AGENT_PERSONA_ID,
       executionRunId: params.sessionId,
+      thinkingLevel: params.thinkingLevel,
       usageConversationId: params.usageConversationId,
       workspaceConversationId: params.workspaceConversationId,
       workspaceReadFallbackConversationId:

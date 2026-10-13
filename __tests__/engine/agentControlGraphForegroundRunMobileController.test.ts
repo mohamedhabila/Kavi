@@ -72,7 +72,7 @@ describe('foreground mobile controller binding', () => {
   });
 
   it('binds the host controller with a foreground persistence barrier', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -184,7 +184,6 @@ describe('foreground mobile controller binding', () => {
       },
     ]);
     const conversation = createConversation({
-      mode: 'agentic',
       activeAgentRunId: 'agent-run-mobile-1',
       messages: [
         {
@@ -361,7 +360,7 @@ describe('foreground mobile controller binding', () => {
         timestamp: 40,
       },
     ]);
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,

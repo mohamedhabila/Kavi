@@ -40,7 +40,6 @@ export type E2EReadinessFailureCategory =
   | 'wrong_args'
   | 'missing_clarification'
   | 'permission_failure'
-  | 'execution_route_failure'
   | 'execution_failure'
   | 'final_response_failure'
   | 'goal_state_bug'

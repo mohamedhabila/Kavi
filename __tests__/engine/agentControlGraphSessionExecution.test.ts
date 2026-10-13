@@ -63,7 +63,6 @@ function createParams(
       warningInjectedThisRound: false,
       workingMessages: [],
     },
-    isSuperAgent: true,
     maxToolIterations: 2,
     maxTokens: 8000,
     promptContextSupport: {
@@ -78,7 +77,6 @@ function createParams(
     requestFrame: buildGraphEntryRequestFrame({
       text: 'Run the task',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     }),
     thinkingLevel: 'off',

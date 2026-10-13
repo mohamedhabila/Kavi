@@ -34,7 +34,6 @@ describe('tool surface retains tools the run already invoked', () => {
   it('pins an invoked tool so budget pressure cannot evict it', async () => {
     const resolution = await resolveModelTurnGroundedToolSurface({
       allTools: [clipboardRead, clipboardWrite, shareText],
-      conversationMode: 'agentic',
       completedWorkflowToolNames: new Set([clipboardRead.name]),
       explicitToolSurfaceToolNames: [clipboardRead.name, clipboardWrite.name, shareText.name],
       trackedAsyncOperations: new Map(),
@@ -50,7 +49,6 @@ describe('tool surface retains tools the run already invoked', () => {
     // would make the token budget unenforceable.
     const resolution = await resolveModelTurnGroundedToolSurface({
       allTools: [clipboardRead, clipboardWrite, shareText],
-      conversationMode: 'agentic',
       completedWorkflowToolNames: new Set([clipboardRead.name]),
       explicitToolSurfaceToolNames: [clipboardRead.name, clipboardWrite.name, shareText.name],
       trackedAsyncOperations: new Map(),
@@ -65,7 +63,6 @@ describe('tool surface retains tools the run already invoked', () => {
     // A tool the policy layer removed must not be resurrected by having been used.
     const resolution = await resolveModelTurnGroundedToolSurface({
       allTools: [clipboardWrite],
-      conversationMode: 'agentic',
       completedWorkflowToolNames: new Set([clipboardRead.name]),
       explicitToolSurfaceToolNames: [clipboardWrite.name],
       trackedAsyncOperations: new Map(),
@@ -104,7 +101,7 @@ describe('a refusal now means permission, and says so honestly', () => {
       'utf8',
     );
     expect(preflight).not.toContain('is not allowed in this context');
-    // One branch for the run allowlist, one for a conversation-mode restriction.
-    expect(preflight.match(/buildUnauthorizedToolResult\(/g)).toHaveLength(2);
+    // The run allowlist is the one permission boundary; what a turn advertises is not one.
+    expect(preflight.match(/buildUnauthorizedToolResult\(/g)).toHaveLength(1);
   });
 });

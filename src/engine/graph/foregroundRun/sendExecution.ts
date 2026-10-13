@@ -9,13 +9,11 @@
 // `useForegroundConversationRunner`.
 // ---------------------------------------------------------------------------
 
-import { SUPER_AGENT_PERSONA_ID } from '../../../services/agents/personas';
 import { importConversationWorkspaceAttachment } from '../../../services/conversationWorkspace/attachments';
 import { getComposerDraftKey } from '../../../screens/chatComposerDrafts';
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
-import type { ConversationMode } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import { createTurnLatencyTimeline } from '../../turnLatencyTimeline';
 import { isRegisteredSlashCommand } from '../runTracking';
@@ -38,11 +36,9 @@ export type ForegroundConversationSendContext = {
   addMessage: ChatStoreState['addMessage'];
   attachmentWorkspaceImportFailedMessage: string;
   clearComposerDraft: (draftKey: string) => void;
-  defaultConversationMode: ConversationMode;
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   generateId: () => string;
   getLiveActiveConversationId: () => string | null;
-  isAgenticMode: boolean;
   /** Chat screen scroll affordance; harnesses supply a no-op. */
   markNextScrollForced: () => void;
   releaseConversationWrite: (conversationId: string) => void;
@@ -120,11 +116,7 @@ export async function executeForegroundConversationSend(
 
   const resolvedConversationId =
     context.getLiveActiveConversationId() ??
-    context.ensureConversation({
-      personaId: context.isAgenticMode ? SUPER_AGENT_PERSONA_ID : undefined,
-      mode: context.defaultConversationMode,
-      reportMissingProvider: true,
-    });
+    context.ensureConversation({ reportMissingProvider: true });
   if (!resolvedConversationId) return;
 
   const conversationId = resolvedConversationId;

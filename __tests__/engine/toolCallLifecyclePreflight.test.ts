@@ -153,11 +153,11 @@ describe('resolveToolCallPreflight', () => {
   );
 
   it('still refuses a tool the run is not permitted to use', () => {
-    // Permission is a separate question from advertisement, and it still refuses. Chitchat
-    // supplies such a set so a casual conversation cannot mutate state.
+    // Permission is a separate question from advertisement, and the run allowlist still
+    // refuses.
     const lifecycle = buildLifecycle({
       groundedRequestScopedTools: [],
-      authorizedToolNames: new Set(['memory_recall']),
+      toolFilter: (name) => name === 'memory_recall',
     });
     const result = resolveToolCallPreflight(lifecycle, {
       id: 'tc-unpermitted',

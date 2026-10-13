@@ -1,61 +1,8 @@
 // ---------------------------------------------------------------------------
-// Tests — Agentic Architecture Production Hardening
+// Tests — Sub-agent Production Hardening
 // ---------------------------------------------------------------------------
-// Covers: SUPER_AGENT_PERSONA_ID constant, systemPrompt validation,
-// name sanitization, mode fallback, spawn error mapping.
-
-import {
-  SUPER_AGENT_PERSONA,
-  SUPER_AGENT_PERSONA_ID,
-  SUPER_AGENT_SYSTEM_PROMPT,
-  getPersona,
-} from '../../src/services/agents/personas';
-import { type ConversationMode } from '../../src/types/conversation';
-
-// ── SUPER_AGENT_PERSONA_ID constant ─────────────────────────────────────
-
-describe('SUPER_AGENT_PERSONA_ID', () => {
-  it('is exported as a string constant', () => {
-    expect(typeof SUPER_AGENT_PERSONA_ID).toBe('string');
-    expect(SUPER_AGENT_PERSONA_ID).toBe('super-agent');
-  });
-
-  it('matches the persona object id', () => {
-    expect(SUPER_AGENT_PERSONA.id).toBe(SUPER_AGENT_PERSONA_ID);
-  });
-
-  it('is resolvable via getPersona', () => {
-    const persona = getPersona(SUPER_AGENT_PERSONA_ID);
-    expect(persona).toBeDefined();
-    expect(persona?.name).toBe('SuperAgent');
-  });
-});
-
-// ── Mode fallback behavior ──────────────────────────────────────────────
-
-describe('ConversationMode fallback chain', () => {
-  it('agentic is a valid default mode', () => {
-    const mode: ConversationMode = 'agentic';
-    const conversationMode: ConversationMode | undefined = undefined;
-    const defaultMode: ConversationMode | undefined = undefined;
-    const effectiveMode = conversationMode ?? defaultMode ?? mode;
-    expect(effectiveMode).toBe('agentic');
-  });
-
-  it('conversation.mode takes priority over default', () => {
-    const conversationMode: ConversationMode = 'chitchat';
-    const defaultMode: ConversationMode = 'agentic';
-    const effective = conversationMode ?? defaultMode ?? 'agentic';
-    expect(effective).toBe('chitchat');
-  });
-
-  it('falls back to hardcoded agentic when all undefined', () => {
-    const conversationMode: ConversationMode | undefined = undefined;
-    const defaultMode: ConversationMode | undefined = undefined;
-    const effective = conversationMode ?? defaultMode ?? 'agentic';
-    expect(effective).toBe('agentic');
-  });
-});
+// Covers: systemPrompt validation, name sanitization, spawn schema hardening,
+// spawn error mapping.
 
 // ── systemPrompt trimming in sub-agent ──────────────────────────────────
 
@@ -178,77 +125,5 @@ describe('spawn error message mapping', () => {
 
   it('handles non-Error values', () => {
     expect(mapSpawnError('string error')).toBe('string error');
-  });
-});
-
-// ── SuperAgent prompt decision rules ─────────────────────────────────────
-
-describe('SuperAgent system prompt — decision rules', () => {
-  it('treats delegation as deliberate rather than automatic', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'workers only when they materially improve completion',
-    );
-  });
-
-  it('keeps direct execution available for simple work and execution asks', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Trivial Q&A and one-shot lookups');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('answer directly');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'highest-leverage tool that directly fits the next work unit',
-    );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'launch the worker directly instead of preflighting with supervisor tools',
-    );
-  });
-
-  it('mentions sessions_spawn for worker delegation', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('sessions_spawn');
-  });
-
-  it('avoids forcing a formal pre-tool plan before spawning', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'do not emit a formal workstream plan before the first tool call',
-    );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('If the next step is clear, start acting');
-  });
-
-  it('requires delegated prompts to carry time context when freshness matters', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Fresh/live/status claims');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('runtime time context');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('verify with tools');
-  });
-
-  it('stops early on low-signal requests instead of manufacturing a workflow', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Low-signal or underspecified request');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('ask one concrete question');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('do not plan, delegate, invent work');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'do not plan, delegate, invent work, or combine clarification with another tool call',
-    );
-  });
-
-  it('criticizes unreasonable process requests and narrows scope', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('Unreasonable scope/process');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('say why');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('smallest sensible scope');
-  });
-
-  it('forbids duplicate supervisor-plus-worker passes over the same substantive step', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain('delegate only for named gaps');
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'workers only when they materially improve completion',
-    );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).not.toContain(
-      'pause final delivery and delegate before concluding',
-    );
-  });
-
-  it('treats python as a capability-extension fallback before declaring tasks impossible', () => {
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Use python as a capability bridge only when first-class tools are insufficient',
-    );
-    expect(SUPER_AGENT_SYSTEM_PROMPT).toContain(
-      'Use tool_catalog only when the exposed tool surface is insufficient for the next step',
-    );
   });
 });

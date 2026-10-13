@@ -57,7 +57,7 @@ describe('foreground run steering', () => {
   });
 
   it('delivers a steer after a tool-calling step and before the next answer', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('provider', 'model');
     const context = createExecutionContext({
       conversation,

@@ -9,7 +9,6 @@ let mockLoadingState = false;
 let mockActiveProviderId: string | null = 'openai';
 let mockActiveModel: string | null = 'gpt-5.4';
 let mockThinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' = 'medium';
-let mockDefaultConversationMode: 'agentic' | 'chitchat' = 'agentic';
 const createDefaultProvidersList = (): any[] => [
   {
     id: 'openai',
@@ -67,12 +66,6 @@ export const mockChatScreenState = {
   },
   set thinkingLevel(value: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') {
     mockThinkingLevel = value;
-  },
-  get defaultConversationMode() {
-    return mockDefaultConversationMode;
-  },
-  set defaultConversationMode(value: 'agentic' | 'chitchat') {
-    mockDefaultConversationMode = value;
   },
   get providersList() {
     return mockProvidersList;
@@ -142,7 +135,6 @@ export function resetMockChatScreenState() {
   mockActiveProviderId = 'openai';
   mockActiveModel = 'gpt-5.4';
   mockThinkingLevel = 'medium';
-  mockDefaultConversationMode = 'agentic';
   mockProvidersList = createDefaultProvidersList();
   mockSubAgentListener = null;
   mockActiveSubAgents = [];

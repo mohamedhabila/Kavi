@@ -7,7 +7,6 @@
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
-import type { ConversationMode } from '../../types/conversation';
 import {
   normalizeToolWorkflowContract,
   workflowProductionSatisfiesConsumption,
@@ -15,7 +14,6 @@ import {
 import { normalizeToolName } from './toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from './plan-definitions';
 import { isRepeatableActivatedTool, shouldAcceptContinuationTool } from './toolSurfaceRetention';
-import { isChitchatAuthorizedTool } from './toolSurfaceAuthority';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 /**
@@ -85,39 +83,6 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
-/**
- * Turn-1 *disclosure* order for chitchat, not authority — whether one of these names
- * can actually be called is decided entirely by `resolveAuthorizedToolNames` below.
- * This is the everyday-action set a general mobile assistant reaches for on an
- * ordinary first turn: clarification, grounded memory, web lookup, and the native
- * capabilities a phone assistant is asked for most (calendar, contacts, messaging,
- * maps, sharing, device state) — present immediately so none of them costs a
- * `tool_catalog` round-trip before the turn can start.
- */
-const CHITCHAT_DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
-  REQUEST_CLARIFICATION_TOOL_NAME,
-  'memory_remember',
-  'memory_search',
-  'memory_forget',
-  'web_search',
-  'web_fetch',
-  'reminder',
-  'calendar_events',
-  'calendar_create_event',
-  'contacts_search',
-  'contacts_pick',
-  'email_compose',
-  'sms_compose',
-  'phone_call',
-  'maps_open',
-  'share_text',
-  'clipboard_read',
-  'clipboard_write',
-  'photos_pick',
-  'location_current',
-  'device_query',
-  'notification_send',
-]);
 const STABLE_TOOL_SURFACE_ORDER = new Map(
   [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
     name,
@@ -192,7 +157,6 @@ function prunePrematureWorkflowConsumers(params: {
 
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
-  conversationMode?: ConversationMode;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   observedToolNames: Iterable<string>;
@@ -212,11 +176,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
       .filter(([toolName]) => Boolean(toolName)),
   );
 
-  const defaultCoreToolNames =
-    params.conversationMode === 'chitchat'
-      ? CHITCHAT_DEFAULT_CORE_TOOL_NAMES
-      : DEFAULT_CORE_TOOL_NAMES;
-  for (const toolName of defaultCoreToolNames) {
+  for (const toolName of DEFAULT_CORE_TOOL_NAMES) {
     selectedNames.add(toolName);
     stablePrefixToolNames.add(toolName);
   }
@@ -286,20 +246,12 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
    * Eviction still holds for a pure mutator, where a second call means a second effect
    * and the tool has nothing further to contribute once its write has landed. It is
    * lifted for tools whose contract declares a repeatable capability, because computing
-   * another scenario or reading another source is the work itself. Authority is
-   * unchanged: the chitchat authority gate below still holds, and side-effectful tools
+   * another scenario or reading another source is the work itself. Side-effectful tools
    * still run the approval path on every call.
    */
   for (const toolName of params.activatedCatalogToolNames) {
     const tool = toolByName.get(toolName);
-    // Catalog discovery proves availability, not authority to call it in chitchat. Mirrors
-    // `resolveAuthorizedToolNames` exactly (via `isChitchatAuthorizedTool`) so a tool that
-    // reaches the surface here is never one execution would then refuse. A code-owned
-    // explicit pin remains the deliberate escape hatch above.
-    const chitchatAuthorizesThisTool =
-      params.conversationMode !== 'chitchat' || !tool || isChitchatAuthorizedTool(tool);
     if (
-      chitchatAuthorizesThisTool &&
       shouldAcceptContinuationTool({
         toolName,
         toolByName,

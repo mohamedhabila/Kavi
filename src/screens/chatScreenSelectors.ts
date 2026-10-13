@@ -38,7 +38,6 @@ export function selectChatScreenChatSlice(state: ChatState) {
     completeAgentRun: state.completeAgentRun,
     updateModelInConversation: state.updateModelInConversation,
     updatePersonaInConversation: state.updatePersonaInConversation,
-    updateModeInConversation: state.updateModeInConversation,
   };
 }
 
@@ -54,6 +53,5 @@ export function selectChatScreenSettingsSlice(state: SettingsState) {
     linkUnderstandingEnabled: state.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
     maxLinks: state.maxLinks,
-    defaultConversationMode: state.defaultConversationMode,
   };
 }

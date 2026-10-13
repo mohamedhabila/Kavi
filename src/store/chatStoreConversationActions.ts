@@ -3,7 +3,7 @@ import { generateId } from '../utils/id';
 import { getDefaultConversationTitle } from '../utils/conversation';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
-import type { Conversation, ConversationMode } from '../types/conversation';
+import type { Conversation } from '../types/conversation';
 import type { ChatState } from './chatStoreTypes';
 import { forgetConversationHistory } from '../services/memory/core/memoryCapture';
 import { createLogger } from '../utils/logger';
@@ -32,7 +32,6 @@ export function buildConversation(params: {
   systemPrompt: string;
   modelOverride?: string;
   personaId?: string;
-  mode?: ConversationMode;
 }): Conversation {
   const now = Date.now();
   const workspaceTargetId = resolveConversationWorkspaceTargetId();
@@ -46,7 +45,6 @@ export function buildConversation(params: {
     createdAt: now,
     updatedAt: now,
     personaId: params.personaId,
-    mode: params.mode,
     usage: buildEmptyConversationUsage(),
     logs: [],
     agentRuns: [],
@@ -82,10 +80,9 @@ export function createConversationStoreActions(
   | 'clearChatHistory'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
-  | 'updateModeInConversation'
 > {
   return {
-    ensureConversation: (providerId, systemPrompt, modelOverride, options) => {
+    ensureConversation: (providerId, systemPrompt, modelOverride) => {
       const { conversations, activeConversationId } = get();
       const existing =
         conversations.find((conversation) => conversation.id === activeConversationId) ??
@@ -105,8 +102,6 @@ export function createConversationStoreActions(
         providerId,
         systemPrompt,
         modelOverride,
-        personaId: options?.personaId,
-        mode: options?.mode,
       });
       set((state) => ({
         conversations: [conversation, ...state.conversations],
@@ -130,15 +125,12 @@ export function createConversationStoreActions(
         ),
       })),
 
-    updatePersonaInConversation: (conversationId, personaId, options) => {
+    updatePersonaInConversation: (conversationId, personaId) => {
       set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id !== conversationId) return c;
           const previousPersonaId = c.personaId;
-          const shouldRecordEvent =
-            options?.recordEvent !== false &&
-            previousPersonaId !== personaId &&
-            c.messages.length > 0;
+          const shouldRecordEvent = previousPersonaId !== personaId && c.messages.length > 0;
           const personaEvents = shouldRecordEvent
             ? [
                 ...(c.personaEvents ?? []),
@@ -155,12 +147,5 @@ export function createConversationStoreActions(
       }));
       requestChatStorePersistenceCheckpoint();
     },
-
-    updateModeInConversation: (conversationId, mode) =>
-      set((state) => ({
-        conversations: state.conversations.map((c) =>
-          c.id === conversationId ? { ...c, mode } : c,
-        ),
-      })),
   };
 }

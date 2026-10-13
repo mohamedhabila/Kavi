@@ -1,6 +1,6 @@
 import type { AgentRun, AgentRunControlGraphStatus, AgentRunStatus } from '../../types/agentRun';
 import type { Attachment } from '../../types/attachment';
-import type { Conversation, ConversationMode } from '../../types/conversation';
+import type { Conversation } from '../../types/conversation';
 import type { AssistantCompletionStatus, Message } from '../../types/message';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { ConversationUsageSummary } from '../../types/usage';
@@ -12,11 +12,6 @@ import type {
   ForegroundScenarioMemoryItemsState,
   ForegroundScenarioMemoryPromptEvidence,
 } from './foregroundScenarioMemoryItemsEvidence';
-
-export type ForegroundScenarioRouteDirective =
-  | 'production_auto'
-  | 'forced_chitchat'
-  | 'forced_agentic';
 
 export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'context_reset';
 
@@ -55,8 +50,6 @@ export type ForegroundScenarioTurnInput = {
   /** Evaluator-owned wall-clock pause before this turn; never interpreted by product code. */
   delayBeforeMs?: number;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
-  route: ForegroundScenarioRouteDirective;
-  selectedMode?: ConversationMode;
   maxTokens?: number;
   timeoutMs?: number;
   /** Evaluator-owned exact tool surface for this turn; overrides the scenario-level surface. */
@@ -78,7 +71,6 @@ export type ForegroundScenarioDriverInput = {
   conversationTitle: string;
   systemPrompt: string;
   initialMessages?: ReadonlyArray<Message>;
-  defaultMode: ConversationMode;
   /** Hard outer wall-clock deadline for the complete scenario, including memory settlement. */
   scenarioTimeoutMs: number;
   turns: ReadonlyArray<ForegroundScenarioTurnInput>;
@@ -107,11 +99,6 @@ export type ForegroundScenarioNativeEvidenceSnapshot = Readonly<{
   stateBefore: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
   stateAfter: DeepReadonly<E2ENativeMobileFixtureStateSnapshot>;
   invocations: ReadonlyArray<DeepReadonly<E2ENativeMobileInvocationSnapshot>>;
-}>;
-
-export type ForegroundScenarioExecutionContextSnapshot = Readonly<{
-  mode: ConversationMode;
-  personaId: string;
 }>;
 
 export type ForegroundScenarioFinalAssistantSnapshot = Readonly<{
@@ -155,10 +142,6 @@ export type ForegroundScenarioTurnSnapshot = Readonly<{
   native: ForegroundScenarioNativeEvidenceSnapshot;
   memoryPrompt: ForegroundScenarioMemoryPromptEvidence;
   messages: DeepReadonly<Message[]>;
-  route: Readonly<{
-    directive: ForegroundScenarioRouteDirective;
-  }> &
-    ForegroundScenarioExecutionContextSnapshot;
   run: DeepReadonly<AgentRun> | null;
   timedOut: boolean;
   turnIndex: number;

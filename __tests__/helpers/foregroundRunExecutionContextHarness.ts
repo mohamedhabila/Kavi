@@ -77,113 +77,125 @@ export function createExecutionContext(params: {
   providers: LlmProviderConfig[];
   recordConversationTurnMemory: jest.Mock;
   ensureConversation: jest.Mock;
+  /** Further conversations the store holds beside the active `conversation`. */
+  otherConversations?: Conversation[];
   /** Append messages the run adds to the conversation instead of discarding them. */
   persistAddedMessages?: boolean;
 }) {
   let idSequence = 0;
   let runSequence = 0;
-  let currentConversation = params.conversation;
+  const activeConversationId = params.conversation.id;
+  const conversationsById = new Map<string, Conversation>(
+    [params.conversation, ...(params.otherConversations ?? [])].map((conversation) => [
+      conversation.id,
+      conversation,
+    ]),
+  );
   const commitConversation = (conversation: Conversation) => {
-    currentConversation = conversation;
+    conversationsById.set(conversation.id, conversation);
     useChatStore.setState({
-      conversations: [conversation],
-      activeConversationId: conversation.id,
+      conversations: [...conversationsById.values()],
+      activeConversationId,
     });
   };
-  commitConversation(currentConversation);
+  const updateConversation = (
+    conversationId: string,
+    update: (conversation: Conversation) => Conversation,
+  ) => {
+    const conversation = conversationsById.get(conversationId);
+    if (conversation) commitConversation(update(conversation));
+  };
+  commitConversation(params.conversation);
   const projectionOwners = new Map<string, ModelProjectionOwner>();
   const projectionWaiters = new Map<string, Set<() => void>>();
   const noOp = jest.fn();
   const addMessage = params.persistAddedMessages
-    ? jest.fn((conversationId: string, message: Partial<Message> & Pick<Message, 'role'>) => {
-        if (conversationId !== currentConversation.id) return;
-        commitConversation({
-          ...currentConversation,
+    ? jest.fn((conversationId: string, message: Partial<Message> & Pick<Message, 'role'>) =>
+        updateConversation(conversationId, (conversation) => ({
+          ...conversation,
           messages: [
-            ...currentConversation.messages,
+            ...conversation.messages,
             {
               ...message,
-              id: message.id ?? `added-${currentConversation.messages.length}`,
+              id: message.id ?? `added-${conversation.messages.length}`,
               content: message.content ?? '',
               timestamp: message.timestamp ?? Date.now(),
             } as Message,
           ],
-        });
-      })
+        })),
+      )
     : noOp;
-  const appendAgentRunCheckpoint = jest.fn((conversationId, entry, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(appendAgentRunCheckpointInConversation(currentConversation, entry, runId));
-  });
-  const completeAgentRun = jest.fn((conversationId, completion, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(completeAgentRunInConversation(currentConversation, completion, runId));
-  });
-  const setAgentRunPhase = jest.fn((conversationId, phase, phaseParams, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(
-      setAgentRunPhaseInConversation(currentConversation, phase, phaseParams, runId),
-    );
-  });
+  const appendAgentRunCheckpoint = jest.fn((conversationId, entry, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      appendAgentRunCheckpointInConversation(conversation, entry, runId),
+    ),
+  );
+  const completeAgentRun = jest.fn((conversationId, completion, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      completeAgentRunInConversation(conversation, completion, runId),
+    ),
+  );
+  const setAgentRunPhase = jest.fn((conversationId, phase, phaseParams, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      setAgentRunPhaseInConversation(conversation, phase, phaseParams, runId),
+    ),
+  );
   const startAgentRun = jest.fn((conversationId, runParams) => {
     const runId = `run-${++runSequence}`;
-    if (conversationId === currentConversation.id) {
-      commitConversation(
-        startAgentRunInConversation(currentConversation, {
-          ...runParams,
-          runId,
-          timestamp: Date.now(),
-        }),
-      );
-    }
+    updateConversation(conversationId, (conversation) =>
+      startAgentRunInConversation(conversation, {
+        ...runParams,
+        runId,
+        timestamp: Date.now(),
+      }),
+    );
     return runId;
   });
-  const updateAgentRunAsyncWork = jest.fn((conversationId, patch, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(updateAgentRunAsyncWorkInConversation(currentConversation, patch, runId));
-  });
-  const updateAgentRunControlGraph = jest.fn((conversationId, controlGraph, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(
-      updateAgentRunControlGraphInConversation(currentConversation, controlGraph, runId),
-    );
-  });
-  const updateAgentRunSummary = jest.fn((conversationId, patch, runId) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation(updateAgentRunSummaryInConversation(currentConversation, patch, runId));
-  });
-  const updateMessage = jest.fn((conversationId: string, messageId: string, content: string) => {
-    if (conversationId !== currentConversation.id) return;
-    commitConversation({
-      ...currentConversation,
-      messages: currentConversation.messages.map((message) =>
+  const updateAgentRunAsyncWork = jest.fn((conversationId, patch, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      updateAgentRunAsyncWorkInConversation(conversation, patch, runId),
+    ),
+  );
+  const updateAgentRunControlGraph = jest.fn((conversationId, controlGraph, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      updateAgentRunControlGraphInConversation(conversation, controlGraph, runId),
+    ),
+  );
+  const updateAgentRunSummary = jest.fn((conversationId, patch, runId) =>
+    updateConversation(conversationId, (conversation) =>
+      updateAgentRunSummaryInConversation(conversation, patch, runId),
+    ),
+  );
+  const updateMessage = jest.fn((conversationId: string, messageId: string, content: string) =>
+    updateConversation(conversationId, (conversation) => ({
+      ...conversation,
+      messages: conversation.messages.map((message) =>
         message.id === messageId ? { ...message, content } : message,
       ),
-    });
-  });
+    })),
+  );
   const updateMessageAssistantMetadata = jest.fn(
     (
       conversationId: string,
       messageId: string,
       assistantMetadata: Conversation['messages'][number]['assistantMetadata'],
-    ) => {
-      if (conversationId !== currentConversation.id) return;
-      commitConversation({
-        ...currentConversation,
-        messages: currentConversation.messages.map((message) =>
+    ) =>
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        messages: conversation.messages.map((message) =>
           message.id === messageId ? { ...message, assistantMetadata } : message,
         ),
-      });
-    },
+      })),
   );
   const ensureAgentRunFinalResponse = jest.fn(
     async ({ conversationId, preferredAssistantMessageId }) => {
-      if (conversationId !== currentConversation.id) return undefined;
+      const conversation = conversationsById.get(conversationId);
+      if (!conversation) return undefined;
       const target = preferredAssistantMessageId
-        ? currentConversation.messages.find(
+        ? conversation.messages.find(
             (message) => message.id === preferredAssistantMessageId && message.role === 'assistant',
           )
-        : [...currentConversation.messages]
+        : [...conversation.messages]
             .reverse()
             .find((message) => message.role === 'assistant' && !message.subAgentEvent);
       if (!target) return undefined;
@@ -198,10 +210,11 @@ export function createExecutionContext(params: {
     },
   );
   const applyMobileControllerOutcome = jest.fn((conversationId, input) => {
-    if (conversationId !== currentConversation.id) {
+    const conversation = conversationsById.get(conversationId);
+    if (!conversation) {
       return { status: 'rejected' as const, reason: 'run_unavailable' as const };
     }
-    const outcome = applyMobileControllerOutcomeInConversation(currentConversation, input);
+    const outcome = applyMobileControllerOutcomeInConversation(conversation, input);
     if (outcome.status === 'applied') commitConversation(outcome.conversation);
     return outcome;
   });
@@ -234,18 +247,18 @@ export function createExecutionContext(params: {
         const current = projectionOwners.get(conversationId);
         if (current && current.runId !== owner.runId) return 'owner_conflict' as const;
         projectionOwners.set(conversationId, owner);
-        if (conversationId === currentConversation.id) {
+        updateConversation(conversationId, (conversation) => {
           const shouldAppendAssistant =
             assistantMessage &&
-            !currentConversation.messages.some((message) => message.id === assistantMessage.id);
-          commitConversation({
-            ...currentConversation,
+            !conversation.messages.some((message) => message.id === assistantMessage.id);
+          return {
+            ...conversation,
             messages: shouldAppendAssistant
-              ? [...currentConversation.messages, assistantMessage]
-              : currentConversation.messages,
+              ? [...conversation.messages, assistantMessage]
+              : conversation.messages,
             modelProjectionOwner: owner,
-          });
-        }
+          };
+        });
         return 'claimed' as const;
       }),
       completeModelExecution,
@@ -255,13 +268,11 @@ export function createExecutionContext(params: {
         (conversationId, owner) => projectionOwners.get(conversationId)?.runId === owner.runId,
       ),
       mutateModelProjection: jest.fn(({ conversationId, owner, mutate }) => {
-        if (
-          conversationId !== currentConversation.id ||
-          projectionOwners.get(conversationId)?.runId !== owner.runId
-        ) {
+        const conversation = conversationsById.get(conversationId);
+        if (!conversation || projectionOwners.get(conversationId)?.runId !== owner.runId) {
           return { kind: 'owner_changed' as const };
         }
-        const result = mutate(currentConversation);
+        const result = mutate(conversation);
         if (result.kind === 'applied') {
           commitConversation(result.conversation);
           return { kind: 'applied' as const, value: result.value };
@@ -274,11 +285,11 @@ export function createExecutionContext(params: {
           return 'owner_changed' as const;
         }
         projectionOwners.delete(conversationId);
-        if (conversationId === currentConversation.id) {
+        updateConversation(conversationId, (conversation) => {
           const { modelProjectionOwner: _modelProjectionOwner, ...releasedConversation } =
-            currentConversation;
-          commitConversation(releasedConversation);
-        }
+            conversation;
+          return releasedConversation;
+        });
         for (const resolve of projectionWaiters.get(conversationId) ?? []) resolve();
         projectionWaiters.delete(conversationId);
         return 'released' as const;
@@ -305,9 +316,8 @@ export function createExecutionContext(params: {
       createId: () => `generated-${++idSequence}`,
       ensureAgentRunFinalResponse,
       ensureConversation: params.ensureConversation,
-      getConversation: (conversationId: string) =>
-        conversationId === currentConversation.id ? currentConversation : undefined,
-      getConversations: () => [currentConversation],
+      getConversation: (conversationId: string) => conversationsById.get(conversationId),
+      getConversations: () => [...conversationsById.values()],
       getResumeAgentRun: () => null,
       recordConversationTurnMemory: params.recordConversationTurnMemory,
       requestPersistenceCheckpoint: noOp,
@@ -334,7 +344,6 @@ export function createExecutionContext(params: {
       chatNoApiKeyMessage: 'Missing API key',
       chatNoModelMessage: 'Missing model',
       chatNoProviderMessage: 'Missing provider',
-      defaultConversationMode: 'agentic' as const,
       exportDialogTitle: 'Export',
       linkUnderstandingEnabled: true,
       maxLinks: 4,
@@ -372,6 +381,6 @@ export function createExecutionContext(params: {
       mergeStreamingDraft: noOp,
       updateStreamingDraft: noOp,
     },
-    getCurrentConversation: () => currentConversation,
+    getCurrentConversation: () => conversationsById.get(activeConversationId)!,
   };
 }

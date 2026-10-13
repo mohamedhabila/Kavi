@@ -272,11 +272,9 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
       maxLinks: 3,
-      defaultConversationMode: 'agentic',
       setLinkUnderstandingEnabled: jest.fn(),
       setMediaUnderstandingEnabled: jest.fn(),
       setMaxLinks: jest.fn(),
-      setDefaultConversationMode: jest.fn(),
       developerModeEnabled: mockSettingsState.developerModeEnabled,
       setDeveloperModeEnabled: mockSettings.setDeveloperModeEnabled,
     };

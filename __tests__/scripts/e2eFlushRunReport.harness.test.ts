@@ -130,7 +130,7 @@ describe('e2e-flush-run-report harness', () => {
     expect(JSON.stringify(projectedTrace)).not.toContain('projection-sentinel');
     expect(
       projectPublicRedactedTrace({
-        schemaVersion: 'e2e-redacted-trace-v4',
+        schemaVersion: 'e2e-redacted-trace-v5',
         privatePayload: 'projection-sentinel-invalid-trace',
       }),
     ).toBeNull();

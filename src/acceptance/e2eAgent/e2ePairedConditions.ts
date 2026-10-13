@@ -1,15 +1,14 @@
 import {
-  E2E_PAIRED_ROUTE_CONDITIONS,
   validateE2EPairedInvariantConfig,
   type E2EPairedInvariantConfig,
 } from './e2ePairedInvariant';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 
-export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v5' as const;
+export const E2E_PAIRED_CONDITION_SCHEMA_VERSION = 'e2e-paired-condition-v6' as const;
 export const E2E_PAIRED_PLAN_SCHEMA_VERSION = 'e2e-paired-plan-v5' as const;
 
 export const E2E_PAIRED_CONDITIONS = [
-  ...E2E_PAIRED_ROUTE_CONDITIONS,
+  'production_auto',
   'memory_off',
   'diagnostic_full_context',
 ] as const;
@@ -17,7 +16,6 @@ export const E2E_PAIRED_CONDITIONS = [
 export type E2EPairedCondition = (typeof E2E_PAIRED_CONDITIONS)[number];
 
 export type E2EPairedConditionBehavior = Readonly<{
-  routeOverride: 'production_auto' | 'forced_chitchat' | 'forced_agentic' | null;
   memoryMode: 'production' | 'off';
   contextMode: 'production' | 'full_context';
 }>;
@@ -72,11 +70,6 @@ function requireExactKeys(value: object, expectedKeys: ReadonlyArray<string>, la
 
 function buildConditionBehavior(condition: E2EPairedCondition): E2EPairedConditionBehavior {
   return {
-    routeOverride: E2E_PAIRED_ROUTE_CONDITIONS.includes(
-      condition as (typeof E2E_PAIRED_ROUTE_CONDITIONS)[number],
-    )
-      ? (condition as (typeof E2E_PAIRED_ROUTE_CONDITIONS)[number])
-      : null,
     memoryMode: condition === 'memory_off' ? 'off' : 'production',
     contextMode: condition === 'diagnostic_full_context' ? 'full_context' : 'production',
   };

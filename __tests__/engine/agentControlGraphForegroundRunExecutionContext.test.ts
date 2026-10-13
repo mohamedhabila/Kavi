@@ -69,7 +69,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('uses one target snapshot for orchestration, commands, and terminal memory provenance', async () => {
-    const conversation = createConversation({ mode: 'chitchat', personaId: 'reviewer' });
+    const conversation = createConversation({ personaId: 'reviewer' });
     const staleProvider = createProvider('stale-provider', 'stale-model');
     const targetProvider = createProvider('target-provider', 'target-model');
     const finalizationProvider = { ...targetProvider, apiKey: 'hydrated-key' };
@@ -165,7 +165,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('waits for slow startup recovery readiness before creating exactly one generation', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -205,7 +205,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('does not create a tracked run when projection availability fails', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -229,7 +229,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('holds the inference lease through terminal lifecycle and releases it after completion', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const recordConversationTurnMemory = jest.fn();
     const context = createExecutionContext({
@@ -257,7 +257,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('releases the inference lease after an orchestrator exception', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -282,7 +282,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('relinquishes process ownership when terminal journal completion fails', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -312,7 +312,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('does not call the model when the journal-first boundary cannot be persisted', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -339,7 +339,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('does not create a journal generation when the reservation claim fails', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -362,7 +362,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('closes a superseded generation without starting inference after the journal boundary', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -393,7 +393,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('closes and releases the old generation before a nested resume may begin', async () => {
-    const conversation = createConversation({ mode: 'agentic' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -434,7 +434,7 @@ describe('foreground run target-conversation execution context', () => {
   });
 
   it('waits for an aborted same-conversation owner to release before running the new turn', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -471,8 +471,9 @@ describe('foreground run target-conversation execution context', () => {
         });
         return;
       }
+      deliverFinalAssistantMessage(callbacks);
       callbacks.onDone();
-      return { terminalDisposition: 'command' };
+      return { terminalDisposition: 'final_candidate' };
     });
 
     const first = executeForegroundConversationRun({
@@ -500,26 +501,20 @@ describe('foreground run target-conversation execution context', () => {
   it('keeps callbacks and cleanup owned by each concurrent conversation', async () => {
     const firstConversation = createConversation({
       id: 'conversation-a',
-      mode: 'chitchat',
       personaId: 'default',
     });
     const secondConversation = createConversation({
       id: 'conversation-b',
-      mode: 'chitchat',
       personaId: 'default',
     });
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation: firstConversation,
+      otherConversations: [secondConversation],
       providers: [provider],
       ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
-    context.helpers.getConversation = (conversationId: string) =>
-      [firstConversation, secondConversation].find(
-        (conversation) => conversation.id === conversationId,
-      );
-    context.helpers.getConversations = () => [firstConversation, secondConversation];
 
     const registry = createForegroundRequestRegistry();
     context.requests = {
@@ -555,7 +550,7 @@ describe('foreground run target-conversation execution context', () => {
         new Promise<Awaited<ReturnType<typeof runOrchestrator>>>((resolve) => {
           callbacksByConversation.set(options.conversationId, callbacks);
           releaseByConversation.set(options.conversationId, () =>
-            resolve({ terminalDisposition: 'command' }),
+            resolve({ terminalDisposition: 'final_candidate' }),
           );
         }),
     );
@@ -591,7 +586,9 @@ describe('foreground run target-conversation execution context', () => {
       'enriched-b',
     );
 
-    callbacksByConversation.get(firstConversation.id)?.onDone();
+    const firstCallbacks = callbacksByConversation.get(firstConversation.id)!;
+    deliverFinalAssistantMessage(firstCallbacks);
+    firstCallbacks.onDone();
     releaseByConversation.get(firstConversation.id)?.();
     await firstRun;
 
@@ -607,7 +604,9 @@ describe('foreground run target-conversation execution context', () => {
       'still-current',
     );
 
-    callbacksByConversation.get(secondConversation.id)?.onDone();
+    const secondCallbacks = callbacksByConversation.get(secondConversation.id)!;
+    deliverFinalAssistantMessage(secondCallbacks);
+    secondCallbacks.onDone();
     releaseByConversation.get(secondConversation.id)?.();
     await secondRun;
     expect(registry.size).toBe(0);

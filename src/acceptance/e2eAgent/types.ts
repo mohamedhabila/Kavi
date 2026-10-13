@@ -8,17 +8,14 @@ import type {
   AgentRunStatus,
   AgentRunSummary,
 } from '../../types/agentRun';
-import type { ConversationMode } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
 import type {
   ForegroundScenarioCompletionSnapshot,
-  ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
   ForegroundScenarioLifecycleBoundary,
   ForegroundScenarioLifecycleSnapshot,
   ForegroundScenarioNativeEvidenceSnapshot,
-  ForegroundScenarioRouteDirective,
   ForegroundScenarioSteerDirective,
   ForegroundScenarioUserSnapshot,
 } from './foregroundScenarioDriverTypes';
@@ -123,10 +120,6 @@ export type E2EScenarioTurnTrace = {
   turnIndex: number;
   lifecycleBefore: ForegroundScenarioLifecycleSnapshot | null;
   user: ForegroundScenarioUserSnapshot;
-  route: Readonly<{
-    directive: ForegroundScenarioRouteDirective;
-  }> &
-    ForegroundScenarioExecutionContextSnapshot;
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
   finalAssistantCandidateCount: number;
   completion: ForegroundScenarioCompletionSnapshot;
@@ -168,20 +161,12 @@ export type E2EScenarioResult = {
 
 export type E2EUserTurn = {
   content: string;
-  route?: ForegroundScenarioRouteDirective;
   lifecycleBefore?: ForegroundScenarioLifecycleBoundary;
-  /** Simulates the user choosing a chat mode in the product UI before this turn. */
-  selectedMode?: ConversationMode;
   /** Simulates the user sending another message while this turn's run works. */
   steer?: ForegroundScenarioSteerDirective;
 };
 
 export type E2EScenarioContentClass = 'private' | 'synthetic_public';
-
-export type E2EScenarioExecution = {
-  initialMode: ConversationMode;
-  route: ForegroundScenarioRouteDirective;
-};
 
 export type E2EPairedCausalMemoryContract = Readonly<{
   kind: 'causal_memory';
@@ -254,22 +239,10 @@ export type E2ERubric =
     }
   | { kind: 'min_user_turns'; min: number }
   | {
-      kind: 'turn_route';
-      turnIndex: number;
-      directive: ForegroundScenarioRouteDirective;
-      mode: ConversationMode;
-    }
-  | {
       kind: 'turn_completion';
       turnIndex: number;
-      field: 'execution' | 'final_response';
+      field: 'execution' | 'final_response' | 'agent_run';
       expected: boolean;
-    }
-  | {
-      kind: 'turn_completion';
-      turnIndex: number;
-      field: 'agent_run';
-      expected: boolean | null;
     }
   | {
       kind: 'turn_lifecycle_boundary';
@@ -326,8 +299,6 @@ export type E2EScenario = {
   id: string;
   conversationId: string;
   contentClass: E2EScenarioContentClass;
-  /** Product route applied unless a turn explicitly overrides it. */
-  execution: E2EScenarioExecution;
   /** Structural thread title token used by passive memory ingestion. */
   threadTitle?: string;
   /** Single-turn prompt when `userTurns` is omitted. */

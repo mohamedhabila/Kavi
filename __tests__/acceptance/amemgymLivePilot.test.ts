@@ -295,7 +295,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             conversationTitle: 'AMemGym live pilot',
             systemPrompt,
             initialMessages: session.messages,
-            defaultMode: 'chitchat',
             scenarioTimeoutMs: 240_000,
             timeoutMs: 120_000,
             memoryTimeoutMs: 90_000,
@@ -303,7 +302,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             turns: [
               {
                 content: requirePayloadText(payload, 'observation'),
-                route: 'forced_chitchat',
               },
             ],
           });
@@ -341,7 +339,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             conversationTitle: 'AMemGym read-only question',
             systemPrompt,
             initialMessages: [],
-            defaultMode: 'chitchat',
             scenarioTimeoutMs: 180_000,
             timeoutMs: 120_000,
             memoryTimeoutMs: 30_000,
@@ -349,7 +346,6 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
             turns: [
               {
                 content: requirePayloadText(payload, 'question'),
-                route: 'forced_chitchat',
               },
             ],
           });

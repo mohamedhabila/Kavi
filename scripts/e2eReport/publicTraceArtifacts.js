@@ -34,7 +34,7 @@ function writePublicTraceArtifact(params) {
   )}-${fixtureIdDigest(params.fixtureId)}.json`;
   const relativePath = `${params.retentionRunId}/${TRACE_ARTIFACT_DIR_NAME}/${filename}`;
   const artifact = {
-    schemaVersion: 'e2e-redacted-trace-v4',
+    schemaVersion: 'e2e-redacted-trace-v5',
     traceId: `${sanitizeTraceFileName(params.generatedAt)}:${params.fixtureId}`,
     generatedAt: params.generatedAt,
     retentionReason: params.retentionReason,

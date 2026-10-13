@@ -140,7 +140,6 @@ beforeEach(() => {
     linkUnderstandingEnabled: true,
     mediaUnderstandingEnabled: true,
     maxLinks: 3,
-    defaultConversationMode: 'agentic',
   });
   jest.clearAllMocks();
   mockSaveSecure.mockResolvedValue(undefined);

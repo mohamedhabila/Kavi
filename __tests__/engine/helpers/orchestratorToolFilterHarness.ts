@@ -71,6 +71,7 @@ jest.mock('../../../src/services/commands/builtins', () => ({
 }));
 
 jest.mock('../../../src/services/agents/personas', () => ({
+  DEFAULT_PERSONA_ID: 'default',
   getPersona: jest.fn().mockReturnValue(undefined),
   resolvePersonaSystemPrompt: jest.fn((_p: any, prompt: string) => prompt),
   resolvePersonaModel: jest.fn((_p: any, pId: string, m: string) => ({

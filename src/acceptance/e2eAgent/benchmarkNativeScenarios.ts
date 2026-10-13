@@ -9,7 +9,6 @@ export const BENCH_GOAL_JSON_FIELD_CRITERION: E2EScenario = {
   id: 'bench-goal-json-field-criterion',
   conversationId: 'e2e-bench-goal-json',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Check whether the default calendar allows modifications and tell me.',
   rubrics: [
     {
@@ -30,7 +29,6 @@ export const BENCH_TAU_NATIVE_JSON_OUTCOME: E2EScenario = {
   id: 'bench-tau-native-json-outcome',
   conversationId: 'e2e-bench-tau-json',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Verify the calendar configuration and events from 2026-06-10T00:00:00Z to 2026-06-11T00:00:00Z.',
   rubrics: [
@@ -52,7 +50,6 @@ export const BENCH_TAU_CALENDAR_EVENTS_CHAIN: E2EScenario = {
   id: 'bench-tau-calendar-events-chain',
   conversationId: 'e2e-bench-tau-chain',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Verify that the calendar allows modifications and inspect events from 2026-06-10T00:00:00Z to 2026-06-11T00:00:00Z.',
   rubrics: [
@@ -74,7 +71,6 @@ export const BENCH_ANDROIDWORLD_CALENDAR_MUTATION: E2EScenario = {
   id: 'bench-androidworld-calendar-mutation',
   conversationId: 'e2e-bench-androidworld-calendar',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Create a calendar event titled `E2E Native Review` from 2026-06-10T09:00:00Z to 2026-06-10T10:00:00Z, then update the created event once by adding note `Updated by E2E`, and verify the calendar state.',
   rubrics: [
@@ -101,7 +97,6 @@ export const BENCH_ANDROIDWORLD_PERMISSION_DENIAL: E2EScenario = {
   id: 'bench-androidworld-permission-denial',
   conversationId: 'e2e-bench-androidworld-permission',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Check device permission state, handle denied location access, and open maps for query `E2E Station`.',
   rubrics: [
@@ -133,7 +128,6 @@ export const BENCH_MOBILEAGENT_CONTACT_MESSAGE_DRAFT: E2EScenario = {
   id: 'bench-mobileagent-contact-message-draft',
   conversationId: 'e2e-bench-mobileagent-contact-message',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Look up Avery in device contacts and open the native SMS composer with exactly one recipient. ' +
     'Prefill the unsent draft with message `E2E-MOBILE-MESSAGE`; do not send it.',
@@ -166,7 +160,6 @@ export const BENCH_MOBILEWORLD_DISCOVER_CONTACT_MESSAGE: E2EScenario = {
   id: 'bench-mobileworld-discover-contact-message',
   conversationId: 'e2e-bench-mobileworld-discover-contact',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Discover and then use mobile communication tools.',
   userTurns: [
     {
@@ -204,7 +197,6 @@ export const BENCH_ANDROIDWORLD_CLIPBOARD_SHARE_NOTIFY: E2EScenario = {
   id: 'bench-androidworld-clipboard-share-notify',
   conversationId: 'e2e-bench-androidworld-state',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Put `E2E-CLIPBOARD-42` on the clipboard and verify it, open a share sheet for `E2E-SHARE-42`, then schedule a notification for 60 seconds and cancel it.',
   rubrics: [
@@ -241,7 +233,6 @@ export const BENCH_MOBILEAGENT_MEDIA_STATE: E2EScenario = {
   id: 'bench-mobileagent-media-state',
   conversationId: 'e2e-bench-mobileagent-media',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Inspect the latest two photos, capture the screen as PNG, and record a 3-second camera clip.',
   rubrics: [

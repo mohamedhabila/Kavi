@@ -14,7 +14,7 @@ function createConversation(messages: Conversation['messages']): Conversation {
     createdAt: 1,
     updatedAt: 1,
     providerId: 'openai',
-    model: 'gpt-test',
+    modelOverride: 'gpt-test',
     systemPrompt: '',
     usage: {
       entries: [],

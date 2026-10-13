@@ -111,7 +111,6 @@ function buildParams() {
           { providerId: primaryProvider.id, model: primaryProvider.model },
         ),
         graph,
-        isSuperAgent: true,
         iteration: 2,
         maxToolIterations: 6,
         maxTokens: 4096,
@@ -125,7 +124,6 @@ function buildParams() {
         requestFrame: buildGraphEntryRequestFrame({
           text: 'Return the recovered answer.',
           attachmentCount: 0,
-          mode: 'agentic',
           continuation: 'new',
         }),
         runtime,

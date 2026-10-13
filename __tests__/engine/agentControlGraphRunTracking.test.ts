@@ -17,32 +17,26 @@ const userMessage = (content: string, attachmentCount = 0): Message => ({
 });
 
 describe('agent control graph run tracking', () => {
-  it('tracks actionable agentic turns', () => {
+  it('tracks actionable turns', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('Create a file and verify it.'),
-        messageCount: 1,
       }),
     ).toBe(true);
   });
 
-  it('tracks short requests on the normal agentic path', () => {
+  it('tracks short requests on the normal workflow path', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('hi'),
-        messageCount: 1,
       }),
     ).toBe(true);
   });
 
-  it('tracks attachment-only agentic requests', () => {
+  it('tracks attachment-only requests', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('', 1),
-        messageCount: 1,
       }),
     ).toBe(true);
   });
@@ -50,19 +44,15 @@ describe('agent control graph run tracking', () => {
   it('does not track structurally empty input', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage(''),
-        messageCount: 1,
       }),
     ).toBe(false);
   });
 
-  it('keeps punctuation-only input on the language-neutral agentic path', () => {
+  it('keeps punctuation-only input on the language-neutral workflow path', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage(' ... '),
-        messageCount: 1,
       }),
     ).toBe(true);
   });
@@ -70,9 +60,7 @@ describe('agent control graph run tracking', () => {
   it('does not create workflow runs for registered slash commands', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('/new'),
-        messageCount: 1,
       }),
     ).toBe(false);
   });
@@ -80,29 +68,15 @@ describe('agent control graph run tracking', () => {
   it('keeps unknown slash-prefixed requests on the normal workflow path', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('/future-command'),
-        messageCount: 1,
       }),
     ).toBe(true);
   });
 
-  it('does not track chitchat turns even when the text is actionable', () => {
+  it('tracks run resumes regardless of direct-request assessment', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'chitchat',
-        latestUserMessage: userMessage('Create a file and verify it.'),
-        messageCount: 1,
-      }),
-    ).toBe(false);
-  });
-
-  it('tracks agentic run resumes regardless of direct-request assessment', () => {
-    expect(
-      shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
-        latestUserMessage: userMessage('ok'),
-        messageCount: 3,
+        latestUserMessage: userMessage(''),
         reuseAgentRunId: 'run-1',
       }),
     ).toBe(true);
@@ -111,19 +85,7 @@ describe('agent control graph run tracking', () => {
   it('tracks standalone literal-token requests on the normal workflow path', () => {
     expect(
       shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
         latestUserMessage: userMessage('CHECKNO42'),
-        messageCount: 1,
-      }),
-    ).toBe(true);
-  });
-
-  it('tracks standalone literal-token replies even inside an existing conversation', () => {
-    expect(
-      shouldTrackForegroundAgentRun({
-        conversationMode: 'agentic',
-        latestUserMessage: userMessage('PINGC718'),
-        messageCount: 6,
       }),
     ).toBe(true);
   });

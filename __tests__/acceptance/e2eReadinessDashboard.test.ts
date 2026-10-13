@@ -306,10 +306,6 @@ describe('e2eReadinessDashboard', () => {
           failedRubricKinds: ['min_user_turns'],
         }),
         buildTaxonomyEntry({
-          fixtureId: 'personal-shopping-list',
-          failedRubricKinds: ['turn_route'],
-        }),
-        buildTaxonomyEntry({
           fixtureId: 'false-finalize-recovery',
           failedRubricKinds: ['turn_completion:execution'],
         }),
@@ -391,9 +387,6 @@ describe('e2eReadinessDashboard', () => {
     expect(clusters.get('token_budget_overrun')?.scenarioIds).toEqual(['tool-catalog-agents']);
     expect(clusters.get('missing_clarification')?.scenarioIds).toEqual([
       'multi-turn-gate-followup',
-    ]);
-    expect(clusters.get('execution_route_failure')?.scenarioIds).toEqual([
-      'personal-shopping-list',
     ]);
     expect(clusters.get('execution_failure')?.scenarioIds).toEqual([
       'false-finalize-recovery',

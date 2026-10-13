@@ -1,6 +1,7 @@
 import type { Attachment } from './attachment';
 import type { AgentRunTaskLedgerItem } from './agentRun';
 import type { Message } from './message';
+import type { ThinkingLevelPreference } from './provider';
 
 export type SubAgentStatus = 'running' | 'completed' | 'timeout' | 'error' | 'cancelled';
 export type SubAgentCompletionState = 'verified_success' | 'blocked' | 'incomplete';
@@ -71,6 +72,8 @@ export interface SubAgentConfig {
   inheritTools?: boolean;
   linkUnderstandingEnabled?: boolean;
   mediaUnderstandingEnabled?: boolean;
+  /** The user's reasoning-effort setting when the worker was started. */
+  thinkingLevel?: ThinkingLevelPreference;
   maxIterations?: number;
   timeoutMs?: number;
   depth?: number;

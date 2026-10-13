@@ -60,12 +60,15 @@ jest.mock('../../src/services/commands/builtins', () => ({
   getCommand: jest.fn().mockReturnValue(null),
 }));
 jest.mock('../../src/services/agents/personas', () => ({
-  getPersona: jest.fn().mockReturnValue(undefined),
+  DEFAULT_PERSONA_ID: 'default',
   resolvePersonaSystemPrompt: jest.fn((_p: any, prompt: string) => prompt),
   resolvePersonaModel: jest.fn((_p: any, providerId: string, model: string) => ({
     providerId,
     model,
   })),
+}));
+jest.mock('../../src/services/agents/registry', () => ({
+  getPersona: jest.fn().mockReturnValue(undefined),
 }));
 beforeEach(() => {
   jest.clearAllMocks();
@@ -464,6 +467,6 @@ describe('runOrchestrator — error handling', () => {
 
 describe('runOrchestrator — constants', () => {
   it('exports max iterations constant', () => {
-    expect(MAX_TOOL_ITERATIONS).toBe(25);
+    expect(MAX_TOOL_ITERATIONS).toBe(40);
   });
 });

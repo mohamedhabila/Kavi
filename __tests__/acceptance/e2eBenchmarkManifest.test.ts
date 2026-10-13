@@ -23,7 +23,6 @@ describe('e2eBenchmarkManifest', () => {
       id: 'hidden-artifact-target',
       conversationId: 'hidden-artifact-conversation',
       contentClass: 'synthetic_public',
-      execution: { initialMode: 'agentic', route: 'forced_agentic' },
       prompt: 'Create the requested report in reports/summary.txt.',
       rubrics: [
         { kind: 'workspace_file', path: 'artifacts/secret-output.txt' },
@@ -82,16 +81,10 @@ describe('e2eBenchmarkManifest', () => {
       const manifest = manifests.find((candidate) => candidate.scenarioId === scenario.id);
       expect(scenario.contentClass).toBe('synthetic_public');
       expect(manifest?.contentClass).toBe(scenario.contentClass);
-      expect(manifest?.initialState.execution).toEqual({
-        ...scenario.execution,
-        turnRoutes: scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ?? [
-          scenario.execution.route,
-        ],
-        turnLifecycleBoundaries: scenario.userTurns?.map(
-          (turn) => turn.lifecycleBefore ?? null,
-        ) ?? [null],
-        turnSelectedModes: scenario.userTurns?.map((turn) => turn.selectedMode ?? null) ?? [null],
-      });
+      expect(manifest?.initialState).not.toHaveProperty('execution');
+      expect(manifest?.initialState.turnLifecycleBoundaries).toEqual(
+        scenario.userTurns?.map((turn) => turn.lifecycleBefore ?? null) ?? [null],
+      );
     }
 
     for (const manifest of manifests) {

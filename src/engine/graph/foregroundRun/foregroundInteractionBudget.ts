@@ -4,10 +4,9 @@
 // A person waiting on the screen reads an unbroken multi-minute tool-calling
 // grind as a hung app, not useful background work. A foreground interactive
 // run is therefore bounded far tighter than a delegated worker or a
-// scheduled/background run: those keep the full persona-scoped iteration
-// ceilings in orchestrator/constants.ts (MAX_TOOL_ITERATIONS /
-// MAX_TOOL_ITERATIONS_SUPERAGENT, extendable up to MAX_TOOL_ITERATIONS_OVERRIDE)
-// and the 15-minute model-turn inactivity guard.
+// scheduled/background run: those keep the full iteration ceiling in
+// orchestrator/constants.ts (MAX_TOOL_ITERATIONS, extendable up to
+// MAX_TOOL_ITERATIONS_OVERRIDE) and the 15-minute model-turn inactivity guard.
 //
 // This module is pure and code-owned: it never inspects model output or
 // claimed progress, so it fires deterministically on iteration count and

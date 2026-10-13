@@ -12,7 +12,6 @@ type ThinkingOption = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 type SettingsAssistantSectionProps = {
   colors: AppPalette;
-  defaultConversationMode: 'agentic' | 'chitchat';
   handleLocaleChange: (locale: Locale) => void | Promise<void>;
   linkUnderstandingEnabled: boolean;
   locale: Locale;
@@ -21,7 +20,6 @@ type SettingsAssistantSectionProps = {
   mediaUnderstandingEnabled: boolean;
   mode: 'assistant' | 'appearance';
   onLayout?: (event: any) => void;
-  setDefaultConversationMode: (value: 'agentic' | 'chitchat') => void;
   setLinkUnderstandingEnabled: (value: boolean) => void;
   setMaxLinks: (value: number) => void;
   setMediaUnderstandingEnabled: (value: boolean) => void;
@@ -41,7 +39,6 @@ type SettingsAssistantSectionProps = {
 
 export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> = ({
   colors,
-  defaultConversationMode,
   handleLocaleChange,
   linkUnderstandingEnabled,
   locale,
@@ -50,7 +47,6 @@ export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> =
   mediaUnderstandingEnabled,
   mode,
   onLayout,
-  setDefaultConversationMode,
   setLinkUnderstandingEnabled,
   setMaxLinks,
   setMediaUnderstandingEnabled,
@@ -102,11 +98,9 @@ export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> =
       {mode !== 'appearance' ? (
         <SettingsAssistantBehaviorControls
           colors={colors}
-          defaultConversationMode={defaultConversationMode}
           linkUnderstandingEnabled={linkUnderstandingEnabled}
           maxLinks={maxLinks}
           mediaUnderstandingEnabled={mediaUnderstandingEnabled}
-          setDefaultConversationMode={setDefaultConversationMode}
           setLinkUnderstandingEnabled={setLinkUnderstandingEnabled}
           setMaxLinks={setMaxLinks}
           setMediaUnderstandingEnabled={setMediaUnderstandingEnabled}

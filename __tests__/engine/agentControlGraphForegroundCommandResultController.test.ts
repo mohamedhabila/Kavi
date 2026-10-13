@@ -26,7 +26,6 @@ function createConversation(): Conversation {
   return {
     id: 'conv1',
     title: 'Test Chat',
-    mode: 'agentic',
     providerId: 'openai',
     createdAt: 1,
     updatedAt: 1,

@@ -33,7 +33,6 @@ function baseParams() {
     activeProvider: provider,
     callbacks: {},
     conversationId: 'source-thread-1',
-    graphOwnedRun: false,
     internalUserMessageCount: 0,
     linkUnderstandingEnabled: false,
     logger: { devLog: jest.fn(), devWarn: jest.fn() },
@@ -79,7 +78,6 @@ describe('orchestrator request memory policy', () => {
     mockedReadSessionMemory.mockReturnValue(memoryRead());
     const result = await prepareOrchestratorRequestBundle({
       ...baseParams(),
-      graphOwnedRun: true,
       graphSnapshot: {
         status: 'waiting_async',
         asyncWork: {
@@ -91,7 +89,6 @@ describe('orchestrator request memory policy', () => {
     });
 
     expect(result.requestFrame).toMatchObject({
-      mode: 'agentic',
       continuation: 'resume_waiting_async',
     });
   });

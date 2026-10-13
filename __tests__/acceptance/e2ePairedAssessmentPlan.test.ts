@@ -18,7 +18,6 @@ const SCENARIO: E2EScenario = {
   id: 'paired-plan',
   conversationId: 'paired-plan-conversation',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'chitchat', route: 'production_auto' },
   prompt: 'Remember and use the preference.',
   userTurns: [{ content: 'Remember the preference.' }, { content: 'Use the preference.' }],
   rubrics: [{ kind: 'min_user_turns', min: 2 }],

@@ -383,7 +383,6 @@ export function evaluateE2ERubric(
       }
       return { fixtureId, passed: true };
     }
-    case 'turn_route':
     case 'turn_completion':
     case 'turn_lifecycle_boundary':
     case 'turn_final_response_token':

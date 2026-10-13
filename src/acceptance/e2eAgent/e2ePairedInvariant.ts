@@ -12,12 +12,6 @@ import {
   validateE2EPairedCausalMemoryDefinition,
 } from './e2ePairedCausalMemoryContract';
 
-export const E2E_PAIRED_ROUTE_CONDITIONS = [
-  'production_auto',
-  'forced_chitchat',
-  'forced_agentic',
-] as const;
-
 export type E2EPairedInvariantConfig = Readonly<{
   provider: E2EPairedProviderInvariant;
   systemPrompt: string;
@@ -27,15 +21,12 @@ export type E2EPairedInvariantConfig = Readonly<{
     fixtureId: string;
     conversationId: string;
     contentClass: E2EScenario['contentClass'];
-    execution: E2EScenario['execution'];
     threadTitle: string | null;
     prompt: string;
     userTurns: ReadonlyArray<
       Readonly<{
         content: string;
-        route: NonNullable<E2EScenario['userTurns']>[number]['route'] | null;
         lifecycleBefore: NonNullable<E2EScenario['userTurns']>[number]['lifecycleBefore'] | null;
-        selectedMode: NonNullable<E2EScenario['userTurns']>[number]['selectedMode'] | null;
       }>
     >;
     rubrics: E2EScenario['rubrics'];
@@ -131,7 +122,6 @@ function canonicalScenarioInput(scenario: E2EScenario): E2EPairedInvariantConfig
     fixtureId: requireTrimmed(scenario.id, 'scenario.id', 256),
     conversationId: requireTrimmed(scenario.conversationId, 'scenario.conversationId', 256),
     contentClass: scenario.contentClass,
-    execution: cloneJson(scenario.execution),
     threadTitle:
       scenario.threadTitle === undefined
         ? null
@@ -139,9 +129,7 @@ function canonicalScenarioInput(scenario: E2EScenario): E2EPairedInvariantConfig
     prompt: requireTrimmed(scenario.prompt, 'scenario.prompt', 100_000),
     userTurns: turns.map((turn, index) => ({
       content: requireTrimmed(turn.content, `scenario.userTurns[${index}].content`, 100_000),
-      route: turn.route ?? null,
       lifecycleBefore: turn.lifecycleBefore ?? null,
-      selectedMode: turn.selectedMode ?? null,
     })),
     rubrics: cloneJson(scenario.rubrics),
     pairedEvaluation: pairedEvaluation ? cloneJson(pairedEvaluation) : null,
@@ -232,7 +220,6 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
       'fixtureId',
       'conversationId',
       'contentClass',
-      'execution',
       'threadTitle',
       'prompt',
       'userTurns',
@@ -247,17 +234,6 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
   requireTrimmed(config.conversationId, 'invariantConfig.scenarioInput.conversationId', 256);
   if (!['private', 'synthetic_public'].includes(config.contentClass)) {
     throw new Error('invariantConfig.scenarioInput.contentClass is unsupported.');
-  }
-  requireExactKeys(
-    config.execution,
-    ['initialMode', 'route'],
-    'invariantConfig.scenarioInput.execution',
-  );
-  if (!['agentic', 'chitchat'].includes(config.execution.initialMode)) {
-    throw new Error('invariantConfig.scenarioInput.execution.initialMode is unsupported.');
-  }
-  if (!E2E_PAIRED_ROUTE_CONDITIONS.includes(config.execution.route)) {
-    throw new Error('invariantConfig.scenarioInput.execution.route is unsupported.');
   }
   if (config.threadTitle !== null) {
     requireTrimmed(config.threadTitle, 'invariantConfig.scenarioInput.threadTitle', 10_000);
@@ -279,7 +255,7 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
   for (const [index, turn] of config.userTurns.entries()) {
     requireExactKeys(
       turn,
-      ['content', 'route', 'lifecycleBefore', 'selectedMode'],
+      ['content', 'lifecycleBefore'],
       `invariantConfig.scenarioInput.userTurns[${index}]`,
     );
     requireTrimmed(
@@ -287,20 +263,12 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
       `invariantConfig.scenarioInput.userTurns[${index}].content`,
       100_000,
     );
-    if (turn.route !== null && !E2E_PAIRED_ROUTE_CONDITIONS.includes(turn.route)) {
-      throw new Error(`invariantConfig.scenarioInput.userTurns[${index}].route is unsupported.`);
-    }
     if (
       turn.lifecycleBefore !== null &&
       !['app_relaunch', 'context_reset'].includes(turn.lifecycleBefore)
     ) {
       throw new Error(
         `invariantConfig.scenarioInput.userTurns[${index}].lifecycleBefore is unsupported.`,
-      );
-    }
-    if (turn.selectedMode !== null && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
-      throw new Error(
-        `invariantConfig.scenarioInput.userTurns[${index}].selectedMode is unsupported.`,
       );
     }
   }

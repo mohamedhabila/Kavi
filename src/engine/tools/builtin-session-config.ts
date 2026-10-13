@@ -1,5 +1,6 @@
 import { generateId } from '../../utils/id';
 import type { Message } from '../../types/message';
+import type { ThinkingLevelPreference } from '../../types/provider';
 import type { SubAgentConfig } from '../../types/subAgent';
 import { truncateGraphemesTo } from '../../utils/graphemes';
 
@@ -82,6 +83,7 @@ export function buildSpawnSubAgentConfig(args: {
   workerTools?: string[];
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
+  thinkingLevel: ThinkingLevelPreference;
 }): SubAgentConfig {
   return {
     parentConversationId: args.parentConversationId,
@@ -102,6 +104,7 @@ export function buildSpawnSubAgentConfig(args: {
     tools: args.workerTools,
     linkUnderstandingEnabled: args.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: args.mediaUnderstandingEnabled,
+    thinkingLevel: args.thinkingLevel,
   };
 }
 
@@ -163,6 +166,7 @@ export function buildFollowUpSubAgentConfig(args: {
   sandboxPolicy?: 'full' | 'safe-only' | 'inherit';
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
+  thinkingLevel: ThinkingLevelPreference;
 }): SubAgentConfig {
   return {
     parentConversationId: args.parentConversationId || args.sessionId,
@@ -185,5 +189,6 @@ export function buildFollowUpSubAgentConfig(args: {
     sandboxPolicy: args.sandboxPolicy,
     linkUnderstandingEnabled: args.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: args.mediaUnderstandingEnabled,
+    thinkingLevel: args.thinkingLevel,
   };
 }

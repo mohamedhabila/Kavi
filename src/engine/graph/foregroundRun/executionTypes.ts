@@ -1,11 +1,7 @@
 import type { MutableRefObject } from 'react';
 import type { ThinkingLevel } from '../../thinking';
 import type { ChatState } from '../../../store/chatStoreTypes';
-import type {
-  Conversation,
-  ConversationLogEntry,
-  ConversationMode,
-} from '../../../types/conversation';
+import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message, ToolCall } from '../../../types/message';
 import type {
@@ -32,8 +28,6 @@ import type { RecordConversationTurnMemory } from '../../../services/memory/core
 export type EnsureConversationOptions = {
   providerId?: string;
   model?: string;
-  personaId?: string;
-  mode?: 'agentic' | 'chitchat';
   reportMissingProvider?: boolean;
 };
 
@@ -142,7 +136,6 @@ export interface ForegroundConversationRunState {
   chatNoApiKeyMessage: string | null;
   chatNoModelMessage: string | null;
   chatNoProviderMessage: string | null;
-  defaultConversationMode: ConversationMode;
   exportDialogTitle: string;
   linkUnderstandingEnabled: boolean;
   maxLinks: number;

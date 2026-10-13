@@ -14,7 +14,6 @@ import type {
   ThinkingLevelPreference,
 } from '../types/provider';
 import type { WebSearchProvider } from '../types/tool';
-import type { ConversationMode } from '../types/conversation';
 import type { MemoryConsolidationMode } from '../services/memory/memoryConsolidationMode';
 
 export interface SettingsDataState extends AppSettings {
@@ -35,7 +34,6 @@ export interface SettingsDataState extends AppSettings {
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
   maxLinks: number;
-  defaultConversationMode: ConversationMode;
   memoryConsolidationMode: MemoryConsolidationMode;
   consolidationProvider: string | null;
   compactionSummarizer: CompactionSummarizerMode;
@@ -92,7 +90,6 @@ export interface SettingsState extends SettingsDataState {
   setLinkUnderstandingEnabled: (enabled: boolean) => void;
   setMediaUnderstandingEnabled: (enabled: boolean) => void;
   setMaxLinks: (max: number) => void;
-  setDefaultConversationMode: (mode: ConversationMode) => void;
   setDefaultWorkspaceTargetId: (targetId: string | null) => void;
   setConsolidationProvider: (providerId: string | null) => void;
   setMemoryConsolidationMode: (mode: MemoryConsolidationMode, providerId?: string | null) => void;
@@ -126,7 +123,6 @@ export function createDefaultSettingsDataState(): SettingsDataState {
     linkUnderstandingEnabled: true,
     mediaUnderstandingEnabled: true,
     maxLinks: 3,
-    defaultConversationMode: 'chitchat',
     defaultWorkspaceTargetId: null,
     consolidationProvider: null,
     memoryConsolidationMode: 'auto',

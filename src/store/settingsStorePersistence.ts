@@ -25,7 +25,6 @@ export function partializeSettingsState(state: SettingsDataState): AppSettings {
     linkUnderstandingEnabled: state.linkUnderstandingEnabled,
     mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
     maxLinks: state.maxLinks,
-    defaultConversationMode: state.defaultConversationMode,
     consolidationProvider: state.consolidationProvider,
     memoryConsolidationMode: normalizeMemoryConsolidationMode(state.memoryConsolidationMode),
     compactionSummarizer: state.compactionSummarizer,

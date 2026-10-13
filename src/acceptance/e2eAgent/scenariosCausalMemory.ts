@@ -3,26 +3,20 @@ import type { E2ERubric, E2EScenario } from './types';
 
 const EVENT_TITLE = 'Causal memory design review';
 
-function completedTurnRubrics(turnIndex: number, mode: 'agentic' | 'chitchat'): E2ERubric[] {
+function completedTurnRubrics(turnIndex: number): E2ERubric[] {
   return [
-    { kind: 'turn_route', turnIndex, directive: 'production_auto', mode },
     { kind: 'turn_completion', turnIndex, field: 'execution', expected: true },
     { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
-    {
-      kind: 'turn_completion',
-      turnIndex,
-      field: 'agent_run',
-      expected: mode === 'agentic' ? true : null,
-    },
+    { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: true },
   ];
 }
 
 const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   { kind: 'min_user_turns', min: 4 },
-  ...completedTurnRubrics(0, 'chitchat'),
-  ...completedTurnRubrics(1, 'chitchat'),
-  ...completedTurnRubrics(2, 'agentic'),
-  ...completedTurnRubrics(3, 'chitchat'),
+  ...completedTurnRubrics(0),
+  ...completedTurnRubrics(1),
+  ...completedTurnRubrics(2),
+  ...completedTurnRubrics(3),
   { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
   { kind: 'turn_native_invocation_count', turnIndex: 1, expectedCount: 0 },
   { kind: 'turn_lifecycle_boundary', turnIndex: 2, boundary: 'context_reset' },
@@ -100,7 +94,6 @@ export const PAIRED_CAUSAL_GLOBAL_PREFERENCE_SCENARIO: E2EScenario = {
   id: 'paired-causal-global-preference',
   conversationId: 'e2e-paired-causal-global-preference',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'chitchat', route: 'production_auto' },
   threadTitle: 'Preference use after a context reset',
   prompt:
     'Evaluate whether a naturally corrected global preference still holds after the context resets, without raw-history leakage.',
@@ -114,11 +107,9 @@ export const PAIRED_CAUSAL_GLOBAL_PREFERENCE_SCENARIO: E2EScenario = {
     },
     {
       lifecycleBefore: 'context_reset',
-      selectedMode: 'agentic',
       content: `Create one calendar event titled "${EVENT_TITLE}" in my modifiable calendar starting at 2026-07-23T14:00:00Z. Use my usual design-review length. If you cannot determine that duration, do not guess or create anything; ask me for it. Verify any event you create and do not create duplicates.`,
     },
     {
-      selectedMode: 'chitchat',
       content: 'What is my usual design-review length? Do not make any changes.',
     },
   ],

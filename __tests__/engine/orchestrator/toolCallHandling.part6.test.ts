@@ -90,9 +90,9 @@ describe('Orchestrator', () => {
       };
 
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
       skillsModule.getSkillToolDefinitions.mockReturnValueOnce([
         {
@@ -145,9 +145,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-super-agent-fallback-weather',
+        conversationId: 'conv-fallback-weather',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         internalUserMessageCount: 1,
         messages: [
           {
@@ -189,17 +189,17 @@ describe('Orchestrator', () => {
       expect(systemPromptMessage.content).toContain(
         'Runtime: mobile (React Native / Expo), channel mobile-app.',
       );
-      expect(getSkillSystemPrompts).toHaveBeenCalledWith('conv-super-agent-fallback-weather');
+      expect(getSkillSystemPrompts).toHaveBeenCalledWith('conv-fallback-weather');
     });
 
-    it('allows SuperAgent to finalize a non-trivial solo-tool run when no delegated worker was requested', async () => {
+    it('allows a non-trivial solo-tool run to finalize when no delegated worker was requested', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
 
       (executeTool as jest.Mock).mockResolvedValueOnce({
@@ -234,9 +234,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-super-agent-delegation',
+        conversationId: 'conv-delegation',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         messages: [
           {
             id: 'msg1',
@@ -264,14 +264,14 @@ describe('Orchestrator', () => {
       });
     });
 
-    it('does not force SuperAgent to relaunch delegation after a failed worker launch', async () => {
+    it('does not force a relaunch of delegation after a failed worker launch', async () => {
       const registryModule = jest.requireMock('../../../src/services/agents/registry') as {
         getPersona: jest.Mock;
       };
       registryModule.getPersona.mockReturnValueOnce({
-        id: 'super-agent',
-        name: 'SuperAgent',
-        systemPrompt: 'You are the SuperAgent.',
+        id: 'default',
+        name: 'Kavi',
+        systemPrompt: 'You are Kavi.',
       });
 
       (executeTool as jest.Mock)
@@ -320,9 +320,9 @@ describe('Orchestrator', () => {
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-super-agent-retry-delegation',
+        conversationId: 'conv-retry-delegation',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         messages: [
           {
             id: 'msg1',

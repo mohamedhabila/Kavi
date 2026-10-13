@@ -24,7 +24,7 @@ import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-07-28.external-portfolio-v7';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-10-13.external-portfolio-v8';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-07-28';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -89,13 +89,7 @@ export type E2EBenchmarkManifest = {
     conversationId: string;
     userTurnCount: number;
     nativeFixtureRequired: boolean;
-    execution: {
-      initialMode: E2EScenario['execution']['initialMode'];
-      route: E2EScenario['execution']['route'];
-      turnRoutes: ReadonlyArray<E2EScenario['execution']['route']>;
-      turnLifecycleBoundaries: ReadonlyArray<E2EUserTurn['lifecycleBefore'] | null>;
-      turnSelectedModes: ReadonlyArray<E2EUserTurn['selectedMode'] | null>;
-    };
+    turnLifecycleBoundaries: ReadonlyArray<E2EUserTurn['lifecycleBefore'] | null>;
   };
   hiddenGroundTruth: {
     visibleToAgent: false;
@@ -184,7 +178,6 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'cache_read_tokens',
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
-  'turn_route',
   'turn_completion',
   'turn_lifecycle_boundary',
   'turn_final_response_token',
@@ -254,7 +247,6 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'cache_prefix_readiness':
     case 'cache_eligible_read_rate':
       return 'cache_event';
-    case 'turn_route':
     case 'turn_completion':
       return 'execution_state';
     case 'turn_lifecycle_boundary':
@@ -451,16 +443,9 @@ export function buildE2EBenchmarkManifest(scenario: E2EScenario): E2EBenchmarkMa
       conversationId: scenario.conversationId,
       userTurnCount: scenario.userTurns?.length ?? 1,
       nativeFixtureRequired: environmentKind === 'native_fixture',
-      execution: {
-        ...scenario.execution,
-        turnRoutes: scenario.userTurns?.map((turn) => turn.route ?? scenario.execution.route) ?? [
-          scenario.execution.route,
-        ],
-        turnLifecycleBoundaries: scenario.userTurns?.map(
-          (turn) => turn.lifecycleBefore ?? null,
-        ) ?? [null],
-        turnSelectedModes: scenario.userTurns?.map((turn) => turn.selectedMode ?? null) ?? [null],
-      },
+      turnLifecycleBoundaries: scenario.userTurns?.map((turn) => turn.lifecycleBefore ?? null) ?? [
+        null,
+      ],
     },
     hiddenGroundTruth: {
       visibleToAgent: false,

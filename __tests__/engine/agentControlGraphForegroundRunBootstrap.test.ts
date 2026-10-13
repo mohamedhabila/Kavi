@@ -15,7 +15,6 @@ function createConversation(params: {
   return {
     id: 'conv1',
     title: 'Test',
-    mode: 'agentic',
     messages: params.messages ?? [],
     providerId: 'openai',
     createdAt: 1,

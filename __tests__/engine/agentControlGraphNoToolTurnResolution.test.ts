@@ -18,7 +18,6 @@ describe('agent control graph no-tool turn resolution', () => {
     const requestFrame = buildGraphEntryRequestFrame({
       text: 'Disable the named scheduled task.',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     });
     params.controlGraph = buildGraphScenarioSnapshot({

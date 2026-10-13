@@ -9,7 +9,6 @@ export const BENCH_GAIA_FILE_HOP_CHAIN: E2EScenario = {
   id: 'bench-gaia-file-hop-chain',
   conversationId: 'e2e-bench-gaia-hop',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Write `artifacts/seed.txt` with exact content `SEED-E2E-7`. ' +
     'Read `artifacts/seed.txt`, then write `artifacts/derived.txt` with exact content `DERIVED-SEED-E2E-7`.',
@@ -34,7 +33,6 @@ export const BENCH_BOOTSTRAP_FIRST_TURN_GOALS: E2EScenario = {
   id: 'bench-bootstrap-first-turn-goals',
   conversationId: 'e2e-bench-bootstrap',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'Help me ship the release artifact.',
   userTurns: [
     {
@@ -56,7 +54,6 @@ export const BENCH_AGENTBENCH_TOOL_CHAIN: E2EScenario = {
   id: 'bench-agentbench-tool-chain',
   conversationId: 'e2e-bench-agentbench-chain',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Write `artifacts/chain-seed.txt` with `CHAIN-SEED-E2E`. ' +
     'Inspect `artifacts/`, verify `artifacts/chain-seed.txt`, then write `artifacts/chain-proof.txt` with `CHAIN-PROOF-E2E`.',
@@ -75,7 +72,6 @@ export const BENCH_BFCL_PARALLEL_FILE_READ: E2EScenario = {
   id: 'bench-bfcl-parallel-file-read',
   conversationId: 'e2e-bench-bfcl-parallel',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Write `artifacts/parallel-a.txt` with `BFCL-A-E2E` and `artifacts/parallel-b.txt` with `BFCL-B-E2E`. ' +
     'Then verify both files in the same response.',
@@ -95,7 +91,6 @@ export const BENCH_BFCL_MULTI_TURN_STATE_CARRY: E2EScenario = {
   id: 'bench-bfcl-multi-turn-state-carry',
   conversationId: 'e2e-bench-bfcl-state',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'bfcl-state-carry-thread',
   prompt: 'Persist a workspace token across turns.',
   userTurns: [
@@ -128,7 +123,6 @@ export const BENCH_BFCL_PASSIVE_NO_TOOLS: E2EScenario = {
   id: 'bench-bfcl-passive-no-tools',
   conversationId: 'e2e-bench-bfcl-passive',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'bfcl-passive-thread',
   prompt: 'Acknowledge a passive planning token.',
   userTurns: [

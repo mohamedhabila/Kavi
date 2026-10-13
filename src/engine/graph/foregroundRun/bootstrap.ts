@@ -1,5 +1,5 @@
 import type { AgentRun } from '../../../types/agentRun';
-import type { Conversation, ConversationMode } from '../../../types/conversation';
+import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import { selectForegroundSupersededRun } from '../foregroundConversationCancellation';
 import { shouldTrackForegroundAgentRun } from '../runTracking';
@@ -63,7 +63,6 @@ type StartAgentRunParams = {
 export function buildForegroundRunBootstrapSelection(params: {
   conversation?: Conversation;
   createAssistantMessageId: () => string;
-  defaultConversationMode: ConversationMode;
   reuseAgentRunId?: string;
   assistantDraftMode?: AssistantDraftMode;
   clarificationReplyAdmission?: ClarificationReplyAdmission;
@@ -86,10 +85,7 @@ export function buildForegroundRunBootstrapSelection(params: {
       : undefined;
   const normalizedReuseAgentRunId = explicitlyReusedAgentRunId ?? awaitingUserRun?.id;
   const shouldTrackAgentRun = shouldTrackForegroundAgentRun({
-    conversationMode: params.conversation?.mode,
-    defaultConversationMode: params.defaultConversationMode,
     latestUserMessage,
-    messageCount: params.conversation?.messages?.length ?? 0,
     reuseAgentRunId: normalizedReuseAgentRunId,
   });
   const { existingRun, supersededRun, supersededRunningWorkerCount } =

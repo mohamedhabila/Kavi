@@ -211,22 +211,6 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('workspace_note_write')).toBe(false);
   });
 
-  it('keeps scheduled assistant work off the chit-chat surface', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      conversationMode: 'chitchat',
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
-    });
-
-    const names = selectedNames(surface);
-    expect(names.has('memory_forget')).toBe(true);
-    expect(names.has('cron')).toBe(false);
-  });
-
   it('exposes the discovery entrypoint when asked', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,

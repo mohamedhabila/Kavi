@@ -1,6 +1,5 @@
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
-import type { ConversationMode } from '../../types/conversation';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
 import {
@@ -182,7 +181,6 @@ function resolveWorkflowContinuationToolNames(
 
 export async function resolveDefaultGroundedRequestScopedTools(params: {
   allTools: ReadonlyArray<ToolDefinition>;
-  conversationMode?: ConversationMode;
   observedToolNames: Iterable<string>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   workingMessages: ReadonlyArray<Message>;
@@ -238,7 +236,6 @@ export async function resolveDefaultGroundedRequestScopedTools(params: {
 
   return resolveTurnToolSurface({
     allTools: params.allTools,
-    conversationMode: params.conversationMode,
     pendingAsyncMonitorToolNames,
     explicitToolSurfaceToolNames,
     observedToolNames,

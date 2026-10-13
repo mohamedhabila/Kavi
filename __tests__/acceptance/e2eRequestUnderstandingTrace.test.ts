@@ -15,7 +15,6 @@ describe('request understanding E2E trace', () => {
         requestFrame: buildGraphEntryRequestFrame({
           text: 'PRIVATE-REQUEST-TEXT-NEVER-EXPORT',
           attachmentCount: 0,
-          mode: 'agentic',
           continuation: 'resume',
         }),
       }),
@@ -25,17 +24,17 @@ describe('request understanding E2E trace', () => {
     );
 
     expect(trace.requestUnderstanding).toMatchObject({
-      version: 3,
+      version: 4,
       integrity: 'valid',
       routing: {
         status: 'known',
-        mode: 'agentic',
         continuation: 'resume',
         decisionAction: 'act',
       },
       registeredRequiredInformation: { status: 'known', count: 0, unresolvedCount: 0 },
       effectAuthorization: { status: 'unknown' },
     });
+    expect(trace.requestUnderstanding?.routing).not.toHaveProperty('mode');
     expect(JSON.stringify(trace)).not.toContain('PRIVATE-REQUEST-TEXT-NEVER-EXPORT');
 
     const projected = projectGraphSnapshot({
@@ -56,7 +55,7 @@ describe('request understanding E2E trace', () => {
       projectGraphSnapshot({
         ...trace,
         requestUnderstanding: {
-          version: 3,
+          version: 4,
           integrity: 'valid',
           routing: { status: 'invented' },
           registeredRequiredInformation: {

@@ -230,7 +230,6 @@ export async function prepareOrchestratorRequestBundle(params: {
   activeProvider: LlmProviderConfig;
   callbacks: PreparationCallbacks;
   conversationId: string;
-  graphOwnedRun: boolean;
   internalUserMessageCount: number;
   linkUnderstandingEnabled: boolean;
   logger: LoggerLike;
@@ -272,7 +271,6 @@ export async function prepareOrchestratorRequestBundle(params: {
   const requestContext = prepareAgentControlGraphRequestContext({
     memoryScopedMessages: memoryAccessContext.scopedMessages,
     workflowScopeUserMessageId: params.workflowScopeUserMessageId,
-    graphOwnedRun: params.graphOwnedRun,
     continuation: resolveRequestContinuation(params.graphSnapshot),
   });
   if (requestContext.missingWorkflowScopeAnchorId) {

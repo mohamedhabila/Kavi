@@ -63,7 +63,6 @@ describeLivePilot('attachment grounding — exact foreground chat', () => {
       conversationTitle: 'Attachment grounding',
       systemPrompt:
         'You are a careful general mobile assistant. Ground answers in current evidence.',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 4 * 60 * 1_000,
       disableLongTermMemory: true,
       disableTools: true,
@@ -83,8 +82,6 @@ describeLivePilot('attachment grounding — exact foreground chat', () => {
               base64: image.toString('base64'),
             },
           ],
-          route: 'production_auto',
-          selectedMode: 'chitchat',
           timeoutMs: 3 * 60 * 1_000,
         },
       ],

@@ -1,8 +1,8 @@
 import {
   AgentPersona,
+  DEFAULT_PERSONA_ID,
   resolvePersonaModel,
   resolvePersonaSystemPrompt,
-  SUPER_AGENT_PERSONA_ID,
 } from '../../services/agents/personas';
 import { getPersona } from '../../services/agents/registry';
 import { getCommand } from '../../services/commands/builtins';
@@ -33,8 +33,6 @@ import {
   clonePendingTrackedAsyncOperations,
 } from '../pendingAsyncOperations';
 import { buildToolDefinitions } from '../tools/definitions';
-import { filterToolsForConversationMode } from '../tools/conversationModeToolAuthority';
-import { resolveConversationStartsAgentic } from '../graph/conversation/resolveConversationRuntimeMode';
 import { filterToolsForMemoryPolicy } from '../tools/memoryPolicyToolAuthority';
 import { hydrateProviderContextWindows } from '../../services/context/providerContextWindows';
 import {
@@ -45,7 +43,6 @@ import {
 import {
   FOREGROUND_MAX_TOOL_ITERATIONS,
   MAX_TOOL_ITERATIONS,
-  MAX_TOOL_ITERATIONS_SUPERAGENT,
   resolveToolIterationBudget,
 } from './constants';
 import type { OrchestratorCallbacks } from './types';
@@ -187,9 +184,6 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   consecutivePendingAsyncNoToolTurns: number;
   emitPendingAsyncOperationsChange: () => void;
   failoverState: FailoverState | null;
-  isSuperAgent: boolean;
-  /** Whether this conversation starts in agentic mode; see resolveConversationStartsAgentic. */
-  startsAgentic: boolean;
   allowLongHorizonIterationExtensions: boolean;
   lastPendingAsyncSignature: string;
   llm: LlmService;
@@ -203,44 +197,28 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   trackedAsyncOperations: Map<string, TrackedAsyncOperation>;
   warningInjectedThisRound: boolean;
 }> {
-  const persona: AgentPersona | undefined = params.personaId
-    ? getPersona(params.personaId)
-    : undefined;
-  if (params.personaId && !persona) {
+  // A run with no chosen persona speaks as the default persona, with the user's roster edits.
+  const chosenPersona = params.personaId ? getPersona(params.personaId) : undefined;
+  if (params.personaId && !chosenPersona) {
     params.logger.devWarn(
       `Persona '${params.personaId}' not found in registry, falling back to default`,
     );
   }
-  const personaRegistryId = persona?.id;
-  const isSuperAgent =
-    typeof personaRegistryId === 'string' && personaRegistryId === SUPER_AGENT_PERSONA_ID;
-  const personaIterationBudget = isSuperAgent
-    ? MAX_TOOL_ITERATIONS_SUPERAGENT
-    : MAX_TOOL_ITERATIONS;
+  const persona: AgentPersona | undefined = chosenPersona ?? getPersona(DEFAULT_PERSONA_ID);
   // A foreground interactive run (a person waiting on the screen) never earns the
   // full persona ceiling as its *default* budget; an explicit caller-supplied
   // `maxToolIterations` still passes through resolveToolIterationBudget unclamped,
   // since explicit caller limits remain fixed (see orchestrator/constants.ts).
   const defaultIterationBudget = params.isForegroundRun
-    ? Math.min(personaIterationBudget, FOREGROUND_MAX_TOOL_ITERATIONS)
-    : personaIterationBudget;
+    ? Math.min(MAX_TOOL_ITERATIONS, FOREGROUND_MAX_TOOL_ITERATIONS)
+    : MAX_TOOL_ITERATIONS;
   const maxToolIterations = resolveToolIterationBudget(
     params.maxToolIterations,
     defaultIterationBudget,
   );
   params.logger.debug(
-    `conversationId=${params.conversationId}, persona=${persona?.name || 'none'} (superAgent=${isSuperAgent}), maxIterations=${maxToolIterations}`,
+    `conversationId=${params.conversationId}, persona=${persona?.name || 'none'}, maxIterations=${maxToolIterations}`,
   );
-  // Mode is a conversation property, not a persona flag: read the conversation's own
-  // persisted mode (falling back to the persona signal only for worker sessions that
-  // are never registered as a UI conversation) instead of gating the tool surface on
-  // `isSuperAgent` directly. Resolved once here so every downstream consumer of "does
-  // this run start agentic" (the tool surface below, and the caller's memory-access
-  // mode) reuses the same value instead of re-resolving it.
-  const startsAgentic = resolveConversationStartsAgentic({
-    conversationId: params.conversationId,
-    personaIsSuperAgent: isSuperAgent,
-  });
   const resolvedPrompt = resolvePersonaSystemPrompt(persona, params.systemPrompt);
   const { providerId: resolvedProviderId, model: resolvedModel } = resolvePersonaModel(
     persona,
@@ -301,16 +279,12 @@ export async function prepareOrchestratorSessionBootstrap(params: {
 
   const mcpTools = mcpManager.getAllToolDefinitions();
   const skillTools = getSkillToolDefinitions();
-  const modeAuthorizedTools = filterToolsForConversationMode(
-    filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
-    startsAgentic ? 'agentic' : 'chitchat',
-  );
   // A tool the user turned off in Settings is not offered at all; executeTool still refuses
   // one called by name, as the authority on every call.
   const permissions = useToolPermissionsStore.getState();
-  const policyAuthorizedTools = filterToolsForMemoryPolicy(modeAuthorizedTools).filter((tool) =>
-    permissions.isAllowed(tool.name),
-  );
+  const policyAuthorizedTools = filterToolsForMemoryPolicy(
+    filterToolsByInvocationPolicy(buildToolDefinitions(mcpTools, skillTools)),
+  ).filter((tool) => permissions.isAllowed(tool.name));
   const catalogVisibleTools = params.toolFilter
     ? policyAuthorizedTools.filter((tool) => params.toolFilter?.(tool.name) !== false)
     : policyAuthorizedTools;
@@ -370,8 +344,6 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     consecutivePendingAsyncNoToolTurns: 0,
     emitPendingAsyncOperationsChange,
     failoverState,
-    isSuperAgent,
-    startsAgentic,
     // Every persona-driven run without an explicit caller budget may earn bounded
     // extensions. The extension itself still requires code-owned evidence of recent
     // completed tool progress, and the repeat/stagnation detectors plus the hard

@@ -47,16 +47,9 @@ export function completedCondition(input: {
 }): Extract<E2EPairedConditionExecution, { status: 'completed' }> {
   const executionCompleted = input.completed ?? true;
   const passed = executionCompleted && input.rubricPassed === input.rubricTotal;
-  const defaultRoute =
-    input.condition === 'forced_agentic'
-      ? ({ directive: 'forced_agentic', mode: 'agentic' } as const)
-      : input.condition === 'forced_chitchat'
-        ? ({ directive: 'forced_chitchat', mode: 'chitchat' } as const)
-        : ({ directive: 'production_auto', mode: 'chitchat' } as const);
   const turnTraces = input.turnTraces ?? [
     buildPairedTurnTrace(
       input.condition === 'memory_off' ? OPTED_OUT_MEMORY_PROMPT : recordedMemoryPrompt(),
-      { route: defaultRoute },
     ),
   ];
   return {

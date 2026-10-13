@@ -1,5 +1,5 @@
-export const MAX_TOOL_ITERATIONS = 25;
-export const MAX_TOOL_ITERATIONS_SUPERAGENT = 40;
+/** Default tool-iteration budget of a background run (a worker, a scheduled job, a hook). */
+export const MAX_TOOL_ITERATIONS = 40;
 // Default long-horizon runs earn this ceiling only through bounded extensions
 // backed by recent successful tool outcomes. Explicit caller limits remain
 // fixed, and the independent repeat/stagnation detectors still terminate loops.

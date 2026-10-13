@@ -1,11 +1,5 @@
 const { validateCase } = require('./evaluationCasePack');
 
-const REQUIRED_CONCRETE_TRANSITIONS = Object.freeze([
-  'chitchat_to_chitchat',
-  'chitchat_to_agentic',
-  'agentic_to_chitchat',
-  'agentic_to_agentic',
-]);
 const REQUIRED_CONTROL_KINDS = Object.freeze(['positive', 'negative', 'mixed']);
 const REQUIRED_HISTORY_BANDS = Object.freeze(['short', 'medium', 'long']);
 const REQUIRED_LIFECYCLE_BANDS = Object.freeze([
@@ -28,27 +22,6 @@ const LONG_ELAPSED_GAP_MS = 30 * 24 * 60 * 60 * 1000;
 
 function addFailure(failures, location, message) {
   failures.push(`${location}: ${message}`);
-}
-
-function forcedMode(mode) {
-  if (mode === 'forced_chitchat') return 'chitchat';
-  if (mode === 'forced_agentic') return 'agentic';
-  return null;
-}
-
-function transitionBetween(left, right) {
-  const leftMode = forcedMode(left?.mode);
-  const rightMode = forcedMode(right?.mode);
-  return leftMode && rightMode ? `${leftMode}_to_${rightMode}` : 'either_to_either';
-}
-
-function actualModeTransitions(caseEntry) {
-  const turns = (caseEntry?.steps ?? []).filter((step) => step?.kind === 'user_turn');
-  const transitions = new Set();
-  for (let index = 1; index < turns.length; index += 1) {
-    transitions.add(transitionBetween(turns[index - 1], turns[index]));
-  }
-  return transitions;
 }
 
 function historyBand(caseEntry) {
@@ -250,18 +223,6 @@ function validateCaseMetadata(caseEntry, index, splitKind, failures) {
   if (expectedId && caseEntry?.id !== expectedId) {
     addFailure(failures, `${location}.id`, `must be ${expectedId}`);
   }
-  const actual = actualModeTransitions(caseEntry);
-  const declared = new Set(caseEntry?.modeTransitions ?? []);
-  for (const transition of actual) {
-    if (!declared.has(transition)) {
-      addFailure(failures, `${location}.modeTransitions`, `must declare actual ${transition}`);
-    }
-  }
-  for (const transition of declared) {
-    if (!actual.has(transition)) {
-      addFailure(failures, `${location}.modeTransitions`, `must not claim absent ${transition}`);
-    }
-  }
   if (!historyBand(caseEntry)) {
     addFailure(failures, `${location}.steps`, 'must contain at least two user turns');
   }
@@ -285,13 +246,6 @@ function validatePrivatePackCoverage(pack, contract, evaluationSchema) {
   for (const family of evaluationSchema?.$defs?.klaeFamily?.enum ?? []) {
     if (!coveredFamilies.has(family)) {
       addFailure(failures, 'pack.cases', `must cover KLAE family ${family}`);
-    }
-  }
-
-  const coveredTransitions = new Set(cases.flatMap((entry) => [...actualModeTransitions(entry)]));
-  for (const transition of REQUIRED_CONCRETE_TRANSITIONS) {
-    if (!coveredTransitions.has(transition)) {
-      addFailure(failures, 'pack.cases', `must exercise mode transition ${transition}`);
     }
   }
 
@@ -320,10 +274,8 @@ function validatePrivatePackCoverage(pack, contract, evaluationSchema) {
 
 module.exports = {
   CASE_ID_PREFIX,
-  REQUIRED_CONCRETE_TRANSITIONS,
   REQUIRED_HISTORY_BANDS,
   REQUIRED_LIFECYCLE_BANDS,
-  actualModeTransitions,
   historyBand,
   lifecycleBands,
   validatePrivatePackCoverage,

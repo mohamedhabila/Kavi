@@ -356,19 +356,18 @@ Run the nine-turn product-native continuity flow on its own:
 E2E_SCENARIO_IDS="organic-mobile-assistant-continuity" npm run eval:e2e:assess
 ```
 
-This flow keeps evaluator routing on `production_auto` while recording user
-mode selections, two persisted relaunches, a preference correction, one
-calendar action with attributed memory-retrieval participation, an intentionally
-ambiguous agentic no-op, and recovery of partial workspace state. This flow is
+This flow records small talk, two persisted relaunches, a preference
+correction, one calendar action with attributed memory-retrieval participation,
+an intentionally ambiguous no-op that must ask for the missing time, and
+recovery of partial workspace state. This flow is
 continuity/retrieval evidence, not standalone causal-memory evidence: the raw
 persisted chat remains available across these relaunches. Causal memory is
 evaluated separately by `paired-causal-global-preference`, whose context reset
 leaves zero raw messages in the conversation while retaining owner-global
-memory. Its two passive learning turns must contain zero model-requested tool
-calls of any kind as well as zero native invocations; exact per-turn calls remain
-available in opt-in private evidence. This prevents a non-native effect from
-inflating neutral parity while leaving product behavior and benchmark prompts
-unchanged.
+memory. Its two passive learning turns must contain zero native invocations;
+exact per-turn calls remain available in opt-in private evidence. This keeps a
+device effect from inflating neutral parity while leaving product behavior and
+benchmark prompts unchanged.
 Its 240K token ceiling is provisional until clean first-attempt live trials are
 available. Recalibrate to `ceil(max observed × 1.25)` after at least three
 retries-disabled runs. The nine-turn 810-second scenario deadline is a hard
@@ -449,9 +448,9 @@ directory.
 
 For exact local diagnosis, set
 `E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
-atomic, owner-only `e2e-private-scenario-evidence-v10` file per attempt with raw
-turn, selected-mode, result, estimated-cost, memory, per-turn memory prompt, native,
-graph, and lifecycle evidence. The setting is intentionally opt-in; the
+atomic, owner-only `e2e-private-scenario-evidence-v11` file per attempt with raw
+turn, result, estimated-cost, memory, per-turn memory prompt, native, graph, and
+lifecycle evidence. The setting is intentionally opt-in; the
 directory is gitignored, cannot escape the private root through `..` or symlinks,
 is never referenced by the public report, and must not be included in uploaded
 CI artifacts.
@@ -541,13 +540,13 @@ recall, gate follow-up). Multi-turn scenarios invoke `runOrchestrator` once
 per user message with accumulated history and graph resume, matching the
 foreground conversation path.
 
-The core suite also includes six longitudinal product flows: chitchat profile
-correction, chitchat-to-calendar preference application, agent-outcome
-continuity into chitchat, reusable failure-constraint recovery, and profile
-continuity across a persisted app relaunch, plus the nine-turn organic mobile
-assistant continuity flow. These flows score route,
-execution, final-response, agent-run, durable-memory, lifecycle, and verified
-end-state evidence independently.
+The core suite also includes six longitudinal product flows: profile
+correction in casual conversation, a remembered preference applied to a later
+calendar action, agent-outcome continuity into the next turn, reusable
+failure-constraint recovery, and profile continuity across a persisted app
+relaunch, plus the nine-turn organic mobile assistant continuity flow. These
+flows score execution, final-response, agent-run, durable-memory, lifecycle,
+and verified end-state evidence independently.
 
 **Benchmark-adapted scenarios (`bench-*`):** GAIA file-hop chain, session
 memory cache, prompt-cache long-horizon probes, describe-then-use, 3-turn memory

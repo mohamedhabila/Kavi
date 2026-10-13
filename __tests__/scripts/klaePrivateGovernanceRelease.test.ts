@@ -72,15 +72,11 @@ describe('private KLAE release governance', () => {
     );
   });
 
-  it('requires every family, actual mode transition, and causally exercised lifecycle band', () => {
+  it('requires every family and causally exercised lifecycle band', () => {
     for (const caseEntry of fixture.packs.development.cases) {
       caseEntry.families = caseEntry.families.filter((family: string) => family !== 'delegation');
     }
     const longCase = fixture.packs.development.cases[0];
-    for (const step of longCase.steps) {
-      if (step.kind === 'user_turn') step.mode = 'forced_agentic';
-    }
-    longCase.modeTransitions = ['agentic_to_agentic'];
     longCase.steps = longCase.steps.filter(
       (step: { event?: string }) => step.event !== 'provider_change',
     );
@@ -95,8 +91,6 @@ describe('private KLAE release governance', () => {
     expect(validate()).toEqual(
       expect.arrayContaining([
         'development.pack.cases: must cover KLAE family delegation',
-        'development.pack.cases: must exercise mode transition chitchat_to_agentic',
-        'development.pack.cases: must exercise mode transition agentic_to_chitchat',
         'development.pack.cases: must cover lifecycle band provider_change',
       ]),
     );

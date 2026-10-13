@@ -282,8 +282,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       setMaxLinks: (max) => set({ maxLinks: clampMaxLinks(max) }),
 
-      setDefaultConversationMode: (mode) => set({ defaultConversationMode: mode }),
-
       setDefaultWorkspaceTargetId: (targetId) =>
         set((state) => ({
           defaultWorkspaceTargetId: sanitizeDefaultWorkspaceTargetIdForState({
@@ -399,8 +397,6 @@ export const useSettingsStore = create<SettingsState>()(
               settings.mediaUnderstandingEnabled ?? state.mediaUnderstandingEnabled,
             maxLinks:
               settings.maxLinks !== undefined ? clampMaxLinks(settings.maxLinks) : state.maxLinks,
-            defaultConversationMode:
-              settings.defaultConversationMode ?? state.defaultConversationMode,
             defaultWorkspaceTargetId: hasOwnSetting(settings, 'defaultWorkspaceTargetId')
               ? sanitizeDefaultWorkspaceTargetIdForState({
                   defaultWorkspaceTargetId: settings.defaultWorkspaceTargetId ?? null,

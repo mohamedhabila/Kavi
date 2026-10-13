@@ -103,7 +103,6 @@ function scenario(overrides: Partial<E2EScenario> = {}): E2EScenario {
     id: 'scenario-test',
     conversationId: 'scenario-conversation',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Run the product path.',
     rubrics: [],
     ...overrides,
@@ -162,7 +161,6 @@ describe('runE2EScenario product foreground integration', () => {
     expect(result.turnTraces).toHaveLength(2);
     expect(result.turnTraces[0]).toMatchObject({
       user: { text: 'Turn one' },
-      route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'super-agent' },
       finalAssistant: { text: 'Response 1', completionStatus: 'complete' },
       finalAssistantCandidateCount: 1,
       completion: {
@@ -181,71 +179,6 @@ describe('runE2EScenario product foreground integration', () => {
       memoryExtractionSettled: true,
     });
     expect(result.graphSnapshots.at(-1)?.status).toBe('finalized');
-  });
-
-  it('supports production-auto, forced-agentic, and forced-chitchat routes per turn', async () => {
-    const result = await runE2EScenario(
-      scenario({
-        contentClass: 'synthetic_public',
-        execution: { initialMode: 'chitchat', route: 'production_auto' },
-        userTurns: [
-          { content: 'Talk naturally.' },
-          { content: 'Complete this task.', route: 'forced_agentic' },
-          { content: 'Talk naturally again.', route: 'forced_chitchat' },
-        ],
-      }),
-    );
-
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ personaId: 'default' }),
-      expect.any(Object),
-    );
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ personaId: 'super-agent' }),
-      expect.any(Object),
-    );
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ personaId: 'default' }),
-      expect.any(Object),
-    );
-    expect(result.completed).toBe(true);
-    expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(3);
-  });
-
-  it('maps user-selected modes without replacing production_auto route evidence', async () => {
-    const result = await runE2EScenario(
-      scenario({
-        execution: { initialMode: 'chitchat', route: 'production_auto' },
-        userTurns: [
-          { content: 'Complete this task.', selectedMode: 'agentic' },
-          { content: 'Now return to chat.', selectedMode: 'chitchat' },
-        ],
-      }),
-    );
-
-    expect(result.turnTraces.map((turn) => turn.route)).toEqual([
-      { directive: 'production_auto', mode: 'agentic', personaId: 'super-agent' },
-      { directive: 'production_auto', mode: 'chitchat', personaId: 'default' },
-    ]);
-  });
-
-  it('keeps a forced diagnostic route authoritative over the invariant user mode choice', async () => {
-    const result = await runE2EScenario(
-      scenario({
-        execution: { initialMode: 'agentic', route: 'production_auto' },
-        userTurns: [{ content: 'Talk naturally.', selectedMode: 'chitchat' }],
-      }),
-      { routeOverride: 'forced_agentic' },
-    );
-
-    expect(result.turnTraces[0]?.route).toEqual({
-      directive: 'forced_agentic',
-      mode: 'agentic',
-      personaId: 'super-agent',
-    });
   });
 
   it('seeds workspace files before invoking the product executor', async () => {
@@ -316,7 +249,7 @@ describe('runE2EScenario product foreground integration', () => {
     ]);
   });
 
-  it('maps the latest persisted control graph for each agentic turn', async () => {
+  it('maps the latest persisted control graph for each turn', async () => {
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onAssistantMessage(
         'Sources collected.',
@@ -434,9 +367,14 @@ describe('runE2EScenario product foreground integration', () => {
           finishReason: 'yielded',
           terminalReason: null,
         },
-        route: { mode: 'agentic', personaId: 'agentic' },
         run,
         timedOut: false,
+        userMessage: {
+          id: 'user-independent-evidence',
+          role: 'user',
+          content: 'Demonstrate independent completion evidence.',
+          timestamp: 1,
+        },
       }),
     ).toMatchObject({
       assistantStatus: 'complete',

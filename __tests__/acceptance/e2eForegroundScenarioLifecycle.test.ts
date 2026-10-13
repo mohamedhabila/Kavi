@@ -58,7 +58,6 @@ function makeConversation(): Conversation {
     systemPrompt: 'Be helpful.',
     createdAt: 1,
     updatedAt: 11,
-    mode: 'chitchat',
     personaId: 'default',
   };
 }

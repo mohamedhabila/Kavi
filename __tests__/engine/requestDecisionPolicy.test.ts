@@ -9,7 +9,6 @@ function baseFrame() {
   return buildGraphEntryRequestFrame({
     text: 'Complete the requested work',
     attachmentCount: 0,
-    mode: 'agentic',
     continuation: 'new',
   });
 }
@@ -117,7 +116,6 @@ describe('request decision policy', () => {
     const frame = buildGraphEntryRequestFrame({
       text: '',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     });
     expect(decide({ frame, policyDisposition: 'prohibited' }).decision).toEqual({

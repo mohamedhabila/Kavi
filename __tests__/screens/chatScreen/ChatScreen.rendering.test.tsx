@@ -33,15 +33,7 @@ describe('ChatScreen rendering and layout', () => {
   it('bootstraps the one conversation when none is active', () => {
     mockChatScreenState.activeConversationId = null;
     render(<ChatScreen />);
-    expect(mockEnsureConversation).toHaveBeenCalledWith(
-      'openai',
-      'You are helpful',
-      'gpt-5.4',
-      {
-        personaId: 'super-agent',
-        mode: 'agentic',
-      },
-    );
+    expect(mockEnsureConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4');
   });
 
   it('opens drawer when menu is pressed', () => {

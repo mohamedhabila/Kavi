@@ -21,7 +21,6 @@ const scenario: E2EScenario = {
   id: 'retry-fixture',
   conversationId: 'e2e-retry',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt: 'structural prompt',
   rubrics: [{ kind: 'graph_terminal_success' }],
 };

@@ -5,7 +5,7 @@ import { waitForModelProjectionAvailability } from '../../../store/modelProjecti
 import { beginModelProjectionIntent } from '../../../store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../../store/useChatStore';
 import type { Attachment } from '../../../types/attachment';
-import type { Conversation, ConversationMode } from '../../../types/conversation';
+import type { Conversation } from '../../../types/conversation';
 import {
   rewindForegroundConversationRun,
   stopForegroundConversationRuns,
@@ -38,14 +38,12 @@ type UseForegroundConversationActionsParams = {
   clearComposerDraft: (draftKey: string) => void;
   clearForegroundRequestForConversation: (conversationId: string) => void;
   completeAgentRun: ChatStoreState['completeAgentRun'];
-  defaultConversationMode: ConversationMode;
   rewindUserMessageForResend: ChatStoreState['rewindUserMessageForResend'];
   editingMessageId: string | null;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   forceNextScrollRef: MutableRefObject<boolean>;
   generateId: () => string;
-  isAgenticMode: boolean;
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
   pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
@@ -80,14 +78,12 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     clearComposerDraft,
     clearForegroundRequestForConversation,
     completeAgentRun,
-    defaultConversationMode,
     rewindUserMessageForResend,
     editingMessageId,
     ensureAgentRunFinalResponse,
     ensureConversation,
     forceNextScrollRef,
     generateId,
-    isAgenticMode,
     pendingAgentRunAsyncResumesRef,
     pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
@@ -194,11 +190,9 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       addMessage,
       attachmentWorkspaceImportFailedMessage,
       clearComposerDraft,
-      defaultConversationMode,
       ensureConversation,
       generateId,
       getLiveActiveConversationId,
-      isAgenticMode,
       markNextScrollForced: () => {
         forceNextScrollRef.current = true;
       },
@@ -214,12 +208,10 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       addMessage,
       attachmentWorkspaceImportFailedMessage,
       clearComposerDraft,
-      defaultConversationMode,
       ensureConversation,
       forceNextScrollRef,
       generateId,
       getLiveActiveConversationId,
-      isAgenticMode,
       releaseConversationWrite,
       reserveConversationWrite,
       runChat,

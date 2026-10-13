@@ -70,7 +70,6 @@ export async function executeAgentControlGraphToolBatch(params: {
   toolFilter?: (toolName: string) => boolean;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   groundedRequestScopedTools: ToolDefinition[];
-  authorizedToolNames?: ReadonlySet<string>;
   completedWorkflowToolNames: Set<string>;
   emitPendingAsyncOperationsChange?: () => void;
   recordPerformanceMetrics: (metrics: Partial<AgentControlPerformance>, bucket: string) => void;
@@ -147,7 +146,6 @@ export async function executeAgentControlGraphToolBatch(params: {
       runtimeToolAvailability: params.runtimeToolAvailability,
       toolCallHistory: params.toolCallHistory,
       groundedRequestScopedTools: params.groundedRequestScopedTools,
-      authorizedToolNames: params.authorizedToolNames,
       trackedAsyncOperations: params.trackedAsyncOperations,
       signal: params.signal,
       callbacks: {

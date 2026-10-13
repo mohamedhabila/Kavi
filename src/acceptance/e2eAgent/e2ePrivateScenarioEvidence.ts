@@ -12,7 +12,7 @@ import {
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v10';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v11';
 
 export type E2EPrivateEvidenceProvenance = Readonly<{
   app: E2EAppSourceRevision;
@@ -32,14 +32,11 @@ export type E2EPrivateScenarioEvidence = {
   scenario: {
     id: string;
     contentClass: E2EScenario['contentClass'];
-    execution: E2EScenario['execution'];
     requestedTurns: ReadonlyArray<{
       text: string;
-      route: E2EScenario['execution']['route'];
       lifecycleBefore: NonNullable<
         NonNullable<E2EScenario['userTurns']>[number]['lifecycleBefore']
       > | null;
-      selectedMode: E2EScenario['execution']['initialMode'] | null;
     }>;
     rubrics: E2EScenario['rubrics'];
     pairedEvaluation: E2EScenario['pairedEvaluation'] | null;
@@ -59,7 +56,6 @@ export type E2EPrivateScenarioEvidence = {
       turnIndex: number;
       lifecycleBefore: E2EScenarioTurnTrace['lifecycleBefore'];
       user: E2EScenarioTurnTrace['user'];
-      route: E2EScenarioTurnTrace['route'];
       finalAssistant: E2EScenarioTurnTrace['finalAssistant'];
       finalAssistantCandidateCount: number;
       completion: E2EScenarioTurnTrace['completion'];
@@ -118,9 +114,7 @@ function requestedTurns(
   const turns = scenario.userTurns?.length ? scenario.userTurns : [{ content: scenario.prompt }];
   return turns.map((turn) => ({
     text: turn.content,
-    route: turn.route ?? scenario.execution.route,
     lifecycleBefore: turn.lifecycleBefore ?? null,
-    selectedMode: turn.selectedMode ?? null,
   }));
 }
 
@@ -134,7 +128,6 @@ function projectTurn(
     turnIndex: turn.turnIndex,
     lifecycleBefore: turn.lifecycleBefore,
     user: turn.user,
-    route: turn.route,
     finalAssistant: turn.finalAssistant,
     finalAssistantCandidateCount: turn.finalAssistantCandidateCount,
     completion: turn.completion,
@@ -182,7 +175,6 @@ export function buildE2EPrivateScenarioEvidence(params: {
     scenario: {
       id: params.scenario.id,
       contentClass: params.scenario.contentClass,
-      execution: { ...params.scenario.execution },
       requestedTurns: requestedTurns(params.scenario),
       rubrics: JSON.parse(JSON.stringify(params.scenario.rubrics)) as E2EScenario['rubrics'],
       pairedEvaluation: params.scenario.pairedEvaluation

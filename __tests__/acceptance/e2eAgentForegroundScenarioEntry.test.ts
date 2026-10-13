@@ -45,7 +45,7 @@ function makeProvider(): LlmProviderConfig {
   };
 }
 
-describe('foreground scenario selected mode and outer deadline', () => {
+describe('foreground scenario entry point and outer deadline', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     resetE2EMemorySandbox();
@@ -56,11 +56,10 @@ describe('foreground scenario selected mode and outer deadline', () => {
       providers: [makeProvider()],
       activeProviderId: 'scenario-provider',
       activeModel: 'scenario-provider-model',
-      defaultConversationMode: 'chitchat',
     });
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onAssistantMessage('Completed.', undefined, undefined, completeFinalMetadata);
-      callbacks.onAgentControlGraphStateChange(
+      callbacks.onAgentControlGraphStateChange?.(
         createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
       );
       callbacks.onDone();
@@ -70,57 +69,6 @@ describe('foreground scenario selected mode and outer deadline', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-  });
-
-  it('preserves production_auto attribution when the user changes the persisted app mode', async () => {
-    const result = await runForegroundScenario({
-      provider: makeProvider(),
-      conversationId: 'scenario-conversation',
-      conversationTitle: 'Scenario title',
-      systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
-      scenarioTimeoutMs: 60_000,
-      turns: [
-        { content: 'Complete the task.', route: 'production_auto', selectedMode: 'agentic' },
-        { content: 'Thanks, let us chat.', route: 'production_auto', selectedMode: 'chitchat' },
-      ],
-    });
-
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ personaId: 'super-agent' }),
-      expect.any(Object),
-    );
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ personaId: 'default' }),
-      expect.any(Object),
-    );
-    expect(result.turns.map((turn) => turn.route)).toEqual([
-      { directive: 'production_auto', mode: 'agentic', personaId: 'super-agent' },
-      { directive: 'production_auto', mode: 'chitchat', personaId: 'default' },
-    ]);
-  });
-
-  it('rejects an unsupported selected app mode before running a turn', async () => {
-    await expect(
-      runForegroundScenario({
-        provider: makeProvider(),
-        conversationId: 'scenario-conversation',
-        conversationTitle: 'Scenario title',
-        systemPrompt: 'Scenario prompt',
-        defaultMode: 'chitchat',
-        scenarioTimeoutMs: 60_000,
-        turns: [
-          {
-            content: 'How are you?',
-            route: 'production_auto',
-            selectedMode: 'unsupported' as never,
-          },
-        ],
-      }),
-    ).rejects.toThrow('selectedMode must be agentic or chitchat');
-    expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
   it('passes image attachments through the exact foreground chat entry point', async () => {
@@ -139,9 +87,8 @@ describe('foreground scenario selected mode and outer deadline', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
-      turns: [{ content: '', attachments: [attachment], route: 'production_auto' }],
+      turns: [{ content: '', attachments: [attachment] }],
     });
 
     const providerUserMessage = mockedRunOrchestrator.mock.calls[0][0].messages.find(
@@ -171,9 +118,8 @@ describe('foreground scenario selected mode and outer deadline', () => {
         conversationId: 'scenario-conversation',
         conversationTitle: 'Scenario title',
         systemPrompt: 'Scenario prompt',
-        defaultMode: 'chitchat',
         scenarioTimeoutMs: 60_000,
-        turns: [{ content: '  ', route: 'production_auto' }],
+        turns: [{ content: '  ' }],
       }),
     ).rejects.toThrow('must contain text or an attachment');
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
@@ -184,6 +130,9 @@ describe('foreground scenario selected mode and outer deadline', () => {
     mockedRunOrchestrator.mockImplementation(async (options, callbacks) => {
       userMessageCounts.push(options.messages.filter((message) => message.role === 'user').length);
       callbacks.onAssistantMessage('Completed.', undefined, undefined, completeFinalMetadata);
+      callbacks.onAgentControlGraphStateChange?.(
+        createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
+      );
       callbacks.onDone();
       return { terminalDisposition: 'final_candidate' };
     });
@@ -193,13 +142,11 @@ describe('foreground scenario selected mode and outer deadline', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       turns: [
-        { content: 'Remember this preference.', route: 'production_auto' },
+        { content: 'Remember this preference.' },
         {
           content: 'What do you remember?',
-          route: 'production_auto',
           lifecycleBefore: 'context_reset',
         },
       ],
@@ -233,10 +180,9 @@ describe('foreground scenario selected mode and outer deadline', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 25,
       timeoutMs: 1_000,
-      turns: [{ content: 'Complete, then persist.', route: 'production_auto' }],
+      turns: [{ content: 'Complete, then persist.' }],
     });
     const rejection = expect(run).rejects.toThrow(
       'Timed-out foreground execution did not settle before cleanup.',

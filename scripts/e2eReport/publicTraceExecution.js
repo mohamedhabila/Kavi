@@ -1,11 +1,8 @@
 const {
   E2E_PUBLIC_ASSISTANT_STATUSES,
-  E2E_PUBLIC_BUILT_IN_PERSONA_IDS,
-  E2E_PUBLIC_CONVERSATION_MODES,
   E2E_PUBLIC_FINISH_REASONS,
   E2E_PUBLIC_GRAPH_STATUSES,
   E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH,
-  E2E_PUBLIC_ROUTE_DIRECTIVES,
   E2E_PUBLIC_RUN_PHASES,
   E2E_PUBLIC_RUN_STATUSES,
   E2E_PUBLIC_TERMINAL_REASONS,
@@ -18,9 +15,6 @@ const {
   safeEnum,
 } = require('./publicTracePrimitives');
 
-const ROUTE_DIRECTIVES = new Set(E2E_PUBLIC_ROUTE_DIRECTIVES);
-const CONVERSATION_MODES = new Set(E2E_PUBLIC_CONVERSATION_MODES);
-const BUILT_IN_PERSONA_IDS = new Set(E2E_PUBLIC_BUILT_IN_PERSONA_IDS);
 const ASSISTANT_STATUSES = new Set(E2E_PUBLIC_ASSISTANT_STATUSES);
 const RUN_STATUSES = new Set(E2E_PUBLIC_RUN_STATUSES);
 const GRAPH_STATUSES = new Set(E2E_PUBLIC_GRAPH_STATUSES);
@@ -69,25 +63,6 @@ function projectLifecycleBoundaryEvidence(value) {
     };
   }
   return undefined;
-}
-
-function projectRouteEvidence(value) {
-  const source = asRecord(value);
-  const directive = source ? safeEnum(source.directive, ROUTE_DIRECTIVES) : undefined;
-  const directiveHash = source ? projectHash(source.directiveHash) : null;
-  const mode = source ? safeEnum(source.mode, CONVERSATION_MODES) : undefined;
-  const modeHash = source ? projectHash(source.modeHash) : null;
-  const personaIdHash = source ? projectHash(source.personaIdHash) : null;
-  if (!source || !directive || !directiveHash || !mode || !modeHash || !personaIdHash) return null;
-  const personaId = safeEnum(source.personaId, BUILT_IN_PERSONA_IDS);
-  return {
-    directive,
-    directiveHash,
-    mode,
-    modeHash,
-    ...(personaId ? { personaId } : {}),
-    personaIdHash,
-  };
 }
 
 function projectOptionalClassifiedString(source, valueKey, hashKey, allowed) {
@@ -276,6 +251,5 @@ module.exports = {
   projectCompletionEvidence,
   projectFinalAssistantEvidence,
   projectLifecycleBoundaryEvidence,
-  projectRouteEvidence,
   projectUserEvidence,
 };

@@ -174,7 +174,6 @@ describe('ChatScreen orchestrator requests', () => {
   });
 
   it('passes the selected thinking level into the orchestrator request', async () => {
-    mockChatScreenState.defaultConversationMode = 'chitchat';
     mockChatScreenState.thinkingLevel = 'high';
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);

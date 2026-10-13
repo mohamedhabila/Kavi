@@ -128,9 +128,8 @@ describe('scheduled model projection ownership', () => {
     expect(snapshotConversation(conversationId)).toBe(before);
   });
 
-  it('defers to foreground intent without changing messages, mode, persona, or model', () => {
+  it('defers to foreground intent without changing messages, persona, or model', () => {
     const conversationId = createConversation();
-    useChatStore.getState().updateModeInConversation(conversationId, 'chitchat');
     useChatStore.getState().updatePersonaInConversation(conversationId, 'default');
     useChatStore.getState().updateModelInConversation(conversationId, 'provider-1', 'model-1');
     const before = snapshotConversation(conversationId);

@@ -215,7 +215,6 @@ describe('useSettingsStore replacement settings', () => {
       linkUnderstandingEnabled: false,
       mediaUnderstandingEnabled: false,
       maxLinks: 7,
-      defaultConversationMode: 'chitchat',
     } as any);
 
     const state = useSettingsStore.getState();
@@ -227,7 +226,6 @@ describe('useSettingsStore replacement settings', () => {
     expect(state.linkUnderstandingEnabled).toBe(false);
     expect(state.mediaUnderstandingEnabled).toBe(false);
     expect(state.maxLinks).toBe(7);
-    expect(state.defaultConversationMode).toBe('chitchat');
   });
 
   it('preserves Gemini as a supported web search provider', () => {
@@ -298,7 +296,6 @@ describe('useSettingsStore persistence settings', () => {
       browserProviders: [makeBrowserProvider()],
       expoAccounts: [makeExpoAccount()],
       expoProjects: [makeExpoProject()],
-      defaultConversationMode: 'chitchat',
       developerModeEnabled: true,
     });
 
@@ -308,7 +305,6 @@ describe('useSettingsStore persistence settings', () => {
         browserProviders: [expect.objectContaining({ id: 'browser-1' })],
         expoAccounts: [expect.objectContaining({ id: 'expo-account-1' })],
         expoProjects: [expect.objectContaining({ id: 'expo-project-1' })],
-        defaultConversationMode: 'chitchat',
         developerModeEnabled: true,
       }),
     );

@@ -30,17 +30,6 @@ const EXPO_PROJECT_TOKENS_WARNING =
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 const LOCALES = ['en', 'zh-CN', 'zh-TW', 'pt-BR', 'de', 'es', 'ar', 'fr', 'ja'] as const;
 const WEB_SEARCH_PROVIDERS = ['auto', 'brave', 'gemini', 'perplexity', 'grok', 'kimi'] as const;
-// 'direct' is accepted for backwards compatibility with exports created before
-// the 2026-04-29 rename to 'chitchat'. New exports always emit 'chitchat'.
-const LEGACY_CONVERSATION_MODE_ALIASES: Record<string, 'agentic' | 'chitchat'> = {
-  direct: 'chitchat',
-};
-
-function normalizeConversationMode(value: unknown): 'agentic' | 'chitchat' | undefined {
-  if (typeof value !== 'string') return undefined;
-  if (value === 'agentic' || value === 'chitchat') return value;
-  return LEGACY_CONVERSATION_MODE_ALIASES[value];
-}
 const THEMES = ['light', 'dark', 'system'] as const;
 
 type LlmProviderConfig = AppSettings['providers'][number];
@@ -249,7 +238,6 @@ export function exportSettings(): ExportedSettings {
       linkUnderstandingEnabled: state.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
       maxLinks: state.maxLinks,
-      defaultConversationMode: state.defaultConversationMode,
       developerModeEnabled: state.developerModeEnabled,
     },
     ...(omittedSensitiveData.length > 0 ? { omittedSensitiveData } : {}),
@@ -379,9 +367,6 @@ export function importSettings(data: string | ExportedSettings): ImportResult {
         settingsUpdate.mediaUnderstandingEnabled = settings.mediaUnderstandingEnabled;
       if (typeof settings.maxLinks === 'number' && Number.isFinite(settings.maxLinks))
         settingsUpdate.maxLinks = Math.max(1, Math.min(10, Math.floor(settings.maxLinks)));
-      const importedConversationMode = normalizeConversationMode(settings.defaultConversationMode);
-      if (importedConversationMode)
-        settingsUpdate.defaultConversationMode = importedConversationMode;
       if (typeof settings.developerModeEnabled === 'boolean')
         settingsUpdate.developerModeEnabled = settings.developerModeEnabled;
 

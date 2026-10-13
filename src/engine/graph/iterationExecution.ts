@@ -8,10 +8,7 @@ import {
   summarizeRequestUnderstanding,
 } from '../../services/agents/requestUnderstandingProjection';
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
-import { buildConversationModeEscalationDetail } from './conversation/modeEscalation';
-import { resolveConversationStartsAgentic } from './conversation/resolveConversationRuntimeMode';
 import { evaluateForegroundInteractionBudgetCheckpoint } from './foregroundRun/foregroundInteractionBudget';
-import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { executePreparedAgentControlGraphTurn } from './iterationReadyTurnExecution';
 import type {
   AgentControlGraphIterationRuntimeState,
@@ -82,16 +79,6 @@ export async function executeAgentControlGraphIteration(
     disableTooling: params.disableTooling,
     completedWorkflowToolNames: params.graph.completedWorkflowToolNames,
     explicitToolSurfaceToolNames: params.toolRuntime.explicitToolSurfaceToolNames,
-    // Downstream this flag only decides the turn's starting conversation mode
-    // ('agentic' vs 'chitchat'); mode is a conversation property, not a persona flag,
-    // so read the conversation's own persisted mode here instead of re-deriving it
-    // from the persona. `escalatedToAgentic` still carries a same-run escalation
-    // forward even before the persisted write below is visible to a re-read.
-    startsAgentic: resolveConversationStartsAgentic({
-      conversationId: params.conversationId,
-      personaIsSuperAgent: params.isSuperAgent,
-    }),
-    escalatedToAgentic: runtime.escalatedToAgentic === true,
     iteration: params.iteration,
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
@@ -111,27 +98,6 @@ export async function executeAgentControlGraphIteration(
     sessionActivatedToolNames: params.graph.getGraphSnapshot().sessionActivatedToolNames,
     workingMessages: runtime.workingMessages,
   });
-
-  // A chitchat turn that reached for agentic-only capability escalates the whole
-  // conversation rather than silently dropping the tool. The current iteration keeps
-  // the surface it already resolved; authority applies from the next one, and the
-  // persisted mode carries it into later user turns.
-  // Absent detection means "no escalation", never a crash: escalation is an optional
-  // signal layered onto turn preparation, and a turn must still execute without it.
-  const modeEscalation = modelTurnPreparation.modeEscalation;
-  if (modeEscalation?.required === true && runtime.escalatedToAgentic !== true) {
-    runtime.escalatedToAgentic = true;
-    params.graph.recordObservability({
-      observabilityType: GRAPH_OBSERVABILITY_AUDIT_TYPES.CONVERSATION_MODE_ESCALATED,
-      iteration: params.iteration,
-      detail: buildConversationModeEscalationDetail(modeEscalation),
-    });
-    params.onConversationModeEscalated?.({
-      conversationId: params.conversationId,
-      reason: modeEscalation.reason,
-      blockedToolNames: modeEscalation.blockedToolNames,
-    });
-  }
 
   return executePreparedAgentControlGraphTurn({
     iterationParams: params,

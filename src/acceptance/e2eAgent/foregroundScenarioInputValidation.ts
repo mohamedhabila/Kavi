@@ -87,9 +87,6 @@ export function validateForegroundScenarioInput(input: ForegroundScenarioDriverI
     if (input.disableTools && turn.allowedToolNames !== undefined) {
       throw new Error('disableTools and turn allowedToolNames cannot be configured together.');
     }
-    if (turn.selectedMode !== undefined && !['agentic', 'chitchat'].includes(turn.selectedMode)) {
-      throw new Error(`turns[${index}].selectedMode must be agentic or chitchat.`);
-    }
     if (
       turn.steer !== undefined &&
       (!Number.isSafeInteger(turn.steer.afterToolResults) ||

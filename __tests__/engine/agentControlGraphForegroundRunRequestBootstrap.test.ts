@@ -37,7 +37,6 @@ function createConversation(params: {
   return {
     id: 'conv1',
     title: 'Test',
-    mode: 'agentic',
     messages: params.messages ?? [],
     providerId: 'provider-1',
     createdAt: 1,
@@ -93,7 +92,6 @@ describe('foreground run request bootstrap', () => {
       claim,
       conversation,
       createAssistantMessageId: () => 'assistant-new',
-      defaultConversationMode: 'agentic',
     });
     expect(prepared.kind).toBe('ready');
     if (prepared.kind !== 'ready') throw new Error('Expected a ready bootstrap');
@@ -150,7 +148,6 @@ describe('foreground run request bootstrap', () => {
       claim,
       conversation,
       createAssistantMessageId: () => 'assistant-new',
-      defaultConversationMode: 'agentic',
       options: { reuseAgentRunId: 'run-1', assistantDraftMode: 'continue' },
     });
     expect(prepared.kind).toBe('ready');
@@ -189,7 +186,6 @@ describe('foreground run request bootstrap', () => {
         claim,
         conversation: terminalConversation,
         createAssistantMessageId: () => 'assistant-new',
-        defaultConversationMode: 'agentic',
         options: { reuseAgentRunId: 'run-1' },
       }),
     ).toEqual({ kind: 'reuse_unavailable', runId: 'run-1' });

@@ -8,7 +8,6 @@ import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
 import type { AgentControlTurnDirectives } from './agentControlGraph';
 import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
-import type { ConversationModeEscalation } from './conversation/modeEscalation';
 import type { SessionMemoryRead } from '../../services/memory/memoryAccessGateway';
 
 export type PromptContextSupport = {
@@ -24,14 +23,10 @@ export type PromptContextSupport = {
 };
 
 export type PreparedAgentControlGraphModelTurnReady = {
-  /** Reported when a chitchat turn reached for capability only agentic runs may use. */
-  modeEscalation: ConversationModeEscalation;
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
   iterationThinkingLevel: ThinkingLevel;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
-  /** What the run may execute, as opposed to what this turn advertises. */
-  authorizedToolNames: ReadonlySet<string>;
   preparedTurn: PreparedAgentTurn;
   requestMaxTokens: number;
   requestModel: string;
@@ -49,10 +44,6 @@ export interface PrepareAgentControlGraphModelTurnParams {
   disableTooling?: boolean;
   completedWorkflowToolNames: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
-  /** Whether the conversation this turn belongs to starts in agentic mode. */
-  startsAgentic: boolean;
-  /** True once this run escalated out of chitchat; keeps agentic authority for later iterations. */
-  escalatedToAgentic?: boolean;
   iteration: number;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;

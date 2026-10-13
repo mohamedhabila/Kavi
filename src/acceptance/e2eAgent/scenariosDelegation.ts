@@ -6,7 +6,6 @@ export const DELEGATION_E2E_SCENARIO: E2EScenario = {
   id: 'delegation-worker-finalize',
   conversationId: 'e2e-delegation',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Delegate this to a worker: it returns exact output `E2E-WORKER-EVIDENCE-42`. ' +
     'Tell me what the worker returned.',
@@ -26,7 +25,6 @@ export const DELEGATION_CHAIN_E2E_SCENARIO: E2EScenario = {
   id: 'delegation-worker-evidence-chain',
   conversationId: 'e2e-delegation-chain',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   prompt:
     'Delegate this to a worker: it returns `E2E-WORKER-CHAIN-77`. ' +
     'Tell me what the worker returned.',

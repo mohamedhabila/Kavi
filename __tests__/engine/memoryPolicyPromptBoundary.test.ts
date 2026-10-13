@@ -108,7 +108,6 @@ describe('memory policy prompt boundary', () => {
   it('re-authorizes the resolved tool surface after its async selection boundary', async () => {
     const resolution = resolveModelTurnGroundedToolSurface({
       allTools: [memoryWriteTool, memoryErasureTool, deviceWriteTool],
-      conversationMode: 'agentic',
       completedWorkflowToolNames: new Set(),
       explicitToolSurfaceToolNames: [
         memoryWriteTool.name,

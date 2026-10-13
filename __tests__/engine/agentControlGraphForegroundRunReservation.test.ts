@@ -39,7 +39,7 @@ describe('foreground run projection reservation', () => {
           events.push(`release:${input.taskKind}`);
         }
       });
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -77,7 +77,7 @@ describe('foreground run projection reservation', () => {
   });
 
   it('durably terminalizes and releases the reserved placeholder when preflight rejects', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -109,7 +109,7 @@ describe('foreground run projection reservation', () => {
   });
 
   it('repairs and releases an owned reservation after its first persistence flush fails', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -134,7 +134,7 @@ describe('foreground run projection reservation', () => {
   });
 
   it('renders a stopped pre-generation reservation as a neutral cancellation', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,
@@ -211,7 +211,7 @@ describe('foreground run projection reservation', () => {
   });
 
   it('retains ownership when terminal placeholder persistence cannot be proven', async () => {
-    const conversation = createConversation({ mode: 'chitchat' });
+    const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
       conversation,

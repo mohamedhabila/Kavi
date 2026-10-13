@@ -1,8 +1,6 @@
 import type { Message } from '../../../types/message';
 import type { ToolDefinition } from '../../../types/tool';
-import type { ConversationMode } from '../../../types/conversation';
 import type { TrackedAsyncOperation } from '../../pendingAsyncOperations';
-import { resolveAuthorizedToolNames } from '../../tools/toolSurfaceAuthority';
 import { normalizeToolName } from '../../tools/toolNameNormalization';
 import { resolveAgentExecutionTurnContract } from '../agentExecutionTurnContract';
 import { getPendingTrackedAsyncOperationToolNames } from '../../pendingAsyncOperations';
@@ -10,14 +8,9 @@ import { extractDiscoveryActivatedToolNames } from '../discoveryToolActivation';
 import { findTurnOpeningUserIndex } from '../../../utils/steeringMessages';
 import { resolveDefaultGroundedRequestScopedTools } from '../turnToolSurface';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
-import {
-  detectChitchatModeEscalation,
-  type ConversationModeEscalation,
-} from '../conversation/modeEscalation';
 
 export async function resolveModelTurnGroundedToolSurface(params: {
   allTools: ReadonlyArray<ToolDefinition>;
-  conversationMode: ConversationMode;
   completedWorkflowToolNames: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
@@ -25,14 +18,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   workingMessages: ReadonlyArray<Message>;
 }): Promise<{
   allowSessionCoordinationTools: boolean;
-  /** Set when a chitchat turn reached for a capability only an agentic run may use. */
-  modeEscalation: ConversationModeEscalation;
   groundedRequestScopedTools: ToolDefinition[];
-  /**
-   * What the run may execute, as opposed to what this turn advertises. Execution consults
-   * this; `groundedRequestScopedTools` only shapes what the model is shown.
-   */
-  authorizedToolNames: ReadonlySet<string>;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   pinnedToolNames: string[];
   toolSurfacePinTelemetry: {
@@ -61,7 +47,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
 
   const resolvedGroundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: policyAuthorizedTools,
-    conversationMode: params.conversationMode,
     observedToolNames: params.completedWorkflowToolNames,
     pendingAsyncMonitorToolNames,
     workingMessages: params.workingMessages,
@@ -71,7 +56,6 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   // Tool selection may suspend while policy changes. Re-authorize the complete
   // result after the async boundary so stale memory capabilities never reach
   // prompt construction, pinning, or provider dispatch.
-  const currentPolicyAuthorizedTools = filterToolsForMemoryPolicy(params.allTools);
   const groundedRequestScopedTools = filterToolsForMemoryPolicy(resolvedGroundedRequestScopedTools);
   const groundedToolNames = new Set(
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
@@ -104,20 +88,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
 
   return {
     allowSessionCoordinationTools: turnContract.allowSessionCoordinationTools,
-    modeEscalation: detectChitchatModeEscalation({
-      conversationMode: params.conversationMode,
-      allTools: policyAuthorizedTools,
-      activatedCatalogToolNames: new Set([
-        ...turnActivatedCatalogToolNames,
-        ...sessionActivatedToolNames,
-      ]),
-    }),
     groundedRequestScopedTools,
-    authorizedToolNames: resolveAuthorizedToolNames({
-      allTools: currentPolicyAuthorizedTools,
-      conversationMode: params.conversationMode,
-      explicitToolSurfaceToolNames,
-    }),
     pendingAsyncMonitorToolNames,
     pinnedToolNames,
     toolSurfacePinTelemetry: {

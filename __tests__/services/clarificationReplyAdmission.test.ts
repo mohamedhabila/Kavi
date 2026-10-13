@@ -73,7 +73,6 @@ function conversationWithReply(reply = 'ليلى، وقل لها صباح الخ
   return {
     id: 'conversation-1',
     title: 'Test',
-    mode: 'agentic',
     providerId: provider.id,
     createdAt: 1,
     updatedAt: 3,

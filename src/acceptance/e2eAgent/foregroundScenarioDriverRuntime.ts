@@ -1,6 +1,5 @@
-import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
 import { executeForegroundConversationRun } from '../../engine/graph/foregroundRun/execution';
-import { resolveForegroundConversationExecutionContext } from '../../engine/graph/foregroundRun/executionContext';
+import { shouldTrackForegroundAgentRun } from '../../engine/graph/runTracking';
 import type { ExecuteForegroundConversationRunParams } from '../../engine/graph/foregroundRun/executionTypes';
 import type { ResumeAgentRun } from '../../engine/graph/foregroundRun/contracts';
 import type { ForegroundConversationSendContext } from '../../engine/graph/foregroundRun/sendExecution';
@@ -41,7 +40,7 @@ import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { waitForPersistedAgentRecoveryReadiness } from '../../services/startupRecovery';
 import type { AgentRun } from '../../types/agentRun';
-import type { Conversation, ConversationMode } from '../../types/conversation';
+import type { Conversation } from '../../types/conversation';
 import type { Message } from '../../types/message';
 import type { ConversationUsageSummary } from '../../types/usage';
 import { generateId } from '../../utils/id';
@@ -49,9 +48,7 @@ import { isE2EGraphExecutionComplete } from './e2eGraphCompletion';
 import type {
   ForegroundScenarioCompletionSnapshot,
   ForegroundScenarioDriverInput,
-  ForegroundScenarioExecutionContextSnapshot,
   ForegroundScenarioFinalAssistantSnapshot,
-  ForegroundScenarioRouteDirective,
 } from './foregroundScenarioDriverTypes';
 
 export type ForegroundScenarioRequestRegistry = ReturnType<
@@ -90,8 +87,6 @@ export function createSeedConversation(input: ForegroundScenarioDriverInput): Co
     systemPrompt: input.systemPrompt,
     createdAt: now,
     updatedAt: now,
-    personaId: resolveConversationPersonaForMode({ nextMode: input.defaultMode }),
-    mode: input.defaultMode,
     usage: {
       entries: [],
       totalInput: 0,
@@ -105,60 +100,6 @@ export function createSeedConversation(input: ForegroundScenarioDriverInput): Co
     logs: [],
     agentRuns: [],
   };
-}
-
-export function applyForegroundScenarioRoute(
-  conversationId: string,
-  directive: ForegroundScenarioRouteDirective,
-  defaultMode: ConversationMode,
-  selectedMode?: ConversationMode,
-): ForegroundScenarioExecutionContextSnapshot {
-  const before = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === conversationId);
-  if (!before) throw new Error(`Conversation ${conversationId} is unavailable.`);
-
-  if (selectedMode !== undefined) {
-    const store = useChatStore.getState();
-    store.updateModeInConversation(conversationId, selectedMode);
-    store.updatePersonaInConversation(
-      conversationId,
-      resolveConversationPersonaForMode({
-        conversationPersonaId: before.personaId,
-        nextMode: selectedMode,
-      }),
-      { recordEvent: false },
-    );
-  }
-
-  if (directive !== 'production_auto') {
-    const selectedConversation = useChatStore
-      .getState()
-      .conversations.find((candidate) => candidate.id === conversationId);
-    const mode = directive === 'forced_agentic' ? 'agentic' : 'chitchat';
-    const personaId = resolveConversationPersonaForMode({
-      conversationPersonaId: selectedConversation?.personaId,
-      nextMode: mode,
-    });
-    const store = useChatStore.getState();
-    store.updateModeInConversation(conversationId, mode);
-    store.updatePersonaInConversation(conversationId, personaId, { recordEvent: false });
-  }
-
-  return resolveForegroundScenarioExecutionContext(conversationId, defaultMode);
-}
-
-export function resolveForegroundScenarioExecutionContext(
-  conversationId: string,
-  defaultMode: ConversationMode,
-): ForegroundScenarioExecutionContextSnapshot {
-  const conversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === conversationId);
-  return resolveForegroundConversationExecutionContext({
-    conversation,
-    defaultConversationMode: defaultMode,
-  });
 }
 
 export function resolveForegroundScenarioFinalAssistant(
@@ -190,19 +131,20 @@ export function resolveForegroundScenarioFinalAssistant(
 export function buildForegroundScenarioCompletionSnapshot(params: {
   error: string | null;
   finalAssistant: ForegroundScenarioFinalAssistantSnapshot | null;
-  route: ForegroundScenarioExecutionContextSnapshot;
   run: AgentRun | null;
   timedOut: boolean;
+  userMessage: Message;
 }): ForegroundScenarioCompletionSnapshot {
-  const runStatus =
-    params.route.mode === 'agentic' ? (params.run?.status ?? 'missing') : 'not_applicable';
+  // The engine's own rule for which turns are tracked runs, so the harness cannot drift from it.
+  const expectsRun = shouldTrackForegroundAgentRun({ latestUserMessage: params.userMessage });
+  const runStatus = expectsRun ? (params.run?.status ?? 'missing') : 'not_applicable';
   const graphStatus = params.run?.controlGraph?.status ?? null;
   return {
     assistantStatus: params.finalAssistant?.completionStatus ?? 'missing',
     executionCompleted:
       !params.error &&
       !params.timedOut &&
-      (params.route.mode === 'chitchat' || isE2EGraphExecutionComplete(graphStatus)),
+      (!expectsRun || isE2EGraphExecutionComplete(graphStatus)),
     finalResponseCompleted: params.finalAssistant?.completionStatus === 'complete',
     runStatus,
     runCompleted: runStatus === 'not_applicable' ? null : runStatus === 'completed',
@@ -294,14 +236,10 @@ export function createForegroundScenarioRuntime(
         systemPrompt: settings.systemPrompt,
       });
       if (!providerContext) return undefined;
-      const route = resolveForegroundConversationExecutionContext({
-        conversation,
-        defaultConversationMode: settings.defaultConversationMode,
-      });
       return {
         ...providerContext,
         conversationId: conversation.id,
-        personaId: route.personaId,
+        personaId: conversation.personaId,
         internalUserMessageCount: 0,
       };
     },
@@ -375,10 +313,6 @@ export function createForegroundScenarioRuntime(
             providerId,
             currentSettings.systemPrompt,
             options.model ?? provider?.model,
-            {
-              personaId: options.personaId,
-              mode: options.mode,
-            },
           );
       },
       getConversation: (conversationId) =>
@@ -406,7 +340,6 @@ export function createForegroundScenarioRuntime(
       chatNoApiKeyMessage: 'The selected provider has no API key.',
       chatNoModelMessage: 'The selected provider has no model.',
       chatNoProviderMessage: 'No provider configured.',
-      defaultConversationMode: settings.defaultConversationMode,
       exportDialogTitle: 'Export conversation',
       linkUnderstandingEnabled: settings.linkUnderstandingEnabled,
       maxLinks: settings.maxLinks,
@@ -450,7 +383,6 @@ export function createForegroundScenarioRuntime(
   const buildSendContext = createForegroundScenarioSendContextFactory({
     abortForegroundRequestForConversation: requests.abortForegroundRequestForConversation,
     context,
-    defaultMode: input.defaultMode,
     requests,
     setChatError: (message) => {
       chatError = message;

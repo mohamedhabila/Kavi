@@ -14,7 +14,6 @@ import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
 import type { OrchestratorCallbacks, OrchestratorOptions } from './types';
-import { persistConversationModeEscalation } from '../graph/conversation/persistModeEscalation';
 import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
@@ -39,8 +38,6 @@ export async function runOrchestratorGraphSession(params: {
     consecutivePendingAsyncNoToolTurns,
     emitPendingAsyncOperationsChange,
     failoverState,
-    isSuperAgent,
-    startsAgentic,
     allowLongHorizonIterationExtensions,
     lastPendingAsyncSignature,
     llm,
@@ -88,9 +85,8 @@ export async function runOrchestratorGraphSession(params: {
       }
       return options.workflowTaskAnchor;
     }
-    if (!isSuperAgent) return undefined;
     // The anchor protects task fidelity across long, delegation-capable execution; a
-    // plain interactive agentic turn that cannot delegate does not need it. A run
+    // plain interactive turn that cannot delegate does not need it. A run
     // that can spawn workers (sessions_spawn on its surface), or is itself a
     // delegated worker, does. Every interactive foreground chat turn carries a
     // workflowScopeUserMessageId; a worker run (see subAgentOrchestratorRun.ts)
@@ -121,13 +117,6 @@ export async function runOrchestratorGraphSession(params: {
     activeProvider,
     callbacks,
     conversationId,
-    // Mode is a conversation property, not a persona flag: `startsAgentic` is the
-    // conversation's own persisted mode (resolved once in bootstrap.ts, falling back
-    // to the persona signal only for worker sessions that are never registered as a
-    // UI conversation) instead of re-deriving it from `isSuperAgent`.
-    // `RequestUnderstandingRouting.mode` and every other per-turn consumer of
-    // `requestFrame.mode` inherit this through `requestContext.ts`.
-    graphOwnedRun: startsAgentic,
     internalUserMessageCount,
     linkUnderstandingEnabled,
     logger,
@@ -219,14 +208,12 @@ export async function runOrchestratorGraphSession(params: {
         warningInjectedThisRound,
         workingMessages,
       },
-      isSuperAgent,
       isForegroundRun: options.isForegroundRun,
       runStartedAtMs: Date.now(),
       allowLongHorizonIterationExtensions,
       maxToolIterations,
       maxTokens,
       onCompaction: callbacks.onCompaction,
-      onConversationModeEscalated: persistConversationModeEscalation,
       personaThinkingLevel: persona?.thinkingLevel,
       promptContextSupport: {
         maxToolIterations,

@@ -47,12 +47,10 @@ describe('graph entry request frame', () => {
         buildGraphEntryRequestFrame({
           text,
           attachmentCount,
-          mode: 'agentic',
           continuation: 'new',
         }),
-      ).toMatchObject({
-        version: 2,
-        mode: 'agentic',
+      ).toEqual({
+        version: 3,
         input: { kind, attachmentCount },
         continuation: 'new',
         requiredInformation: [],
@@ -61,15 +59,14 @@ describe('graph entry request frame', () => {
     },
   );
 
-  it('preserves code-owned continuation and mode without inferring semantics', () => {
+  it('preserves code-owned continuation without inferring semantics', () => {
     expect(
       buildGraphEntryRequestFrame({
         text: 'continue',
         attachmentCount: 0,
-        mode: 'chitchat',
         continuation: 'resume_waiting_async',
       }),
-    ).toMatchObject({ mode: 'chitchat', continuation: 'resume_waiting_async' });
+    ).toMatchObject({ continuation: 'resume_waiting_async' });
   });
 
   it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
@@ -79,7 +76,6 @@ describe('graph entry request frame', () => {
         buildGraphEntryRequestFrame({
           text: 'hello',
           attachmentCount,
-          mode: 'chitchat',
           continuation: 'new',
         }),
       ).toThrow('request_frame_attachment_count_invalid');
@@ -93,7 +89,6 @@ describe('graph entry request frame', () => {
         buildGraphEntryRequestFrame({
           text,
           attachmentCount: 0,
-          mode: 'chitchat',
           continuation: 'new',
         }),
       ).toMatchObject({

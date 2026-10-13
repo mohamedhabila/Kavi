@@ -62,12 +62,15 @@ jest.mock('../../src/services/commands/builtins', () => ({
   getCommand: jest.fn().mockReturnValue(null),
 }));
 jest.mock('../../src/services/agents/personas', () => ({
-  getPersona: jest.fn().mockReturnValue(undefined),
+  DEFAULT_PERSONA_ID: 'default',
   resolvePersonaSystemPrompt: jest.fn((_p: any, prompt: string) => prompt),
   resolvePersonaModel: jest.fn((_p: any, providerId: string, model: string) => ({
     providerId,
     model,
   })),
+}));
+jest.mock('../../src/services/agents/registry', () => ({
+  getPersona: jest.fn().mockReturnValue(undefined),
 }));
 
 async function* makeStream(events: any[], terminalDisposition?: 'text' | 'tool') {

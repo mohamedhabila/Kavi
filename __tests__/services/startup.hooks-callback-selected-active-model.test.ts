@@ -144,7 +144,6 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       activeModel: 'gpt-5.4',
       providers: [mockProvider],
       systemPrompt: 'You are helpful.',
-      defaultConversationMode: 'agentic',
       thinkingLevel: 'medium',
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
@@ -187,7 +186,7 @@ beforeEach(() => {
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
   mockChatStoreState.ensureConversation.mockImplementation(
-    (providerId, systemPrompt, modelOverride, options) => {
+    (providerId, systemPrompt, modelOverride) => {
       const existing =
         mockChatStoreState.conversations.find(
           (conversation) => conversation.id === mockChatStoreState.activeConversationId,
@@ -201,9 +200,7 @@ beforeEach(() => {
         modelOverride,
         messages: [],
       });
-      if (options?.activate !== false) {
-        mockChatStoreState.activeConversationId = id;
-      }
+      mockChatStoreState.activeConversationId = id;
       return id;
     },
   );
@@ -332,6 +329,8 @@ describe('initializeServices', () => {
     const [opts] = mockRunOrchestrator.mock.calls[0];
     expect(opts.model).toBe('gpt-4o-mini');
     expect(opts.executionRunId).toEqual(expect.stringMatching(/^hook-/));
+    expect(opts.thinkingLevel).toBe('medium');
+    expect(opts.personaId).toBeUndefined();
   });
   it('rejects a hook execution that reaches a blocked control graph', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
@@ -398,7 +397,7 @@ describe('initializeServices', () => {
     expect(mockHasBootMd).toHaveBeenCalled();
     expect(mockRunBootOnce).toHaveBeenCalledTimes(1);
   });
-  it('passes the selected active model into boot execution when it differs from the provider default', async () => {
+  it('passes the selected active model and thinking level into boot execution', async () => {
     mockHasBootMd.mockResolvedValueOnce(true);
     jest.doMock('../../src/store/useSettingsStore', () => ({
       useSettingsStore: {
@@ -413,6 +412,7 @@ describe('initializeServices', () => {
               enabled: true,
             },
           ],
+          thinkingLevel: 'high',
         }),
         subscribe: () => () => undefined,
       },
@@ -426,6 +426,7 @@ describe('initializeServices', () => {
       expect.objectContaining({ id: 'openai' }),
       expect.any(Array),
       'gpt-4o-mini',
+      'high',
     );
   });
   it('notifies the user when BOOT.md reaches a failed terminal outcome', async () => {

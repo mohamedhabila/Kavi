@@ -8,11 +8,7 @@ import {
   prepareOrchestratorSessionBootstrap,
   tryHandleOrchestratorSlashCommand,
 } from './orchestrator/bootstrap';
-import {
-  MAX_IDENTICAL_TOOL_CALLS,
-  MAX_TOOL_ITERATIONS,
-  MAX_TOOL_ITERATIONS_SUPERAGENT,
-} from './orchestrator/constants';
+import { MAX_IDENTICAL_TOOL_CALLS, MAX_TOOL_ITERATIONS } from './orchestrator/constants';
 import { runOrchestratorGraphSession } from './orchestrator/session';
 import type {
   OrchestratorCallbacks,
@@ -20,7 +16,7 @@ import type {
   OrchestratorRunResult,
 } from './orchestrator/types';
 
-export { MAX_IDENTICAL_TOOL_CALLS, MAX_TOOL_ITERATIONS, MAX_TOOL_ITERATIONS_SUPERAGENT };
+export { MAX_IDENTICAL_TOOL_CALLS, MAX_TOOL_ITERATIONS };
 export type { OrchestratorCallbacks, OrchestratorOptions, OrchestratorRunResult };
 
 const logger = createLogger('Orchestrator');

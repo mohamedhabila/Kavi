@@ -20,7 +20,6 @@ function frame(): RequestFrame {
   return buildGraphEntryRequestFrame({
     text: 'Private request text that must not be copied',
     attachmentCount: 0,
-    mode: 'agentic',
     continuation: 'new',
   });
 }
@@ -42,13 +41,12 @@ describe('request understanding projection', () => {
     const projection = projectRequestUnderstanding({ requestFrame: frame() });
 
     expect(projection).toEqual({
-      version: 3,
+      version: 4,
       integrity: 'valid',
       routing: {
         status: 'known',
         source: 'request_frame',
         value: {
-          mode: 'agentic',
           inputKind: 'text',
           attachmentCount: 0,
           continuation: 'new',
@@ -68,7 +66,7 @@ describe('request understanding projection', () => {
 
   it('keeps unavailable request state explicitly unknown', () => {
     expect(projectRequestUnderstanding({})).toEqual({
-      version: 3,
+      version: 4,
       integrity: 'valid',
       routing: { status: 'unknown', reason: 'request_state_unavailable' },
       registeredRequiredInformation: { status: 'unknown', reason: 'request_state_unavailable' },
@@ -82,6 +80,9 @@ describe('request understanding projection', () => {
     );
 
     expect(prompt).toContain('### Code-owned route');
+    expect(prompt).toContain(
+      '- continuation=new; input=text; attachments=0; decision=act; reason=actionable_input',
+    );
     expect(prompt).toContain('model prose can never grant authority');
     expect(prompt).not.toMatch(/goal|objective|success condition|constraint/i);
   });
@@ -272,11 +273,10 @@ describe('request understanding projection', () => {
       projectRequestUnderstanding({ requestFrame: frame() }),
     );
     expect(summary).toEqual({
-      version: 3,
+      version: 4,
       integrity: 'valid',
       routing: {
         status: 'known',
-        mode: 'agentic',
         inputKind: 'text',
         attachmentCount: 0,
         continuation: 'new',

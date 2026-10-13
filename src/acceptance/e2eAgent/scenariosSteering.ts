@@ -17,7 +17,6 @@ export const STEER_MIDRUN_MEMORY_SCENARIO: E2EScenario = {
   id: 'steer-midrun-memory',
   conversationId: 'e2e-steer-midrun-memory',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'agentic', route: 'forced_agentic' },
   threadTitle: 'Trip planning',
   prompt: 'Add a fact to remember while the assistant is still working, then recall it later.',
   initialWorkspaceFiles: [

@@ -210,6 +210,7 @@ export async function runPreparedSubAgentSession<TAgent extends SubAgentSnapshot
       toolFilter: workerToolFilter,
       linkUnderstandingEnabled: params.config.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: params.config.mediaUnderstandingEnabled,
+      thinkingLevel: params.config.thinkingLevel,
       explicitToolSelectionRejectedMessage,
       subAgent,
       config: params.config,

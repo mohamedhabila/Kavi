@@ -38,14 +38,12 @@ function createContext(overrides: Partial<ForegroundConversationSendContext> = {
     clearComposerDraft: jest.fn(() => {
       calls.push('clearComposerDraft');
     }),
-    defaultConversationMode: 'chat',
     ensureConversation: jest.fn(() => {
       calls.push('ensureConversation');
       return 'created-conversation';
     }),
     generateId: () => 'generated-message-id',
     getLiveActiveConversationId: () => 'active-conversation',
-    isAgenticMode: false,
     markNextScrollForced: jest.fn(() => {
       calls.push('markNextScrollForced');
     }),
@@ -115,18 +113,14 @@ describe('executeForegroundConversationSend', () => {
     });
   });
 
-  it('creates a canonical conversation when none is active, using the agentic persona', async () => {
+  it('creates a canonical conversation when none is active', async () => {
     const { context } = createContext({
       getLiveActiveConversationId: () => null,
-      isAgenticMode: true,
-      defaultConversationMode: 'agentic',
     });
 
     await executeForegroundConversationSend({ context, text: 'hello' });
 
-    expect(context.ensureConversation).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: 'agentic', reportMissingProvider: true }),
-    );
+    expect(context.ensureConversation).toHaveBeenCalledWith({ reportMissingProvider: true });
     expect(context.runChat).toHaveBeenCalledWith('created-conversation', {
       latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
     });

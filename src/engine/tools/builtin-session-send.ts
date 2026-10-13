@@ -180,6 +180,7 @@ export async function executeSessionSend(
         previousContext?.config.linkUnderstandingEnabled ?? settings.linkUnderstandingEnabled,
       mediaUnderstandingEnabled:
         previousContext?.config.mediaUnderstandingEnabled ?? settings.mediaUnderstandingEnabled,
+      thinkingLevel: previousContext?.config.thinkingLevel ?? settings.thinkingLevel,
     });
 
     if (args.waitForCompletion) {

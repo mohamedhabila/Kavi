@@ -140,8 +140,8 @@ export function createForegroundTrackedRunStore(params: {
     terminalReason?: AgentRunTerminalReason,
   ) => {
     if (!params.runId) {
-      // Chitchat turns have no persisted AgentRun to compare-and-set. Reaching
-      // this boundary means the foreground generation itself closed cleanly.
+      // An untracked turn (a slash command) has no persisted AgentRun to
+      // compare-and-set. Reaching this boundary means the generation closed cleanly.
       return true;
     }
 

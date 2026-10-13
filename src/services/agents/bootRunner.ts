@@ -5,13 +5,12 @@
 // agent turn silently on app launch.
 
 import type { BootConfig, BootRunResult } from '../../types/boot';
-import type { LlmProviderConfig } from '../../types/provider';
+import type { LlmProviderConfig, ThinkingLevelPreference } from '../../types/provider';
 import { Paths, File, Directory } from 'expo-file-system';
 import { runOrchestrator } from '../../engine/orchestrator';
 import { bindProviderToModel } from '../llm/support/providerSupport';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
-import { SUPER_AGENT_PERSONA_ID } from './personas';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import { resolveAgentControlGraphTerminalFailure } from '../../engine/graph/terminalOutcome';
 
@@ -76,6 +75,7 @@ export async function runBootOnce(
   provider: LlmProviderConfig,
   allProviders?: LlmProviderConfig[],
   modelOverride?: string,
+  thinkingLevel?: ThinkingLevelPreference,
 ): Promise<BootRunResult> {
   if (!bootConfig.enabled) {
     return { status: 'skipped', reason: 'Boot execution disabled' };
@@ -113,8 +113,8 @@ export async function runBootOnce(
           provider: bootProvider,
           model: bootModel,
           conversationId: sessionId,
-          personaId: SUPER_AGENT_PERSONA_ID,
           executionRunId: sessionId,
+          thinkingLevel,
           systemPrompt:
             'You are executing startup instructions from BOOT.md. ' +
             'Complete the tasks silently. Do not ask for user input.',

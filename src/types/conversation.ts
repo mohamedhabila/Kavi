@@ -22,11 +22,6 @@ export interface ConversationLogEntry {
   detail?: string;
 }
 
-// 'chitchat' is the canonical value (renamed from 'direct' on 2026-04-29).
-// Persisted state migration v8→v9 in useSettingsStore upgrades old 'direct'
-// values; chatPersistence sanitizers do the same for `Conversation.mode`.
-export type ConversationMode = 'agentic' | 'chitchat';
-
 export type OrchestratorState = 'idle' | 'thinking' | 'responding' | 'error';
 
 export interface PersonaSwitchEvent {
@@ -58,7 +53,6 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   personaId?: string;
-  mode?: ConversationMode;
   usage?: ConversationUsageSummary;
   logs?: ConversationLogEntry[];
   agentRuns?: AgentRun[];

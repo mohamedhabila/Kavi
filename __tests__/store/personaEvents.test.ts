@@ -56,19 +56,6 @@ describe('updatePersonaInConversation — personaEvents log', () => {
     expect(personaEventsOf(convId)).toEqual([]);
   });
 
-  it('can update an engine-owned persona without presenting it as a user style switch', () => {
-    const convId = seedConversationWithMessage('default');
-
-    useChatStore
-      .getState()
-      .updatePersonaInConversation(convId, 'super-agent', { recordEvent: false });
-
-    expect(personaEventsOf(convId)).toEqual([]);
-    expect(useChatStore.getState().conversations.find((c) => c.id === convId)?.personaId).toBe(
-      'super-agent',
-    );
-  });
-
   it('accumulates multiple switch events in order', () => {
     const convId = seedConversationWithMessage('default');
     useChatStore.getState().updatePersonaInConversation(convId, 'work');

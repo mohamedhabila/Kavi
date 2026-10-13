@@ -10,13 +10,11 @@ import {
   buildCompletionEvidence,
   buildFinalAssistantEvidence,
   buildLifecycleBoundaryEvidence,
-  buildRouteEvidence,
   buildUserEvidence,
   type E2ERedactedAgentRunEvidence,
   type E2ERedactedCompletionEvidence,
   type E2ERedactedFinalAssistantEvidence,
   type E2ERedactedLifecycleBoundaryEvidence,
-  type E2ERedactedRouteEvidence,
   type E2ERedactedUserEvidence,
 } from './e2eTraceExecutionEvidence';
 import {
@@ -51,7 +49,6 @@ export type E2ERedactedTurnTrace = {
   completed: boolean;
   lifecycleBefore: E2ERedactedLifecycleBoundaryEvidence | null;
   user: E2ERedactedUserEvidence;
-  route: E2ERedactedRouteEvidence;
   finalAssistant: E2ERedactedFinalAssistantEvidence | null;
   finalAssistantCandidateCount: number;
   completion: E2ERedactedCompletionEvidence;
@@ -65,7 +62,7 @@ export type E2ERedactedTurnTrace = {
 };
 
 export type E2EScenarioTraceSummary = {
-  schemaVersion: 'e2e-redacted-trace-v4';
+  schemaVersion: 'e2e-redacted-trace-v5';
   fixtureId: string;
   conversationIdHash: E2ERedactedHash;
   completed: boolean;
@@ -93,7 +90,6 @@ function buildTurnTrace(turn: E2EScenarioTurnTrace): E2ERedactedTurnTrace {
     completed: turn.completed,
     lifecycleBefore: buildLifecycleBoundaryEvidence(turn.lifecycleBefore),
     user: buildUserEvidence(turn),
-    route: buildRouteEvidence(turn),
     finalAssistant: buildFinalAssistantEvidence(turn),
     finalAssistantCandidateCount: requireNonNegativeSafeInteger(
       turn.finalAssistantCandidateCount,
@@ -119,7 +115,7 @@ export function buildE2EScenarioTraceSummary(params: {
   const { result } = params;
   const lastGraph = result.graphSnapshots[result.graphSnapshots.length - 1];
   return {
-    schemaVersion: 'e2e-redacted-trace-v4',
+    schemaVersion: 'e2e-redacted-trace-v5',
     fixtureId: result.fixtureId,
     conversationIdHash: hashString(result.conversationId),
     completed: result.completed,

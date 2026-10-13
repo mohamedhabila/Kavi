@@ -62,7 +62,6 @@ describe('runForegroundScenario', () => {
       activeProviderId: originalProvider.id,
       activeModel: originalProvider.model,
       systemPrompt: 'Original prompt',
-      defaultConversationMode: 'agentic',
     });
 
     mockedWaitForMemoryExtractionIdle.mockResolvedValue(true);
@@ -79,7 +78,7 @@ describe('runForegroundScenario', () => {
         undefined,
         completeFinalMetadata,
       );
-      callbacks.onAgentControlGraphStateChange(
+      callbacks.onAgentControlGraphStateChange?.(
         createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
       );
       callbacks.onUsage?.({
@@ -93,21 +92,19 @@ describe('runForegroundScenario', () => {
     });
   });
 
-  it('covers chitchat-to-chitchat and chitchat-to-agentic route rotations', async () => {
+  it('runs every turn as a tracked foreground run and restores both global stores', async () => {
     const provider = makeProvider('scenario-provider');
     const result = await runForegroundScenario({
       provider,
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       maxTokens: 777,
       turns: [
-        { content: 'Hello there.', route: 'forced_chitchat', timestamp: 10 },
+        { content: 'Hello there.', timestamp: 10 },
         {
           content: 'Create a calendar event tomorrow at noon.',
-          route: 'forced_agentic',
           timestamp: 20,
         },
       ],
@@ -118,7 +115,7 @@ describe('runForegroundScenario', () => {
       expect.objectContaining({
         conversationId: 'scenario-conversation',
         maxTokens: 777,
-        personaId: 'default',
+        personaId: undefined,
       }),
       expect.any(Object),
     );
@@ -127,7 +124,7 @@ describe('runForegroundScenario', () => {
       expect.objectContaining({
         conversationId: 'scenario-conversation',
         maxTokens: 777,
-        personaId: 'super-agent',
+        personaId: undefined,
       }),
       expect.any(Object),
     );
@@ -138,8 +135,8 @@ describe('runForegroundScenario', () => {
         assistantStatus: 'complete',
         executionCompleted: true,
         finalResponseCompleted: true,
-        runStatus: 'not_applicable',
-        runCompleted: null,
+        runStatus: 'completed',
+        runCompleted: true,
       },
       finalAssistant: {
         text: 'Response 1',
@@ -148,16 +145,13 @@ describe('runForegroundScenario', () => {
         terminalReason: null,
       },
       finalAssistantCandidateCount: 1,
-      route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
-      run: null,
       timedOut: false,
       user: { text: 'Hello there.', timestamp: 10 },
       memoryExtractionSettled: true,
     });
-    expect(result.turns[1].route).toEqual({
-      directive: 'forced_agentic',
-      mode: 'agentic',
-      personaId: 'super-agent',
+    expect(result.turns[0].run).toMatchObject({
+      userMessageId: result.turns[0].userMessageId,
+      status: 'completed',
     });
     expect(result.turns[1].run).toMatchObject({
       userMessageId: result.turns[1].userMessageId,
@@ -190,74 +184,22 @@ describe('runForegroundScenario', () => {
     expect(mockedCancelMemoryExtraction).toHaveBeenCalledTimes(1);
   });
 
-  it('covers agentic-to-agentic and agentic-to-chitchat route rotations', async () => {
+  it('applies per-turn token limits and the compaction opt-out', async () => {
     const provider = makeProvider('scenario-provider');
     const result = await runForegroundScenario({
       provider,
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'agentic',
-      scenarioTimeoutMs: 60_000,
-      turns: [
-        {
-          content: 'Create a calendar event tomorrow at noon.',
-          route: 'forced_agentic',
-        },
-        { content: 'Thanks, how are you?', route: 'forced_chitchat' },
-      ],
-    });
-
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ personaId: 'super-agent' }),
-      expect.any(Object),
-    );
-    expect(mockedRunOrchestrator).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ personaId: 'default' }),
-      expect.any(Object),
-    );
-    expect(result.turns[0].route).toEqual({
-      directive: 'forced_agentic',
-      mode: 'agentic',
-      personaId: 'super-agent',
-    });
-    expect(result.turns[0].run).toMatchObject({
-      userMessageId: result.turns[0].userMessageId,
-      status: 'completed',
-    });
-    expect(result.turns[1]).toMatchObject({
-      route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
-      run: null,
-    });
-    expect(mockedScheduleMemoryExtraction).toHaveBeenCalledTimes(2);
-    expect(result.memoryItems.indexedTurnCount).toBe(2);
-    expect(result.turns.every((turn) => turn.error === null)).toBe(true);
-  });
-
-  it('does not mutate the configured route for production_auto turns', async () => {
-    const provider = makeProvider('scenario-provider');
-    const result = await runForegroundScenario({
-      provider,
-      conversationId: 'scenario-conversation',
-      conversationTitle: 'Scenario title',
-      systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       enableCompaction: false,
-      turns: [{ content: 'How are you?', route: 'production_auto', maxTokens: 321 }],
+      turns: [{ content: 'How are you?', maxTokens: 321 }],
     });
 
-    expect(result.turns[0].route).toEqual({
-      directive: 'production_auto',
-      mode: 'chitchat',
-      personaId: 'default',
-    });
     expect(mockedRunOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({
         maxTokens: 321,
-        personaId: 'default',
+        personaId: undefined,
         enableCompaction: false,
       }),
       expect.any(Object),
@@ -275,10 +217,9 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       memoryTimeoutMs: 5,
-      turns: [{ content: 'How are you?', route: 'production_auto' }],
+      turns: [{ content: 'How are you?' }],
     });
 
     expect(result.turns[0]).toMatchObject({
@@ -301,12 +242,11 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       disableLongTermMemory: true,
       allowedToolNames: ['memory_search'],
       beforeTurns,
-      turns: [{ content: 'How are you?', route: 'production_auto' }],
+      turns: [{ content: 'How are you?' }],
     });
 
     expect(beforeTurns).toHaveBeenCalledWith({
@@ -331,16 +271,15 @@ describe('runForegroundScenario', () => {
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
 
-  it('can run the agentic foreground graph with its tool surface disabled', async () => {
+  it('can run the foreground graph with its tool surface disabled', async () => {
     await runForegroundScenario({
       provider: makeProvider('scenario-provider'),
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'agentic',
       scenarioTimeoutMs: 60_000,
       disableTools: true,
-      turns: [{ content: 'Inspect this request without acting.', route: 'forced_agentic' }],
+      turns: [{ content: 'Inspect this request without acting.' }],
     });
 
     const toolFilter = mockedRunOrchestrator.mock.calls[0][0].toolFilter;
@@ -355,9 +294,8 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat' as const,
       scenarioTimeoutMs: 60_000,
-      turns: [{ content: 'How are you?', route: 'production_auto' as const }],
+      turns: [{ content: 'How are you?' }],
     };
     await expect(
       runForegroundScenario({ ...base, allowedToolNames: ['not_a_product_tool'] }),
@@ -371,14 +309,14 @@ describe('runForegroundScenario', () => {
     await expect(
       runForegroundScenario({
         ...base,
-        turns: [{ content: 'How are you?', route: 'production_auto' as const, delayBeforeMs: 0 }],
+        turns: [{ content: 'How are you?', delayBeforeMs: 0 }],
       }),
     ).rejects.toThrow('delayBeforeMs must be a positive finite number');
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
   it('does not count an incomplete final response as a completed turn', async () => {
-    mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
+    mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onAssistantMessage(
         'I could not finish.',
         undefined,
@@ -386,6 +324,12 @@ describe('runForegroundScenario', () => {
         buildAssistantMessageMetadata('final', {
           completionStatus: 'incomplete',
           finishReason: 'length',
+          terminalReason: 'tool_failure',
+        }),
+      );
+      callbacks.onAgentControlGraphStateChange?.(
+        createInitialAgentControlGraphSnapshot({
+          status: 'failed',
           terminalReason: 'tool_failure',
         }),
       );
@@ -398,9 +342,8 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
-      turns: [{ content: 'Finish this.', route: 'production_auto' }],
+      turns: [{ content: 'Finish this.' }],
     });
 
     expect(result.turns[0]).toMatchObject({
@@ -413,10 +356,10 @@ describe('runForegroundScenario', () => {
       },
       completion: {
         assistantStatus: 'incomplete',
-        executionCompleted: true,
+        executionCompleted: false,
         finalResponseCompleted: false,
-        runStatus: 'not_applicable',
-        runCompleted: null,
+        runStatus: 'failed',
+        runCompleted: false,
       },
     });
   });
@@ -478,10 +421,9 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'chitchat',
       scenarioTimeoutMs: 60_000,
       timeoutMs: 5,
-      turns: [{ content: 'Wait forever.', route: 'production_auto' }],
+      turns: [{ content: 'Wait forever.' }],
     });
 
     expect(result.turns).toHaveLength(1);
@@ -503,12 +445,8 @@ describe('runForegroundScenario', () => {
       conversationId: 'scenario-conversation',
       conversationTitle: 'Scenario title',
       systemPrompt: 'Scenario prompt',
-      defaultMode: 'agentic',
       scenarioTimeoutMs: 60_000,
-      turns: [
-        { content: 'First turn.', route: 'production_auto' },
-        { content: 'Must not run.', route: 'production_auto' },
-      ],
+      turns: [{ content: 'First turn.' }, { content: 'Must not run.' }],
     });
 
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();

@@ -11,11 +11,9 @@ type ThinkingOption = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 type SettingsAssistantBehaviorControlsProps = {
   colors: AppPalette;
-  defaultConversationMode: 'agentic' | 'chitchat';
   linkUnderstandingEnabled: boolean;
   maxLinks: number;
   mediaUnderstandingEnabled: boolean;
-  setDefaultConversationMode: (value: 'agentic' | 'chitchat') => void;
   setLinkUnderstandingEnabled: (value: boolean) => void;
   setMaxLinks: (value: number) => void;
   setMediaUnderstandingEnabled: (value: boolean) => void;
@@ -32,11 +30,9 @@ export const SettingsAssistantBehaviorControls: React.FC<
   SettingsAssistantBehaviorControlsProps
 > = ({
   colors,
-  defaultConversationMode,
   linkUnderstandingEnabled,
   maxLinks,
   mediaUnderstandingEnabled,
-  setDefaultConversationMode,
   setLinkUnderstandingEnabled,
   setMaxLinks,
   setMediaUnderstandingEnabled,
@@ -108,54 +104,6 @@ export const SettingsAssistantBehaviorControls: React.FC<
         value={mediaUnderstandingEnabled}
       />
     </View>
-
-    <Text style={styles.sectionTitle}>{t('settings.defaultConversationMode')}</Text>
-    <View style={styles.listItem}>
-      <View style={styles.listItemContent}>
-        <Text style={styles.listItemTitle}>{t('settings.defaultConversationModeSummary')}</Text>
-        <Text style={styles.listItemSubtitle}>{t('settings.defaultConversationModeHint')}</Text>
-      </View>
-    </View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetRow}>
-      <TouchableOpacity
-        accessibilityLabel={t('settings.defaultConversationModeAgenticAccessibility')}
-        accessibilityRole="button"
-        accessibilityState={{ selected: defaultConversationMode === 'agentic' }}
-        onPress={() => setDefaultConversationMode('agentic')}
-        style={[
-          styles.presetChip,
-          defaultConversationMode === 'agentic' && styles.presetChipActive,
-        ]}
-      >
-        <Text
-          style={[
-            styles.presetChipText,
-            defaultConversationMode === 'agentic' && styles.presetChipTextActive,
-          ]}
-        >
-          {t('settings.defaultConversationModeAgentic')}
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        accessibilityLabel={t('settings.defaultConversationModeChitchatAccessibility')}
-        accessibilityRole="button"
-        accessibilityState={{ selected: defaultConversationMode === 'chitchat' }}
-        onPress={() => setDefaultConversationMode('chitchat')}
-        style={[
-          styles.presetChip,
-          defaultConversationMode === 'chitchat' && styles.presetChipActive,
-        ]}
-      >
-        <Text
-          style={[
-            styles.presetChipText,
-            defaultConversationMode === 'chitchat' && styles.presetChipTextActive,
-          ]}
-        >
-          {t('settings.defaultConversationModeChitchat')}
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
 
     <TouchableOpacity
       accessibilityLabel={t(

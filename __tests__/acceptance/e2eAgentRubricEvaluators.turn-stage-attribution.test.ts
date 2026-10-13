@@ -18,7 +18,6 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
       memoryStore: 'reopened',
     },
     user: { messageId: 'user-1', text: 'Continue.', timestamp: 10 },
-    route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
     finalAssistant: {
       messageId: 'assistant-1',
       text: 'Done.',
@@ -32,11 +31,11 @@ function buildTurn(overrides: Partial<TurnTrace> = {}): TurnTrace {
       assistantStatus: 'complete',
       executionCompleted: true,
       finalResponseCompleted: true,
-      runStatus: 'not_applicable',
-      runCompleted: null,
-      runCompletedAt: null,
+      runStatus: 'completed',
+      runCompleted: true,
+      runCompletedAt: 12,
       runTerminalReason: null,
-      graphStatus: null,
+      graphStatus: 'finalized',
       graphTerminalReason: null,
     },
     agentRun: null,
@@ -393,27 +392,7 @@ describe('turn stage-attribution rubrics', () => {
     });
   });
 
-  it('grades the actual route directive and resolved mode for the requested turn', () => {
-    expect(
-      evaluateE2ERubric(buildResult(), {
-        kind: 'turn_route',
-        turnIndex: 1,
-        directive: 'forced_chitchat',
-        mode: 'chitchat',
-      }),
-    ).toMatchObject({ passed: true });
-
-    expect(
-      evaluateE2ERubric(buildResult(), {
-        kind: 'turn_route',
-        turnIndex: 1,
-        directive: 'production_auto',
-        mode: 'chitchat',
-      }),
-    ).toMatchObject({ passed: false });
-  });
-
-  it('grades execution, final response, and nullable agent-run completion independently', () => {
+  it('grades execution, final response, and agent-run completion independently', () => {
     expect([
       evaluateE2ERubric(buildResult(), {
         kind: 'turn_completion',
@@ -431,7 +410,7 @@ describe('turn stage-attribution rubrics', () => {
         kind: 'turn_completion',
         turnIndex: 1,
         field: 'agent_run',
-        expected: null,
+        expected: true,
       }),
     ]).toEqual([
       expect.objectContaining({
@@ -448,16 +427,29 @@ describe('turn stage-attribution rubrics', () => {
       }),
     ]);
 
-    const runTurn = buildTurn({
+    const missingRunTurn = buildTurn({
       completion: {
         ...buildTurn().completion,
-        runStatus: 'completed',
-        runCompleted: true,
-        runCompletedAt: 12,
+        executionCompleted: false,
+        runStatus: 'missing',
+        runCompleted: false,
+        runCompletedAt: null,
+        graphStatus: null,
       },
     });
     expect(
-      evaluateE2ERubric(buildResult(runTurn), {
+      evaluateE2ERubric(buildResult(missingRunTurn), {
+        kind: 'turn_completion',
+        turnIndex: 1,
+        field: 'agent_run',
+        expected: false,
+      }),
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn-1:turn_completion:agent_run',
+      passed: true,
+    });
+    expect(
+      evaluateE2ERubric(buildResult(missingRunTurn), {
         kind: 'turn_completion',
         turnIndex: 1,
         field: 'agent_run',
@@ -465,6 +457,18 @@ describe('turn stage-attribution rubrics', () => {
       }),
     ).toMatchObject({
       fixtureId: 'stage-attribution:turn-1:turn_completion:agent_run',
+      passed: false,
+      detail: 'turn 1 completion agent_run=false (expected true)',
+    });
+    expect(
+      evaluateE2ERubric(buildResult(missingRunTurn), {
+        kind: 'turn_completion',
+        turnIndex: 1,
+        field: 'final_response',
+        expected: true,
+      }),
+    ).toMatchObject({
+      fixtureId: 'stage-attribution:turn-1:turn_completion:final_response',
       passed: true,
     });
     expect(
@@ -480,20 +484,23 @@ describe('turn stage-attribution rubrics', () => {
     });
   });
 
-  it('rejects null expectations for boolean-only completion fields', () => {
-    const invalidRubric = {
-      kind: 'turn_completion',
-      turnIndex: 1,
-      field: 'execution',
-      expected: null,
-    } as unknown as E2ERubric;
+  it.each(['execution', 'final_response', 'agent_run'] as const)(
+    'rejects a null expectation for the %s completion field',
+    (field) => {
+      const invalidRubric = {
+        kind: 'turn_completion',
+        turnIndex: 1,
+        field,
+        expected: null,
+      } as unknown as E2ERubric;
 
-    expect(evaluateE2ERubric(buildResult(), invalidRubric)).toMatchObject({
-      fixtureId: 'stage-attribution:turn-1:turn_completion:execution',
-      passed: false,
-      detail: 'turn completion field execution has an invalid expected value',
-    });
-  });
+      expect(evaluateE2ERubric(buildResult(), invalidRubric)).toMatchObject({
+        fixtureId: `stage-attribution:turn-1:turn_completion:${field}`,
+        passed: false,
+        detail: `turn completion field ${field} has an invalid expected value`,
+      });
+    },
+  );
 
   it('requires an observed, fully reopened app-relaunch boundary on the exact turn', () => {
     expect(

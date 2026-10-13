@@ -10,7 +10,6 @@ import {
 } from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
-import type { ForegroundScenarioRouteDirective } from './foregroundScenarioDriverTypes';
 import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
 import { buildE2EProviderWithDiscoveredCatalog, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
@@ -29,7 +28,6 @@ export type E2EScenarioRunOptions = Readonly<{
   scenarioTimeoutMs?: number;
   perTurnTimeoutMs?: number;
   memoryTimeoutMs?: number;
-  routeOverride?: ForegroundScenarioRouteDirective;
   disableLongTermMemory?: boolean;
   allowedToolNames?: ReadonlyArray<string>;
   beforeTurns?: (identity: {
@@ -123,13 +121,10 @@ export async function runE2EScenario(
       conversationTitle: scenario.threadTitle ?? scenario.id,
       systemPrompt: resolveE2EScenarioSystemPrompt(scenario),
       initialMessages: scenario.initialMessages,
-      defaultMode: scenario.execution.initialMode,
       scenarioTimeoutMs,
       turns: userTurns.map((turn) => ({
         content: turn.content,
         lifecycleBefore: turn.lifecycleBefore,
-        route: options.routeOverride ?? turn.route ?? scenario.execution.route,
-        selectedMode: turn.selectedMode,
         timeoutMs: perTurnTimeoutMs,
         ...(turn.steer ? { steer: turn.steer } : {}),
       })),

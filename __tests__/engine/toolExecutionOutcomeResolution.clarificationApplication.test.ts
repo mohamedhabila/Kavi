@@ -23,7 +23,6 @@ describe('tool execution clarification outcome resolution', () => {
     const entryFrame = buildGraphEntryRequestFrame({
       text: 'Draft a message for me.',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     });
     params.getGraphSnapshot = jest.fn().mockReturnValue({

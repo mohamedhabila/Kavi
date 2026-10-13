@@ -127,18 +127,11 @@ describe('ChatScreen composer send flow', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockEnsureConversation).toHaveBeenCalledWith(
-        'openai',
-        'You are helpful',
-        'gpt-5.4',
-        {
-          personaId: 'super-agent',
-          mode: 'agentic',
-        },
-      );
+      expect(mockEnsureConversation).toHaveBeenCalledWith('openai', 'You are helpful', 'gpt-5.4');
       expect(mockAddMessage).toHaveBeenCalled();
       expect(mockRunOrchestrator).toHaveBeenCalled();
     });
+    expect(mockRunOrchestrator.mock.calls[0][0]).toHaveProperty('personaId', undefined);
   });
 
   it('shows error when no provider configured', async () => {
@@ -213,10 +206,6 @@ describe('ChatScreen composer send flow', () => {
         'local-qwen',
         'You are helpful',
         'qwen-2.5-1.5b-instruct',
-        {
-          personaId: 'super-agent',
-          mode: 'agentic',
-        },
       );
       expect(mockRunOrchestrator).toHaveBeenCalled();
     });

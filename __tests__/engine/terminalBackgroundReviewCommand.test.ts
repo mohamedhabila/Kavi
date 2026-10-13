@@ -43,7 +43,6 @@ function conversation(agentRun: AgentRun): Conversation {
   return {
     id: 'conv-1',
     title: 'Conversation',
-    mode: 'agent',
     messages: [{ id: 'user-1', role: 'user', content: 'Do work', timestamp: 1 }],
     createdAt: 1,
     updatedAt: 10,

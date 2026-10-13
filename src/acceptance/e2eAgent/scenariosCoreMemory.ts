@@ -6,7 +6,6 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'memory-remember-recall',
     conversationId: 'e2e-memory-recall',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt:
       'Remember that subject `e2e-entity-i1` has artifact_token `E2E-MEM-42`, then verify the stored value.',
     rubrics: [
@@ -22,7 +21,6 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'multi-turn-memory-preference',
     conversationId: 'e2e-memory-preference',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Remember my meeting code for subject personal-meeting.',
     userTurns: [
       {
@@ -50,7 +48,6 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'multi-turn-catalog-memory',
     conversationId: 'e2e-catalog-memory',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Find the available durable memory capability.',
     userTurns: [
       {
@@ -74,7 +71,6 @@ export const E2E_CORE_MEMORY_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'tool-catalog-query-memory',
     conversationId: 'e2e-catalog-query',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     prompt: 'Discover how to recall durable memory.',
     userTurns: [
       {

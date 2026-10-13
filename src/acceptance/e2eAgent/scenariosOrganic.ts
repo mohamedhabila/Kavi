@@ -6,26 +6,16 @@ const RECOVERED_WEEK_PLAN_SHA256 =
   '2077bc75ba1bae2c0f7f3512cd0781d24c06b38b0fe980f90c4365a18f3fc7d9';
 const CALENDAR_EVENT_TITLE = 'Organic design review';
 
-function completedProductionTurnRubrics(
-  turnIndex: number,
-  mode: 'chitchat' | 'agentic',
-): E2ERubric[] {
+function completedTurnRubrics(turnIndex: number): E2ERubric[] {
   return [
-    { kind: 'turn_route', turnIndex, directive: 'production_auto', mode },
     { kind: 'turn_completion', turnIndex, field: 'execution', expected: true },
     { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
-    {
-      kind: 'turn_completion',
-      turnIndex,
-      field: 'agent_run',
-      expected: mode === 'agentic' ? true : null,
-    },
+    { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: true },
   ];
 }
 
-function pausedAgenticTurnRubrics(turnIndex: number): E2ERubric[] {
+function pausedTurnRubrics(turnIndex: number): E2ERubric[] {
   return [
-    { kind: 'turn_route', turnIndex, directive: 'production_auto', mode: 'agentic' },
     { kind: 'turn_completion', turnIndex, field: 'execution', expected: false },
     { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
     { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: false },
@@ -33,19 +23,17 @@ function pausedAgenticTurnRubrics(turnIndex: number): E2ERubric[] {
 }
 
 /**
- * One product-native conversation instead of isolated capability probes. The
- * user changes modes through the same persisted choice exposed by the app;
- * production_auto then preserves that choice rather than forcing an evaluator
- * route. End-state rubrics score outcomes, not tool names or tool order.
+ * One product-native conversation instead of isolated capability probes: small talk,
+ * corrections, actions, relaunches, ambiguity and recovery in the same thread. End-state
+ * rubrics score outcomes, not tool names or tool order.
  */
 export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
   id: 'organic-mobile-assistant-continuity',
   conversationId: 'e2e-organic-mobile-assistant-continuity',
   contentClass: 'synthetic_public',
-  execution: { initialMode: 'chitchat', route: 'production_auto' },
   threadTitle: 'Design week continuity',
   prompt:
-    'Continue one natural mobile-assistant conversation across mode choices, corrections, actions, relaunches, ambiguity, and recovery.',
+    'Continue one natural mobile-assistant conversation across small talk, corrections, actions, relaunches, ambiguity, and recovery.',
   initialWorkspaceFiles: [
     {
       path: 'policies/week-plan-recovery.txt',
@@ -72,11 +60,9 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
         'Actually, make that 45 minutes from now on, not 30. Please update what you remember about my usual design-review length.',
     },
     {
-      selectedMode: 'agentic',
       content: `Create one calendar event titled "${CALENDAR_EVENT_TITLE}" in my modifiable calendar starting at 2026-07-16T14:00:00Z. Use my current remembered default duration, verify the result, and do not create duplicates.`,
     },
     {
-      selectedMode: 'chitchat',
       content: 'What exact event title did you just create for me?',
     },
     {
@@ -85,32 +71,29 @@ export const ORGANIC_MOBILE_ASSISTANT_CONTINUITY_SCENARIO: E2EScenario = {
         'What is my current usual design-review length? Use the corrected value, not the old one.',
     },
     {
-      selectedMode: 'agentic',
       content: `Move "${CALENDAR_EVENT_TITLE}" to a different time, but I have not supplied the new date or time yet. Do not update the calendar until you have that required detail; ask me for it.`,
     },
     {
-      selectedMode: 'agentic',
       content:
         'Recover the interrupted week-plan work now. Inspect `policies/week-plan-recovery.txt`, replace the incomplete contents of `artifacts/week-plan.txt` with the exact approved content, and verify the recovered file.',
     },
     {
       lifecycleBefore: 'app_relaunch',
-      selectedMode: 'chitchat',
       content:
         'Recap my current design-review length and the exact calendar event title, without making any new changes.',
     },
   ],
   rubrics: [
     { kind: 'min_user_turns', min: 9 },
-    ...completedProductionTurnRubrics(0, 'chitchat'),
-    ...completedProductionTurnRubrics(1, 'chitchat'),
-    ...completedProductionTurnRubrics(2, 'chitchat'),
-    ...completedProductionTurnRubrics(3, 'agentic'),
-    ...completedProductionTurnRubrics(4, 'chitchat'),
-    ...completedProductionTurnRubrics(5, 'chitchat'),
-    ...pausedAgenticTurnRubrics(6),
-    ...completedProductionTurnRubrics(7, 'agentic'),
-    ...completedProductionTurnRubrics(8, 'chitchat'),
+    ...completedTurnRubrics(0),
+    ...completedTurnRubrics(1),
+    ...completedTurnRubrics(2),
+    ...completedTurnRubrics(3),
+    ...completedTurnRubrics(4),
+    ...completedTurnRubrics(5),
+    ...pausedTurnRubrics(6),
+    ...completedTurnRubrics(7),
+    ...completedTurnRubrics(8),
     { kind: 'turn_lifecycle_boundary', turnIndex: 5, boundary: 'app_relaunch' },
     { kind: 'turn_lifecycle_boundary', turnIndex: 8, boundary: 'app_relaunch' },
     { kind: 'turn_final_response_token', turnIndex: 4, token: CALENDAR_EVENT_TITLE },

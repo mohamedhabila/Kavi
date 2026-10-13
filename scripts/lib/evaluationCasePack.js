@@ -10,12 +10,6 @@ const {
 } = require('./evaluationContract');
 
 const DEVELOPMENT_PACK_FILE = path.join('evaluation', 'klae-development.json');
-const REQUIRED_MODE_TRANSITIONS = [
-  'chitchat_to_chitchat',
-  'chitchat_to_agentic',
-  'agentic_to_chitchat',
-  'agentic_to_agentic',
-];
 const ASSISTANT_PROSE_TARGET_SEGMENTS = new Set(['content', 'prose', 'regex', 'text']);
 
 function addFailure(failures, location, message) {
@@ -111,15 +105,6 @@ function validateEvaluationCasePack(pack, contract, schema) {
   for (const family of schema?.$defs?.klaeFamily?.enum ?? []) {
     if (!coveredFamilies.has(family)) {
       addFailure(failures, 'pack.cases', `must include the representative family ${family}`);
-    }
-  }
-
-  const coveredTransitions = new Set(
-    pack.cases.flatMap((caseEntry) => caseEntry?.modeTransitions ?? []),
-  );
-  for (const transition of REQUIRED_MODE_TRANSITIONS) {
-    if (!coveredTransitions.has(transition)) {
-      addFailure(failures, 'pack.cases', `must include the mode transition ${transition}`);
     }
   }
 

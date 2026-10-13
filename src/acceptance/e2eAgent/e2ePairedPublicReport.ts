@@ -14,7 +14,7 @@ import { buildE2EScenarioTraceSummary } from './e2eTraceSummary';
 import { stableHash, stableStringify } from './e2eTraceRedaction';
 import type { E2EEstimatedCostSummary, E2EScenarioTurnTrace } from './types';
 
-export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v6' as const;
+export const E2E_PAIRED_PUBLIC_REPORT_SCHEMA_VERSION = 'e2e-paired-public-report-v7' as const;
 
 type PublicConditionMetrics = Readonly<{
   executionCompleted: boolean;
@@ -25,15 +25,6 @@ type PublicConditionMetrics = Readonly<{
   durationMs: number;
   userTurnCount: number;
   turnTraceIndexCoverage: 'complete' | 'incomplete';
-  routeDirectiveCounts: Readonly<{
-    production_auto: number;
-    forced_chitchat: number;
-    forced_agentic: number;
-  }>;
-  conversationModeCounts: Readonly<{
-    chitchat: number;
-    agentic: number;
-  }>;
   toolCallCount: number;
   errorCount: number;
   inputTokens: number;
@@ -121,19 +112,10 @@ export type E2EPairedPublicReport = Readonly<{
     pairedScoreDelta: number | null;
   }>;
   accidentalSuccessDiagnostics: ReadonlyArray<
-    | 'reference_only_pass'
-    | 'candidate_only_pass'
-    | 'control_only_pass'
-    | 'diagnostic_only_pass'
-    | 'forced_route_only_pass'
+    'reference_only_pass' | 'candidate_only_pass' | 'control_only_pass' | 'diagnostic_only_pass'
   >;
 }>;
 
-const PRODUCTION_CONDITIONS = new Set<E2EPairedCondition>([
-  'production_auto',
-  'forced_chitchat',
-  'forced_agentic',
-]);
 const MEMORY_CONTROL_CONDITIONS = new Set<E2EPairedCondition>(['memory_off']);
 const DIAGNOSTIC_CONDITIONS = new Set<E2EPairedCondition>(['diagnostic_full_context']);
 
@@ -145,63 +127,25 @@ function booleanDelta(candidate: boolean, reference: boolean): -1 | 0 | 1 {
   return (Number(candidate) - Number(reference)) as -1 | 0 | 1;
 }
 
-function buildTurnAuditMetrics(
-  turns: ReadonlyArray<Pick<E2EScenarioTurnTrace, 'route' | 'turnIndex'>>,
+/** Whether the condition traced every user turn exactly once. */
+function resolveTurnTraceIndexCoverage(
+  turns: ReadonlyArray<Pick<E2EScenarioTurnTrace, 'turnIndex'>>,
   userTurnCount: number,
-): Pick<
-  PublicConditionMetrics,
-  'turnTraceIndexCoverage' | 'routeDirectiveCounts' | 'conversationModeCounts'
-> {
-  const routeDirectiveCounts = {
-    production_auto: 0,
-    forced_chitchat: 0,
-    forced_agentic: 0,
-  };
-  const conversationModeCounts = { chitchat: 0, agentic: 0 };
+): PublicConditionMetrics['turnTraceIndexCoverage'] {
   const turnIndexes = new Set<number>();
-  let indexesInRange = turns.length === userTurnCount;
   for (const turn of turns) {
     if (
       !Number.isSafeInteger(turn.turnIndex) ||
       turn.turnIndex < 0 ||
       turn.turnIndex >= userTurnCount
     ) {
-      indexesInRange = false;
+      return 'incomplete';
     }
     turnIndexes.add(turn.turnIndex);
-    const directive = turn.route.directive;
-    if (!['production_auto', 'forced_chitchat', 'forced_agentic'].includes(directive)) {
-      throw new Error('Paired route evidence contains an unsupported directive.');
-    }
-    const mode = turn.route.mode;
-    if (!['chitchat', 'agentic'].includes(mode)) {
-      throw new Error('Paired route evidence contains an unsupported conversation mode.');
-    }
-    routeDirectiveCounts[directive] += 1;
-    conversationModeCounts[mode] += 1;
   }
-  const directiveCount = Object.values(routeDirectiveCounts).reduce(
-    (total, count) => total + count,
-    0,
-  );
-  const modeCount = Object.values(conversationModeCounts).reduce(
-    (total, count) => total + count,
-    0,
-  );
-  if (
-    !Number.isSafeInteger(directiveCount) ||
-    !Number.isSafeInteger(modeCount) ||
-    directiveCount > userTurnCount ||
-    modeCount > userTurnCount
-  ) {
-    throw new Error('Paired route evidence exceeds the user-turn count.');
-  }
-  return {
-    turnTraceIndexCoverage:
-      indexesInRange && turnIndexes.size === userTurnCount ? 'complete' : 'incomplete',
-    routeDirectiveCounts,
-    conversationModeCounts,
-  };
+  return turns.length === userTurnCount && turnIndexes.size === userTurnCount
+    ? 'complete'
+    : 'incomplete';
 }
 
 function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPublicCondition {
@@ -223,10 +167,6 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
   );
   if (!trace) throw new Error(`Condition ${condition.condition} produced an invalid public trace.`);
   const assessment = condition.assessment;
-  const turnAuditMetrics = buildTurnAuditMetrics(
-    condition.result.turnTraces,
-    condition.result.userTurnCount,
-  );
   return {
     ...base,
     status: 'completed',
@@ -238,7 +178,10 @@ function projectCondition(condition: E2EPairedConditionExecution): E2EPairedPubl
       passed: assessment.passed,
       durationMs: condition.result.durationMs,
       userTurnCount: condition.result.userTurnCount,
-      ...turnAuditMetrics,
+      turnTraceIndexCoverage: resolveTurnTraceIndexCoverage(
+        condition.result.turnTraces,
+        condition.result.userTurnCount,
+      ),
       toolCallCount: condition.result.toolCalls.length,
       errorCount: condition.result.errors.length,
       inputTokens: condition.result.usage.inputTokens,
@@ -280,15 +223,6 @@ function hasCompleteMemoryTurnCoverage(condition: CompletedPublicCondition): boo
     condition.metrics.turnTraceIndexCoverage === 'complete' &&
     recorded + missing + optOut === userTurnCount &&
     missing === 0
-  );
-}
-
-function hasProductionAutoDirectiveCoverage(condition: CompletedPublicCondition): boolean {
-  const { routeDirectiveCounts, userTurnCount } = condition.metrics;
-  return (
-    routeDirectiveCounts.production_auto === userTurnCount &&
-    routeDirectiveCounts.forced_chitchat === 0 &&
-    routeDirectiveCounts.forced_agentic === 0
   );
 }
 
@@ -335,8 +269,6 @@ function buildMemoryPairedObservation(
     };
   }
   const instrumentationInvalid =
-    !hasProductionAutoDirectiveCoverage(control) ||
-    !hasProductionAutoDirectiveCoverage(product) ||
     !hasExpectedMemoryControl(control) ||
     !hasCompleteEnabledMemory(product) ||
     (product.metrics.memory.selectedItemCount === 0 &&
@@ -376,15 +308,9 @@ function buildAccidentalSuccessDiagnostics(
   const failing = conditions.find(
     (condition) => condition.status === 'completed' && !condition.metrics.passed,
   );
-  if (passing && failing && PRODUCTION_CONDITIONS.has(failing.condition)) {
+  if (passing && failing && failing.condition === 'production_auto') {
     if (MEMORY_CONTROL_CONDITIONS.has(passing.condition)) diagnostics.push('control_only_pass');
     if (DIAGNOSTIC_CONDITIONS.has(passing.condition)) diagnostics.push('diagnostic_only_pass');
-    if (
-      (passing.condition === 'forced_agentic' || passing.condition === 'forced_chitchat') &&
-      failing.condition === 'production_auto'
-    ) {
-      diagnostics.push('forced_route_only_pass');
-    }
   }
   return diagnostics;
 }

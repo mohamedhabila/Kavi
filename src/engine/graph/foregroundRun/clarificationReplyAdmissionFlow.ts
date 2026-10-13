@@ -6,7 +6,7 @@ import {
 import { createAgentRunAbortError } from '../../../services/runtimeError';
 import { acquireMainInferenceLease } from '../../../services/memory/onDeviceGuards';
 import { recordConversationUsageEvent } from '../../../services/usage/conversationUsage';
-import type { Conversation, ConversationMode } from '../../../types/conversation';
+import type { Conversation } from '../../../types/conversation';
 import type { ModelProjectionOwner } from '../../../types/conversation';
 import type { RunChatOptions } from './contracts';
 import type { ExecuteForegroundConversationRunParams } from './executionTypes';
@@ -95,7 +95,6 @@ export async function transitionForegroundClarificationAdmission(params: {
   claim: ForegroundRunRequestClaim;
   conversation: Conversation | undefined;
   conversationId: string;
-  defaultConversationMode: ConversationMode;
   durability: ExecuteForegroundConversationRunParams['context']['durability'];
   foregroundRequestId: string;
   isCurrentRunInvocation: () => boolean;
@@ -120,7 +119,6 @@ export async function transitionForegroundClarificationAdmission(params: {
       claim: params.claim,
       conversation: params.conversation,
       createAssistantMessageId: () => preparedBootstrap.bootstrap.assistantMessageId,
-      defaultConversationMode: params.defaultConversationMode,
       clarificationReplyAdmission: admission,
       options: params.options,
     });

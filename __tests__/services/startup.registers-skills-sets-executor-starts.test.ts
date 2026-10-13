@@ -46,7 +46,6 @@ const mockChatStoreState = {
   conversations: [] as any[],
   activeConversationId: 'active-conversation',
   ensureConversation: jest.fn(),
-  updateModeInConversation: jest.fn(),
   updatePersonaInConversation: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
@@ -172,7 +171,6 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       activeModel: 'gpt-5.4',
       providers: [mockProvider],
       systemPrompt: 'You are helpful.',
-      defaultConversationMode: 'agentic',
       thinkingLevel: 'medium',
       linkUnderstandingEnabled: true,
       mediaUnderstandingEnabled: true,
@@ -231,7 +229,7 @@ beforeEach(() => {
   mockSettingsHydrationListeners.clear();
   mockChatHydrationListeners.clear();
   mockChatStoreState.ensureConversation.mockImplementation(
-    (providerId, systemPrompt, modelOverride, options) => {
+    (providerId, systemPrompt, modelOverride) => {
       const existing =
         mockChatStoreState.conversations.find(
           (conversation) => conversation.id === mockChatStoreState.activeConversationId,
@@ -245,9 +243,7 @@ beforeEach(() => {
         modelOverride,
         messages: [],
       });
-      if (options?.activate !== false) {
-        mockChatStoreState.activeConversationId = id;
-      }
+      mockChatStoreState.activeConversationId = id;
       return id;
     },
   );
@@ -479,10 +475,6 @@ describe('initializeServices', () => {
       'openai',
       'You are helpful.',
       'gpt-5.4',
-      {
-        personaId: 'super-agent',
-        mode: 'agentic',
-      },
     );
     expect(mockSendLocalNotification).not.toHaveBeenCalled();
     await executor.onSuccess(job, result);

@@ -48,7 +48,6 @@ describe('scenarioResultMapper tool outcomes', () => {
           turnIndex: 0,
           lifecycleBefore: null,
           user: { messageId: 'user-1', text: 'run', timestamp: 1 },
-          route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'default' },
           finalAssistant: null,
           finalAssistantCandidateCount: 0,
           completion: {
@@ -95,7 +94,6 @@ describe('scenarioResultMapper tool outcomes', () => {
     const native = { stateBefore: {}, stateAfter: {}, invocations: [] };
     const baseTurn = {
       lifecycleBefore: null,
-      route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'default' },
       finalAssistantCandidateCount: 1,
       run: null,
       memoryExtractionSettled: true,
@@ -188,7 +186,6 @@ describe('scenarioResultMapper tool outcomes', () => {
           turnIndex: 0,
           lifecycleBefore: null,
           user: { messageId: 'user-1', text: 'Draft a message', timestamp: 1 },
-          route: { directive: 'forced_agentic', mode: 'agentic', personaId: 'default' },
           finalAssistant: {
             messageId: 'assistant-1',
             text: 'Who should receive it?',
@@ -256,7 +253,6 @@ describe('scenarioResultMapper tool outcomes', () => {
           turnIndex: 0,
           lifecycleBefore: null,
           user: { messageId: 'user-1', text: 'hello', timestamp: 1 },
-          route: { directive: 'forced_chitchat', mode: 'chitchat', personaId: 'default' },
           finalAssistant: null,
           finalAssistantCandidateCount: 0,
           completion: {

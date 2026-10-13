@@ -15,7 +15,7 @@ import {
 
 describe('Orchestrator', () => {
   describe('Direct response routing', () => {
-    it('delivers a standalone super-agent answer in one call without inflating its prompt', async () => {
+    it('delivers a standalone answer in one call without inflating its prompt', async () => {
       const mockSendMessage = jest.fn();
 
       (LlmService as any).mockImplementation(() => ({
@@ -23,8 +23,8 @@ describe('Orchestrator', () => {
         sendMessage: mockSendMessage,
       }));
       (getPersona as jest.Mock).mockReturnValue({
-        id: 'super-agent',
-        name: 'SuperAgent',
+        id: 'default',
+        name: 'Kavi',
       });
 
       mockStreamMessage.mockImplementationOnce(() =>
@@ -47,7 +47,7 @@ describe('Orchestrator', () => {
         model: 'gemini-3.5-flash',
         conversationId: 'conv-direct-response-fast-path',
         systemPrompt: 'You are helpful',
-        personaId: 'super-agent',
+        personaId: 'default',
         messages: [
           {
             id: 'msg1',

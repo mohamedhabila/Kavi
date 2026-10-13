@@ -324,10 +324,9 @@ describe('scheduled job conversation transcript', () => {
     });
   });
 
-  it("runs in the conversation's own mode and persona without rewriting them", async () => {
+  it("runs with the conversation's own persona without rewriting it", async () => {
     const conversation = {
       ...mockConversation('active-conversation'),
-      mode: 'chitchat' as const,
       personaId: 'travel-guide',
       modelOverride: 'conversation-model',
     };
@@ -337,7 +336,7 @@ describe('scheduled job conversation transcript', () => {
       async (options: { personaId?: string; model?: string }, callbacks: OrchestratorCallbacks) => {
         expect(options.personaId).toBe('travel-guide');
         expect(options.model).toBe('job-model');
-        emitSchedulerFinal(callbacks, 'Chitchat response.');
+        emitSchedulerFinal(callbacks, 'Persona response.');
         callbacks.onDone?.();
       },
     );
@@ -349,11 +348,9 @@ describe('scheduled job conversation transcript', () => {
 
     expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(findMockConversation(conversation.id)).toMatchObject({
-      mode: 'chitchat',
       personaId: 'travel-guide',
       modelOverride: 'conversation-model',
     });
-    expect(mockChatState.updateModeInConversation).not.toHaveBeenCalled();
     expect(mockChatState.updatePersonaInConversation).not.toHaveBeenCalled();
     expect(mockChatState.updateModelInConversation).not.toHaveBeenCalled();
   });
@@ -451,7 +448,6 @@ describe('scheduled job conversation transcript', () => {
     }
 
     expect(JSON.stringify(findMockConversation(conversation.id))).toBe(before);
-    expect(mockChatState.updateModeInConversation).not.toHaveBeenCalled();
     expect(mockChatState.updatePersonaInConversation).not.toHaveBeenCalled();
     expect(mockChatState.updateModelInConversation).not.toHaveBeenCalled();
     expect(mockRunOrchestrator).not.toHaveBeenCalled();
@@ -547,7 +543,6 @@ describe('scheduled job conversation transcript', () => {
       { id: 'scheduled:occurrence-job-1:assistant', role: 'assistant' },
     ]);
     expect(mockRunOrchestrator).not.toHaveBeenCalled();
-    expect(mockChatState.updateModeInConversation).not.toHaveBeenCalled();
     expect(mockChatState.updateModelInConversation).not.toHaveBeenCalled();
   });
 

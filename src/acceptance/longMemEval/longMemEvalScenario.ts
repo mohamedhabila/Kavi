@@ -88,7 +88,6 @@ export function buildLongMemEvalScenario(
     id: `longmemeval-${instance.questionId}`,
     conversationId: 'longmemeval',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'chitchat', route: 'production_auto' },
     prompt: instance.question,
     rubrics: [],
     ...(arm === 'context' ? { initialMessages: buildLongMemEvalHistoryMessages(instance) } : {}),

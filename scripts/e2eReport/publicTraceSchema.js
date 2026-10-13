@@ -4,7 +4,6 @@ const {
   projectCompletionEvidence,
   projectFinalAssistantEvidence,
   projectLifecycleBoundaryEvidence,
-  projectRouteEvidence,
   projectUserEvidence,
 } = require('./publicTraceExecution');
 const { projectMemoryFinalEvidence, projectMemoryTurnEvidence } = require('./publicTraceMemory');
@@ -32,7 +31,6 @@ function projectTurn(value) {
     ? projectLifecycleBoundaryEvidence(source.lifecycleBefore)
     : undefined;
   const user = source ? projectUserEvidence(source.user) : null;
-  const route = source ? projectRouteEvidence(source.route) : null;
   const finalAssistant = source ? projectFinalAssistantEvidence(source.finalAssistant) : undefined;
   const finalAssistantCandidateCount = source
     ? nonNegativeInteger(source.finalAssistantCandidateCount)
@@ -53,7 +51,6 @@ function projectTurn(value) {
     typeof source.completed !== 'boolean' ||
     lifecycleBefore === undefined ||
     !user ||
-    !route ||
     finalAssistant === undefined ||
     finalAssistantCandidateCount === null ||
     !completion ||
@@ -72,7 +69,6 @@ function projectTurn(value) {
     completed: source.completed,
     lifecycleBefore,
     user,
-    route,
     finalAssistant,
     finalAssistantCandidateCount,
     completion,
@@ -88,7 +84,7 @@ function projectTurn(value) {
 
 function projectPublicRedactedTrace(value) {
   const source = asRecord(value);
-  if (!source || source.schemaVersion !== 'e2e-redacted-trace-v4') {
+  if (!source || source.schemaVersion !== 'e2e-redacted-trace-v5') {
     return null;
   }
   const fixtureId = isPublicEvaluationId(source.fixtureId) ? source.fixtureId : null;
@@ -133,7 +129,7 @@ function projectPublicRedactedTrace(value) {
     source.graphStatus === null ? null : safeEnum(source.graphStatus, SAFE_GRAPH_STATUSES);
   if (graphStatus === undefined) return null;
   return {
-    schemaVersion: 'e2e-redacted-trace-v4',
+    schemaVersion: 'e2e-redacted-trace-v5',
     fixtureId,
     conversationIdHash,
     completed: source.completed,

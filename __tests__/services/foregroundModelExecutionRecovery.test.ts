@@ -2,7 +2,7 @@ import { planForegroundModelRestartRecovery } from '../../src/services/execution
 import { conversation, lease } from '../helpers/foregroundModelRecoveryFixtures';
 
 describe('foreground model restart recovery planning', () => {
-  it('looks up a chitchat tool effect by the exact foreground execution run', () => {
+  it('looks up an untracked tool effect by the exact foreground execution run', () => {
     const resolveToolEffect = jest.fn(() => ({ kind: 'verified' as const, observedAt: 10 }));
     const ownedConversation = conversation({
       messages: [

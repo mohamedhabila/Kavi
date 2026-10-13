@@ -39,7 +39,7 @@ const mockedResolveForegroundInterruptedResponseOutcome =
   >;
 
 function prepareReadyRun() {
-  const conversation = createConversation({ mode: 'chitchat' });
+  const conversation = createConversation();
   const provider = createProvider('provider', 'model');
   const context = createExecutionContext({
     conversation,

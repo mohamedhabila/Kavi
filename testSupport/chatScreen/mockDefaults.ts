@@ -38,7 +38,6 @@ import {
   mockUpdateMessageEnrichedContent,
   mockUpdateMessageProviderReplay,
   mockUpdateMessageReasoning,
-  mockUpdateModeInConversation,
   mockUpdateModelInConversation,
   mockUpdatePersonaInConversation,
   mockUpdateToolCallStatus,
@@ -100,7 +99,6 @@ export function resetChatScreenTestEnvironment() {
     mockUpdateToolCallStatus,
     mockUpdateMessageEffect,
     mockUpdatePersonaInConversation,
-    mockUpdateModeInConversation,
     mockRecordConversationUsage,
     mockAddConversationLog,
     mockStartAgentRun,
@@ -146,12 +144,7 @@ export function resetChatScreenTestEnvironment() {
 
   resetMockChatScreenState();
   mockEnsureConversation.mockImplementation(
-    (
-      providerId: string,
-      systemPrompt: string,
-      modelOverride?: string,
-      options?: { activate?: boolean; personaId?: string; mode?: string },
-    ) => {
+    (providerId: string, systemPrompt: string, modelOverride?: string) => {
       const existing =
         mockChatScreenState.conversations.find(
           (conversation) => conversation.id === mockChatScreenState.activeConversationId,
@@ -178,8 +171,6 @@ export function resetChatScreenTestEnvironment() {
             systemPrompt,
             createdAt: timestamp,
             updatedAt: timestamp,
-            personaId: options?.personaId,
-            mode: options?.mode,
             usage: {
               entries: [],
               totalInput: 0,
@@ -196,9 +187,7 @@ export function resetChatScreenTestEnvironment() {
           ...mockChatScreenState.conversations,
         ];
       }
-      if (options?.activate !== false) {
-        mockChatScreenState.activeConversationId = conversationId;
-      }
+      mockChatScreenState.activeConversationId = conversationId;
       return conversationId;
     },
   );

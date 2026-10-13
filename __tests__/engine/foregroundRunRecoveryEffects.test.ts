@@ -31,6 +31,8 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
     id: candidate.conversationId,
     title: 'Recovered run',
     messages: [],
+    providerId: 'provider-1',
+    systemPrompt: '',
     agentRuns: [],
     createdAt: 1,
     updatedAt: 2,

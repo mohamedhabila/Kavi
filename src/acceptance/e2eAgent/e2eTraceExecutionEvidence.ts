@@ -4,20 +4,13 @@ import type {
   AgentRunSummary,
   AgentRunTerminalReason,
 } from '../../types/agentRun';
-import type { ConversationMode } from '../../types/conversation';
 import type { AssistantCompletionStatus } from '../../types/message';
-import type {
-  ForegroundScenarioCompletionSnapshot,
-  ForegroundScenarioRouteDirective,
-} from './foregroundScenarioDriverTypes';
+import type { ForegroundScenarioCompletionSnapshot } from './foregroundScenarioDriverTypes';
 import {
   E2E_PUBLIC_ASSISTANT_STATUSES,
-  E2E_PUBLIC_BUILT_IN_PERSONA_IDS,
-  E2E_PUBLIC_CONVERSATION_MODES,
   E2E_PUBLIC_FINISH_REASONS,
   E2E_PUBLIC_GRAPH_STATUSES,
   E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH,
-  E2E_PUBLIC_ROUTE_DIRECTIVES,
   E2E_PUBLIC_RUN_PHASES,
   E2E_PUBLIC_RUN_STATUSES,
   E2E_PUBLIC_TERMINAL_REASONS,
@@ -29,7 +22,6 @@ import {
 } from './e2eTraceValidation';
 import type { E2EScenarioTurnTrace } from './types';
 
-type PublicBuiltInPersonaId = (typeof E2E_PUBLIC_BUILT_IN_PERSONA_IDS)[number];
 type PublicFinishReason = (typeof E2E_PUBLIC_FINISH_REASONS)[number];
 
 export type E2ERedactedUserEvidence = {
@@ -40,15 +32,6 @@ export type E2ERedactedUserEvidence = {
 export type E2ERedactedLifecycleBoundaryEvidence = NonNullable<
   E2EScenarioTurnTrace['lifecycleBefore']
 >;
-
-export type E2ERedactedRouteEvidence = {
-  directive: ForegroundScenarioRouteDirective;
-  directiveHash: E2ERedactedHash;
-  mode: ConversationMode;
-  modeHash: E2ERedactedHash;
-  personaId?: PublicBuiltInPersonaId;
-  personaIdHash: E2ERedactedHash;
-};
 
 export type E2ERedactedFinalAssistantEvidence = {
   messageIdHash: E2ERedactedHash;
@@ -95,9 +78,6 @@ export type E2ERedactedAgentRunEvidence = {
   summary: E2ERedactedAgentRunSummary;
 };
 
-const ROUTE_DIRECTIVES = new Set<string>(E2E_PUBLIC_ROUTE_DIRECTIVES);
-const CONVERSATION_MODES = new Set<string>(E2E_PUBLIC_CONVERSATION_MODES);
-const BUILT_IN_PERSONA_IDS = new Set<string>(E2E_PUBLIC_BUILT_IN_PERSONA_IDS);
 const ASSISTANT_STATUSES = new Set<string>(E2E_PUBLIC_ASSISTANT_STATUSES);
 const RUN_STATUSES = new Set<string>(E2E_PUBLIC_RUN_STATUSES);
 const GRAPH_STATUSES = new Set<string>(E2E_PUBLIC_GRAPH_STATUSES);
@@ -191,27 +171,6 @@ export function buildLifecycleBoundaryEvidence(
     };
   }
   throw new Error('Unsupported E2E lifecycle boundary evidence.');
-}
-
-export function buildRouteEvidence(turn: E2EScenarioTurnTrace): E2ERedactedRouteEvidence {
-  return {
-    directive: requirePublicEnum<ForegroundScenarioRouteDirective>(
-      turn.route.directive,
-      ROUTE_DIRECTIVES,
-      'turn.route.directive',
-    ),
-    directiveHash: hashString(turn.route.directive),
-    mode: requirePublicEnum<ConversationMode>(
-      turn.route.mode,
-      CONVERSATION_MODES,
-      'turn.route.mode',
-    ),
-    modeHash: hashString(turn.route.mode),
-    ...(BUILT_IN_PERSONA_IDS.has(turn.route.personaId)
-      ? { personaId: turn.route.personaId as PublicBuiltInPersonaId }
-      : {}),
-    personaIdHash: hashString(turn.route.personaId),
-  };
 }
 
 export function buildFinalAssistantEvidence(

@@ -19,10 +19,9 @@ describe('full-registry turn tool surface', () => {
   // assistant that cannot see web or read-only device state on the first turn pays a
   // discovery round-trip for the most common requests it receives, and often answers
   // from parametric knowledge instead. The budget below is the real constraint.
-  it('keeps a new agentic turn on a compact core plus discovery surface', async () => {
+  it('keeps a new turn on a compact core plus discovery surface', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
-      conversationMode: 'agentic',
       observedToolNames: new Set<string>(),
       workingMessages: [userMessage],
     });
@@ -48,25 +47,9 @@ describe('full-registry turn tool surface', () => {
     expect(tokenEstimate).toBeLessThanOrEqual(5_000);
   });
 
-  it('gives chitchat the same read-only everyday surface without graph or delegation tools', async () => {
+  it('keeps the core out of unrelated mobile mutation domains', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
-      conversationMode: 'chitchat',
-      observedToolNames: new Set<string>(),
-      workingMessages: [userMessage],
-    });
-    const names = new Set(selected.map((tool) => tool.name));
-
-    expect(names.has('web_search')).toBe(true);
-    expect(names.has('calendar_events')).toBe(true);
-    expect(names.has('update_plan')).toBe(false);
-    expect(names.has('sessions_spawn')).toBe(false);
-  });
-
-  it('keeps the agentic core out of unrelated mobile mutation domains', async () => {
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: TOOL_DEFINITIONS,
-      conversationMode: 'agentic',
       observedToolNames: new Set<string>(),
       workingMessages: [userMessage],
     });

@@ -53,10 +53,6 @@
         "abstain"
       ]
     },
-    "requestedMode": {
-      "type": "string",
-      "enum": ["chitchat", "agentic", "either", "clarify_before_routing"]
-    },
     "approvalRisk": {
       "type": "string",
       "enum": ["none", "approval_required", "prohibited", "unknown"]
@@ -71,7 +67,6 @@
         "preferences",
         "missingInformation",
         "requestedAction",
-        "requestedMode",
         "approvalRisk",
         "temporalRequirements",
         "successCriteria"
@@ -94,9 +89,6 @@
         },
         "requestedAction": {
           "$ref": "#/$defs/requestedAction"
-        },
-        "requestedMode": {
-          "$ref": "#/$defs/requestedMode"
         },
         "approvalRisk": {
           "$ref": "#/$defs/approvalRisk"
@@ -193,32 +185,6 @@
         }
       ]
     },
-    "scorableModeGoldField": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["status", "value"],
-      "properties": {
-        "status": {
-          "const": "scorable"
-        },
-        "value": {
-          "$ref": "#/$defs/requestedMode"
-        }
-      }
-    },
-    "modeGoldField": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/scorableModeGoldField"
-        },
-        {
-          "$ref": "#/$defs/ambiguousGoldField"
-        },
-        {
-          "$ref": "#/$defs/unscorableGoldField"
-        }
-      ]
-    },
     "scorableApprovalGoldField": {
       "type": "object",
       "additionalProperties": false,
@@ -255,7 +221,6 @@
         "preferences",
         "missingInformation",
         "requestedAction",
-        "requestedMode",
         "approvalRisk",
         "temporalRequirements",
         "successCriteria"
@@ -278,9 +243,6 @@
         },
         "requestedAction": {
           "$ref": "#/$defs/actionGoldField"
-        },
-        "requestedMode": {
-          "$ref": "#/$defs/modeGoldField"
         },
         "approvalRisk": {
           "$ref": "#/$defs/approvalGoldField"
@@ -456,7 +418,6 @@
             "preferences",
             "missingInformation",
             "requestedAction",
-            "requestedMode",
             "approvalRisk",
             "temporalRequirements",
             "successCriteria"
@@ -641,8 +602,8 @@
           "items": {
             "$ref": "#/$defs/fieldScore"
           },
-          "minItems": 10,
-          "maxItems": 10
+          "minItems": 9,
+          "maxItems": 9
         },
         "coverage": {
           "type": "object",

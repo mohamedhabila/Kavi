@@ -8,10 +8,10 @@ const READINESS_MIN_AXIS_PASS_RATE = 0.95;
 const READINESS_MIN_FAST_SUITE_SCENARIO_COUNT = 39;
 const PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4096;
 const PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
-const SCENARIO_MANIFEST_VERSION = '2026-07-11.organic-flow-v3';
+const SCENARIO_MANIFEST_VERSION = '2026-10-13.one-mode-v4';
 const NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 const READINESS_DASHBOARD_VERSION = '2026-07-10.phase12-pricing-v1';
-const BENCHMARK_MANIFEST_VERSION = '2026-07-28.external-portfolio-v7';
+const BENCHMARK_MANIFEST_VERSION = '2026-10-13.external-portfolio-v8';
 const BENCHMARK_SOURCE_REFRESH_DATE = '2026-07-28';
 const READINESS_ARTIFACT_RETENTION_RUNS = 90;
 const RUN_REPORT_SCHEMA_VERSION = 'e2e-run-report-v2';
@@ -42,7 +42,6 @@ const FAILURE_CATEGORIES = [
   'wrong_args',
   'missing_clarification',
   'permission_failure',
-  'execution_route_failure',
   'execution_failure',
   'final_response_failure',
   'goal_state_bug',

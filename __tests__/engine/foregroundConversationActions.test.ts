@@ -44,7 +44,6 @@ function createParams(
     clearComposerDraft: jest.fn(),
     clearForegroundRequestForConversation: jest.fn(),
     completeAgentRun: jest.fn(),
-    defaultConversationMode: 'agentic',
     rewindUserMessageForResend: jest.fn(() => ({
       status: 'rejected',
       reason: 'message_unavailable',
@@ -54,7 +53,6 @@ function createParams(
     ensureConversation: jest.fn(),
     forceNextScrollRef: { current: false },
     generateId: () => 'message-1',
-    isAgenticMode: true,
     pendingAgentRunAsyncResumesRef: { current: new Map() },
     pendingAgentRunFinalizationsRef: { current: new Map() },
     pendingAgentRunTerminalReviewsRef: { current: new Map() },

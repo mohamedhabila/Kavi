@@ -185,9 +185,8 @@ Those private packs stay outside git. The checked-in 12-case development pack
 is a representative, redistributable contract fixture, not a substitute for
 the private packs and not a leaderboard score.
 
-Every full private split independently covers all KLAE families, the four
-mode transitions derived from actual turns, positive/negative/mixed controls,
-and short (2-3 turns), medium (4-15 turns), and long (16+ turns) case histories.
+Every full private split independently covers all KLAE families,
+positive/negative/mixed controls, and short (2-3 turns), medium (4-15 turns), and long (16+ turns) case histories.
 Lifecycle coverage is causal: a relevant user interaction must occur before
 and after a context-reset, background, reboot, or provider-change boundary;
 kill/relaunch and offline/online windows must be exercised end to end. Each
@@ -361,7 +360,7 @@ no candidate access to execution evidence or a final answer, and no app-runtime
 access to gold. Violating any attestation invalidates the input; omitting leaked
 fields from a post-execution frame is not a valid substitute.
 
-The closed frame has ten fields:
+The closed frame has nine fields:
 
 | Field                  | Meaning                                                                   |
 | ---------------------- | ------------------------------------------------------------------------- |
@@ -371,14 +370,13 @@ The closed frame has ten fields:
 | `preferences`          | Soft choices that should guide an otherwise valid result.                 |
 | `missingInformation`   | Facts that must be clarified before a safe or correct next action.        |
 | `requestedAction`      | Closed action class such as answer, clarify, plan, execute, or remember.  |
-| `requestedMode`        | Chitchat, agentic, either, or clarification before routing.               |
 | `approvalRisk`         | No approval, approval required, prohibited, or unknown.                   |
 | `temporalRequirements` | Deadlines, ordering, recurrence, duration, or explicit absence of timing. |
 | `successCriteria`      | Observable conditions that make the requested outcome complete.           |
 
 Multi-value fields contain bounded canonical atoms. Use the sole atom `none`
 for an explicit absence; combining `none` with another atom invalidates the
-input. Action, mode, and approval risk use closed enums. Candidate frames
+input. Action and approval risk use closed enums. Candidate frames
 cannot contain request text, tool calls, execution traces, assistant output,
 final answers, artifacts, or arbitrary extra properties. This prevents the
 scorer from rewarding post-execution or answer leakage.
@@ -516,8 +514,8 @@ path.
 ## KLAE case-pack contract
 
 KLAE asks whether persistent context makes Kavi more useful, natural, safe,
-and continuous across direct chat and agentic work. The public pack covers all
-four concrete mode transitions and representative profile, preference,
+and continuous across casual conversation and multi-step work. The public pack
+covers representative profile, preference,
 correction, temporal, episodic, open-loop, procedure, failure, interference,
 abstention, silence, deletion, multilingual, attachment, lifecycle,
 delegation, safety, and long-task recovery behavior.
@@ -544,7 +542,7 @@ A product-real runner maps these paths to captured state:
 
 | Root                      | Observation examples                                                                     |
 | ------------------------- | ---------------------------------------------------------------------------------------- |
-| `turn`                    | Actual mode, structured assistant decision, memory references, answer fact references.   |
+| `turn`                    | Structured assistant decision, memory references, answer fact references.                |
 | `memory`                  | Current and historical facts, episodes, experience records, indexes, and derived caches. |
 | `native`                  | Calendar, contact, message, notification, and other mobile fixture state.                |
 | `workspace` or `artifact` | File existence, digest, language metadata, source references, and structured contents.   |
@@ -637,9 +635,8 @@ references explicitly based at `retention_root`; each path includes its run id.
 The uploaded artifact includes that retention tree. It may contain structural
 redacted traces, but never raw or private traces.
 
-The current public trace contract is `e2e-redacted-trace-v4`. Each turn is a
-closed projection of the immutable run result: actual route and mode,
-completion states, hashed user and final-response identities, bounded AgentRun
+The current public trace contract is `e2e-redacted-trace-v5`. Each turn is a
+closed projection of the immutable run result: completion states, hashed user and final-response identities, bounded AgentRun
 counters, memory deltas and persistence-receipt counts, native state
 fingerprints, and a verified lifecycle boundary when an app relaunch occurred.
 Raw text, raw IDs, memory values, provider payloads, and native arguments are
@@ -649,8 +646,8 @@ permission to publish private input.
 
 Raw scenario evidence is local and opt-in. Set `E2E_PRIVATE_EVIDENCE_DIR` to a
 directory that resolves inside `.private/evals/` to write one unique
-`e2e-private-scenario-evidence-v10` file per attempt. The private file retains
-requested turns and user-selected modes, final responses, exact memory and
+`e2e-private-scenario-evidence-v11` file per attempt. The private file retains
+requested turns, final responses, exact memory and
 receipt evidence, the per-turn memory prompt builds used by memory-selection rubrics,
 tool and native results, graph state, and verified relaunch boundaries for
 diagnosis.

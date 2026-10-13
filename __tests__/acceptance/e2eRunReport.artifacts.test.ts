@@ -58,7 +58,6 @@ describe('e2eRunReport artifacts', () => {
         integrity: 'valid',
         routing: {
           status: 'known',
-          mode: 'agentic',
           inputKind: 'text',
           attachmentCount: 0,
           continuation: 'resume_waiting_user',

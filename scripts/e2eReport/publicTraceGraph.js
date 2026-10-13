@@ -45,7 +45,6 @@ const SAFE_GRAPH_AUDIT_TYPES = new Set([
 
 const SAFE_REQUEST_UNDERSTANDING_FIELD_STATUSES = new Set(['known', 'unknown', 'conflict']);
 const SAFE_REQUEST_UNDERSTANDING_INTEGRITY = new Set(['valid', 'conflict']);
-const SAFE_REQUEST_MODES = new Set(['chitchat', 'agentic']);
 const SAFE_REQUEST_INPUT_KINDS = new Set(['empty', 'text', 'attachments', 'text_and_attachments']);
 const SAFE_REQUEST_CONTINUATIONS = new Set(E2E_PUBLIC_REQUEST_CONTINUATIONS);
 const SAFE_REQUEST_DECISION_ACTIONS = new Set(['act', 'clarify', 'wait', 'decline', 'consent']);
@@ -103,14 +102,12 @@ function projectRequestUnderstandingRouting(value) {
     : undefined;
   if (!source || !status) return null;
   if (status !== 'known') return { status };
-  const mode = safeEnum(source.mode, SAFE_REQUEST_MODES);
   const inputKind = safeEnum(source.inputKind, SAFE_REQUEST_INPUT_KINDS);
   const attachmentCount = nonNegativeInteger(source.attachmentCount);
   const continuation = safeEnum(source.continuation, SAFE_REQUEST_CONTINUATIONS);
   const decisionAction = safeEnum(source.decisionAction, SAFE_REQUEST_DECISION_ACTIONS);
   const decisionReason = safeEnum(source.decisionReason, SAFE_REQUEST_DECISION_REASONS);
   if (
-    !mode ||
     !inputKind ||
     attachmentCount === null ||
     !continuation ||
@@ -121,7 +118,6 @@ function projectRequestUnderstandingRouting(value) {
   }
   return {
     status,
-    mode,
     inputKind,
     attachmentCount,
     continuation,
@@ -132,7 +128,7 @@ function projectRequestUnderstandingRouting(value) {
 
 function projectRequestUnderstanding(value) {
   const source = asRecord(value);
-  if (!source || source.version !== 3) return undefined;
+  if (!source || source.version !== 4) return undefined;
   const integrity = safeEnum(source.integrity, SAFE_REQUEST_UNDERSTANDING_INTEGRITY);
   const routing = projectRequestUnderstandingRouting(source.routing);
   const registeredRequiredInformation = projectRequestUnderstandingList(
@@ -165,7 +161,7 @@ function projectRequestUnderstanding(value) {
     return undefined;
   }
   return {
-    version: 3,
+    version: 4,
     integrity,
     routing,
     registeredRequiredInformation,

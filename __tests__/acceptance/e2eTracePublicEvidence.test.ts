@@ -1,9 +1,5 @@
-import { BUILT_IN_PERSONAS } from '../../src/services/agents/personas';
 import { buildE2EScenarioTraceSummary } from '../../src/acceptance/e2eAgent/e2eTraceSummary';
-import {
-  E2E_PUBLIC_BUILT_IN_PERSONA_IDS,
-  E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH,
-} from '../../src/acceptance/e2eAgent/e2eTraceExecutionPolicy';
+import { E2E_PUBLIC_MAX_FINAL_ASSISTANT_TEXT_LENGTH } from '../../src/acceptance/e2eAgent/e2eTraceExecutionPolicy';
 import { getE2ENativeMobileFixtureStateSnapshot } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import { buildFixtureResult } from '../helpers/e2eRunReportHarness';
@@ -13,7 +9,6 @@ const {
   projectAgentRunEvidence,
   projectCompletionEvidence,
   projectFinalAssistantEvidence,
-  projectRouteEvidence,
   projectUserEvidence,
 } = require('../../scripts/e2eReport/publicTraceExecution');
 const {
@@ -31,7 +26,6 @@ const PRIVATE_SENTINELS = [
   'PRIVATE-CONVERSATION-ID',
   'PRIVATE-USER-MESSAGE-ID',
   'PRIVATE-USER-TEXT',
-  'PRIVATE-CUSTOM-PERSONA',
   'PRIVATE-ASSISTANT-MESSAGE-ID',
   'PRIVATE-ASSISTANT-TEXT',
   'PRIVATE-FINISH-REASON',
@@ -101,11 +95,6 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
           messageId: 'PRIVATE-USER-MESSAGE-ID',
           text: 'PRIVATE-USER-TEXT',
           timestamp: 123,
-        },
-        route: {
-          directive: 'forced_agentic',
-          mode: 'agentic',
-          personaId: 'PRIVATE-CUSTOM-PERSONA',
         },
         finalAssistant: {
           messageId: 'PRIVATE-ASSISTANT-MESSAGE-ID',
@@ -185,12 +174,6 @@ function buildPrivateEvidenceResult(): E2EScenarioResult {
 }
 
 describe('public immutable E2E evidence projection', () => {
-  it('keeps policy persona IDs synchronized with product built-ins', () => {
-    expect([...E2E_PUBLIC_BUILT_IN_PERSONA_IDS].sort()).toEqual(
-      BUILT_IN_PERSONAS.map((persona) => persona.id).sort(),
-    );
-  });
-
   it('projects only hashes, counts, allowlisted enums, and state fingerprints', () => {
     const trace = buildE2EScenarioTraceSummary({ result: buildPrivateEvidenceResult() });
     const serialized = JSON.stringify(trace);
@@ -205,11 +188,6 @@ describe('public immutable E2E evidence projection', () => {
       user: {
         messageIdHash: { length: 'PRIVATE-USER-MESSAGE-ID'.length },
         textHash: { length: 'PRIVATE-USER-TEXT'.length },
-      },
-      route: {
-        directive: 'forced_agentic',
-        mode: 'agentic',
-        personaIdHash: { length: 'PRIVATE-CUSTOM-PERSONA'.length },
       },
       finalAssistant: {
         messageIdHash: { length: 'PRIVATE-ASSISTANT-MESSAGE-ID'.length },
@@ -251,7 +229,7 @@ describe('public immutable E2E evidence projection', () => {
         toolInvocations: [{ nameHash: { length: 'PRIVATE-NATIVE-TOOL'.length }, count: 1 }],
       },
     });
-    expect(trace.turns[0]?.route).not.toHaveProperty('personaId');
+    expect(trace.turns[0]).not.toHaveProperty('route');
     expect(trace.turns[0]?.user).not.toHaveProperty('timestamp');
     expect(trace.turns[0]?.finalAssistant).not.toHaveProperty('finishReason');
     expect(trace.turns[0]?.finalAssistant).not.toHaveProperty('timestamp');
@@ -296,7 +274,6 @@ describe('public immutable E2E evidence projection', () => {
     expect(SAFE_NATIVE_FIXTURE_PATHS.has('calendar.lastCreatedTitle')).toBe(true);
     const sourceTurn = trace.turns[0];
     expect(projectUserEvidence(sourceTurn?.user)).not.toBeNull();
-    expect(projectRouteEvidence(sourceTurn?.route)).not.toBeNull();
     expect(projectFinalAssistantEvidence(sourceTurn?.finalAssistant)).not.toBeUndefined();
     expect(projectCompletionEvidence(sourceTurn?.completion)).not.toBeNull();
     expect(projectAgentRunEvidence(sourceTurn?.agentRun)).not.toBeUndefined();
@@ -316,7 +293,6 @@ describe('public immutable E2E evidence projection', () => {
     hostile.turns[0].user.text = 'PRIVATE-USER-TEXT';
     hostile.turns[0].finalAssistant.text = 'PRIVATE-ASSISTANT-TEXT';
     hostile.turns[0].agentRun.latestSummary = 'PRIVATE-ASSISTANT-TEXT';
-    hostile.turns[0].route.personaId = 'PRIVATE-CUSTOM-PERSONA';
     hostile.turns[0].memory.itemIds = ['PRIVATE-MEMORY-ID'];
     hostile.memoryFinal.items = [{ text: 'PRIVATE-MEMORY-CONTENT' }];
     hostile.turns[0].native.rawState = { text: 'PRIVATE-NATIVE-STATE' };
@@ -327,7 +303,6 @@ describe('public immutable E2E evidence projection', () => {
     for (const sentinel of PRIVATE_SENTINELS) expect(serialized).not.toContain(sentinel);
     expect(projected).toEqual(projectPublicRedactedTrace(projected));
     expect(projected.turns[0].user).toEqual(trace.turns[0]?.user);
-    expect(projected.turns[0].route).not.toHaveProperty('personaId');
 
     const oldTurn = JSON.parse(JSON.stringify(trace));
     delete oldTurn.turns[0].user;
@@ -342,25 +317,7 @@ describe('public immutable E2E evidence projection', () => {
     expect(projectPublicRedactedTrace(invalidLifecycle)).toBeNull();
   });
 
-  it('publishes built-in persona IDs while still hashing them', () => {
-    const result = buildPrivateEvidenceResult();
-    const turn = result.turnTraces[0] as { route: { personaId: string } };
-    turn.route.personaId = 'super-agent';
-    const trace = buildE2EScenarioTraceSummary({ result });
-    expect(trace.turns[0]?.route).toMatchObject({
-      personaId: 'super-agent',
-      personaIdHash: { length: 'super-agent'.length },
-    });
-  });
-
   it('rejects unknown strict enums and invalid numeric counters before redaction', () => {
-    const invalidRoute = buildPrivateEvidenceResult();
-    const route = invalidRoute.turnTraces[0]?.route as unknown as { mode: string };
-    route.mode = 'PRIVATE-UNKNOWN-FIELD';
-    expect(() => buildE2EScenarioTraceSummary({ result: invalidRoute })).toThrow(
-      'turn.route.mode contains an unsupported enum value.',
-    );
-
     const invalidCounter = buildPrivateEvidenceResult();
     const turn = invalidCounter.turnTraces[0] as unknown as {
       finalAssistantCandidateCount: number;
@@ -416,7 +373,6 @@ describe('public immutable E2E evidence projection', () => {
       memoryFinal: { currentItemCount: number };
       turns: Array<{
         memory: { promptStatus: string; extractionSettled: unknown };
-        route: { mode: string };
         agentRun: { summary: { startedTools: number } };
         finalAssistant: { textLength: number };
       }>;
@@ -427,13 +383,6 @@ describe('public immutable E2E evidence projection', () => {
       return candidate;
     };
 
-    expect(
-      projectPublicRedactedTrace(
-        mutate((candidate) => {
-          candidate.turns[0].route.mode = 'OTHER';
-        }),
-      ),
-    ).toBeNull();
     expect(
       projectPublicRedactedTrace(
         mutate((candidate) => {

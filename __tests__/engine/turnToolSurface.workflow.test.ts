@@ -9,25 +9,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps safe long-work primitives available without prompt-phrase routing', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: [SESSION_SPAWN_TOOL, WAIT_TOOL],
-      conversationMode: 'agentic',
       observedToolNames: new Set(),
       workingMessages: [userMessage('Handle this task carefully.', 1)],
     });
 
     expect(selected.some((tool) => tool.name === 'wait')).toBe(true);
     expect(selected.some((tool) => tool.name === 'sessions_spawn')).toBe(true);
-  });
-
-  it('keeps long-work primitives out of ordinary chat mode', async () => {
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: [SESSION_SPAWN_TOOL, WAIT_TOOL],
-      conversationMode: 'chitchat',
-      observedToolNames: new Set(),
-      workingMessages: [userMessage('Tell me about waiting politely.', 1)],
-    });
-
-    expect(selected.some((tool) => tool.name === 'wait')).toBe(false);
-    expect(selected.some((tool) => tool.name === 'sessions_spawn')).toBe(false);
   });
 
   it('defers required workflow consumers when an upstream producer is available but unobserved', () => {

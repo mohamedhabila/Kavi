@@ -39,28 +39,11 @@ describe('E2E longitudinal product scenarios', () => {
     }
   });
 
-  it('attributes route, execution, final response, agent run, and memory receipt per turn', () => {
-    const expectedRoutes = [
-      ['chitchat', 'chitchat'],
-      ['chitchat', 'agentic'],
-      ['agentic', 'chitchat'],
-      ['agentic', 'agentic'],
-      ['chitchat', 'chitchat'],
-    ] as const;
-
-    E2E_LONGITUDINAL_SCENARIOS.forEach((scenario, scenarioIndex) => {
+  it('attributes execution, final response, and agent run completion per turn', () => {
+    for (const scenario of E2E_LONGITUDINAL_SCENARIOS) {
       scenario.userTurns!.forEach((turn, turnIndex) => {
-        const mode = expectedRoutes[scenarioIndex]![turnIndex]!;
-        const directive = mode === 'agentic' ? 'forced_agentic' : 'forced_chitchat';
-        const stageRubrics = rubricsForTurn(scenario, turnIndex);
-        expect(turn.route).toBe(directive);
-        expect(stageRubrics).toContainEqual({
-          kind: 'turn_route',
-          turnIndex,
-          directive,
-          mode,
-        });
-        expect(stageRubrics).toEqual(
+        expect(turn as unknown as Record<string, unknown>).not.toHaveProperty('route');
+        expect(rubricsForTurn(scenario, turnIndex)).toEqual(
           expect.arrayContaining([
             {
               kind: 'turn_completion',
@@ -78,12 +61,12 @@ describe('E2E longitudinal product scenarios', () => {
               kind: 'turn_completion',
               turnIndex,
               field: 'agent_run',
-              expected: mode === 'agentic' ? true : null,
+              expected: true,
             },
           ]),
         );
       });
-    });
+    }
   });
 
   it('proves preference application with exact calendar timing and duration state', () => {

@@ -6,7 +6,6 @@ import type {
 } from './provider';
 import type { MemoryConsolidationMode } from '../services/memory/memoryConsolidationMode';
 import type { WebSearchProvider } from './tool';
-import type { ConversationMode } from './conversation';
 import type {
   McpServerConfig,
   SshTargetConfig,
@@ -39,7 +38,6 @@ export interface AppSettings {
   maxLinks?: number;
   theme: 'light' | 'dark' | 'system';
   systemPrompt: string;
-  defaultConversationMode?: ConversationMode;
   /**
    * Which model extracts memories from finished turns: `auto` uses the active chat model,
    * `local` an on-device model, `specific` the chosen provider, and `off` none (Kavi then

@@ -93,7 +93,6 @@ const mockSettingsState = {
   linkUnderstandingEnabled: true,
   mediaUnderstandingEnabled: false,
   maxLinks: 5,
-  defaultConversationMode: 'agentic',
   developerModeEnabled: true,
   replaceAllSettings: mockReplaceAllSettings,
 };
@@ -511,7 +510,6 @@ describe('Settings Import/Export', () => {
       expect(s.linkUnderstandingEnabled).toBe(true);
       expect(s.mediaUnderstandingEnabled).toBe(false);
       expect(s.maxLinks).toBe(5);
-      expect(s.defaultConversationMode).toBe('agentic');
       expect(s.developerModeEnabled).toBe(true);
     });
 
@@ -527,7 +525,6 @@ describe('Settings Import/Export', () => {
           linkUnderstandingEnabled: false,
           mediaUnderstandingEnabled: true,
           maxLinks: 10,
-          defaultConversationMode: 'direct',
           developerModeEnabled: false,
         },
       } as any);
@@ -541,8 +538,6 @@ describe('Settings Import/Export', () => {
       expect(arg.linkUnderstandingEnabled).toBe(false);
       expect(arg.mediaUnderstandingEnabled).toBe(true);
       expect(arg.maxLinks).toBe(10);
-      // Legacy 'direct' import is normalized to canonical 'chitchat'.
-      expect(arg.defaultConversationMode).toBe('chitchat');
       expect(arg.developerModeEnabled).toBe(false);
       expect(mockSetLocale).toHaveBeenCalledWith('ja');
     });
@@ -606,7 +601,6 @@ describe('Settings Import/Export', () => {
       const arg = mockReplaceAllSettings.mock.calls[0][0];
       expect(arg).not.toHaveProperty('lastUsedModel');
       expect(arg).not.toHaveProperty('thinkingLevel');
-      expect(arg).not.toHaveProperty('defaultConversationMode');
       expect(arg).not.toHaveProperty('developerModeEnabled');
     });
   });

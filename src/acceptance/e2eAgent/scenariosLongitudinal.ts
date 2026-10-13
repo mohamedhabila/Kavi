@@ -1,53 +1,13 @@
 import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
 import type { E2ERubric, E2EScenario } from './types';
 
-type CompletedTurnRubricsInput = {
-  turnIndex: number;
-  directive: 'forced_chitchat' | 'forced_agentic';
-  mode: 'chitchat' | 'agentic';
-  agentRunCompleted: boolean | null;
-};
-
-function completedTurnRubrics(input: CompletedTurnRubricsInput): E2ERubric[] {
+function completedTurnRubrics(turnIndex: number): E2ERubric[] {
   return [
-    {
-      kind: 'turn_route',
-      turnIndex: input.turnIndex,
-      directive: input.directive,
-      mode: input.mode,
-    },
-    {
-      kind: 'turn_completion',
-      turnIndex: input.turnIndex,
-      field: 'execution',
-      expected: true,
-    },
-    {
-      kind: 'turn_completion',
-      turnIndex: input.turnIndex,
-      field: 'final_response',
-      expected: true,
-    },
-    {
-      kind: 'turn_completion',
-      turnIndex: input.turnIndex,
-      field: 'agent_run',
-      expected: input.agentRunCompleted,
-    },
+    { kind: 'turn_completion', turnIndex, field: 'execution', expected: true },
+    { kind: 'turn_completion', turnIndex, field: 'final_response', expected: true },
+    { kind: 'turn_completion', turnIndex, field: 'agent_run', expected: true },
   ];
 }
-
-const CHITCHAT_TURN = {
-  directive: 'forced_chitchat',
-  mode: 'chitchat',
-  agentRunCompleted: null,
-} as const;
-
-const AGENTIC_TURN = {
-  directive: 'forced_agentic',
-  mode: 'agentic',
-  agentRunCompleted: true,
-} as const;
 
 const OUTCOME_CONTINUITY_TOKEN = 'OUTCOME-CONTINUITY-E2E-42';
 const FAILURE_ARTIFACT_DIRECTORY = 'artifacts';
@@ -62,25 +22,22 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'profile-correction-chitchat',
     conversationId: 'e2e-longitudinal-profile-correction',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'chitchat', route: 'forced_chitchat' },
     threadTitle: 'Profile details',
-    prompt: 'Correct a durable profile detail during a chitchat conversation.',
+    prompt: 'Correct a durable profile detail in casual conversation.',
     userTurns: [
       {
-        route: 'forced_chitchat',
         content:
           'Please remember this profile detail exactly: subject `profile-owner` has `home_city` value `Rotterdam`.',
       },
       {
-        route: 'forced_chitchat',
         content:
           'Correction for my profile: subject `profile-owner` now has `home_city` value `Utrecht`, replacing Rotterdam. Use the corrected city going forward.',
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
-      ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
+      ...completedTurnRubrics(0),
+      ...completedTurnRubrics(1),
       { kind: 'memory_item', contains: ['profile-owner', 'Utrecht'] },
       {
         kind: 'memory_item_absent',
@@ -97,25 +54,22 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'preference-to-calendar-action',
     conversationId: 'e2e-longitudinal-calendar-preference',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'chitchat', route: 'forced_chitchat' },
     threadTitle: 'Meeting preferences',
-    prompt: 'Apply a preference learned in chitchat to a later calendar action.',
+    prompt: 'Apply a preference learned in conversation to a later calendar action.',
     userTurns: [
       {
-        route: 'forced_chitchat',
         content:
           'For future scheduling, remember exactly that subject `profile-owner` has `default_meeting_duration_minutes` value `45`.',
       },
       {
-        route: 'forced_agentic',
         content:
           'Schedule one event titled `Design review E2E` in my modifiable calendar starting at `2026-07-15T14:00:00Z`. Apply my remembered default meeting duration and complete the action without asking me to repeat it.',
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
-      ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
+      ...completedTurnRubrics(0),
+      ...completedTurnRubrics(1),
       { kind: 'memory_item', contains: ['profile-owner', '45'] },
       {
         kind: 'native_fixture_state',
@@ -147,23 +101,20 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'agent-outcome-to-chitchat',
     conversationId: 'e2e-longitudinal-outcome-continuity',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'Project outcome continuity',
-    prompt: 'Carry a verified agent outcome into the next chitchat turn.',
+    prompt: 'Carry a verified agent outcome into the next conversational turn.',
     userTurns: [
       {
-        route: 'forced_agentic',
         content: `Record the completed project outcome by writing \`artifacts/project-status.txt\` with exact content \`${OUTCOME_CONTINUITY_TOKEN}\`.`,
       },
       {
-        route: 'forced_chitchat',
         content: 'In our ongoing conversation, what project outcome did you just complete for me?',
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      ...completedTurnRubrics({ turnIndex: 0, ...AGENTIC_TURN }),
-      ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
+      ...completedTurnRubrics(0),
+      ...completedTurnRubrics(1),
       {
         kind: 'workspace_file',
         path: 'artifacts/project-status.txt',
@@ -185,7 +136,6 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'failure-gotcha-reuse',
     conversationId: 'e2e-longitudinal-failure-gotcha',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'agentic', route: 'forced_agentic' },
     threadTitle: 'Release workflow recovery',
     prompt:
       'Learn a reusable workflow constraint from a failed release attempt and apply it later.',
@@ -197,19 +147,17 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
     userTurns: [
       {
-        route: 'forced_agentic',
         content:
           'Inspect `policies/release-artifact-rules.txt` and retain its reusable release constraint using the exact durable fact labels it provides. This turn is only for learning the gotcha; do not create a release artifact yet.',
       },
       {
-        route: 'forced_agentic',
         content: `Prepare the release candidate now inside \`${FAILURE_ARTIFACT_DIRECTORY}/\`. Its base name is \`${FAILURE_ARTIFACT_BASE_NAME}\` and its exact content must be \`${FAILURE_ARTIFACT_CONTENT}\`. Apply the remembered workflow constraint and leave no invalid alternative.`,
       },
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      ...completedTurnRubrics({ turnIndex: 0, ...AGENTIC_TURN }),
-      ...completedTurnRubrics({ turnIndex: 1, ...AGENTIC_TURN }),
+      ...completedTurnRubrics(0),
+      ...completedTurnRubrics(1),
       { kind: 'memory_item', contains: ['mobile-release-workflow', FAILURE_ARTIFACT_SUFFIX] },
       {
         kind: 'workspace_file',
@@ -227,17 +175,14 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'relaunch-profile-continuity',
     conversationId: 'e2e-longitudinal-relaunch-profile',
     contentClass: 'synthetic_public',
-    execution: { initialMode: 'chitchat', route: 'forced_chitchat' },
     threadTitle: 'Profile continuity after relaunch',
     prompt: 'Preserve a learned profile detail across a real persisted app relaunch.',
     userTurns: [
       {
-        route: 'forced_chitchat',
         content:
           'Remember this profile detail exactly: subject `profile-owner` has `commute_mode` value `bicycle`.',
       },
       {
-        route: 'forced_chitchat',
         lifecycleBefore: 'app_relaunch',
         content:
           'The app has reopened. Which commute mode should you continue using for my profile?',
@@ -245,8 +190,8 @@ export const E2E_LONGITUDINAL_SCENARIOS: ReadonlyArray<E2EScenario> = [
     ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
-      ...completedTurnRubrics({ turnIndex: 0, ...CHITCHAT_TURN }),
-      ...completedTurnRubrics({ turnIndex: 1, ...CHITCHAT_TURN }),
+      ...completedTurnRubrics(0),
+      ...completedTurnRubrics(1),
       { kind: 'turn_lifecycle_boundary', turnIndex: 1, boundary: 'app_relaunch' },
       { kind: 'memory_item', contains: ['profile-owner', 'bicycle'] },
       {

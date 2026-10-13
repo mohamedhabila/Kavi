@@ -1,6 +1,5 @@
-export const REQUEST_FRAME_VERSION = 2 as const;
+export const REQUEST_FRAME_VERSION = 3 as const;
 
-export type RequestMode = 'chitchat' | 'agentic';
 export type RequestInputKind = 'empty' | 'text' | 'attachments' | 'text_and_attachments';
 export type RequestContinuation = 'new' | 'resume' | 'resume_waiting_async' | 'resume_waiting_user';
 export type RequestDecisionAction = 'act' | 'clarify' | 'wait' | 'decline' | 'consent';
@@ -35,7 +34,6 @@ export interface RequiredRequestInformation {
 
 export interface RequestFrame {
   version: typeof REQUEST_FRAME_VERSION;
-  mode: RequestMode;
   input: Readonly<{
     kind: RequestInputKind;
     attachmentCount: number;

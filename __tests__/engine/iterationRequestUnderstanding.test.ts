@@ -59,7 +59,6 @@ function params(iteration: number) {
     conversationId: 'conversation',
     failoverState: null,
     graph,
-    isSuperAgent: true,
     iteration,
     latestUserMessageText: 'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
     maxToolIterations: 4,
@@ -74,7 +73,6 @@ function params(iteration: number) {
     requestFrame: buildGraphEntryRequestFrame({
       text: 'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
       attachmentCount: 0,
-      mode: 'agentic',
       continuation: 'new',
     }),
     runtime,
@@ -113,7 +111,7 @@ describe('iteration request understanding continuity', () => {
         type: 'REQUEST_UNDERSTANDING_PROJECTED',
         iteration: 2,
         projection: expect.objectContaining({
-          version: 3,
+          version: 4,
           integrity: 'valid',
           effectAuthorization: { status: 'unknown' },
         }),
@@ -122,7 +120,7 @@ describe('iteration request understanding continuity', () => {
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptContextSupport: expect.objectContaining({
-          runtimeContext: expect.stringContaining('## Request Understanding Projection (v3)'),
+          runtimeContext: expect.stringContaining('## Request Understanding Projection (v4)'),
         }),
       }),
     );
@@ -146,7 +144,7 @@ describe('iteration request understanding continuity', () => {
     expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
       expect.objectContaining({
         type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        projection: expect.objectContaining({ version: 3, integrity: 'valid' }),
+        projection: expect.objectContaining({ version: 4, integrity: 'valid' }),
       }),
     ]);
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(

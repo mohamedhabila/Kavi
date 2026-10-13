@@ -1,4 +1,4 @@
-export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 3 as const;
+export const REQUEST_UNDERSTANDING_PROJECTION_VERSION = 4 as const;
 
 export type RequestUnderstandingUnknownReason =
   | 'request_state_unavailable'
@@ -31,7 +31,6 @@ export type RequestUnderstandingField<T> =
   | RequestUnderstandingConflict;
 
 export type RequestUnderstandingRouting = Readonly<{
-  mode: 'chitchat' | 'agentic';
   inputKind: 'empty' | 'text' | 'attachments' | 'text_and_attachments';
   attachmentCount: number;
   continuation: 'new' | 'resume' | 'resume_waiting_async' | 'resume_waiting_user';
@@ -98,7 +97,6 @@ export interface RequestUnderstandingSnapshot {
   routing:
     | Readonly<{
         status: 'known';
-        mode: RequestUnderstandingRouting['mode'];
         inputKind: RequestUnderstandingRouting['inputKind'];
         attachmentCount: number;
         continuation: RequestUnderstandingRouting['continuation'];

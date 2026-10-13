@@ -11,12 +11,6 @@ describe('E2E benchmark manifest stage attribution', () => {
     }
     const rubrics: E2ERubric[] = [
       {
-        kind: 'turn_route',
-        turnIndex: 0,
-        directive: 'forced_agentic',
-        mode: 'agentic',
-      },
-      {
         kind: 'turn_completion',
         turnIndex: 0,
         field: 'execution',
@@ -66,7 +60,7 @@ describe('E2E benchmark manifest stage attribution', () => {
     const scenario: E2EScenario = {
       ...sourceScenario,
       userTurns: [
-        { content: 'First turn.', selectedMode: 'agentic' },
+        { content: 'First turn.' },
         { content: 'Continue after relaunch.', lifecycleBefore: 'app_relaunch' },
       ],
       rubrics,
@@ -76,8 +70,7 @@ describe('E2E benchmark manifest stage attribution', () => {
 
     expect(manifest.finalStateEvaluators).toEqual([]);
     expect(manifest.resourceBudgetEvaluators).toEqual([]);
-    expect(manifest.initialState.execution.turnLifecycleBoundaries).toEqual([null, 'app_relaunch']);
-    expect(manifest.initialState.execution.turnSelectedModes).toEqual(['agentic', null]);
+    expect(manifest.initialState.turnLifecycleBoundaries).toEqual([null, 'app_relaunch']);
     expect(
       manifest.trajectoryEvaluators.map(({ rubricKind, evaluatorKind, evidenceKind }) => ({
         rubricKind,
@@ -85,11 +78,6 @@ describe('E2E benchmark manifest stage attribution', () => {
         evidenceKind,
       })),
     ).toEqual([
-      {
-        rubricKind: 'turn_route',
-        evaluatorKind: 'trajectory',
-        evidenceKind: 'execution_state',
-      },
       {
         rubricKind: 'turn_completion',
         evaluatorKind: 'trajectory',
