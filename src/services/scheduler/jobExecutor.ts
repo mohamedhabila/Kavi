@@ -24,8 +24,8 @@ import {
 } from './jobExecutorPersistence';
 import { createScheduledJobRetryPolicy } from './jobExecutorRetryPolicy';
 import {
-  configureScheduledExecutionConversation,
   resolveScheduledExecutionConversation,
+  resolveScheduledExecutionPersona,
   resolveScheduledOccurrenceCompletedOutput,
   resolveScheduledExecutionProvider,
 } from './jobExecutorSetup';
@@ -72,12 +72,7 @@ export async function executeScheduledJob(
     });
     await checkpointScheduledProjectionClaim(conversationId);
     executionLifecycle.throwIfBackgrounded();
-    const executionPersonaId = configureScheduledExecutionConversation({
-      job,
-      provider,
-      model,
-      conversationId,
-    });
+    const executionPersonaId = resolveScheduledExecutionPersona(conversationId);
     const completedOutput = resolveScheduledOccurrenceCompletedOutput({
       job,
       chatState: useChatStore.getState(),

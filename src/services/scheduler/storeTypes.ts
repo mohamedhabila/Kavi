@@ -1,4 +1,3 @@
-import type { ConversationMode } from '../../types/conversation';
 import type {
   CronFailureAlert,
   CronJob,
@@ -6,8 +5,6 @@ import type {
   CronSchedule,
   SchedulerRunningCompletion,
   SchedulerTerminalReport,
-  SessionTarget,
-  WakeMode,
 } from '../cron/types';
 import type { RunFailureUpdate } from './storeAttemptSettlement';
 
@@ -33,11 +30,8 @@ export interface SchedulerState {
     name: string;
     schedule: CronSchedule;
     prompt: string;
-    mode?: ConversationMode;
     model?: string;
     providerId?: string;
-    sessionTarget?: SessionTarget;
-    wakeMode?: WakeMode;
     deliveryMode?: 'conversation' | 'notification' | 'both';
     failureAlert?: CronFailureAlert;
   }) => string;

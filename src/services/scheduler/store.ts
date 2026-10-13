@@ -46,11 +46,8 @@ export const useSchedulerStore = create<SchedulerState>()(
           createdAtMs: now,
           updatedAtMs: now,
           schedule: scheduleRuntime.schedule,
-          sessionTarget: params.sessionTarget || 'isolated',
-          wakeMode: params.wakeMode || 'new',
           payload: {
             prompt: params.prompt,
-            mode: params.mode ?? 'agentic',
             model: params.model,
             providerId: params.providerId,
           },

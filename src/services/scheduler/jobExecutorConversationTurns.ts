@@ -1,12 +1,10 @@
 import { useChatStore } from '../../store/useChatStore';
-import type { ConversationMode } from '../../types/conversation';
 import type {
   AssistantMessageMetadata,
   MessageProviderReplay,
   ToolCall,
 } from '../../types/message';
 import { generateId } from '../../utils/id';
-import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
 import type { ToolMessageOutcome } from '../../engine/toolExecution/toolMessageOutcome';
 
 type ChatState = Pick<
@@ -17,11 +15,6 @@ type ChatState = Pick<
   | 'updateMessageProviderReplay'
   | 'updateMessageAssistantMetadata'
   | 'updateToolCallStatus'
->;
-
-type ConversationModeState = Pick<
-  ReturnType<typeof useChatStore.getState>,
-  'conversations' | 'updateModeInConversation' | 'updatePersonaInConversation'
 >;
 
 export interface PendingAssistantResponse {
@@ -104,22 +97,6 @@ export class ScheduledToolTurnLedger {
     }
     return true;
   }
-}
-
-export function synchronizeScheduledConversationMode(
-  chatState: ConversationModeState,
-  conversationId: string,
-  mode: ConversationMode,
-): string {
-  const personaId = resolveConversationPersonaForMode({
-    conversationPersonaId: chatState.conversations.find(
-      (conversation) => conversation.id === conversationId,
-    )?.personaId,
-    nextMode: mode,
-  });
-  chatState.updateModeInConversation(conversationId, mode);
-  chatState.updatePersonaInConversation(conversationId, personaId, { recordEvent: false });
-  return personaId;
 }
 
 export function appendOrUpdateAssistantToolTurn(params: {

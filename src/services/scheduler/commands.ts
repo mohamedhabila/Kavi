@@ -4,11 +4,8 @@ import type {
   CronJob,
   CronPayload,
   CronSchedule,
-  SessionTarget,
-  WakeMode,
 } from '../cron/types';
 import { computeNextRunAtMs } from '../cron/schedule';
-import type { ConversationMode } from '../../types/conversation';
 import { withSchedulerOperationLock } from './operationLock';
 import { flushSchedulerStorePersistenceNow } from './persistence';
 import { ensureSchedulerMaintenanceReady } from './runtimeReadiness';
@@ -20,11 +17,8 @@ export type CreateScheduledJobInput = {
   name: string;
   schedule: CronSchedule;
   prompt: string;
-  mode?: ConversationMode;
   model?: string;
   providerId?: string;
-  sessionTarget?: SessionTarget;
-  wakeMode?: WakeMode;
   deliveryMode?: 'conversation' | 'notification' | 'both';
   failureAlert?: CronFailureAlert;
 };

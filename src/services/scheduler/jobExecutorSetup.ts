@@ -1,7 +1,6 @@
 import type { LlmProviderConfig } from '../../types/provider';
 import { useChatStore } from '../../store/useChatStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { SUPER_AGENT_PERSONA_ID } from '../agents/personas';
 import {
   providerRequiresApiKey,
   resolveConversationModel,
@@ -10,8 +9,9 @@ import {
 } from '../llm/support/providerSupport';
 import type { CronJob } from '../cron/types';
 import { hasCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
-import { synchronizeScheduledConversationMode } from './jobExecutorConversationTurns';
 import { NonRetryableSchedulerExecutionError } from './executionError';
+import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
+import { resolveForegroundConversationExecutionContext } from '../../engine/graph/foregroundRun/executionContext';
 
 export async function resolveScheduledExecutionProvider(job: CronJob) {
   const settings = useSettingsStore.getState();
@@ -82,44 +82,45 @@ export function resolveScheduledExecutionConversation(params: {
       (message) => message.id === userMessageId || message.id === assistantMessageId,
     ),
   )?.id;
-  const existingConversationId =
-    projectedConversationId ||
+  // Kavi is one conversation: a scheduled job is a turn in it, unless an earlier attempt of
+  // this occurrence already lives in a conversation.
+  const conversationId =
+    projectedConversationId ??
     (job.retryConversationId &&
     chatState.conversations.some((conversation) => conversation.id === job.retryConversationId)
       ? job.retryConversationId
-      : undefined) ||
-    (job.delivery?.conversationId &&
-    chatState.conversations.some((conversation) => conversation.id === job.delivery?.conversationId)
-      ? job.delivery.conversationId
-      : undefined) ||
-    (job.sessionTarget === 'main' && job.wakeMode === 'continue'
-      ? chatState.activeConversationId || undefined
-      : undefined);
-  const executionMode = job.payload.mode;
-  const conversationId =
-    existingConversationId ??
-    chatState.ensureConversation(provider.id, systemPrompt, model, {
-      activate: false,
-      personaId: executionMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
-      mode: executionMode,
-    });
+      : undefined) ??
+    ensureScheduledConversation({ provider, model, systemPrompt });
   return { chatState: useChatStore.getState(), conversationId };
 }
 
-export function configureScheduledExecutionConversation(params: {
-  job: CronJob;
+/** Creates the one conversation the way the chat screen does when none exists yet. */
+function ensureScheduledConversation(params: {
   provider: LlmProviderConfig;
   model: string;
-  conversationId: string;
+  systemPrompt: string;
 }): string {
-  const chatState = useChatStore.getState();
-  const executionPersonaId = synchronizeScheduledConversationMode(
-    chatState,
-    params.conversationId,
-    params.job.payload.mode,
-  );
-  chatState.updateModelInConversation(params.conversationId, params.provider.id, params.model);
-  return executionPersonaId;
+  const mode = useSettingsStore.getState().defaultConversationMode;
+  return useChatStore
+    .getState()
+    .ensureConversation(params.provider.id, params.systemPrompt, params.model, {
+      activate: false,
+      mode,
+      personaId: resolveConversationPersonaForMode({ nextMode: mode }),
+    });
+}
+
+/**
+ * A scheduled run is a turn in the conversation: it runs with the persona a foreground turn
+ * would use, and never rewrites the conversation's mode, persona or model.
+ */
+export function resolveScheduledExecutionPersona(conversationId: string): string {
+  return resolveForegroundConversationExecutionContext({
+    conversation: useChatStore
+      .getState()
+      .conversations.find((conversation) => conversation.id === conversationId),
+    defaultConversationMode: useSettingsStore.getState().defaultConversationMode,
+  }).personaId;
 }
 
 export function resolveScheduledOccurrenceCompletedOutput(params: {

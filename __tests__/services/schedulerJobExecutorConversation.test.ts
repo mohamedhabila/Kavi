@@ -324,13 +324,18 @@ describe('scheduled job conversation transcript', () => {
     });
   });
 
-  it('keeps persisted mode and persona consistent when reusing a conversation', async () => {
-    const conversation = mockConversation('active-conversation');
+  it("runs in the conversation's own mode and persona without rewriting them", async () => {
+    const conversation = {
+      ...mockConversation('active-conversation'),
+      mode: 'chitchat' as const,
+      personaId: 'travel-guide',
+      modelOverride: 'conversation-model',
+    };
     mockChatState.conversations = [conversation];
     mockChatState.activeConversationId = conversation.id;
     mockRunOrchestrator.mockImplementationOnce(
       async (options: { personaId?: string }, callbacks: OrchestratorCallbacks) => {
-        expect(options.personaId).toBe('default');
+        expect(options.personaId).toBe('travel-guide');
         emitSchedulerFinal(callbacks, 'Chitchat response.');
         callbacks.onDone?.();
       },
@@ -338,15 +343,18 @@ describe('scheduled job conversation transcript', () => {
 
     await executeJob({
       ...scheduledJob(),
-      sessionTarget: 'main',
-      wakeMode: 'continue',
-      payload: { prompt: 'Say hello', mode: 'chitchat' },
+      payload: { prompt: 'Say hello', providerId: 'openai', model: 'job-model' },
     });
 
+    expect(mockRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(findMockConversation(conversation.id)).toMatchObject({
       mode: 'chitchat',
-      personaId: 'default',
+      personaId: 'travel-guide',
+      modelOverride: 'conversation-model',
     });
+    expect(mockChatState.updateModeInConversation).not.toHaveBeenCalled();
+    expect(mockChatState.updatePersonaInConversation).not.toHaveBeenCalled();
+    expect(mockChatState.updateModelInConversation).not.toHaveBeenCalled();
   });
 
   it('reuses an exact completed occurrence and releases its temporary owner', async () => {
@@ -427,11 +435,8 @@ describe('scheduled job conversation transcript', () => {
       await expect(
         executeJob({
           ...scheduledJob(),
-          sessionTarget: 'main',
-          wakeMode: 'continue',
           payload: {
             prompt: 'Do not interleave.',
-            mode: 'chitchat',
             providerId: 'openai',
             model: 'different-model',
           },
@@ -503,7 +508,6 @@ describe('scheduled job conversation transcript', () => {
       executeJob({
         ...scheduledJob(),
         retryConversationId: 'scheduled-conversation',
-        delivery: { mode: 'conversation', conversationId: 'delivery-conversation' },
       }),
     ).resolves.toMatchObject({
       output: 'Recovered on retry.',

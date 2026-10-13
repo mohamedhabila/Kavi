@@ -13,9 +13,7 @@ const baseJob: CronJob = {
   createdAtMs: 1,
   updatedAtMs: 2,
   schedule: { kind: 'every', everyMs: 86_400_000 },
-  sessionTarget: 'isolated',
-  wakeMode: 'new',
-  payload: { prompt: 'Summarize the day', mode: 'agentic' },
+  payload: { prompt: 'Summarize the day' },
   nextRunAtMs: 1_000,
 };
 

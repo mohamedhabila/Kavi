@@ -121,10 +121,7 @@ export function normalizePersistedJob(job: CronJob, nowMs: number): CronJob {
   return {
     ...cleanJob,
     definitionRevision: positiveInteger(job.definitionRevision) ?? 1,
-    payload: {
-      ...job.payload,
-      mode: job.payload?.mode === 'chitchat' ? 'chitchat' : 'agentic',
-    },
+    payload: job.payload,
     schedule: scheduleRuntime.schedule,
     nextRunAtMs: finiteTimestamp(job.nextRunAtMs) ?? scheduleRuntime.nextRunAtMs,
     lastRunAtMs: finiteTimestamp(job.lastRunAtMs),

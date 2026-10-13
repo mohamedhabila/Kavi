@@ -2,30 +2,25 @@
 // Kavi — Cron Types
 // ---------------------------------------------------------------------------
 
-export type CronJobBase<TSchedule, TSessionTarget, TWakeMode, TPayload, TDelivery, TFailureAlert> =
-  {
-    id: string;
-    definitionRevision: number;
-    name: string;
-    enabled: boolean;
-    deleteAfterRun?: boolean;
-    createdAtMs: number;
-    updatedAtMs: number;
-    schedule: TSchedule;
-    sessionTarget: TSessionTarget;
-    wakeMode: TWakeMode;
-    payload: TPayload;
-    delivery?: TDelivery;
-    failureAlert?: TFailureAlert;
-  };
+export type CronJobBase<TSchedule, TPayload, TDelivery, TFailureAlert> = {
+  id: string;
+  definitionRevision: number;
+  name: string;
+  enabled: boolean;
+  deleteAfterRun?: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+  schedule: TSchedule;
+  payload: TPayload;
+  delivery?: TDelivery;
+  failureAlert?: TFailureAlert;
+};
 
 export type CronSchedule =
   | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'at'; at?: string; atMs?: number | string }
   | { kind: 'every'; everyMs: number | string; anchorMs?: number | string };
 
-export type SessionTarget = 'main' | 'isolated';
-export type WakeMode = 'continue' | 'new';
 export type DeliveryMode = 'conversation' | 'notification' | 'both';
 export type SchedulerWakePolicy = 'notify_only' | 'active_only';
 export type SchedulerTrigger =
@@ -55,14 +50,12 @@ export type SchedulerTerminalReport = {
 
 export type CronPayload = {
   prompt: string;
-  mode: ConversationMode;
   model?: string;
   providerId?: string;
 };
 
 export type CronDelivery = {
   mode: DeliveryMode;
-  conversationId?: string;
 };
 
 export type CronFailureAlert = {
@@ -114,13 +107,5 @@ export type CronJobRuntimeState = {
   wakePolicy?: SchedulerWakePolicy;
 };
 
-export type CronJob = CronJobBase<
-  CronSchedule,
-  SessionTarget,
-  WakeMode,
-  CronPayload,
-  CronDelivery,
-  CronFailureAlert
-> &
+export type CronJob = CronJobBase<CronSchedule, CronPayload, CronDelivery, CronFailureAlert> &
   CronJobRuntimeState;
-import type { ConversationMode } from '../../types/conversation';

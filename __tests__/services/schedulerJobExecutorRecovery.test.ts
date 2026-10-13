@@ -16,9 +16,7 @@ function job(): CronJob {
     createdAtMs: 1,
     updatedAtMs: 1,
     schedule: { kind: 'every', everyMs: 60_000 },
-    sessionTarget: 'isolated',
-    wakeMode: 'new',
-    payload: { prompt: 'Run recovery test', mode: 'agentic' },
+    payload: { prompt: 'Run recovery test' },
     runningAttemptId: 'attempt-1',
     runningOccurrenceId: occurrenceId,
   };

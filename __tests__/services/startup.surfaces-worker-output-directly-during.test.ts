@@ -515,61 +515,54 @@ describe('initializeServices', () => {
     );
     warnSpy.mockRestore();
   });
-  it('executor reuses the active conversation and pins the scheduled mode', async () => {
+  it('runs a scheduled job as a turn in the one conversation without rewriting it', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
-    mockChatStoreState.conversations = [
-      {
-        id: 'active-conversation',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        modelOverride: 'gpt-5.4',
-        messages: [],
-      },
-    ];
+    const conversation = {
+      id: 'active-conversation',
+      providerId: 'openai',
+      systemPrompt: 'You are helpful.',
+      modelOverride: 'gpt-4o-mini',
+      mode: 'chitchat',
+      personaId: 'travel-guide',
+      messages: [],
+    };
+    mockChatStoreState.conversations = [conversation];
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(
-      claimedSchedulerJob('Continue Job', 'Continue existing thread', {
-        mode: 'chitchat',
-        sessionTarget: 'main',
-        wakeMode: 'continue',
+    await executor.execute(claimedSchedulerJob('Continue Job', 'Continue existing thread'));
+    expect(mockRunOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'active-conversation',
+        personaId: 'travel-guide',
+        model: 'gpt-5.4',
       }),
+      expect.anything(),
     );
-    expect(mockChatStoreState.ensureConversation).not.toHaveBeenCalled();
-    expect(mockChatStoreState.updateModeInConversation).toHaveBeenCalledWith(
-      'active-conversation',
-      'chitchat',
-    );
-    expect(mockChatStoreState.updateModelInConversation).toHaveBeenCalledWith(
-      'active-conversation',
-      'openai',
-      'gpt-5.4',
-    );
+    expect(mockChatStoreState.updateModeInConversation).not.toHaveBeenCalled();
+    expect(mockChatStoreState.updatePersonaInConversation).not.toHaveBeenCalled();
+    expect(mockChatStoreState.updateModelInConversation).not.toHaveBeenCalled();
+    expect(mockChatStoreState.conversations[0]).toMatchObject({
+      mode: 'chitchat',
+      personaId: 'travel-guide',
+      modelOverride: 'gpt-4o-mini',
+    });
   });
-  it('executor materializes the one conversation for main/new jobs', async () => {
+  it('creates the one conversation in the default mode when none exists yet', async () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();
     const executor = mockSetSchedulerExecutor.mock.calls[0][0];
-    await executor.execute(
-      claimedSchedulerJob('Main Job', 'Use the main thread', {
-        sessionTarget: 'main',
-      }),
-    );
+    await executor.execute(claimedSchedulerJob('First Job', 'Start the day'));
     expect(mockChatStoreState.ensureConversation).toHaveBeenCalledWith(
       'openai',
       'You are helpful.',
       'gpt-5.4',
-      {
-        activate: false,
-        personaId: 'super-agent',
-        mode: 'agentic',
-      },
+      { activate: false, mode: 'agentic', personaId: 'super-agent' },
     );
-    expect(mockChatStoreState.updateModelInConversation).toHaveBeenCalledWith(
-      'conv-1',
-      'openai',
-      'gpt-5.4',
+    expect(mockRunOrchestrator).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-1', personaId: 'super-agent' }),
+      expect.anything(),
     );
+    expect(mockChatStoreState.updateModelInConversation).not.toHaveBeenCalled();
   });
   it('executor rejects jobs with missing prompt', async () => {
     const { initializeServices } = require('../../src/services/startup');

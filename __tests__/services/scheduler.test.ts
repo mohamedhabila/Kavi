@@ -78,8 +78,6 @@ describe('useSchedulerStore', () => {
     expect(jobs[0].enabled).toBe(true);
     expect(jobs[0].schedule.kind).toBe('cron');
     expect(jobs[0].payload.prompt).toBe('Do something');
-    expect(jobs[0].sessionTarget).toBe('isolated');
-    expect(jobs[0].wakeMode).toBe('new');
     expect(jobs[0].delivery?.mode).toBe('both');
     expect(typeof jobs[0].nextRunAtMs).toBe('number');
     expect(jobs[0].retryAttempts).toBe(0);
@@ -93,16 +91,12 @@ describe('useSchedulerStore', () => {
       prompt: 'Run me',
       model: 'gpt-5.4',
       providerId: 'openai',
-      sessionTarget: 'main',
-      wakeMode: 'continue',
       deliveryMode: 'both',
     });
 
     const job = useSchedulerStore.getState().jobs[0];
     expect(job.payload.model).toBe('gpt-5.4');
     expect(job.payload.providerId).toBe('openai');
-    expect(job.sessionTarget).toBe('main');
-    expect(job.wakeMode).toBe('continue');
     expect(job.delivery?.mode).toBe('both');
     expect((job.schedule as any).anchorMs).toBeDefined();
   });

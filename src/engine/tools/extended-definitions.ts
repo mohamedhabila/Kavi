@@ -163,11 +163,6 @@ export const CRON_TOOL: ToolDefinition = {
         ],
       },
       prompt: { type: 'string', description: 'Task prompt/instruction (for create/update)' },
-      mode: {
-        type: 'string',
-        enum: ['agentic', 'chitchat'],
-        description: 'Durable conversation mode for execution (default: agentic)',
-      },
       timezone: { type: 'string', description: 'Timezone (default: device timezone)' },
     },
     required: ['action'],

@@ -113,9 +113,7 @@ function job(overrides: Partial<CronJob> = {}): CronJob {
     createdAtMs: 1,
     updatedAtMs: 2,
     schedule: { kind: 'every', everyMs: 86_400_000 },
-    sessionTarget: 'isolated',
-    wakeMode: 'new',
-    payload: { prompt: 'Summarize my day', mode: 'agentic' },
+    payload: { prompt: 'Summarize my day' },
     nextRunAtMs: Date.now() + 3_600_000,
     ...overrides,
   };

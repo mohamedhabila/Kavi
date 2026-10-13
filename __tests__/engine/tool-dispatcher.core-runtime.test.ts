@@ -135,7 +135,6 @@ describe('executeToolInner — raw core tools routing', () => {
         name: 'Amsterdam morning',
         schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Europe/Amsterdam' },
         prompt: 'Prepare my briefing',
-        mode: 'agentic',
       }),
     );
   });
@@ -144,7 +143,7 @@ describe('executeToolInner — raw core tools routing', () => {
     mockGetJob.mockReturnValueOnce({
       id: 'job-1',
       schedule: { kind: 'cron', expr: '0 8 * * *', tz: 'UTC' },
-      payload: { prompt: 'Old prompt', mode: 'agentic', model: 'model-1' },
+      payload: { prompt: 'Old prompt', model: 'model-1' },
     });
 
     const result = await executeTool(
@@ -164,7 +163,7 @@ describe('executeToolInner — raw core tools routing', () => {
     expect(mockUpdateScheduledJob).toHaveBeenCalledWith('job-1', {
       name: 'Updated briefing',
       schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'UTC' },
-      payload: { prompt: 'New prompt', mode: 'agentic', model: 'model-1' },
+      payload: { prompt: 'New prompt', model: 'model-1' },
     });
   });
 
@@ -175,7 +174,7 @@ describe('executeToolInner — raw core tools routing', () => {
         name: 'Briefing',
         enabled: true,
         schedule: { kind: 'cron', expr: '0 9 * * *' },
-        payload: { prompt: 'Prepare it', mode: 'agentic' },
+        payload: { prompt: 'Prepare it' },
         nextRetryAtMs: 200,
         lastError: 'provider unavailable',
         lastWakeError: 'notifications denied',
@@ -185,7 +184,6 @@ describe('executeToolInner — raw core tools routing', () => {
     const parsed = JSON.parse(result.content);
     expect(parsed.jobs[0]).toMatchObject({
       id: 'job-1',
-      mode: 'agentic',
       state: 'retry_scheduled',
       nextRunAtMs: 200,
       lastError: 'provider unavailable',
@@ -229,7 +227,7 @@ describe('executeToolInner — raw core tools routing', () => {
         name: 'discovery-proof',
         enabled: true,
         schedule: { kind: 'cron', expr: '0 * * * *' },
-        payload: { prompt: 'fixture', mode: 'agentic' },
+        payload: { prompt: 'fixture' },
       } as any,
     ]);
 

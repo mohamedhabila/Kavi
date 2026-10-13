@@ -336,7 +336,7 @@ describe('scheduler store durability', () => {
     useSchedulerStore.getState().updateJob(id, {
       name: 'Replacement definition',
       schedule: { kind: 'at', atMs: replacementRunAtMs },
-      payload: { prompt: 'Run the replacement', mode: 'agentic' },
+      payload: { prompt: 'Run the replacement' },
     });
     useSchedulerStore
       .getState()
@@ -365,7 +365,7 @@ describe('scheduler store durability', () => {
     useSchedulerStore.getState().updateJob(id, {
       name: 'New retry definition',
       schedule: { kind: 'every', everyMs: 300_000 },
-      payload: { prompt: 'Use the new instructions', mode: 'agentic' },
+      payload: { prompt: 'Use the new instructions' },
     });
     const replacementNextRunAtMs = useSchedulerStore.getState().getJob(id)?.nextRunAtMs;
     useSchedulerStore.getState().recordRunFailure(

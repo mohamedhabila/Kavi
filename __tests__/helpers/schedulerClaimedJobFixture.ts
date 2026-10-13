@@ -1,15 +1,9 @@
-import type { CronJob, DeliveryMode, SessionTarget, WakeMode } from '../../src/services/cron/types';
-import type { ConversationMode } from '../../src/types/conversation';
+import type { CronJob, DeliveryMode } from '../../src/services/cron/types';
 
 export function claimedSchedulerJob(
   name: string,
   prompt: string,
-  options: {
-    mode?: ConversationMode;
-    sessionTarget?: SessionTarget;
-    wakeMode?: WakeMode;
-    deliveryMode?: DeliveryMode;
-  } = {},
+  options: { deliveryMode?: DeliveryMode } = {},
 ): CronJob {
   const slug = name.toLowerCase().replace(/\s+/g, '-');
   return {
@@ -20,9 +14,7 @@ export function claimedSchedulerJob(
     createdAtMs: 1,
     updatedAtMs: 1,
     schedule: { kind: 'every', everyMs: 60_000 },
-    payload: { prompt, mode: options.mode ?? 'agentic' },
-    sessionTarget: options.sessionTarget ?? 'isolated',
-    wakeMode: options.wakeMode ?? 'new',
+    payload: { prompt },
     runningAttemptId: `attempt-${slug}`,
     runningOccurrenceId: `occurrence-${slug}`,
     runningStartedAtMs: 1,

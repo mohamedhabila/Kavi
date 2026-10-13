@@ -252,7 +252,6 @@ export async function executeToolInner(
             prompt: args.prompt || args.command,
             name: args.name,
             timezone: args.timezone,
-            mode: args.mode,
           });
         case 'list': {
           const jobs = await listScheduledJobs();
@@ -267,7 +266,6 @@ export async function executeToolInner(
                 name: j.name,
                 enabled: j.enabled,
                 schedule: j.schedule,
-                mode: j.payload.mode,
                 state: j.runningAttemptId
                   ? 'running'
                   : j.nextRetryAtMs
@@ -310,23 +308,6 @@ export async function executeToolInner(
             typeof args.timezone === 'string' && args.timezone.trim()
               ? args.timezone.trim()
               : undefined;
-          const requestedMode =
-            args.mode === undefined
-              ? undefined
-              : args.mode === 'agentic' || args.mode === 'chitchat'
-                ? args.mode
-                : null;
-          if (requestedMode === null) {
-            return rejectedScheduledJobOutcome({
-              code: 'invalid_scheduled_job',
-              error: 'mode must be agentic or chitchat.',
-              repair: {
-                retryable: true,
-                code: 'invalid_scheduled_job',
-                invalidFields: ['mode'],
-              },
-            });
-          }
           if (typeof args.newName === 'string' && args.newName.trim()) {
             updates.name = args.newName.trim();
           }
@@ -359,24 +340,17 @@ export async function executeToolInner(
             }
             updates.schedule = { ...existingJob.schedule, tz: requestedTimezone };
           }
-          if ((typeof args.prompt === 'string' && args.prompt.trim()) || requestedMode) {
-            updates.payload = {
-              ...existingJob.payload,
-              ...(typeof args.prompt === 'string' && args.prompt.trim()
-                ? { prompt: args.prompt.trim() }
-                : {}),
-              ...(requestedMode ? { mode: requestedMode } : {}),
-            };
+          if (typeof args.prompt === 'string' && args.prompt.trim()) {
+            updates.payload = { ...existingJob.payload, prompt: args.prompt.trim() };
           }
           if (Object.keys(updates).length === 0) {
             return rejectedScheduledJobOutcome({
               code: 'scheduled_job_update_empty',
-              error:
-                'update requires at least one of newName, schedule, prompt, timezone, or mode.',
+              error: 'update requires at least one of newName, schedule, prompt, or timezone.',
               repair: {
                 retryable: true,
                 code: 'scheduled_job_update_empty',
-                missingFields: ['newName', 'schedule', 'prompt', 'timezone', 'mode'],
+                missingFields: ['newName', 'schedule', 'prompt', 'timezone'],
               },
             });
           }

@@ -181,23 +181,10 @@ export async function executeCreateTask(args: {
   prompt?: unknown;
   name?: unknown;
   timezone?: unknown;
-  mode?: unknown;
 }): Promise<ToolRuntimeOutcome> {
   const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
   const name = typeof args.name === 'string' ? args.name.trim() : '';
   const timezone = typeof args.timezone === 'string' ? args.timezone.trim() : '';
-  if (args.mode !== undefined && args.mode !== 'agentic' && args.mode !== 'chitchat') {
-    return rejectedScheduledJobOutcome({
-      code: 'invalid_scheduled_job',
-      error: 'mode must be agentic or chitchat.',
-      repair: {
-        retryable: true,
-        code: 'invalid_scheduled_job',
-        invalidFields: ['mode'],
-      },
-    });
-  }
-  const mode = args.mode === 'chitchat' ? 'chitchat' : 'agentic';
   const hasSchedule =
     typeof args.schedule === 'string' ? args.schedule.trim().length > 0 : args.schedule != null;
   if (!hasSchedule || !prompt) {
@@ -227,7 +214,6 @@ export async function executeCreateTask(args: {
       name: name || truncateGraphemesTo(prompt, 60),
       schedule: normalized.schedule,
       prompt,
-      mode,
     });
     return completedToolOutcome(
       JSON.stringify({
