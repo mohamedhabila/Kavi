@@ -37,11 +37,12 @@ describe('approval follows tool contracts', () => {
     'calendar_list',
     'contacts_search',
     'memory_forget',
+    'python',
   ])('asks before %s', (toolName) => {
     expect(requiresActionApproval(toolName, {})).toBe(true);
   });
 
-  it.each(['sessions_spawn', 'javascript', 'python', 'web_fetch', 'browser_screenshot'])(
+  it.each(['sessions_spawn', 'javascript', 'web_fetch', 'browser_screenshot'])(
     'lets %s run without asking',
     (toolName) => {
       expect(requiresActionApproval(toolName, {})).toBe(false);
