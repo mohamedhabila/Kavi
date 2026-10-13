@@ -114,6 +114,8 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       return ['cache_prefix_drift'];
     case 'token_budget':
       return ['token_budget_overrun'];
+    case 'tool_call_budget':
+      return ['loop_control'];
     case 'min_user_turns':
       return ['missing_clarification'];
     case 'turn_lifecycle_boundary':

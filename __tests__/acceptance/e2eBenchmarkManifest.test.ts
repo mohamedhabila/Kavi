@@ -36,6 +36,24 @@ describe('e2eBenchmarkManifest', () => {
     );
   });
 
+  it('accepts an artifact target named in the workspace instructions the user points to', () => {
+    const scenario: E2EScenario = {
+      id: 'workspace-named-artifact-target',
+      conversationId: 'workspace-named-artifact-conversation',
+      contentClass: 'synthetic_public',
+      prompt: 'Finish the job described in tasks/job.md.',
+      initialWorkspaceFiles: [
+        { path: 'tasks/job.md', content: 'Write the total to out/total.txt.' },
+      ],
+      rubrics: [{ kind: 'workspace_file', path: 'out/total.txt', contains: '42' }],
+    };
+
+    expect(listUnobservableArtifactTargets(scenario)).toEqual([]);
+    expect(listUnobservableArtifactTargets({ ...scenario, initialWorkspaceFiles: [] })).toEqual([
+      'out/total.txt',
+    ]);
+  });
+
   it('keeps the benchmark scenario catalog order stable across implementation modules', () => {
     expect(E2E_BENCHMARK_SCENARIOS.map((scenario) => scenario.id)).toEqual([
       'bench-gaia-file-hop-chain',

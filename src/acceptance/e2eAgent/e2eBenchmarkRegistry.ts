@@ -32,6 +32,7 @@ export const E2E_BENCHMARK_FAMILIES = [
   'locomo-direct',
   'beam-direct',
   'provider-prompt-cache-direct',
+  'kavi-long-task',
 ] as const;
 
 export type E2EBenchmarkFamily = (typeof E2E_BENCHMARK_FAMILIES)[number];
@@ -194,6 +195,13 @@ export const E2E_BENCHMARK_FAMILY_META: Readonly<
       'OpenAI, Anthropic, Gemini, and OpenRouter prompt-caching guidance — stable prefixes and cached-token accounting',
     adaptationNotes:
       'Long single-conversation prompt-cache probe with stable prior history, volatile current-turn context at the tail, and real cached-token read-rate scoring.',
+  },
+  'kavi-long-task': {
+    label: 'Kavi long tasks',
+    externalReference:
+      'OSWorld 2.0 and LH-Bench — long-horizon task completion scored with cost, steps and tool calls per task',
+    adaptationNotes:
+      'Natural multi-file everyday tasks with a stale fact, distractor, interruption or changed requirement; final-state validators plus token and tool-call budgets at 1.5× a reference path.',
   },
 };
 
@@ -512,6 +520,46 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'delegation-worker-evidence-chain': {
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['delegation', 'control_graph', 'task_completion', 'outcome_validators'],
+  },
+  'long-task-expense-report': {
+    benchmarkFamilies: ['kavi-long-task', 'gaia-adapted'],
+    assessmentDimensions: ['task_completion', 'tool_usage', 'token_efficiency', 'outcome_validators'],
+  },
+  'long-task-trip-organizer': {
+    benchmarkFamilies: ['kavi-long-task', 'mobileworld-adapted'],
+    assessmentDimensions: [
+      'task_completion',
+      'task_understanding',
+      'tool_discovery',
+      'mobile_native',
+      'token_efficiency',
+    ],
+  },
+  'long-task-research-brief': {
+    benchmarkFamilies: ['kavi-long-task', 'gaia-adapted'],
+    assessmentDimensions: [
+      'task_completion',
+      'task_understanding',
+      'token_efficiency',
+      'outcome_validators',
+    ],
+  },
+  'long-task-resume-interrupted': {
+    benchmarkFamilies: ['kavi-long-task', 'state-bench-adapted'],
+    assessmentDimensions: ['task_completion', 'task_understanding', 'token_efficiency'],
+  },
+  'long-task-plan-revision': {
+    benchmarkFamilies: ['kavi-long-task', 'state-bench-adapted'],
+    assessmentDimensions: [
+      'task_completion',
+      'task_understanding',
+      'token_efficiency',
+      'outcome_validators',
+    ],
+  },
+  'long-task-feedback-triage': {
+    benchmarkFamilies: ['kavi-long-task', 'agentbench-adapted'],
+    assessmentDimensions: ['task_completion', 'tool_usage', 'token_efficiency', 'outcome_validators'],
   },
 };
 

@@ -27,6 +27,7 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'memory_item',
   'memory_item_absent',
   'token_budget',
+  'tool_call_budget',
   'cache_read_tokens',
   'cache_prefix_readiness',
   'cache_eligible_read_rate',
@@ -178,6 +179,8 @@ function rubricFailureCategories(
       return ['cache_prefix_drift'];
     case 'token_budget':
       return ['token_budget_overrun'];
+    case 'tool_call_budget':
+      return ['loop_control'];
     case 'min_user_turns':
       return ['missing_clarification'];
     case 'turn_lifecycle_boundary':

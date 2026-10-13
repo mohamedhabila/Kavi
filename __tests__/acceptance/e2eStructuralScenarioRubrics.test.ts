@@ -10,6 +10,7 @@ jest.mock('expo-sqlite', () => {
 import type { AgentRunControlGraphState } from '../../src/types/agentRun';
 import { E2E_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/benchmarkScenarios';
 import { E2E_DIRECT_BENCHMARK_SCENARIOS } from '../../src/acceptance/e2eAgent/directBenchmarkScenarios';
+import { E2E_LONG_TASK_SCENARIOS } from '../../src/acceptance/e2eAgent/scenariosLongTasks';
 import {
   DELEGATION_E2E_SCENARIOS,
   E2E_AGENT_SCENARIOS,
@@ -148,9 +149,12 @@ describe('E2E thin runner fixtures', () => {
   });
 
   it('makes native SMS composer expectations explicit in the user request', () => {
+    // A long task is asked the way a person asks it: "text Avery what time I land" requests
+    // the composer, one recipient and an unsent draft without spelling the shard contract out.
     const scenarios = [...E2E_AGENT_SCENARIOS, ...DELEGATION_E2E_SCENARIOS].filter(
       (scenario, index, entries) =>
         scenario.contentClass === 'synthetic_public' &&
+        !E2E_LONG_TASK_SCENARIOS.includes(scenario) &&
         entries.findIndex((entry) => entry.id === scenario.id) === index,
     );
     const smsComposerScenarios = scenarios.filter((scenario) =>

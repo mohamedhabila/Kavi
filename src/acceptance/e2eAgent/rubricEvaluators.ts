@@ -270,15 +270,20 @@ export function evaluateE2ERubric(
         };
       }
 
-      if (rubric.contains) {
-        const content = readWorkspaceRelativeFile(result.conversationId, rubric.path) ?? '';
-        if (!content.includes(rubric.contains)) {
-          return {
-            fixtureId,
-            passed: false,
-            detail: `workspace file ${rubric.path} missing token ${rubric.contains}`,
-          };
-        }
+      const content = readWorkspaceRelativeFile(result.conversationId, rubric.path) ?? '';
+      if (rubric.contains && !content.includes(rubric.contains)) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `workspace file ${rubric.path} missing token ${rubric.contains}`,
+        };
+      }
+      if (rubric.excludes && content.includes(rubric.excludes)) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `workspace file ${rubric.path} still contains ${rubric.excludes}`,
+        };
       }
 
       return { fixtureId, passed: true };
@@ -349,6 +354,17 @@ export function evaluateE2ERubric(
           fixtureId,
           passed: false,
           detail: `token total ${result.usage.totalTokens} exceeds budget ${rubric.maxTotalTokens}`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
+    case 'tool_call_budget': {
+      if (result.toolCalls.length > rubric.maxToolCalls) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `tool calls ${result.toolCalls.length} exceed budget ${rubric.maxToolCalls}`,
         };
       }
       return { fixtureId, passed: true };

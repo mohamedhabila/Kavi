@@ -47,7 +47,7 @@ export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-13.one-mode-v4';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-13.long-tasks-v5';
 
 export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 
@@ -115,12 +115,24 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'direct-beam-long-dialogue-multi-probe': 520_000,
   'direct-longmemeval-v2-experience-runbook': 360_000,
   'direct-mobileworld-long-horizon-personalization': 420_000,
+  'long-task-expense-report': 400_000,
+  'long-task-trip-organizer': 400_000,
+  'long-task-research-brief': 400_000,
+  'long-task-resume-interrupted': 250_000,
+  'long-task-plan-revision': 350_000,
+  'long-task-feedback-triage': 600_000,
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
 export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = new Set([
   'organic-mobile-assistant-continuity',
   'paired-causal-global-preference',
+  'long-task-expense-report',
+  'long-task-trip-organizer',
+  'long-task-research-brief',
+  'long-task-resume-interrupted',
+  'long-task-plan-revision',
+  'long-task-feedback-triage',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */

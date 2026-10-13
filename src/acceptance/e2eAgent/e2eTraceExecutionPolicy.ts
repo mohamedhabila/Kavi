@@ -78,6 +78,7 @@ export const E2E_PUBLIC_RUBRIC_KINDS = completeEnum<E2ERubric['kind']>()([
   'min_user_turns',
   'native_fixture_state',
   'token_budget',
+  'tool_call_budget',
   'turn_clarification',
   'turn_completion',
   'turn_final_response_token',

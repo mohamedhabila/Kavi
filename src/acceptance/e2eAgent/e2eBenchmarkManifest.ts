@@ -24,7 +24,7 @@ import type { E2EAssessmentDimension } from './e2eAssessmentDimensions';
 import type { E2ERubric, E2EScenario, E2EUserTurn } from './types';
 import { assertE2EScenarioArtifactTargetsObservable } from './e2eScenarioArtifactContract';
 
-export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-10-13.external-portfolio-v8';
+export const E2E_BENCHMARK_MANIFEST_VERSION = '2026-10-13.external-portfolio-v9';
 export const E2E_BENCHMARK_SOURCE_REFRESH_DATE = '2026-07-28';
 
 type E2ERubricKind = E2ERubric['kind'];
@@ -188,7 +188,10 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_memory_selection',
 ]);
 
-const RESOURCE_BUDGET_RUBRICS: ReadonlySet<E2ERubricKind> = new Set(['token_budget']);
+const RESOURCE_BUDGET_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
+  'token_budget',
+  'tool_call_budget',
+]);
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -258,6 +261,7 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_native_invocation_count':
       return 'native_fixture_state';
     case 'turn_tool_call_count':
+    case 'tool_call_budget':
     case 'worker_result_token':
       return 'execution_state';
     case 'turn_memory_selection':

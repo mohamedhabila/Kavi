@@ -516,6 +516,7 @@ Benchmark families for mobile assistant scope (structural rubrics only):
 | `locomo-direct`                | LoCoMo long-term conversational memory          | temporal conversation memory and mobile long-horizon personalization shards                      |
 | `beam-direct`                  | BEAM agent memory over long interactions        | long dialogue with fragmented probes, distractors, and structural recall                         |
 | `provider-prompt-cache-direct` | Provider prompt-cache behavior                  | long-horizon prompt-cache probes with stable-prefix accounting                                   |
+| `kavi-long-task`               | OSWorld 2.0 / LH-Bench cost per task            | six natural multi-file tasks graded on final state plus token and tool-call budgets              |
 
 Registry: `src/acceptance/e2eAgent/e2eBenchmarkRegistry.ts`. Report builder: `e2eAssessmentReport.ts`.
 

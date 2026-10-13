@@ -215,7 +215,7 @@ export type E2EClarificationMissingInformation = Readonly<{
 }>;
 
 export type E2ERubric =
-  | { kind: 'workspace_file'; path: string; contains?: string }
+  | { kind: 'workspace_file'; path: string; contains?: string; excludes?: string }
   | { kind: 'workspace_file_absent'; path: string }
   | { kind: 'graph_status'; status: AgentRunControlGraphState['status'] }
   | { kind: 'graph_terminal_success' }
@@ -223,6 +223,8 @@ export type E2ERubric =
   | ({ kind: 'memory_item' } & E2EMemoryItemExpectation)
   | ({ kind: 'memory_item_absent' } & E2EMemoryItemExpectation)
   | { kind: 'token_budget'; maxTotalTokens: number }
+  /** Every tool call the conversation made, all turns together; a worker's own calls are not counted. */
+  | { kind: 'tool_call_budget'; maxToolCalls: number }
   | { kind: 'cache_read_tokens'; minCacheReadTokens: number }
   | {
       kind: 'cache_prefix_readiness';

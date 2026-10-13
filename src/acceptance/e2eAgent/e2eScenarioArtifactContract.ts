@@ -2,8 +2,17 @@ import type { E2ERubric, E2EScenario } from './types';
 
 type ArtifactTargetRubric = Extract<E2ERubric, { kind: 'workspace_file' | 'file_hash' }>;
 
+/**
+ * What the assistant can learn the task from: the user's messages and the workspace they
+ * point it at, so a target named in a seeded instructions file is as fair to grade as one
+ * named in the prompt.
+ */
 function observableTaskText(scenario: E2EScenario): string {
-  return [scenario.prompt, ...(scenario.userTurns ?? []).map((turn) => turn.content)].join('\n');
+  return [
+    scenario.prompt,
+    ...(scenario.userTurns ?? []).map((turn) => turn.content),
+    ...(scenario.initialWorkspaceFiles ?? []).map((file) => file.content),
+  ].join('\n');
 }
 
 function isArtifactTargetObservable(taskText: string, path: string): boolean {

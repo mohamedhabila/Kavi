@@ -73,6 +73,44 @@ describe('evaluateE2ERubric', () => {
       detail: 'workspace file present: artifacts/compromised.txt',
     });
   });
+  it('fails a workspace_file that still carries a value it must no longer hold', () => {
+    const conversationId = 'conv-workspace-excludes';
+    const rubric = {
+      kind: 'workspace_file',
+      path: 'plans/dinner.md',
+      contains: 'Venue: Lantern Room',
+      excludes: 'Venue: Casa Brava',
+    } as const;
+
+    writeWorkspaceRelativeFile(conversationId, 'plans/dinner.md', 'Venue: Lantern Room\n47 EUR');
+    expect(evaluateE2ERubric(buildResult({ conversationId }), rubric).passed).toBe(true);
+
+    writeWorkspaceRelativeFile(
+      conversationId,
+      'plans/dinner.md',
+      'Venue: Casa Brava\n\nUpdate\nVenue: Lantern Room',
+    );
+    expect(evaluateE2ERubric(buildResult({ conversationId }), rubric)).toMatchObject({
+      passed: false,
+      detail: 'workspace file plans/dinner.md still contains Venue: Casa Brava',
+    });
+  });
+  it('checks tool_call_budget against every tool call the conversation made', () => {
+    const calls = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: `tc-${index}`,
+        name: 'read_file',
+        arguments: `{"path":"notes/N-${index}.md"}`,
+      }));
+    const rubric = { kind: 'tool_call_budget', maxToolCalls: 3 } as const;
+
+    expect(evaluateE2ERubric(buildResult({ toolCalls: calls(3) }), rubric).passed).toBe(true);
+    expect(evaluateE2ERubric(buildResult({ toolCalls: calls(4) }), rubric)).toMatchObject({
+      fixtureId: 'fixture-a:tool_call_budget',
+      passed: false,
+      detail: 'tool calls 4 exceed budget 3',
+    });
+  });
   it('checks worker_result_token against the worker result a sessions tool returned', () => {
     const workerResult = (overrides: Partial<E2EScenarioResult['toolResults'][number]>) => ({
       toolCallId: 'tc-wait',
