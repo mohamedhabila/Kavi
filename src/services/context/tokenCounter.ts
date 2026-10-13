@@ -46,7 +46,6 @@ export const LARGE_MODEL_WORKING_CONTEXT_SHARE = 0.75;
 export const MIN_LARGE_MODEL_WORKING_CONTEXT = 48_000;
 export const MAX_LARGE_MODEL_WORKING_CONTEXT = 400_000;
 export const LARGE_MODEL_WORKING_CONTEXT_THRESHOLD = 64_000;
-export const MAX_ROUTINE_COMPACTION_WORKING_CONTEXT = 256_000;
 
 /**
  * On-device runtimes are bounded by phone RAM, not by the model's nominal window.
@@ -54,23 +53,6 @@ export const MAX_ROUTINE_COMPACTION_WORKING_CONTEXT = 256_000;
  * models keep a small, explicitly capped window regardless of their advertised size.
  */
 export const ON_DEVICE_MAX_WORKING_CONTEXT = 8_000;
-
-// ── Tiered compaction thresholds ─────────────────────────────────────────
-// Based on Anthropic's context engineering guidance: graduated response is
-// far more effective than a single cliff-edge compaction.
-//
-// Tier 1 (TOOL_CLEARING):   Clear old tool results — "safest lightest-touch"
-// Tier 2 (SELECTIVE):       Summarize older messages, keep recent context
-// Tier 3 (AGGRESSIVE):      Full summarization with minimal recent tail
-
-/** Tier 1: clear old tool results when context exceeds this share */
-export const TOOL_CLEARING_THRESHOLD_SHARE = 0.6;
-
-/** Tier 2: selective compaction — summarize old, keep recent messages */
-export const SELECTIVE_COMPACTION_THRESHOLD_SHARE = 0.75;
-
-/** Tier 3: aggressive compaction — full summary, minimal recent tail */
-export const AGGRESSIVE_COMPACTION_THRESHOLD_SHARE = 0.85;
 
 // ── Script-aware base estimator ──────────────────────────────────────────
 
@@ -346,40 +328,4 @@ export function getWorkingContextWindow(
       Math.floor(hardWindow * LARGE_MODEL_WORKING_CONTEXT_SHARE),
     ),
   );
-}
-
-export function getCompactionWorkingContextWindow(
-  model: string,
-  options?: WorkingContextWindowOptions,
-): number {
-  return Math.min(getWorkingContextWindow(model, options), MAX_ROUTINE_COMPACTION_WORKING_CONTEXT);
-}
-
-export function getCompactionThreshold(
-  model: string,
-  options?: WorkingContextWindowOptions,
-): number {
-  return Math.floor(
-    getCompactionWorkingContextWindow(model, options) * SELECTIVE_COMPACTION_THRESHOLD_SHARE,
-  );
-}
-
-/**
- * Returns tiered compaction thresholds (in tokens) for graduated context management.
- * Based on Anthropic's context engineering guidance.
- */
-export function getCompactionThresholds(
-  model: string,
-  options?: WorkingContextWindowOptions,
-): {
-  toolClearing: number;
-  selective: number;
-  aggressive: number;
-} {
-  const working = getCompactionWorkingContextWindow(model, options);
-  return {
-    toolClearing: Math.floor(working * TOOL_CLEARING_THRESHOLD_SHARE),
-    selective: Math.floor(working * SELECTIVE_COMPACTION_THRESHOLD_SHARE),
-    aggressive: Math.floor(working * AGGRESSIVE_COMPACTION_THRESHOLD_SHARE),
-  };
 }

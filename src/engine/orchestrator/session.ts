@@ -1,4 +1,4 @@
-import { DefaultContextEngine } from '../../services/context/compaction';
+import { DefaultCompactionEngine } from '../../services/context/compaction';
 import { recordUsage } from '../../services/usage/tracker';
 import { createLogger } from '../../utils/logger';
 import { isJestRuntime } from '../../utils/runtime';
@@ -72,7 +72,7 @@ export async function runOrchestratorGraphSession(params: {
     options.explicitToolSurfaceToolNames,
     runtimeToolAvailability,
   );
-  const compactionEngine = enableCompaction ? new DefaultContextEngine() : null;
+  const compactionEngine = enableCompaction ? new DefaultCompactionEngine() : null;
   const sharedConversationId = options.memoryConversationId ?? conversationId;
   const runtimeContextNote = buildRuntimeContextNote();
   const workflowTaskAnchor = (() => {

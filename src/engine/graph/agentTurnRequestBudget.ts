@@ -4,8 +4,8 @@ import { compressToolDefinitions } from '../tools/toolManagerTokenBudget';
 import { buildToolSurfaceTokenAudit, type ToolSurfaceTokenAudit } from './toolSurfaceTokenAudit';
 import type {
   CompactionContext,
-  ContextEngine,
-  ForcedCompactionTier,
+  CompactionEngine,
+  CompactionTier,
 } from '../../services/context/types';
 import {
   estimateTokens,
@@ -28,7 +28,7 @@ import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessag
 import { stampPromptCachePlacement } from './promptCacheToolPlacement';
 import type { SystemPromptSection } from '../prompts/orchestratorPromptSections';
 
-type BudgetCompactionEngine = Pick<ContextEngine, 'compact'> | null;
+type BudgetCompactionEngine = CompactionEngine | null;
 export type AgentTurnCompactionEngine = BudgetCompactionEngine;
 
 export interface PrepareAgentTurnRequestBudgetParams {
@@ -74,8 +74,7 @@ export interface CompactAgentTurnWorkingMessagesParams {
   currentMessages: Message[];
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   currentTokenCount?: number;
-  tokenBudget?: number;
-  forceTier?: ForcedCompactionTier;
+  tier: CompactionTier;
   failureLabel: string;
   compactionContext?: CompactionContext;
   /** Provider family for the online token-calibration EMA (see `tokenCounter.ts`). */
@@ -113,9 +112,8 @@ export async function compactAgentTurnWorkingMessages(
     const compactResult = await params.compactionEngine.compact({
       sessionId: params.conversationId,
       messages: params.currentMessages,
+      tier: params.tier,
       ...(params.currentTokenCount != null ? { currentTokenCount: params.currentTokenCount } : {}),
-      ...(params.tokenBudget != null ? { tokenBudget: params.tokenBudget } : {}),
-      ...(params.forceTier ? { forceTier: params.forceTier } : {}),
       ...(effectiveCompactionContext ? { compactionContext: effectiveCompactionContext } : {}),
     });
     if (!compactResult.compacted || !compactResult.result) {
@@ -275,7 +273,7 @@ export async function prepareAgentTurnRequestBudget(
     workingMessages.length > 1 &&
     budgetPreview.pressure.requiresMessageWindowing
   ) {
-    for (const forceTier of ['tool_clearing', 'selective', 'aggressive'] as const) {
+    for (const tier of ['tool_clearing', 'selective', 'aggressive'] as const) {
       if (!budgetPreview.pressure.requiresMessageWindowing) {
         break;
       }
@@ -286,7 +284,7 @@ export async function prepareAgentTurnRequestBudget(
         currentMessages: workingMessages,
         onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages, params.requestFamily),
-        forceTier,
+        tier,
         failureLabel: 'Pre-flight compaction failed, continuing without compaction',
         ...(compactionContext ? { compactionContext } : {}),
         requestFamily: params.requestFamily,

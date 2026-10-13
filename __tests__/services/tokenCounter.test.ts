@@ -6,15 +6,8 @@ import {
   estimateTokens,
   estimateMessageTokens,
   getContextWindow,
-  getCompactionWorkingContextWindow,
   getWorkingContextWindow,
-  getCompactionThreshold,
-  getCompactionThresholds,
   MODEL_CONTEXT_WINDOWS,
-  MAX_ROUTINE_COMPACTION_WORKING_CONTEXT,
-  SELECTIVE_COMPACTION_THRESHOLD_SHARE,
-  TOOL_CLEARING_THRESHOLD_SHARE,
-  AGGRESSIVE_COMPACTION_THRESHOLD_SHARE,
 } from '../../src/services/context/tokenCounter';
 import {
   exportTokenCalibrationState,
@@ -369,53 +362,6 @@ describe('getWorkingContextWindow', () => {
     expect(getWorkingContextWindow('gemma3', { onDeviceProvider: true })).toBe(8000);
     // A model whose real window is already smaller than the cap keeps its own size.
     expect(getWorkingContextWindow('phi4', { onDeviceProvider: true })).toBe(8000);
-  });
-});
-
-describe('getCompactionThreshold', () => {
-  it('returns 75% (selective tier) of working context window', () => {
-    expect(getCompactionThreshold('gpt-5.4')).toBe(
-      Math.floor(MAX_ROUTINE_COMPACTION_WORKING_CONTEXT * SELECTIVE_COMPACTION_THRESHOLD_SHARE),
-    );
-  });
-
-  it('scales with model size', () => {
-    expect(getCompactionThreshold('gpt-5-mini')).toBe(
-      Math.floor(MAX_ROUTINE_COMPACTION_WORKING_CONTEXT * SELECTIVE_COMPACTION_THRESHOLD_SHARE),
-    );
-  });
-});
-
-describe('getCompactionWorkingContextWindow', () => {
-  it('caps very large working windows at the routine compaction target', () => {
-    expect(getCompactionWorkingContextWindow('gpt-5.4')).toBe(
-      MAX_ROUTINE_COMPACTION_WORKING_CONTEXT,
-    );
-    expect(getCompactionWorkingContextWindow('gpt-5-mini')).toBe(
-      MAX_ROUTINE_COMPACTION_WORKING_CONTEXT,
-    );
-  });
-
-  it('leaves smaller working windows unchanged', () => {
-    // Below the routine-compaction cap, the working window passes through untouched.
-    expect(getCompactionWorkingContextWindow('claude-haiku-4-5')).toBe(150000);
-    expect(getCompactionWorkingContextWindow('phi4')).toBe(16384);
-  });
-});
-
-describe('getCompactionThresholds', () => {
-  it('returns three graduated thresholds', () => {
-    const thresholds = getCompactionThresholds('gpt-5.4');
-    const working = getCompactionWorkingContextWindow('gpt-5.4');
-    expect(thresholds.toolClearing).toBe(Math.floor(working * TOOL_CLEARING_THRESHOLD_SHARE));
-    expect(thresholds.selective).toBe(Math.floor(working * SELECTIVE_COMPACTION_THRESHOLD_SHARE));
-    expect(thresholds.aggressive).toBe(Math.floor(working * AGGRESSIVE_COMPACTION_THRESHOLD_SHARE));
-  });
-
-  it('thresholds are ordered: toolClearing < selective < aggressive', () => {
-    const thresholds = getCompactionThresholds('claude-sonnet-4-6');
-    expect(thresholds.toolClearing).toBeLessThan(thresholds.selective);
-    expect(thresholds.selective).toBeLessThan(thresholds.aggressive);
   });
 });
 

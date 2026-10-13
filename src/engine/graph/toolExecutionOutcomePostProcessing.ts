@@ -112,7 +112,7 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
     params.compactionEngine &&
     isApproachingContextOverflow(workingMessages, params.contextWindow)
   ) {
-    for (const forceTier of ['tool_clearing', 'selective', 'aggressive'] as const) {
+    for (const tier of ['tool_clearing', 'selective', 'aggressive'] as const) {
       if (!isApproachingContextOverflow(workingMessages, params.contextWindow)) {
         break;
       }
@@ -123,7 +123,7 @@ export async function finalizeAgentControlGraphToolExecutionOutcomes(params: {
         currentMessages: workingMessages,
         onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages, params.requestFamily),
-        forceTier,
+        tier,
         failureLabel: 'Preemptive compaction failed',
         requestFamily: params.requestFamily,
         warn: params.warn,

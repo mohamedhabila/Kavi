@@ -2,13 +2,14 @@
 // Kavi — Context Compaction Engine (Tiered)
 // ---------------------------------------------------------------------------
 // Implements graduated context management based on Anthropic's context
-// engineering guidance:
+// engineering guidance. A request over its working window tries the tiers in
+// order until it fits (agentTurnRequestBudget):
 //
-//   Tier 1 — Tool result clearing  (60% of working context)
+//   Tier 1 — Tool result clearing
 //            "One of the safest lightest touch forms of compaction"
-//   Tier 2 — Selective compaction   (75% of working context)
+//   Tier 2 — Selective compaction
 //            Summarize older messages, keep adaptive recent tail
-//   Tier 3 — Aggressive compaction  (85% of working context)
+//   Tier 3 — Aggressive compaction
 //            Full structured summary with minimal recent tail
 //
 // Summary format follows Anthropic's SDK compaction prompt structure while the
@@ -18,24 +19,13 @@
 
 import type { Message } from '../../types/message';
 import type {
-  CompactionContext,
-  ContextEngine,
-  ContextEngineInfo,
-  AssembleResult,
+  CompactParams,
   CompactResult,
+  CompactionContext,
+  CompactionEngine,
   CompactionTier,
-  ForcedCompactionTier,
-  IngestResult,
-  BootstrapResult,
 } from './types';
-import { registerContextEngine } from './registry';
-import {
-  estimateTokens,
-  estimateMessageTokens,
-  TOOL_CLEARING_THRESHOLD_SHARE,
-  SELECTIVE_COMPACTION_THRESHOLD_SHARE,
-  AGGRESSIVE_COMPACTION_THRESHOLD_SHARE,
-} from './tokenCounter';
+import { estimateTokens, estimateMessageTokens } from './tokenCounter';
 import { emitSessionEvent } from '../events/bus';
 import { buildCompactionSummary } from './compactionSummarizer';
 import { resolveCompactionSummarizerConfig } from './compactionModelResolver';
@@ -86,25 +76,6 @@ export function alignCompactionTailStart(messages: Message[], startIndex: number
   }
 
   return alignedIndex;
-}
-
-// ── Tier determination ───────────────────────────────────────────────────
-
-/**
- * Determine which compaction tier to apply based on current token usage
- * relative to the working context window budget.
- */
-export function determineCompactionTier(tokenCount: number, budget: number): CompactionTier {
-  const thresholds = {
-    toolClearing: Math.floor(budget * TOOL_CLEARING_THRESHOLD_SHARE),
-    selective: Math.floor(budget * SELECTIVE_COMPACTION_THRESHOLD_SHARE),
-    aggressive: Math.floor(budget * AGGRESSIVE_COMPACTION_THRESHOLD_SHARE),
-  };
-
-  if (tokenCount >= thresholds.aggressive) return 'aggressive';
-  if (tokenCount >= thresholds.selective) return 'selective';
-  if (tokenCount >= thresholds.toolClearing) return 'tool_clearing';
-  return 'none';
 }
 
 // ── Tier 1: Tool Result Clearing ─────────────────────────────────────────
@@ -160,94 +131,28 @@ export function clearOldToolResults(
 
 // ── Main Engine ──────────────────────────────────────────────────────────
 
-export class DefaultContextEngine implements ContextEngine {
-  readonly info: ContextEngineInfo = {
-    id: 'default',
-    name: 'Default Context Engine',
-    version: '2.0.0',
-    ownsCompaction: true,
-  };
-
-  async bootstrap(): Promise<BootstrapResult> {
-    return { bootstrapped: true };
-  }
-
-  async ingest(_params: { sessionId: string; message: Message }): Promise<IngestResult> {
-    return { ingested: true };
-  }
-
-  async assemble(params: {
-    sessionId: string;
-    messages: Message[];
-    tokenBudget?: number;
-  }): Promise<AssembleResult> {
-    const budget = params.tokenBudget ?? 128000;
-    let totalTokens = 0;
-    const systemMessages: Message[] = [];
-    const keptNonSystem: Message[] = [];
-
-    // Always include system messages
-    for (const msg of params.messages) {
-      if (msg.role === 'system') {
-        const tokens = estimateTokens(msg.content);
-        totalTokens += tokens;
-        systemMessages.push(msg);
-      }
-    }
-
-    // Include messages from recent to old until budget exceeded
-    const nonSystem = params.messages.filter((m) => m.role !== 'system');
-    for (let index = nonSystem.length - 1; index >= 0; index -= 1) {
-      const msg = nonSystem[index];
-      const tokens = estimateTokens(getMessageContentForContext(msg)) + 4;
-      if (totalTokens + tokens > budget) break;
-      totalTokens += tokens;
-      keptNonSystem.unshift(msg);
-    }
-
-    return {
-      messages: [...systemMessages, ...keptNonSystem],
-      estimatedTokens: totalTokens,
-    };
-  }
-
-  async compact(params: {
-    sessionId: string;
-    messages: Message[];
-    tokenBudget?: number;
-    forceTier?: ForcedCompactionTier;
-    currentTokenCount?: number;
-    compactionContext?: CompactionContext;
-  }): Promise<CompactResult> {
+export class DefaultCompactionEngine implements CompactionEngine {
+  async compact(params: CompactParams): Promise<CompactResult> {
     const tokenCount =
       params.currentTokenCount ??
       estimateMessageTokens(
         params.messages.map((m) => ({ role: m.role, content: getMessageContentForContext(m) })),
         params.compactionContext?.requestFamily,
       );
-    const budget = params.tokenBudget ?? 128000;
-
-    // Determine compaction tier
-    const tier: CompactionTier = params.forceTier ?? determineCompactionTier(tokenCount, budget);
-
-    if (tier === 'none') {
-      return { ok: true, compacted: false, tier: 'none', reason: 'Below all thresholds' };
-    }
 
     // ── Tier 1: Tool Result Clearing ─────────────────────────────────
-    if (tier === 'tool_clearing') {
+    if (params.tier === 'tool_clearing') {
       return this.applyToolClearing(params, tokenCount);
     }
 
     // ── Tier 2 & 3: Summarization ────────────────────────────────────
-    return this.applySummarizationCompaction(params, tokenCount, tier);
+    return this.applySummarizationCompaction(params, tokenCount, params.tier);
   }
 
   private async applyToolClearing(
     params: {
       sessionId: string;
       messages: Message[];
-      tokenBudget?: number;
       compactionContext?: CompactionContext;
     },
     tokenCount: number,
@@ -292,11 +197,10 @@ export class DefaultContextEngine implements ContextEngine {
     params: {
       sessionId: string;
       messages: Message[];
-      tokenBudget?: number;
       compactionContext?: CompactionContext;
     },
     tokenCount: number,
-    tier: 'selective' | 'aggressive',
+    tier: Exclude<CompactionTier, 'tool_clearing'>,
   ): Promise<CompactResult> {
     // Extract prior compaction summaries from system messages before filtering.
     // These would otherwise be silently dropped because buildStructuredSummary
@@ -360,6 +264,3 @@ export class DefaultContextEngine implements ContextEngine {
     };
   }
 }
-
-// Register the default engine
-registerContextEngine('default', () => new DefaultContextEngine());

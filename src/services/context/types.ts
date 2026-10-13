@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Kavi — Context Engine Types
+// Kavi — Compaction Types
 // ---------------------------------------------------------------------------
 
 import type { Message } from '../../types/message';
@@ -7,19 +7,12 @@ import type { Message } from '../../types/message';
 // ── Compaction tiers (Anthropic-style graduated context management) ───────
 
 /**
- * Graduated compaction tiers — from lightest-touch to most aggressive.
+ * Graduated compaction tiers — from lightest-touch to most aggressive. A request over its
+ * working window tries them in this order until it fits.
  * Based on Anthropic's context engineering guidance:
  * "One of the safest lightest touch forms of compaction is tool result clearing"
  */
-export type CompactionTier = 'none' | 'tool_clearing' | 'selective' | 'aggressive';
-
-export type ForcedCompactionTier = 'tool_clearing' | 'selective' | 'aggressive';
-
-export type AssembleResult = {
-  messages: Message[];
-  estimatedTokens: number;
-  systemPromptAddition?: string;
-};
+export type CompactionTier = 'tool_clearing' | 'selective' | 'aggressive';
 
 export type CompactResult = {
   ok: boolean;
@@ -38,10 +31,6 @@ export type CompactResult = {
   };
 };
 
-export type IngestResult = {
-  ingested: boolean;
-};
-
 /** Code-owned inputs that let a compaction summary preserve unfinished work. */
 export type CompactionContext = {
   /** The run's plan steps and in-flight external operations, bounded by the caller. */
@@ -54,49 +43,20 @@ export type CompactionContext = {
   requestFamily?: string;
 };
 
-export type BootstrapResult = {
-  bootstrapped: boolean;
-  importedMessages?: number;
-  reason?: string;
+export type CompactParams = {
+  sessionId: string;
+  messages: Message[];
+  tier: CompactionTier;
+  currentTokenCount?: number;
+  /**
+   * Code-owned pending-work state and summarizer routing for this compaction.
+   * Supplying it lets the summary carry the task forward; omitting it falls back
+   * to a transcript-only summary.
+   */
+  compactionContext?: CompactionContext;
 };
 
-export type ContextEngineInfo = {
-  id: string;
-  name: string;
-  version?: string;
-  ownsCompaction?: boolean;
-};
-
-/**
- * ContextEngine defines the pluggable contract for context management.
- */
-export interface ContextEngine {
-  readonly info: ContextEngineInfo;
-
-  bootstrap?(params: { sessionId: string }): Promise<BootstrapResult>;
-
-  ingest(params: { sessionId: string; message: Message }): Promise<IngestResult>;
-
-  assemble(params: {
-    sessionId: string;
-    messages: Message[];
-    tokenBudget?: number;
-  }): Promise<AssembleResult>;
-
-  compact(params: {
-    sessionId: string;
-    messages: Message[];
-    tokenBudget?: number;
-    force?: boolean;
-    forceTier?: ForcedCompactionTier;
-    currentTokenCount?: number;
-    /**
-     * Code-owned pending-work state and summarizer routing for this compaction.
-     * Supplying it lets the summary carry the task forward; omitting it falls back
-     * to a transcript-only summary.
-     */
-    compactionContext?: CompactionContext;
-  }): Promise<CompactResult>;
-
-  dispose?(): Promise<void>;
+/** Compacts a run's working messages at one tier. */
+export interface CompactionEngine {
+  compact(params: CompactParams): Promise<CompactResult>;
 }

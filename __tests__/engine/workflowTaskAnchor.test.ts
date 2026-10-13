@@ -136,7 +136,7 @@ describe('workflow task anchor', () => {
       compactionEngine: { compact },
       conversationId: 'conversation-1',
       currentMessages: [original, correction],
-      forceTier: 'selective',
+      tier: 'selective',
       failureLabel: 'selective failed',
       warn: jest.fn(),
     });
@@ -144,7 +144,7 @@ describe('workflow task anchor', () => {
       compactionEngine: { compact },
       conversationId: 'conversation-1',
       currentMessages: selective.messages,
-      forceTier: 'aggressive',
+      tier: 'aggressive',
       failureLabel: 'aggressive failed',
       warn: jest.fn(),
     });

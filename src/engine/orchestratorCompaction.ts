@@ -7,7 +7,7 @@ import { repairReadFileContinuationSummary } from '../services/context/compactio
 export interface OrchestratorCompactionEvent {
   notice: string;
   messages: Message[];
-  tier: Exclude<CompactionTier, 'none'>;
+  tier: CompactionTier;
   tokensBefore?: number;
   tokensAfter?: number;
   /** The compaction summary text, if any. */
@@ -52,10 +52,7 @@ export function applyCompactionResultToWorkingMessages(
     };
   }
 
-  const tier: Exclude<CompactionTier, 'none'> =
-    compactResult.tier === 'tool_clearing' || compactResult.tier === 'aggressive'
-      ? compactResult.tier
-      : 'selective';
+  const tier: CompactionTier = compactResult.tier ?? 'selective';
   if (tier === 'tool_clearing') {
     const { messages: cleared } = clearOldToolResults(messages, undefined, family);
     return {

@@ -2,7 +2,7 @@
 // Tests — Memory-aware compaction
 // ---------------------------------------------------------------------------
 
-import { DefaultContextEngine } from '../../../src/services/context/compaction';
+import { DefaultCompactionEngine } from '../../../src/services/context/compaction';
 import { buildStructuredSummary } from '../../../src/services/context/compactionSummary';
 import type { Message } from '../../../src/types/message';
 
@@ -66,8 +66,8 @@ describe('buildStructuredSummary — memory-aware hints', () => {
   });
 });
 
-describe('DefaultContextEngine.compact — memory-aware summaries', () => {
-  const engine = new DefaultContextEngine();
+describe('DefaultCompactionEngine.compact — memory-aware summaries', () => {
+  const engine = new DefaultCompactionEngine();
 
   // Build a summary-eligible payload: many non-system messages so the
   // tail-windowing code in `applySummarizationCompaction` has something to
@@ -81,8 +81,7 @@ describe('DefaultContextEngine.compact — memory-aware summaries', () => {
     const result = await engine.compact({
       sessionId: 's1',
       messages: buildMessages(40),
-      tokenBudget: 1_000_000,
-      forceTier: 'selective',
+      tier: 'selective',
       compactionContext: { openThreads: ['confirm migration', 'update locales'] },
     });
     expect(result.compacted).toBe(true);
@@ -99,8 +98,7 @@ describe('DefaultContextEngine.compact — memory-aware summaries', () => {
     const result = await engine.compact({
       sessionId: 's1',
       messages,
-      tokenBudget: 1_000_000,
-      forceTier: 'aggressive',
+      tier: 'aggressive',
     });
     expect(result.compacted).toBe(true);
     const firstKept = result.result?.firstKeptEntryId;

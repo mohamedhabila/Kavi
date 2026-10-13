@@ -3,9 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import {
-  DefaultContextEngine,
+  DefaultCompactionEngine,
   clearOldToolResults,
-  determineCompactionTier,
   TOOL_CLEARED_PLACEHOLDER,
 } from '../../src/services/context/compaction';
 import {
@@ -60,106 +59,24 @@ const makeToolMsg = (id: string, toolCallId: string, content: string): Message =
   isError: true,
 });
 
-describe('DefaultContextEngine', () => {
-  const engine = new DefaultContextEngine();
-
-  describe('info', () => {
-    it('has correct metadata', () => {
-      expect(engine.info.id).toBe('default');
-      expect(engine.info.ownsCompaction).toBe(true);
-    });
-  });
-
-  describe('bootstrap', () => {
-    it('returns bootstrapped true', async () => {
-      const result = await engine.bootstrap();
-      expect(result.bootstrapped).toBe(true);
-    });
-  });
-
-  describe('ingest', () => {
-    it('returns ingested true', async () => {
-      const result = await engine.ingest({ sessionId: 's1', message: makeMsg('user', 'hi') });
-      expect(result.ingested).toBe(true);
-    });
-  });
-
-  describe('assemble', () => {
-    it('includes all messages within budget', async () => {
-      const messages = [
-        makeMsg('system', 'You are an AI.'),
-        makeMsg('user', 'Hello'),
-        makeMsg('assistant', 'Hi'),
-      ];
-      const result = await engine.assemble({ sessionId: 's1', messages, tokenBudget: 100000 });
-      expect(result.messages).toHaveLength(3);
-      expect(result.estimatedTokens).toBeGreaterThan(0);
-    });
-
-    it('always includes system messages', async () => {
-      const messages = [
-        makeMsg('system', 'System'),
-        ...Array.from({ length: 50 }, (_, i) => makeMsg('user', `Message ${i} `.repeat(100))),
-      ];
-      const result = await engine.assemble({ sessionId: 's1', messages, tokenBudget: 500 });
-      expect(result.messages.some((m) => m.role === 'system')).toBe(true);
-    });
-
-    it('prioritizes recent messages', async () => {
-      const messages = [
-        makeMsg('user', 'Old message'),
-        makeMsg('user', 'Middle message'),
-        makeMsg('user', 'Recent message'),
-      ];
-      const result = await engine.assemble({ sessionId: 's1', messages, tokenBudget: 50 });
-      // Should include most recent
-      expect(result.messages.some((m) => m.content === 'Recent message')).toBe(true);
-    });
-
-    it('keeps system messages first and preserves chronological order', async () => {
-      const messages = [
-        makeMsg('system', 'System instructions'),
-        makeMsg('user', 'First user turn'),
-        makeMsg('assistant', 'First assistant turn'),
-        makeMsg('user', 'Second user turn'),
-      ];
-
-      const result = await engine.assemble({ sessionId: 's1', messages, tokenBudget: 100000 });
-      expect(result.messages.map((message) => message.content)).toEqual([
-        'System instructions',
-        'First user turn',
-        'First assistant turn',
-        'Second user turn',
-      ]);
-    });
-  });
+describe('DefaultCompactionEngine', () => {
+  const engine = new DefaultCompactionEngine();
 
   describe('compact', () => {
-    it('returns not compacted when below threshold', async () => {
-      const messages = [makeMsg('user', 'Hello'), makeMsg('assistant', 'Hi')];
-      const result = await engine.compact({
-        sessionId: 's1',
-        messages,
-        tokenBudget: 100000,
-      });
-      expect(result.compacted).toBe(false);
-      expect(result.tier).toBe('none');
-    });
-
-    it('compacts when forced', async () => {
+    it('summarizes at the selective tier', async () => {
       const messages = Array.from({ length: 20 }, (_, i) =>
         makeMsg(i % 2 === 0 ? 'user' : 'assistant', `Message ${i}`),
       );
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'selective',
+        tier: 'selective',
       });
       expect(result.compacted).toBe(true);
       expect(result.result?.summary).toContain('Conversation Summary');
     });
 
-    it('supports forced tool clearing below the normal thresholds', async () => {
+    it('clears old tool results at the tool clearing tier', async () => {
       const messages: Message[] = [
         makeMsg('user', 'Investigate the failing command.'),
         ...Array.from({ length: 8 }, (_, index) =>
@@ -170,8 +87,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        tokenBudget: 100000,
-        forceTier: 'tool_clearing',
+        tier: 'tool_clearing',
       });
 
       expect(result.compacted).toBe(true);
@@ -179,7 +95,7 @@ describe('DefaultContextEngine', () => {
       expect(result.result?.clearedToolResults).toBeGreaterThan(0);
     });
 
-    it('supports forced aggressive compaction for shorter histories', async () => {
+    it('summarizes shorter histories at the aggressive tier', async () => {
       const messages = Array.from({ length: 6 }, (_, i) =>
         makeMsg(i % 2 === 0 ? 'user' : 'assistant', `Message ${i} ${'x'.repeat(1400)}`),
       );
@@ -187,7 +103,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'aggressive',
+        tier: 'aggressive',
       });
 
       expect(result.compacted).toBe(true);
@@ -202,7 +118,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'selective',
+        tier: 'selective',
       });
       expect(result.result?.firstKeptEntryId).toBeDefined();
     });
@@ -222,7 +138,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'selective',
+        tier: 'selective',
       });
 
       // With selective tier (min keep=8) and only 8 non-system messages,
@@ -302,7 +218,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'selective',
+        tier: 'selective',
       });
 
       expect(result.compacted).toBe(true);
@@ -342,7 +258,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        forceTier: 'selective',
+        tier: 'selective',
       });
       // Only 1 msg, selective min keep=8 → toSummarize.length = 0
       expect(result.compacted).toBe(false);
@@ -350,24 +266,6 @@ describe('DefaultContextEngine', () => {
   });
 
   // ── Tiered compaction tests ──────────────────────────────────────────
-
-  describe('determineCompactionTier', () => {
-    it('returns none when below all thresholds', () => {
-      expect(determineCompactionTier(50000, 100000)).toBe('none');
-    });
-
-    it('returns tool_clearing at 60%+', () => {
-      expect(determineCompactionTier(61000, 100000)).toBe('tool_clearing');
-    });
-
-    it('returns selective at 75%+', () => {
-      expect(determineCompactionTier(76000, 100000)).toBe('selective');
-    });
-
-    it('returns aggressive at 85%+', () => {
-      expect(determineCompactionTier(86000, 100000)).toBe('aggressive');
-    });
-  });
 
   describe('clearOldToolResults', () => {
     it('does nothing when fewer tool results than keep threshold', () => {
@@ -533,7 +431,7 @@ describe('DefaultContextEngine', () => {
 
   describe('multi-round compaction preserves prior summaries', () => {
     it('incorporates prior compaction summary into new summary during Tier 2', async () => {
-      const engine = new DefaultContextEngine();
+      const engine = new DefaultCompactionEngine();
       // Simulate state after a previous compaction: system message with summary + recent messages
       const priorSummary = `${COMPACTION_SUMMARY_MARKER}\n\n## Task Overview\nBuild a web scraper for product pages\n\n## Current State\nTool calls: 12 total`;
       const messages: Message[] = [
@@ -545,8 +443,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 'test',
         messages,
-        tokenBudget: 128000,
-        forceTier: 'selective',
+        tier: 'selective',
       });
       expect(result.compacted).toBe(true);
       expect(result.result?.summary).toContain('## Prior Context');
@@ -554,7 +451,7 @@ describe('DefaultContextEngine', () => {
     });
 
     it('does NOT include non-summary system messages as prior context', async () => {
-      const engine = new DefaultContextEngine();
+      const engine = new DefaultCompactionEngine();
       // Loop warning — should NOT be preserved as prior context
       const loopWarning = 'Warning: possible tool loop detected';
       const messages: Message[] = [
@@ -566,8 +463,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 'test',
         messages,
-        tokenBudget: 128000,
-        forceTier: 'selective',
+        tier: 'selective',
       });
       expect(result.compacted).toBe(true);
       // Loop warning doesn't contain COMPACTION_SUMMARY_MARKER, so no Prior Context section

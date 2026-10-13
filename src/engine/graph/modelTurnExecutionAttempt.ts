@@ -352,7 +352,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
         currentMessages: workingMessages,
         onCompaction: params.onCompaction,
         currentTokenCount: estimateWorkingMessageTokens(workingMessages, requestFamily),
-        forceTier: 'aggressive',
+        tier: 'aggressive',
         failureLabel: 'Provider overflow recovery compaction failed',
         requestFamily,
         warn: params.warn,

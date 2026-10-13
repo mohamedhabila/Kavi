@@ -5,7 +5,7 @@ import {
 } from '../../src/engine/orchestrator';
 import { createWorkflowTaskAnchor } from '../../src/engine/graph/workflowTaskAnchor';
 import * as budgetManager from '../../src/services/context/budgetManager';
-import { DefaultContextEngine } from '../../src/services/context/compaction';
+import { DefaultCompactionEngine } from '../../src/services/context/compaction';
 import type { Message } from '../../src/types/message';
 import type { LlmProviderConfig } from '../../src/types/provider';
 
@@ -162,7 +162,7 @@ describe('runOrchestrator — compaction resilience', () => {
       );
     });
 
-    const compactSpy = jest.spyOn(DefaultContextEngine.prototype, 'compact');
+    const compactSpy = jest.spyOn(DefaultCompactionEngine.prototype, 'compact');
     const anchorMessage = makeMsg('user', 'Continue the task after compaction.');
     const seededMessages = [
       ...Array.from({ length: 10 }, (_, index) =>
@@ -189,7 +189,7 @@ describe('runOrchestrator — compaction resilience', () => {
         ),
       ),
     ).toBe(true);
-    expect(compactSpy.mock.calls.some(([params]) => params.forceTier === 'aggressive')).toBe(true);
+    expect(compactSpy.mock.calls.some(([params]) => params.tier === 'aggressive')).toBe(true);
     if ((callbacks.onCompaction as jest.Mock).mock.calls.length > 0) {
       expect(callbacks.onCompaction).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -244,7 +244,7 @@ describe('runOrchestrator — compaction resilience', () => {
       );
     });
 
-    const compactSpy = jest.spyOn(DefaultContextEngine.prototype, 'compact');
+    const compactSpy = jest.spyOn(DefaultCompactionEngine.prototype, 'compact');
     const actualInspectContextBudget = budgetManager.inspectContextBudget;
     const inspectBudgetSpy = jest.spyOn(budgetManager, 'inspectContextBudget');
     let inspectCallCount = 0;
@@ -280,7 +280,7 @@ describe('runOrchestrator — compaction resilience', () => {
       callbacks,
     );
 
-    expect(compactSpy.mock.calls.some(([params]) => params.forceTier === 'selective')).toBe(true);
+    expect(compactSpy.mock.calls.some(([params]) => params.tier === 'selective')).toBe(true);
     if ((callbacks.onCompaction as jest.Mock).mock.calls.length > 0) {
       const compactionEvent = (callbacks.onCompaction as jest.Mock).mock.calls.at(-1)?.[0];
       expect(compactionEvent).toEqual(
@@ -335,7 +335,7 @@ describe('runOrchestrator — compaction resilience', () => {
       );
     });
 
-    const compactSpy = jest.spyOn(DefaultContextEngine.prototype, 'compact');
+    const compactSpy = jest.spyOn(DefaultCompactionEngine.prototype, 'compact');
     const actualInspectContextBudget = budgetManager.inspectContextBudget;
     const inspectBudgetSpy = jest.spyOn(budgetManager, 'inspectContextBudget');
     let inspectCallCount = 0;
