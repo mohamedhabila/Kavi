@@ -218,8 +218,8 @@ const INVESTIGATION_FILES: ReadonlyArray<E2EWorkspaceSeedFile> = [
 ];
 
 /**
- * Reference path: listing 1, order 1, shipment 1, damage report 1, policy folder 1, policy 1,
- * memo 1, write 1 = 8 calls.
+ * Reference path: listings 5 (support and its four folders, whose file names are ids),
+ * order 1, shipment 1, damage report 1, policy 1, memo 1, write 1 = 11 calls.
  */
 export const LONG_TASK_CHAINED_INVESTIGATION: E2EScenario = {
   id: 'long-task-chained-investigation',
@@ -233,7 +233,7 @@ export const LONG_TASK_CHAINED_INVESTIGATION: E2EScenario = {
   rubrics: [
     ...completedTurnRubrics(0),
     ...workspaceFileContains('support/replies/A-7731.md', ['Correct refund: 60', 'Still owed: 24']),
-    ...longTaskBudgetRubrics('long-task-chained-investigation', 8),
+    ...longTaskBudgetRubrics('long-task-chained-investigation', 11),
   ],
 };
 

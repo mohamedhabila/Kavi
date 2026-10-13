@@ -273,8 +273,8 @@ const RECONCILE_FILES: ReadonlyArray<E2EWorkspaceSeedFile> = [
 ];
 
 /**
- * Reference path: steps 1, progress 1, combined stock 1, reorder points 1, partial list 1,
- * write list 1, write summary 1, write progress 1 = 8 calls (9 with a listing).
+ * Reference path: steps 1, progress 1, listings 3 (root, inventory, out), partial list 1,
+ * combined stock 1, reorder points 1, writes 3 (list, summary, progress) = 11 calls.
  */
 export const LONG_TASK_RESUME_INTERRUPTED: E2EScenario = {
   id: 'long-task-resume-interrupted',
@@ -290,7 +290,7 @@ export const LONG_TASK_RESUME_INTERRUPTED: E2EScenario = {
     { kind: 'workspace_file', path: 'out/reorder-list.csv', excludes: 'SKU-106' },
     { kind: 'workspace_file', path: 'out/summary.md', contains: 'Units to order: 93' },
     { kind: 'workspace_file', path: 'tasks/progress.md', excludes: '[ ]' },
-    ...longTaskBudgetRubrics('long-task-resume-interrupted', 9),
+    ...longTaskBudgetRubrics('long-task-resume-interrupted', 11),
   ],
 };
 
