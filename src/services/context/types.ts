@@ -44,12 +44,8 @@ export type IngestResult = {
 
 /** Code-owned inputs that let a compaction summary preserve unfinished work. */
 export type CompactionContext = {
-  /** Rendered focus block for the conversation, when one is available. */
-  focusBlock?: string;
-  /** Live goals and in-flight external operations, bounded by the caller. */
+  /** The run's plan steps and in-flight external operations, bounded by the caller. */
   openThreads?: string[];
-  /** Milliseconds since the last user turn ended; gates mid-burst summarization. */
-  idleSinceLastTurnMs?: number;
   /** Active request model, used to route model-backed summarization. */
   requestModel?: string;
   /** True when the active provider runs on-device and must not summarize. */

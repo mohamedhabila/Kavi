@@ -64,13 +64,6 @@ const AGGRESSIVE_MAX_RECENT = 8;
 export const TOOL_CLEARED_PLACEHOLDER = '[cleared:';
 
 /**
- * Idle window required to trigger compaction during a non-forced, non-pressure
- * call. "avoid running compaction mid-burst by gating it on
- * idleSinceLastTurn > 90s unless the budget is genuinely exceeded."
- */
-export const COMPACTION_IDLE_GUARD_MS = 45_000;
-
-/**
  * Ensures the compaction tail boundary doesn't split an atomic tool-call group.
  * If the boundary lands on a tool-result message, walk back to include the
  * preceding assistant tool_call message that initiated the group.
@@ -222,18 +215,8 @@ export class DefaultContextEngine implements ContextEngine {
     sessionId: string;
     messages: Message[];
     tokenBudget?: number;
-    force?: boolean;
     forceTier?: ForcedCompactionTier;
     currentTokenCount?: number;
-    /**
-     * Milliseconds since the last user turn ended. When the call is not
-     * forced and the conversation is still actively bursting (idle below
-     * `COMPACTION_IDLE_GUARD_MS`), tier-2/tier-3 compaction is skipped
-     * unless the budget is genuinely exceeded.
-     */
-    idleSinceLastTurnMs?: number;
-    focusBlock?: string;
-    openThreads?: string[];
     compactionContext?: CompactionContext;
   }): Promise<CompactResult> {
     const tokenCount =
@@ -245,9 +228,7 @@ export class DefaultContextEngine implements ContextEngine {
     const budget = params.tokenBudget ?? 128000;
 
     // Determine compaction tier
-    const tier: CompactionTier =
-      params.forceTier ??
-      (params.force ? 'selective' : determineCompactionTier(tokenCount, budget));
+    const tier: CompactionTier = params.forceTier ?? determineCompactionTier(tokenCount, budget);
 
     if (tier === 'none') {
       return { ok: true, compacted: false, tier: 'none', reason: 'Below all thresholds' };
@@ -259,19 +240,7 @@ export class DefaultContextEngine implements ContextEngine {
     }
 
     // ── Tier 2 & 3: Summarization ────────────────────────────────────
-    // An explicit compactionContext wins over the legacy top-level fields so a
-    // caller only has to supply pending-work state in one place.
-    return this.applySummarizationCompaction(
-      {
-        ...params,
-        focusBlock: params.compactionContext?.focusBlock ?? params.focusBlock,
-        openThreads: params.compactionContext?.openThreads ?? params.openThreads,
-        idleSinceLastTurnMs:
-          params.compactionContext?.idleSinceLastTurnMs ?? params.idleSinceLastTurnMs,
-      },
-      tokenCount,
-      tier,
-    );
+    return this.applySummarizationCompaction(params, tokenCount, tier);
   }
 
   private async applyToolClearing(
@@ -324,37 +293,11 @@ export class DefaultContextEngine implements ContextEngine {
       sessionId: string;
       messages: Message[];
       tokenBudget?: number;
-      currentTokenCount?: number;
-      force?: boolean;
-      forceTier?: ForcedCompactionTier;
-      idleSinceLastTurnMs?: number;
-      focusBlock?: string;
-      openThreads?: string[];
       compactionContext?: CompactionContext;
     },
     tokenCount: number,
     tier: 'selective' | 'aggressive',
   ): Promise<CompactResult> {
-    // Idle gate: skip mid-burst compaction unless explicitly
-    // forced or the budget is genuinely exceeded.
-    const budget = params.tokenBudget ?? 128000;
-    const overBudget = tokenCount > budget;
-    const explicitlyForced = params.force === true || params.forceTier !== undefined;
-    const idleMs = params.idleSinceLastTurnMs;
-    if (
-      !explicitlyForced &&
-      !overBudget &&
-      typeof idleMs === 'number' &&
-      idleMs < COMPACTION_IDLE_GUARD_MS
-    ) {
-      return {
-        ok: true,
-        compacted: false,
-        tier,
-        reason: `Skipped: mid-burst (idle ${idleMs}ms < ${COMPACTION_IDLE_GUARD_MS}ms guard)`,
-      };
-    }
-
     // Extract prior compaction summaries from system messages before filtering.
     // These would otherwise be silently dropped because buildStructuredSummary
     // only processes non-system messages.  Feeding them as priorContext ensures
@@ -389,10 +332,7 @@ export class DefaultContextEngine implements ContextEngine {
       messages: toSummarize,
       tier,
       priorContext: priorSummaryContent || undefined,
-      hints: {
-        focusBlock: params.focusBlock,
-        openThreads: params.openThreads,
-      },
+      hints: { openThreads: params.compactionContext?.openThreads },
       summarizer,
     });
     const tokensAfter =

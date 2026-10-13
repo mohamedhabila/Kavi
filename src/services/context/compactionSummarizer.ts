@@ -112,10 +112,6 @@ export async function buildCompactionSummary(params: {
     const sections = [normalized];
     // Code-owned pending work is appended rather than trusted to the summarizer:
     // a dropped open thread is exactly the failure this section exists to prevent.
-    const focusText = (params.hints?.focusBlock ?? '').trim();
-    if (focusText) {
-      sections.push(`## Active Focus\n${focusText}`);
-    }
     const openThreads = (params.hints?.openThreads ?? [])
       .map((thread) => thread.trim())
       .filter(Boolean);

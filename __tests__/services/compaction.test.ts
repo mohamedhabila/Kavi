@@ -153,7 +153,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        force: true,
+        forceTier: 'selective',
       });
       expect(result.compacted).toBe(true);
       expect(result.result?.summary).toContain('Conversation Summary');
@@ -202,7 +202,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        force: true,
+        forceTier: 'selective',
       });
       expect(result.result?.firstKeptEntryId).toBeDefined();
     });
@@ -222,7 +222,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        force: true,
+        forceTier: 'selective',
       });
 
       // With selective tier (min keep=8) and only 8 non-system messages,
@@ -302,7 +302,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        force: true,
+        forceTier: 'selective',
       });
 
       expect(result.compacted).toBe(true);
@@ -342,7 +342,7 @@ describe('DefaultContextEngine', () => {
       const result = await engine.compact({
         sessionId: 's1',
         messages,
-        force: true,
+        forceTier: 'selective',
       });
       // Only 1 msg, selective min keep=8 → toSummarize.length = 0
       expect(result.compacted).toBe(false);
@@ -546,7 +546,7 @@ describe('DefaultContextEngine', () => {
         sessionId: 'test',
         messages,
         tokenBudget: 128000,
-        force: true,
+        forceTier: 'selective',
       });
       expect(result.compacted).toBe(true);
       expect(result.result?.summary).toContain('## Prior Context');
@@ -567,7 +567,7 @@ describe('DefaultContextEngine', () => {
         sessionId: 'test',
         messages,
         tokenBudget: 128000,
-        force: true,
+        forceTier: 'selective',
       });
       expect(result.compacted).toBe(true);
       // Loop warning doesn't contain COMPACTION_SUMMARY_MARKER, so no Prior Context section

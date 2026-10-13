@@ -30,11 +30,9 @@ const MAX_READ_FILE_CONTINUATION_STATES = 64;
 /** Marker used to identify compaction summary messages in the working array. */
 export const COMPACTION_SUMMARY_MARKER = '[Conversation Summary]';
 
-/** Optional memory-aware inputs for deterministic compaction summaries. */
+/** Code-owned inputs a compaction summary must carry forward. */
 export interface StructuredSummaryMemoryHints {
-  /** Rendered focus block (e.g. from `renderFocusBlock`). */
-  focusBlock?: string;
-  /** Open thread / pending decision labels to surface in the summary. */
+  /** Plan steps and in-flight operations to surface in the summary. */
   openThreads?: string[];
 }
 
@@ -228,10 +226,6 @@ export function buildStructuredSummary(
     sections.push(`## Current State\n${stateLines.join('\n')}`);
   }
 
-  const focusText = (hints?.focusBlock ?? '').trim();
-  if (focusText) {
-    sections.push(`## Active Focus\n${focusText}`);
-  }
   const openThreads = (hints?.openThreads ?? [])
     .map((thread) => thread.trim())
     .filter((thread) => thread.length > 0);
