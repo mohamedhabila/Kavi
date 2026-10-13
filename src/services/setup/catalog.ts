@@ -1,5 +1,3 @@
-import type { ToolDefinition } from '../../types/tool';
-
 export interface ServiceSetupField {
   storageKey: string;
   label: string;
@@ -10,13 +8,6 @@ export interface ServiceSetupField {
   setup: string;
   freeAccess: string;
   docsUrl?: string;
-  tools: string[];
-}
-
-export interface ToolPermissionGroup {
-  id: string;
-  title: string;
-  description: string;
   tools: string[];
 }
 
@@ -160,125 +151,6 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
   },
 ];
 
-export const TOOL_PERMISSION_GROUPS: ToolPermissionGroup[] = [
-  {
-    id: 'core',
-    title: 'Core Workspace',
-    description:
-      'Read, write, search, workflow evidence, memory, scheduling, and JavaScript execution.',
-    tools: [
-      'read_file',
-      'write_file',
-      'list_files',
-      'javascript',
-      'python',
-      'file_edit',
-      'glob_search',
-      'text_search',
-      'cron',
-    ],
-  },
-  {
-    id: 'web',
-    title: 'Web Tools',
-    description: 'Search the web and extract page content.',
-    tools: ['web_search', 'web_fetch'],
-  },
-  {
-    id: 'media',
-    title: 'Media & Output',
-    description: 'Notifications, image generation and editing, audio transcription, and speech.',
-    tools: ['image_generate', 'image_edit', 'audio_transcribe', 'speak', 'poll_create'],
-  },
-  {
-    id: 'device',
-    title: 'Device Tools',
-    description: 'Calendar, contacts, location, clipboard, sharing, and device status.',
-    tools: [
-      'calendar_list',
-      'calendar_events',
-      'calendar_create_event',
-      'calendar_update_event',
-      'email_compose',
-      'sms_compose',
-      'phone_call',
-      'maps_open',
-      'contacts_pick',
-      'contacts_manage_access',
-      'contacts_form',
-      'contacts_share',
-      'contacts_search',
-      'contacts_get',
-      'location_current',
-      'clipboard_read',
-      'clipboard_write',
-      'share_text',
-      'share_file',
-      'open_url',
-      'notification_send',
-      'reminder',
-      'device_query',
-      'photos_pick',
-      'camera_clip',
-      'screen_record',
-      'camera_snap',
-    ],
-  },
-  {
-    id: 'canvas',
-    title: 'Canvas & Sessions',
-    description: 'Session-local canvases, canvas inspection, sub-agents, and PDF analysis.',
-    tools: [
-      'canvas_list',
-      'canvas_read',
-      'canvas_create',
-      'canvas_update',
-      'canvas_delete',
-      'canvas_navigate',
-      'canvas_eval',
-      'canvas_snapshot',
-      'sessions_spawn',
-      'sessions_list',
-      'sessions_send',
-      'sessions_history',
-      'sessions_output',
-      'sessions_surface_output',
-      'sessions_status',
-      'sessions_wait',
-      'pdf_read',
-    ],
-  },
-  {
-    id: 'ssh',
-    title: 'SSH & Remote Files',
-    description:
-      'Remote shell execution and SFTP-backed file operations on configured SSH targets.',
-    tools: [
-      'ssh_exec',
-      'ssh_fs',
-    ],
-  },
-  {
-    id: 'agents',
-    title: 'Agents & Memory',
-    description: 'Semantic memory and agent persona management.',
-    tools: ['memory_search', 'tool_catalog', 'agents'],
-  },
-];
-
 export function getServiceSetupField(storageKey: string): ServiceSetupField | undefined {
   return SERVICE_SETUP_FIELDS.find((field) => field.storageKey === storageKey);
-}
-
-export function orderToolsByGroup(
-  definitions: ToolDefinition[],
-): Array<ToolPermissionGroup & { definitions: ToolDefinition[] }> {
-  const definitionMap = new Map(definitions.map((definition) => [definition.name, definition]));
-
-  return TOOL_PERMISSION_GROUPS.map((group) => ({
-    ...group,
-    definitions: group.tools
-      .map((toolName) => definitionMap.get(toolName))
-      .filter((definition): definition is ToolDefinition => Boolean(definition)),
-  })).filter((group) => group.definitions.length > 0);
 }

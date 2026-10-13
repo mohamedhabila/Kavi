@@ -925,26 +925,83 @@ export const ja: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: 'コアワークスペース',
+      agents: {
+        title: 'エージェントプロフィール',
       },
-      web: {
-        title: 'Web ツール',
+      automation: {
+        title: '予定タスク',
       },
-      media: {
-        title: 'メディアと出力',
+      browser: {
+        title: 'ブラウザー',
       },
-      device: {
-        title: 'デバイスツール',
+      calendar: {
+        title: 'カレンダー',
       },
       canvas: {
-        title: 'キャンバスとセッション',
+        title: 'キャンバス',
+      },
+      code: {
+        title: 'コード実行',
+      },
+      communication: {
+        title: 'メッセージと共有',
+      },
+      contacts: {
+        title: '連絡先',
+      },
+      device: {
+        title: 'デバイスの状態',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: '金融',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: '質問・アンケート・音声',
+      },
+      knowledge: {
+        title: '知識',
+      },
+      location: {
+        title: '位置情報',
+      },
+      media: {
+        title: '写真とメディア',
+      },
+      memory: {
+        title: 'メモリー',
+      },
+      mobile_controller: {
+        title: 'スマートフォン操作',
+      },
+      other: {
+        title: 'その他のツール',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: '生産性',
+      },
+      sessions: {
+        title: 'バックグラウンドタスク',
       },
       ssh: {
         title: 'SSH とリモートファイル',
       },
-      agents: {
-        title: 'エージェントとメモリー',
+      weather: {
+        title: '天気',
+      },
+      web: {
+        title: 'ウェブ',
+      },
+      workspace_files: {
+        title: 'ファイル',
       },
     },
   },

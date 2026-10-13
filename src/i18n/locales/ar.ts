@@ -994,26 +994,83 @@ export const ar: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: 'مساحة العمل الأساسية',
+      agents: {
+        title: 'ملفات الوكيل',
       },
-      web: {
-        title: 'أدوات الويب',
+      automation: {
+        title: 'المهام المجدولة',
       },
-      media: {
-        title: 'الوسائط والإخراج',
+      browser: {
+        title: 'المتصفح',
       },
-      device: {
-        title: 'أدوات الجهاز',
+      calendar: {
+        title: 'التقويم',
       },
       canvas: {
-        title: 'اللوحات والجلسات',
+        title: 'اللوحة',
+      },
+      code: {
+        title: 'تشغيل الشيفرة',
+      },
+      communication: {
+        title: 'الرسائل والمشاركة',
+      },
+      contacts: {
+        title: 'جهات الاتصال',
+      },
+      device: {
+        title: 'حالة الجهاز',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: 'المال',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: 'الأسئلة والاستطلاعات والصوت',
+      },
+      knowledge: {
+        title: 'المعرفة',
+      },
+      location: {
+        title: 'الموقع',
+      },
+      media: {
+        title: 'الصور والوسائط',
+      },
+      memory: {
+        title: 'الذاكرة',
+      },
+      mobile_controller: {
+        title: 'التحكم في الهاتف',
+      },
+      other: {
+        title: 'أدوات أخرى',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: 'الإنتاجية',
+      },
+      sessions: {
+        title: 'المهام في الخلفية',
       },
       ssh: {
         title: 'SSH والملفات البعيدة',
       },
-      agents: {
-        title: 'الوكلاء والذاكرة',
+      weather: {
+        title: 'الطقس',
+      },
+      web: {
+        title: 'الويب',
+      },
+      workspace_files: {
+        title: 'الملفات',
       },
     },
   },

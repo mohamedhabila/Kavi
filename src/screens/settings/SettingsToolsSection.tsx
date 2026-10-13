@@ -11,6 +11,7 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 import type { ServiceSetupField } from '../../services/setup/catalog';
 import type { AppPalette } from '../../theme/useAppTheme';
 import { type WebSearchProvider } from '../../types/tool';
+import type { ToolPermissionGroup } from './toolPermissionGroups';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -38,11 +39,6 @@ type BuiltInToolSection = {
   description: string;
 };
 
-type ToolGroup = {
-  id: string;
-  definitions: Array<{ name: string; description: string }>;
-};
-
 type SettingsToolsSectionProps = {
   CollapsibleSectionComponent: CollapsibleSectionComponentType;
   colors: AppPalette;
@@ -59,7 +55,7 @@ type SettingsToolsSectionProps = {
   persistServiceKey: (storageKey: string, value: string) => void | Promise<void>;
   handleOpenUrl: (url?: string) => void | Promise<void>;
   builtInToolSections: BuiltInToolSection[];
-  toolGroups: ToolGroup[];
+  toolGroups: ToolPermissionGroup[];
   permissionStateByTool: Map<string, { allowed: boolean }>;
   expandedToolPermissions: boolean;
   toggleToolPermissions: () => void;

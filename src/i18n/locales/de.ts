@@ -956,26 +956,83 @@ export const de: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: 'Kern-Workspace',
+      agents: {
+        title: 'Agentenprofile',
       },
-      web: {
-        title: 'Web-Tools',
+      automation: {
+        title: 'Geplante Aufgaben',
       },
-      media: {
-        title: 'Medien und Ausgabe',
+      browser: {
+        title: 'Webbrowser',
       },
-      device: {
-        title: 'Geraete-Tools',
+      calendar: {
+        title: 'Kalender',
       },
       canvas: {
-        title: 'Canvas und Sitzungen',
+        title: 'Arbeitsfläche',
+      },
+      code: {
+        title: 'Codeausführung',
+      },
+      communication: {
+        title: 'Nachrichten & Teilen',
+      },
+      contacts: {
+        title: 'Kontakte',
+      },
+      device: {
+        title: 'Gerätestatus',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: 'Finanzen',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: 'Rückfragen, Umfragen & Sprache',
+      },
+      knowledge: {
+        title: 'Wissen',
+      },
+      location: {
+        title: 'Standort',
+      },
+      media: {
+        title: 'Fotos & Medien',
+      },
+      memory: {
+        title: 'Speicher',
+      },
+      mobile_controller: {
+        title: 'Telefonsteuerung',
+      },
+      other: {
+        title: 'Weitere Werkzeuge',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: 'Produktivität',
+      },
+      sessions: {
+        title: 'Hintergrundaufgaben',
       },
       ssh: {
-        title: 'SSH und entfernte Dateien',
+        title: 'SSH & entfernte Dateien',
       },
-      agents: {
-        title: 'Agenten und Speicher',
+      weather: {
+        title: 'Wetter',
+      },
+      web: {
+        title: 'Internet',
+      },
+      workspace_files: {
+        title: 'Dateien',
       },
     },
   },

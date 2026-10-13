@@ -23,6 +23,9 @@ const GLOBAL_IDENTICAL_ALLOWLIST = new Set([
   'terminal.modeJavascript', // "JavaScript" — proper noun, the language name
   'codeEditor.sshLabel', // "SSH" — protocol acronym
   'artifactCard.type.pdf', // "PDF" — file-format acronym
+  'settings.toolGroups.pdf.title', // "PDF" — file-format acronym
+  'settings.toolGroups.expo.title', // "Expo" — product name
+  'settings.toolGroups.github.title', // "GitHub" — brand name
   'onboarding.providers.openai.title', // "OpenAI" — brand name
   'onboarding.providers.anthropic.title', // "Anthropic" — brand name
   'onboarding.providers.gemini.title', // "Gemini" — brand name

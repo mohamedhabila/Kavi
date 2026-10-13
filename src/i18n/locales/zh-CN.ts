@@ -896,26 +896,83 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: '核心工作区',
+      agents: {
+        title: '智能体档案',
       },
-      web: {
-        title: '网页工具',
+      automation: {
+        title: '定时任务',
       },
-      media: {
-        title: '媒体与输出',
+      browser: {
+        title: '浏览器',
       },
-      device: {
-        title: '设备工具',
+      calendar: {
+        title: '日历',
       },
       canvas: {
-        title: '画布与会话',
+        title: '画布',
+      },
+      code: {
+        title: '代码执行',
+      },
+      communication: {
+        title: '消息与分享',
+      },
+      contacts: {
+        title: '联系人',
+      },
+      device: {
+        title: '设备状态',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: '金融',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: '提问、投票与语音',
+      },
+      knowledge: {
+        title: '知识',
+      },
+      location: {
+        title: '位置',
+      },
+      media: {
+        title: '照片与媒体',
+      },
+      memory: {
+        title: '记忆',
+      },
+      mobile_controller: {
+        title: '手机控制',
+      },
+      other: {
+        title: '其他工具',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: '效率工具',
+      },
+      sessions: {
+        title: '后台任务',
       },
       ssh: {
         title: 'SSH 与远程文件',
       },
-      agents: {
-        title: '代理与记忆',
+      weather: {
+        title: '天气',
+      },
+      web: {
+        title: '网页',
+      },
+      workspace_files: {
+        title: '文件',
       },
     },
   },

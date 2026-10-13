@@ -895,26 +895,83 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: '核心工作區',
+      agents: {
+        title: '智慧代理設定檔',
       },
-      web: {
-        title: '網頁工具',
+      automation: {
+        title: '排程任務',
       },
-      media: {
-        title: '媒體與輸出',
+      browser: {
+        title: '瀏覽器',
       },
-      device: {
-        title: '裝置工具',
+      calendar: {
+        title: '行事曆',
       },
       canvas: {
-        title: '畫布與工作階段',
+        title: '畫布',
+      },
+      code: {
+        title: '程式碼執行',
+      },
+      communication: {
+        title: '訊息與分享',
+      },
+      contacts: {
+        title: '聯絡人',
+      },
+      device: {
+        title: '裝置狀態',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: '金融',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: '提問、投票與語音',
+      },
+      knowledge: {
+        title: '知識',
+      },
+      location: {
+        title: '位置',
+      },
+      media: {
+        title: '相片與媒體',
+      },
+      memory: {
+        title: '記憶',
+      },
+      mobile_controller: {
+        title: '手機控制',
+      },
+      other: {
+        title: '其他工具',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: '生產力工具',
+      },
+      sessions: {
+        title: '背景任務',
       },
       ssh: {
         title: 'SSH 與遠端檔案',
       },
-      agents: {
-        title: '代理與記憶',
+      weather: {
+        title: '天氣',
+      },
+      web: {
+        title: '網頁',
+      },
+      workspace_files: {
+        title: '檔案',
       },
     },
   },

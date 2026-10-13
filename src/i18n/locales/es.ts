@@ -973,26 +973,83 @@ export const es: TranslationMap = mergeTranslations(en, {
       },
     },
     toolGroups: {
-      core: {
-        title: 'Workspace principal',
+      agents: {
+        title: 'Perfiles de agente',
       },
-      web: {
-        title: 'Herramientas web',
+      automation: {
+        title: 'Tareas programadas',
       },
-      media: {
-        title: 'Medios y salida',
+      browser: {
+        title: 'Navegador',
       },
-      device: {
-        title: 'Herramientas del dispositivo',
+      calendar: {
+        title: 'Calendario',
       },
       canvas: {
-        title: 'Canvas y sesiones',
+        title: 'Lienzo',
+      },
+      code: {
+        title: 'Ejecución de código',
+      },
+      communication: {
+        title: 'Mensajes y compartir',
+      },
+      contacts: {
+        title: 'Contactos',
+      },
+      device: {
+        title: 'Estado del dispositivo',
+      },
+      expo: {
+        title: 'Expo',
+      },
+      finance: {
+        title: 'Finanzas',
+      },
+      github: {
+        title: 'GitHub',
+      },
+      interaction: {
+        title: 'Preguntas, encuestas y voz',
+      },
+      knowledge: {
+        title: 'Conocimiento',
+      },
+      location: {
+        title: 'Ubicación',
+      },
+      media: {
+        title: 'Fotos y multimedia',
+      },
+      memory: {
+        title: 'Memoria',
+      },
+      mobile_controller: {
+        title: 'Control del teléfono',
+      },
+      other: {
+        title: 'Otras herramientas',
+      },
+      pdf: {
+        title: 'PDF',
+      },
+      productivity: {
+        title: 'Productividad',
+      },
+      sessions: {
+        title: 'Tareas en segundo plano',
       },
       ssh: {
         title: 'SSH y archivos remotos',
       },
-      agents: {
-        title: 'Agentes y memoria',
+      weather: {
+        title: 'Tiempo',
+      },
+      web: {
+        title: 'Internet',
+      },
+      workspace_files: {
+        title: 'Archivos',
       },
     },
   },

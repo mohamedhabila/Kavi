@@ -3,12 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking } from 'react-native';
 
 import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
-import {
-  SERVICE_SETUP_FIELDS,
-  orderToolsByGroup,
-  type ServiceSetupField,
-} from '../../services/setup/catalog';
+import { SERVICE_SETUP_FIELDS, type ServiceSetupField } from '../../services/setup/catalog';
 import { deleteSecure, getSecure, saveSecure } from '../../services/storage/SecureStorage';
+import { buildToolPermissionGroups } from './toolPermissionGroups';
 
 type TranslationFn = (key: string, params?: any) => string;
 type PermissionRecord = { toolName: string; allowed: boolean };
@@ -48,7 +45,15 @@ export function useSettingsToolsFlow({
   const [serviceKeys, setServiceKeys] = useState<Record<string, string>>({});
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  const toolGroups = useMemo(() => orderToolsByGroup(TOOL_DEFINITIONS), []);
+  const toolGroups = useMemo(
+    () =>
+      buildToolPermissionGroups(TOOL_DEFINITIONS).sort((left, right) =>
+        t(`settings.toolGroups.${left.id}.title`).localeCompare(
+          t(`settings.toolGroups.${right.id}.title`),
+        ),
+      ),
+    [t],
+  );
 
   const translateWithFallback = useCallback(
     (key: string, fallback: string, params?: Record<string, string | number>) => {
