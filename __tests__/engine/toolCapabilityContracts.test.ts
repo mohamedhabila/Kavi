@@ -197,6 +197,7 @@ describe('tool capability contracts', () => {
         capabilities: ['compute', 'read', 'write'],
         resourceKinds: ['conversation_workspace'],
         sideEffects: ['local_artifact'],
+        riskHints: ['requires_approval'],
         providesEvidence: ['local_artifact'],
         workflowStages: ['prepare_artifact', 'persist_artifact'],
       }),

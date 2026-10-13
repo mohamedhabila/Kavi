@@ -154,7 +154,7 @@ export const CORE_DOMAIN_TOOLS: ToolDefinition[] = [
       capabilities: ['compute', 'read', 'write'],
       resourceKinds: ['conversation_workspace'],
       sideEffects: ['local_artifact'],
-      riskHints: [],
+      riskHints: ['requires_approval'],
       providesEvidence: ['local_artifact'],
       workflowStages: ['prepare_artifact', 'persist_artifact'],
     },
