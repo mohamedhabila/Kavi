@@ -376,7 +376,6 @@ export function createForegroundScenarioRuntime(
             currentSettings.systemPrompt,
             options.model ?? provider?.model,
             {
-              activate: options.activate,
               personaId: options.personaId,
               mode: options.mode,
             },

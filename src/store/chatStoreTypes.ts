@@ -55,16 +55,15 @@ export interface ChatState {
   isLoading: boolean;
 
   /**
-   * Kavi is one conversation: returns it (the active one, else the most recent), creating it
-   * only when there is none. `activate: false` leaves the active conversation as it is.
+   * Kavi is one conversation: returns it (the active one, else the most recent) and makes it
+   * active, creating it only when there is none.
    */
   ensureConversation: (
     providerId: string,
     systemPrompt: string,
     modelOverride?: string,
-    options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
+    options?: { personaId?: string; mode?: ConversationMode },
   ) => string;
-  setActiveConversation: (id: string | null) => void;
   clearAllConversations: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
   updatePersonaInConversation: (

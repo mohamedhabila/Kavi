@@ -12,7 +12,6 @@ const mockNavigation = {
   goBack: jest.fn(),
   canGoBack: jest.fn(),
 };
-const mockSetActiveConversation = jest.fn();
 const mockForegroundSnapshot = {
   activeConversationIds: new Set<string>(),
   streamingMessageIds: new Map<string, string>(),
@@ -130,7 +129,6 @@ jest.mock('../../src/store/useChatStore', () => ({
           agentRuns: [],
         },
       ],
-      setActiveConversation: mockSetActiveConversation,
     }),
 }));
 

@@ -89,7 +89,7 @@ export const AppNavigator: React.FC = () => {
     isStoreHydrated(useChatStore as PersistHydratableStore),
   );
   const [navReady, setNavReady] = useState(false);
-  const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
+  const [pendingChatOpen, setPendingChatOpen] = useState(false);
   const [pendingSchedulerRoute, setPendingSchedulerRoute] =
     useState<SchedulerNotificationTarget | null>(null);
 
@@ -144,7 +144,7 @@ export const AppNavigator: React.FC = () => {
       const schedulerTarget = getSchedulerNotificationTarget(route);
       if (schedulerTarget) setPendingSchedulerRoute(schedulerTarget);
       if (route.conversationId) {
-        setPendingConversationId(route.conversationId);
+        setPendingChatOpen(true);
       }
     };
 
@@ -162,36 +162,19 @@ export const AppNavigator: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!chatHydrated || !pendingConversationId) {
-      return;
-    }
-
-    const chatState = useChatStore.getState();
-    const hasConversation = chatState.conversations.some(
-      (conversation) => conversation.id === pendingConversationId,
-    );
-    if (!hasConversation) {
-      setPendingConversationId(null);
-      return;
-    }
-
-    chatState.setActiveConversation(pendingConversationId);
-  }, [chatHydrated, pendingConversationId]);
-
-  useEffect(() => {
     if (
       !chatHydrated ||
       !navReady ||
       showOnboarding !== false ||
-      !pendingConversationId ||
+      !pendingChatOpen ||
       !navigationRef.isReady()
     ) {
       return;
     }
 
     navigationRef.navigate('Chat');
-    setPendingConversationId(null);
-  }, [chatHydrated, navReady, pendingConversationId, showOnboarding]);
+    setPendingChatOpen(false);
+  }, [chatHydrated, navReady, pendingChatOpen, showOnboarding]);
 
   useEffect(() => {
     if (

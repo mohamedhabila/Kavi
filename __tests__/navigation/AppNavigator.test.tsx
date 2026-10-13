@@ -5,7 +5,7 @@
 import { act, render } from '@testing-library/react-native';
 import { AppNavigator } from '../../src/navigation/AppNavigator';
 
-const mockSetActiveConversation = jest.fn();
+const mockNavigate = jest.fn();
 const mockSubscribeToNotificationRoutes = jest.fn();
 const mockGetPendingNotificationRoute = jest.fn().mockResolvedValue(null);
 const mockRunJobNow = jest.fn().mockResolvedValue({ status: 'completed' });
@@ -14,7 +14,6 @@ let mockChatHydrated = true;
 const mockChatHydrationListeners = new Set<() => void>();
 const mockChatState = {
   conversations: [{ id: 'conv-1' }],
-  setActiveConversation: (...args: any[]) => mockSetActiveConversation(...args),
 };
 
 function emitChatHydrated(): void {
@@ -23,6 +22,38 @@ function emitChatHydrated(): void {
     listener();
   }
 }
+
+// The container reports ready on mount so the navigator's pending routes can navigate.
+jest.mock('@react-navigation/native', () => {
+  const actual = jest.requireActual('@react-navigation/native');
+  const React = require('react');
+  return {
+    ...actual,
+    useNavigation: () => ({
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+      openDrawer: jest.fn(),
+      closeDrawer: jest.fn(),
+    }),
+    useRoute: () => ({ params: {} }),
+    createNavigationContainerRef: () => ({
+      isReady: () => true,
+      navigate: (...args: unknown[]) => mockNavigate(...args),
+    }),
+    NavigationContainer: ({
+      children,
+      onReady,
+    }: {
+      children: React.ReactNode;
+      onReady?: () => void;
+    }) => {
+      React.useEffect(() => {
+        onReady?.();
+      }, [onReady]);
+      return children;
+    },
+  };
+});
 
 // Mock theme
 jest.mock('../../src/theme/useAppTheme', () => ({
@@ -256,7 +287,7 @@ describe('AppNavigator', () => {
     expect(mockAsyncStorage.getItem).toHaveBeenCalledWith('kavi_onboarding_complete');
   });
 
-  it('activates the linked conversation when a notification route arrives', async () => {
+  it('opens the conversation when a notification route arrives', async () => {
     mockAsyncStorage.getItem.mockResolvedValue('true');
     let routeHandler:
       | ((route: {
@@ -279,7 +310,7 @@ describe('AppNavigator', () => {
     await act(async () => {
       routeHandler?.({ conversationId: 'conv-1' });
     });
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 
   it('runs a scheduled job when a wake notification route arrives', async () => {
@@ -316,7 +347,7 @@ describe('AppNavigator', () => {
     });
   });
 
-  it('waits for chat hydration before activating a pending notification conversation', async () => {
+  it('waits for chat hydration before opening a pending notification conversation', async () => {
     mockChatHydrated = false;
     mockAsyncStorage.getItem.mockResolvedValue('true');
     mockGetPendingNotificationRoute.mockResolvedValue({ conversationId: 'conv-1' });
@@ -326,12 +357,12 @@ describe('AppNavigator', () => {
       await new Promise((r) => setTimeout(r, 50));
     });
 
-    expect(mockSetActiveConversation).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalledWith('Chat');
 
     await act(async () => {
       emitChatHydrated();
     });
 
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
+    expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 });

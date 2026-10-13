@@ -132,7 +132,6 @@ describe('ChatScreen composer send flow', () => {
         'You are helpful',
         'gpt-5.4',
         {
-          activate: undefined,
           personaId: 'super-agent',
           mode: 'agentic',
         },
@@ -215,7 +214,6 @@ describe('ChatScreen composer send flow', () => {
         'You are helpful',
         'qwen-2.5-1.5b-instruct',
         {
-          activate: undefined,
           personaId: 'super-agent',
           mode: 'agentic',
         },

@@ -18,7 +18,6 @@ import { useChatStore } from '../store/useChatStore';
 export const ActivityScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const conversations = useChatStore((state) => state.conversations);
-  const setActiveConversation = useChatStore((state) => state.setActiveConversation);
   const approvalRequestsById = useApprovalStore((state) => state.requests);
   const schedulerJobs = useSchedulerStore((state) => state.jobs);
   const schedulerReports = useSchedulerStore((state) => state.terminalReports);
@@ -80,15 +79,6 @@ export const ActivityScreen: React.FC = () => {
     ],
   );
 
-  const openConversation = useCallback(
-    (conversationId: string) => {
-      if (!conversations.some((conversation) => conversation.id === conversationId)) return;
-      setActiveConversation(conversationId);
-      navigation.navigate('Chat');
-    },
-    [conversations, navigation, setActiveConversation],
-  );
-
   const handleOpenItem = useCallback(
     (item: ActivityItem) => {
       if (item.kind === 'approval') {
@@ -106,10 +96,10 @@ export const ActivityScreen: React.FC = () => {
         return;
       }
       if (item.sourceConversationId) {
-        openConversation(item.sourceConversationId);
+        navigation.navigate('Chat');
       }
     },
-    [navigation, openConversation],
+    [navigation],
   );
 
   const handleOpenArtifact = useCallback(

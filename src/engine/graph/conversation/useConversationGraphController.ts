@@ -75,7 +75,6 @@ export function useConversationGraphController(params: UseConversationGraphContr
 
       const model = options?.model ?? selection?.model ?? undefined;
       return params.ensureStoredConversation(providerId, params.systemPrompt, model, {
-        activate: options?.activate,
         personaId: options?.personaId,
         mode: options?.mode,
       });

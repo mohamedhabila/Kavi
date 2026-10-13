@@ -104,7 +104,6 @@ function ensureScheduledConversation(params: {
   return useChatStore
     .getState()
     .ensureConversation(params.provider.id, params.systemPrompt, params.model, {
-      activate: false,
       mode,
       personaId: resolveConversationPersonaForMode({ nextMode: mode }),
     });

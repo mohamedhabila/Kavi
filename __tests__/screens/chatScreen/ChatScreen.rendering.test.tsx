@@ -38,7 +38,6 @@ describe('ChatScreen rendering and layout', () => {
       'You are helpful',
       'gpt-5.4',
       {
-        activate: undefined,
         personaId: 'super-agent',
         mode: 'agentic',
       },

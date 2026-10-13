@@ -480,7 +480,6 @@ describe('initializeServices', () => {
       'You are helpful.',
       'gpt-5.4',
       {
-        activate: false,
         personaId: 'super-agent',
         mode: 'agentic',
       },

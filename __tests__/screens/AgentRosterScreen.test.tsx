@@ -5,7 +5,6 @@ import type { SubAgentSnapshot } from '../../src/types/subAgent';
 
 const mockOpenDrawer = jest.fn();
 const mockNavigate = jest.fn();
-const mockSetActiveConversation = jest.fn();
 const mockCancelSubAgent = jest.fn();
 let mockRouteParams: Record<string, unknown> = {};
 let mockConversations: Array<{ id: string; title: string; agentRuns?: any[] }> = [
@@ -26,7 +25,6 @@ jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: (selector: (state: any) => any) =>
     selector({
       conversations: mockConversations,
-      setActiveConversation: mockSetActiveConversation,
     }),
 }));
 
@@ -303,7 +301,6 @@ describe('AgentRosterScreen', () => {
 
     fireEvent.press(getByTestId('delegated-work-open-chat-sub-root'));
 
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
     expect(mockNavigate).toHaveBeenCalledWith('Chat');
   });
 
@@ -314,7 +311,6 @@ describe('AgentRosterScreen', () => {
 
     fireEvent.press(getByTestId('delegated-work-retry-sub-root'));
 
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-1');
     expect(mockNavigate).toHaveBeenCalledWith('Chat', {
       preparedDraft: expect.objectContaining({
         conversationId: 'conv-1',

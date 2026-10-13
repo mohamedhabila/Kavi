@@ -79,7 +79,6 @@ export function createConversationStoreActions(
 ): Pick<
   ChatState,
   | 'ensureConversation'
-  | 'setActiveConversation'
   | 'clearAllConversations'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
@@ -96,7 +95,7 @@ export function createConversationStoreActions(
           undefined,
         );
       if (existing) {
-        if (options?.activate !== false && existing.id !== activeConversationId) {
+        if (existing.id !== activeConversationId) {
           set({ activeConversationId: existing.id });
           requestChatStorePersistenceCheckpoint();
         }
@@ -111,16 +110,10 @@ export function createConversationStoreActions(
       });
       set((state) => ({
         conversations: [conversation, ...state.conversations],
-        activeConversationId:
-          options?.activate === false ? state.activeConversationId : conversation.id,
+        activeConversationId: conversation.id,
       }));
       requestChatStorePersistenceCheckpoint();
       return conversation.id;
-    },
-
-    setActiveConversation: (id) => {
-      set({ activeConversationId: id });
-      requestChatStorePersistenceCheckpoint();
     },
 
     clearAllConversations: () => {

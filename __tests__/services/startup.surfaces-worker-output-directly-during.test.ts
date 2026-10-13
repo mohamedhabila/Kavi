@@ -556,7 +556,7 @@ describe('initializeServices', () => {
       'openai',
       'You are helpful.',
       'gpt-5.4',
-      { activate: false, mode: 'agentic', personaId: 'super-agent' },
+      { mode: 'agentic', personaId: 'super-agent' },
     );
     expect(mockRunOrchestrator).toHaveBeenCalledWith(
       expect.objectContaining({ conversationId: 'conv-1', personaId: 'super-agent' }),

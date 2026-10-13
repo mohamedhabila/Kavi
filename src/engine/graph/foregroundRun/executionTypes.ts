@@ -34,7 +34,6 @@ export type EnsureConversationOptions = {
   model?: string;
   personaId?: string;
   mode?: 'agentic' | 'chitchat';
-  activate?: boolean;
   reportMissingProvider?: boolean;
 };
 

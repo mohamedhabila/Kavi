@@ -49,7 +49,6 @@ export const AgentRosterScreen: React.FC = () => {
   const setOverride = usePersonaConfigStore((s) => s.setOverride);
   const clearOverride = usePersonaConfigStore((s) => s.clearOverride);
   const conversations = useChatStore((state) => state.conversations);
-  const setActiveConversation = useChatStore((state) => state.setActiveConversation);
 
   const requestedTab = route.params?.initialTab === 'queue' ? 'queue' : 'roster';
   const [activeTab, setActiveTab] = useState<'roster' | 'queue'>(requestedTab);
@@ -93,10 +92,9 @@ export const AgentRosterScreen: React.FC = () => {
   const handleOpenSourceConversation = useCallback(
     (group: DelegatedWorkGroup) => {
       if (!group.canOpenSourceConversation) return;
-      setActiveConversation(group.sourceConversationId);
       navigation.navigate('Chat');
     },
-    [navigation, setActiveConversation],
+    [navigation],
   );
 
   const handlePrepareRetry = useCallback(
@@ -108,10 +106,9 @@ export const AgentRosterScreen: React.FC = () => {
         source: 'delegated-work-retry',
         text: t('agentRoster.queueRetryPrompt'),
       };
-      setActiveConversation(group.sourceConversationId);
       navigation.navigate('Chat', { preparedDraft });
     },
-    [navigation, setActiveConversation, t],
+    [navigation, t],
   );
 
   const handleStop = useCallback(

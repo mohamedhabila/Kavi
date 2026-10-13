@@ -36,18 +36,15 @@ describe('ensureConversation', () => {
 
     expect(useChatStore.getState().ensureConversation('openai', 'system')).toBe(newer);
 
-    useChatStore.getState().setActiveConversation(older);
+    useChatStore.setState({ activeConversationId: older });
     expect(useChatStore.getState().ensureConversation('openai', 'system')).toBe(older);
   });
 
-  it('leaves the active conversation alone when asked not to activate', () => {
-    const id = useChatStore
-      .getState()
-      .ensureConversation('openai', 'system', undefined, { activate: false });
-
-    expect(useChatStore.getState().conversations.map((conversation) => conversation.id)).toEqual([
-      id,
-    ]);
+  it('makes the conversation it returns active', () => {
+    const id = addConversation('openai', 'system', undefined, { activate: false });
     expect(useChatStore.getState().activeConversationId).toBeNull();
+
+    expect(useChatStore.getState().ensureConversation('openai', 'system')).toBe(id);
+    expect(useChatStore.getState().activeConversationId).toBe(id);
   });
 });
