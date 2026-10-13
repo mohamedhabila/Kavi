@@ -26,11 +26,15 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   closeRemindersDb();
 });
 
 describe('the live E2E notification boundary', () => {
   it('records a reminder the app schedules and then cancels with the operating system', async () => {
+    // The fixture derives the delay from the clock when the OS accepts the notification; a
+    // frozen clock keeps a slow run from rounding the 30 s reminder down to 29.
+    jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 5, 9, 0, 0));
     const created = await executeReminderTool({
       action: 'create',
       title: 'Stretch',
