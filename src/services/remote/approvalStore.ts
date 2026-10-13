@@ -11,6 +11,7 @@ import type {
 } from '../../types/remote';
 import { generateId } from '../../utils/id';
 import { unrefTimerIfSupported } from '../../utils/timers';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 import { describeToolInvocation } from '../security/toolPrivacy';
 import {
   DEFAULT_ANALYTICS,
@@ -113,22 +114,14 @@ function grantCandidateMatchesRequest(
   );
 }
 
-function normalizePersistedRequests(
-  value: unknown,
-  fallbacks: {
-    missingPolicy: 'standard' | 'one-shot';
-    invalidPolicy: 'standard' | 'one-shot';
-  },
-): Record<string, RemoteApprovalRequest> {
+/** A request whose persisted decision policy is missing or unknown falls back to one-shot. */
+function normalizePersistedRequests(value: unknown): Record<string, RemoteApprovalRequest> {
   if (!isRecord(value)) return {};
 
   const requests: Record<string, RemoteApprovalRequest> = {};
   for (const [id, rawRequest] of Object.entries(value)) {
     if (!isRecord(rawRequest)) continue;
-    const decisionPolicy = normalizeDecisionPolicy(
-      rawRequest.decisionPolicy,
-      rawRequest.decisionPolicy === undefined ? fallbacks.missingPolicy : fallbacks.invalidPolicy,
-    );
+    const decisionPolicy = normalizeDecisionPolicy(rawRequest.decisionPolicy, 'one-shot');
     const grantCandidate =
       isStandardDecisionPolicy(decisionPolicy) &&
       grantCandidateMatchesRequest(rawRequest.grantCandidate, rawRequest)
@@ -271,10 +264,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
             : undefined;
           if (!entry) return state;
           const newAllowlist = state.allowlist.some(
-            (candidate) =>
-              candidate.status === 'active' &&
-              candidate.key === entry.key &&
-              candidate.personaId === entry.personaId,
+            (candidate) => candidate.key === entry.key && candidate.personaId === entry.personaId,
           )
             ? state.allowlist
             : [...state.allowlist, entry];
@@ -349,7 +339,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
 
       setPolicy: (patch) =>
         set((state) => ({
-          policy: { ...state.policy, ...patch, expiryFallback: 'reject' },
+          policy: { ...state.policy, ...patch },
         })),
 
       addPersonaOverride: (override) =>
@@ -377,12 +367,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
 
       addToAllowlist: (key, personaId) =>
         set((state) => {
-          if (
-            state.allowlist.some(
-              (entry) =>
-                entry.status === 'active' && entry.key === key && entry.personaId === personaId,
-            )
-          ) {
+          if (state.allowlist.some((entry) => entry.key === key && entry.personaId === personaId)) {
             return state;
           }
           const entry = createInternalAllowlistEntry(key, personaId, Date.now());
@@ -408,9 +393,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
         const { allowlist } = get();
         return allowlist.some(
           (entry) =>
-            entry.status === 'active' &&
-            entry.key === key &&
-            (entry.personaId === undefined || entry.personaId === personaId),
+            entry.key === key && (entry.personaId === undefined || entry.personaId === personaId),
         );
       },
 
@@ -449,58 +432,7 @@ export const useApprovalStore = create<ApprovalStoreState>()(
       name: 'kavi-approvals',
       storage: createJSONStorage(() => AsyncStorage),
       version: 5,
-      migrate: (persistedState: unknown, version: number) => {
-        const persisted = isRecord(persistedState) ? persistedState : {};
-        let migrated: Record<string, unknown> = { ...persisted };
-
-        if (version < 2) {
-          const persistedPolicy = isRecord(migrated.policy) ? migrated.policy : {};
-          migrated = {
-            ...migrated,
-            allowlist: Array.isArray(migrated.allowlist) ? migrated.allowlist : [],
-            analytics: isRecord(migrated.analytics) ? migrated.analytics : DEFAULT_ANALYTICS,
-            policy: {
-              ...DEFAULT_POLICY,
-              ...persistedPolicy,
-              expiryFallback: persistedPolicy.expiryFallback || 'reject',
-              personaOverrides: Array.isArray(persistedPolicy.personaOverrides)
-                ? persistedPolicy.personaOverrides
-                : [],
-            },
-          };
-        }
-
-        if (version < 3) {
-          migrated = {
-            ...migrated,
-            requests: normalizePersistedRequests(migrated.requests, {
-              missingPolicy: 'standard',
-              invalidPolicy: 'one-shot',
-            }),
-          };
-        }
-
-        if (version < 4) {
-          migrated = {
-            ...migrated,
-            allowlist: normalizePersistedAllowlist(migrated.allowlist),
-          };
-        }
-
-        if (version < 5) {
-          const persistedPolicy = isRecord(migrated.policy) ? migrated.policy : {};
-          migrated = {
-            ...migrated,
-            policy: {
-              ...DEFAULT_POLICY,
-              ...persistedPolicy,
-              expiryFallback: 'reject',
-            },
-          };
-        }
-
-        return migrated;
-      },
+      migrate: startOverFromOtherVersion,
       partialize: (state) => ({
         ...state,
         allowlist: state.allowlist.filter((entry) => entry.source !== 'internal'),
@@ -511,16 +443,12 @@ export const useApprovalStore = create<ApprovalStoreState>()(
         return {
           ...currentState,
           requests: Object.prototype.hasOwnProperty.call(persistedState, 'requests')
-            ? normalizePersistedRequests(persistedState.requests, {
-                missingPolicy: 'one-shot',
-                invalidPolicy: 'one-shot',
-              })
+            ? normalizePersistedRequests(persistedState.requests)
             : currentState.requests,
           policy: isRecord(persistedState.policy)
             ? {
                 ...currentState.policy,
                 ...(persistedState.policy as unknown as Partial<ApprovalPolicy>),
-                expiryFallback: 'reject',
               }
             : currentState.policy,
           allowlist: Object.prototype.hasOwnProperty.call(persistedState, 'allowlist')

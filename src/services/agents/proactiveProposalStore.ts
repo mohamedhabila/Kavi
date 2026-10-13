@@ -12,6 +12,7 @@ import {
   type ProactiveTaskProposalReceipt,
   type ProactiveTaskProposalReceipts,
 } from './proactiveTaskProposal';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 type ProactiveProposalPersistedState = {
   receipts: ProactiveTaskProposalReceipts;
@@ -139,6 +140,7 @@ export const useProactiveProposalStore = create<ProactiveProposalState>()(
       name: STORAGE_KEYS.PROACTIVE_PROPOSALS,
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      migrate: startOverFromOtherVersion,
       partialize: (state): ProactiveProposalPersistedState => ({ receipts: state.receipts }),
       merge: (persisted, current) => ({
         ...current,

@@ -2743,15 +2743,12 @@ export const es: TranslationMap = mergeTranslations(en, {
       empty:
         'No hay permisos guardados. Las herramientas seguirán pidiendo revisión cuando corresponda.',
       active: 'Permitido',
-      reviewRequired: 'Revisión necesaria',
       actionLabel: 'Acción: {action}',
       targetLabel: 'Destino: {target}',
       localDevice: 'Destino: este dispositivo',
       exactMcpTool: 'Alcance: esta herramienta MCP exacta',
       exactTool: 'Alcance: esta herramienta exacta',
       personaLabel: 'Perfil del asistente: {persona}',
-      legacyDescription:
-        'Un permiso amplio anterior para «{permission}» se desactivó durante la mejora de seguridad.',
       revoke: 'Revocar',
       revokeLabel: 'Revocar permiso para {tool}',
       settingsTitle: 'Aprobaciones y permisos',

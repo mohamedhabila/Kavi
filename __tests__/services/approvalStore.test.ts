@@ -367,9 +367,9 @@ describe('requestToolApproval', () => {
     jest.useRealTimers();
   });
 
-  it('never auto-approves a one-shot request when the global expiry fallback approves', async () => {
+  it('lets a one-shot request expire, never approving it', async () => {
     jest.useFakeTimers();
-    useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });
+    useApprovalStore.getState().setPolicy({ timeoutMs: 1000 });
 
     const promise = requestToolApproval({
       toolName: 'memory_remember',
@@ -413,11 +413,9 @@ describe('requestToolApproval', () => {
     await expect(promise).resolves.toBe('approved');
   });
 
-  it('fails closed for ordinary requests even when a legacy policy requested auto-approval', async () => {
+  it('fails closed for ordinary requests when the approval times out', async () => {
     jest.useFakeTimers();
-    useApprovalStore.getState().setPolicy({ timeoutMs: 1000, expiryFallback: 'approve' });
-
-    expect(useApprovalStore.getState().policy.expiryFallback).toBe('reject');
+    useApprovalStore.getState().setPolicy({ timeoutMs: 1000 });
 
     const promise = requestToolApproval({
       toolName: 'ssh_exec',
@@ -433,31 +431,6 @@ describe('requestToolApproval', () => {
 });
 
 describe('approval request persistence schema', () => {
-  it('migrates legacy requests to the ordinary decision policy', async () => {
-    const migrate = useApprovalStore.persist.getOptions().migrate;
-    expect(migrate).toBeDefined();
-
-    const migrated = (await migrate!(
-      {
-        requests: {
-          legacy: {
-            id: 'legacy',
-            title: 'Legacy request',
-            description: 'Created before request decision policies',
-            status: 'pending',
-            requestedAt: 1,
-          },
-        },
-      },
-      2,
-    )) as any;
-
-    expect(migrated.requests.legacy.decisionPolicy).toEqual({
-      persistentApproval: 'allowed',
-      expiryFallback: 'global-policy',
-    });
-  });
-
   it('fails closed when a current persisted request has an invalid decision policy', () => {
     const merge = useApprovalStore.persist.getOptions().merge;
     expect(merge).toBeDefined();
@@ -486,43 +459,5 @@ describe('approval request persistence schema', () => {
       persistentApproval: 'forbidden',
       expiryFallback: 'reject',
     });
-  });
-
-  it('migrates broad v3 allowlist entries to review-required grants', async () => {
-    const migrate = useApprovalStore.persist.getOptions().migrate;
-    expect(migrate).toBeDefined();
-
-    const migrated = (await migrate!(
-      {
-        allowlist: [{ key: 'ssh_exec', addedAt: 42 }],
-      },
-      3,
-    )) as any;
-
-    expect(migrated.allowlist).toEqual([
-      expect.objectContaining({
-        toolName: 'ssh_exec',
-        status: 'review-required',
-        source: 'legacy',
-        legacyKey: 'ssh_exec',
-      }),
-    ]);
-  });
-
-  it('migrates legacy auto-approval timeouts to a fail-closed policy', async () => {
-    const migrate = useApprovalStore.persist.getOptions().migrate;
-    expect(migrate).toBeDefined();
-
-    const migrated = (await migrate!(
-      {
-        policy: {
-          ...useApprovalStore.getState().policy,
-          expiryFallback: 'approve',
-        },
-      },
-      4,
-    )) as any;
-
-    expect(migrated.policy.expiryFallback).toBe('reject');
   });
 });

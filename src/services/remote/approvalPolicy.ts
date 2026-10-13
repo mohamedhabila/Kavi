@@ -15,13 +15,8 @@ export interface ApprovalPolicy {
   alwaysApproveTools: string[];
   /** Tool names that never require approval. */
   autoApproveTools: string[];
-  /** Approval timeout in milliseconds. */
+  /** Approval timeout in milliseconds. A request still pending then expires; it is never approved. */
   timeoutMs: number;
-  /**
-   * Fallback decision when approval times out.
-   * @deprecated Approval timeouts always fail closed; retained for persisted-schema compatibility.
-   */
-  expiryFallback: 'reject' | 'approve';
   /** Per-persona overrides. */
   personaOverrides: PersonaPolicyOverride[];
 }
@@ -89,7 +84,6 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
     'expo_eas_probe',
   ],
   timeoutMs: 5 * 60 * 1000,
-  expiryFallback: 'reject',
   personaOverrides: [],
 };
 

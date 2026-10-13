@@ -57,7 +57,6 @@ const translate = (key: string, params?: Record<string, any>) => {
     'approvalHistory.permissions.description': 'Review reusable access.',
     'approvalHistory.permissions.empty': 'No saved permissions.',
     'approvalHistory.permissions.active': 'Allowed',
-    'approvalHistory.permissions.reviewRequired': 'Review needed',
     'approvalHistory.permissions.localDevice': 'Target: this device',
     'approvalHistory.permissions.exactMcpTool': 'Scope: this exact MCP tool',
     'approvalHistory.permissions.exactTool': 'Scope: this exact tool',
@@ -80,9 +79,6 @@ const translate = (key: string, params?: Record<string, any>) => {
   }
   if (key === 'approvalHistory.permissions.personaLabel') {
     return `Assistant profile: ${params?.persona ?? ''}`;
-  }
-  if (key === 'approvalHistory.permissions.legacyDescription') {
-    return `Legacy permission ${params?.permission ?? ''} was disabled.`;
   }
   if (key === 'approvalHistory.permissions.revokeLabel') {
     return `Revoke permission for ${params?.tool ?? ''}`;
@@ -341,7 +337,7 @@ describe('ApprovalHistoryScreen', () => {
     expect(getByText('Saved permissions apply only to an exact action and target.')).toBeTruthy();
   });
 
-  it('shows scoped permissions, flags legacy grants, and revokes by exact key', () => {
+  it('shows scoped permissions and revokes by exact key', () => {
     mockAllowlist = [
       {
         version: 1,
@@ -352,20 +348,7 @@ describe('ApprovalHistoryScreen', () => {
         targetKind: 'ssh-host',
         targetId: 'staging-host',
         addedAt: 20,
-        status: 'active',
         source: 'user',
-      },
-      {
-        version: 1,
-        key: 'legacy-review-key',
-        toolName: 'browser_click',
-        scope: 'browser',
-        actionClass: 'legacy',
-        targetKind: 'tool',
-        addedAt: 10,
-        status: 'review-required',
-        source: 'legacy',
-        legacyKey: 'browser_click',
       },
       {
         version: 1,
@@ -375,7 +358,6 @@ describe('ApprovalHistoryScreen', () => {
         actionClass: '*',
         targetKind: 'tool',
         addedAt: 30,
-        status: 'active',
         source: 'internal',
       },
     ];
@@ -386,8 +368,6 @@ describe('ApprovalHistoryScreen', () => {
     expect(getByText('Action: pwd')).toBeTruthy();
     expect(getByText('Target: staging-host')).toBeTruthy();
     expect(getByText('Allowed')).toBeTruthy();
-    expect(getByText('Review needed')).toBeTruthy();
-    expect(getByText('Legacy permission browser_click was disabled.')).toBeTruthy();
     expect(queryByText('internal_tool')).toBeNull();
 
     fireEvent.press(getByLabelText('Revoke permission for ssh_exec'));

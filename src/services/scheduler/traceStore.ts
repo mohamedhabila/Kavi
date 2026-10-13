@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { SchedulerTrigger } from '../cron/types';
 import { EXECUTION_TRACE_STORE_KEY, executionTraceStateStorage } from './tracePersistence';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 export interface ExecutionTrace {
   id: string;
@@ -91,6 +92,7 @@ export const useExecutionTraceStore = create<ExecutionTraceState>()(
       name: EXECUTION_TRACE_STORE_KEY,
       storage: createJSONStorage(() => executionTraceStateStorage),
       version: 1,
+      migrate: startOverFromOtherVersion,
     },
   ),
 );

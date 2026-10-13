@@ -19,14 +19,11 @@ import {
   prepareScheduleRuntime,
 } from './storeModel';
 import type { CronJob } from '../cron/types';
-import {
-  buildReconciledAttemptTerminalReport,
-  sanitizeSchedulerReportText,
-  sanitizeSchedulerTerminalReport,
-} from './terminalReport';
+import { sanitizeSchedulerReportText, sanitizeSchedulerTerminalReport } from './terminalReport';
 import { reconcileScheduledAttempt } from './storeAttemptRecovery';
 import { settleScheduledRunFailure, settleScheduledRunSuccess } from './storeAttemptSettlement';
 import type { SchedulerState } from './storeTypes';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 export const useSchedulerStore = create<SchedulerState>()(
   persist(
@@ -525,52 +522,7 @@ export const useSchedulerStore = create<SchedulerState>()(
       name: SCHEDULER_STORE_KEY,
       storage: createJSONStorage(() => schedulerStateStorage),
       version: 7,
-      migrate: (persistedState: any, version) => {
-        if (!persistedState) return persistedState;
-        let jobs = Array.isArray(persistedState.jobs) ? persistedState.jobs : [];
-        if (version < 2) {
-          jobs = jobs.map((job: CronJob) => ({
-            ...job,
-            delivery: {
-              ...job.delivery,
-              mode:
-                job.delivery?.mode === 'notification' || job.delivery?.mode === 'both'
-                  ? job.delivery.mode
-                  : 'both',
-            },
-          }));
-        }
-        const migratedState = { ...persistedState };
-        delete migratedState.lastEvaluationAtMs;
-        const now = Date.now();
-        const normalizedJobs = jobs.map((job: CronJob) => normalizePersistedJob(job, now));
-        let terminalReports =
-          version < 6 ? [] : normalizeTerminalReports(persistedState.terminalReports);
-        if (version === 6) {
-          for (let index = 0; index < normalizedJobs.length; index += 1) {
-            const originalJob = jobs[index] as CronJob & {
-              lastAmbiguousReportedAttemptId?: string;
-            };
-            const normalizedJob = normalizedJobs[index];
-            if (
-              !normalizedJob.lastAmbiguousAttemptId ||
-              originalJob.lastAmbiguousReportedAttemptId === normalizedJob.lastAmbiguousAttemptId
-            ) {
-              continue;
-            }
-            const report = buildReconciledAttemptTerminalReport(
-              normalizedJob,
-              normalizedJob.lastAmbiguousAtMs ?? now,
-            );
-            if (report) terminalReports = appendTerminalReport(terminalReports, report);
-          }
-        }
-        return {
-          ...migratedState,
-          terminalReports,
-          jobs: normalizedJobs,
-        };
-      },
+      migrate: startOverFromOtherVersion,
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<SchedulerState> | undefined;
         const now = Date.now();

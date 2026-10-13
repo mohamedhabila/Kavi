@@ -23,6 +23,7 @@ import {
   deleteManagedSkillBundle,
   syncSkillEntriesToConversationWorkspace,
 } from './storage';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 const DEFAULT_MAX_SKILLS_IN_PROMPT = 150;
 const DEFAULT_MAX_SKILLS_PROMPT_CHARS = 12000;
@@ -184,6 +185,7 @@ export const useSkillsStore = create<SkillsState>()(
       name: 'kavi-skills',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      migrate: startOverFromOtherVersion,
     },
   ),
 );

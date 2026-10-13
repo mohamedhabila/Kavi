@@ -60,10 +60,7 @@ export const ApprovalHistoryScreen: React.FC = () => {
       allowlist
         .filter((entry) => entry.source !== 'internal')
         .slice()
-        .sort((left, right) => {
-          if (left.status !== right.status) return left.status === 'review-required' ? -1 : 1;
-          return right.addedAt - left.addedAt;
-        }),
+        .sort((left, right) => right.addedAt - left.addedAt),
     [allowlist],
   );
 

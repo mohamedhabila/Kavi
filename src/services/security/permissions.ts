@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 export interface ToolPermission {
   toolName: string;
@@ -105,6 +106,7 @@ export const useToolPermissionsStore = create<ToolPermissionsState>()(
     {
       name: 'kavi-tool-permissions',
       storage: createJSONStorage(() => AsyncStorage),
+      migrate: startOverFromOtherVersion,
     },
   ),
 );

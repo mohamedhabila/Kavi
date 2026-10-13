@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { AgentPersona } from './personas';
+import { startOverFromOtherVersion } from '../../store/persistedStoreVersion';
 
 export type PersonaConfigPatch = Partial<
   Pick<
@@ -66,6 +67,7 @@ export const usePersonaConfigStore = create<PersonaConfigState>()(
     {
       name: 'kavi-persona-config',
       storage: createJSONStorage(() => AsyncStorage),
+      migrate: startOverFromOtherVersion,
     },
   ),
 );

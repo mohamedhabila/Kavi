@@ -2725,15 +2725,12 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       empty:
         'Nenhuma permissão salva. As ferramentas continuarão pedindo revisão quando necessário.',
       active: 'Permitido',
-      reviewRequired: 'Revisão necessária',
       actionLabel: 'Ação: {action}',
       targetLabel: 'Destino: {target}',
       localDevice: 'Destino: este dispositivo',
       exactMcpTool: 'Escopo: esta ferramenta MCP exata',
       exactTool: 'Escopo: esta ferramenta exata',
       personaLabel: 'Perfil do assistente: {persona}',
-      legacyDescription:
-        'Uma permissão ampla anterior para “{permission}” foi desativada durante a atualização de segurança.',
       revoke: 'Revogar',
       revokeLabel: 'Revogar permissão para {tool}',
       settingsTitle: 'Aprovações e permissões',

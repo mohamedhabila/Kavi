@@ -2756,15 +2756,12 @@ export const fr: TranslationMap = mergeTranslations(en, {
       empty:
         'Aucune autorisation enregistrée. Les outils continueront à demander une vérification.',
       active: 'Autorisé',
-      reviewRequired: 'Vérification requise',
       actionLabel: 'Action : {action}',
       targetLabel: 'Cible : {target}',
       localDevice: 'Cible : cet appareil',
       exactMcpTool: 'Portée : cet outil MCP précis',
       exactTool: 'Portée : cet outil précis',
       personaLabel: 'Profil de l’assistant : {persona}',
-      legacyDescription:
-        'Une ancienne autorisation étendue pour « {permission} » a été désactivée lors de la mise à niveau de sécurité.',
       revoke: 'Révoquer',
       revokeLabel: 'Révoquer l’autorisation pour {tool}',
       settingsTitle: 'Autorisations et validations',

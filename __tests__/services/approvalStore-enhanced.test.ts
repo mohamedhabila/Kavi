@@ -240,7 +240,6 @@ describe('approveAlways', () => {
         key: grantCandidate!.key,
         targetId: 'staging-host',
         actionClass: 'pwd',
-        status: 'active',
         source: 'user',
       }),
     ]);

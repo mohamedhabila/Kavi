@@ -16,12 +16,14 @@ import { partializeChatPersistState } from './chatPersistence';
 import { createAgentRunStoreActions } from './agentRuns/storeActions';
 import { createConversationStoreActions } from './chatStoreConversationActions';
 import { createMessageStoreActions } from './chatStoreMessageActions';
-import { CHAT_STORE_VERSION, migrateChatStoreState } from './chatStoreMigrations';
 import { normalizePersistedChatState } from './chatStoreNormalization';
+import { startOverFromOtherVersion } from './persistedStoreVersion';
 import { createUsageStoreActions } from './chatStoreUsageActions';
 import type { ChatState } from './chatStoreTypes';
 
 export type { ChatState } from './chatStoreTypes';
+
+const CHAT_STORE_VERSION = 9;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -39,12 +41,7 @@ export const useChatStore = create<ChatState>()(
       // Archived history must be durable before a generation that omits it is committed.
       storage: createThrottledJSONStorage({ beforeCommit: drainPendingTranscriptArchive }),
       version: CHAT_STORE_VERSION,
-      migrate: (persistedState: unknown, persistedVersion: number) => {
-        const normalized = normalizePersistedChatState(
-          migrateChatStoreState(persistedState, persistedVersion),
-        );
-        return partializeChatPersistState(normalized);
-      },
+      migrate: startOverFromOtherVersion,
       merge: (persistedState, currentState) => ({
         ...currentState,
         ...normalizePersistedChatState(persistedState as Partial<ChatState> | undefined),

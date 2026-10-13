@@ -130,24 +130,7 @@ describe('approval grants', () => {
     ).toBe(false);
   });
 
-  it('migrates broad legacy entries to review-required instead of active access', () => {
-    const migrated = normalizePersistedAllowlist([
-      { key: 'ssh_exec', addedAt: 10, personaId: 'operator' },
-    ]);
-
-    expect(migrated).toEqual([
-      expect.objectContaining({
-        toolName: 'ssh_exec',
-        status: 'review-required',
-        source: 'legacy',
-        legacyKey: 'ssh_exec',
-        personaId: 'operator',
-      }),
-    ]);
-    expect(normalizePersistedAllowlist(migrated)).toEqual(migrated);
-  });
-
-  it('rehydrates only valid user grants as active', () => {
+  it('rehydrates only valid user grants', () => {
     const candidate = buildApprovalGrantCandidate({
       toolName: 'notification_send',
       riskLevel: 'low',
@@ -158,7 +141,6 @@ describe('approval grants', () => {
     const activeGrant = {
       ...candidate!,
       addedAt: 10,
-      status: 'active' as const,
       source: 'user' as const,
       sourceRequestId: 'approval-1',
     };
@@ -168,7 +150,7 @@ describe('approval grants', () => {
     ).toEqual([]);
   });
 
-  it('does not rehydrate internal bypass entries as active permissions', () => {
+  it('does not rehydrate internal bypass entries', () => {
     expect(
       normalizePersistedAllowlist([
         {
@@ -179,16 +161,9 @@ describe('approval grants', () => {
           actionClass: '*',
           targetKind: 'tool',
           addedAt: 10,
-          status: 'active',
           source: 'internal',
         },
       ]),
-    ).toEqual([
-      expect.objectContaining({
-        status: 'review-required',
-        source: 'legacy',
-        legacyKey: 'calendar_list',
-      }),
-    ]);
+    ).toEqual([]);
   });
 });

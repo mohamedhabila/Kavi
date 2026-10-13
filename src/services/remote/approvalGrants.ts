@@ -10,16 +10,12 @@ import {
 } from './approvalRisk';
 import { buildAllowlistKey } from './approvalPolicy';
 
-export type ApprovalGrantStatus = 'active' | 'review-required';
-export type ApprovalGrantSource = 'user' | 'internal' | 'legacy';
+export type ApprovalGrantSource = 'user' | 'internal';
 
 export interface AllowlistEntry extends RemoteApprovalGrantCandidate {
   addedAt: number;
-  status: ApprovalGrantStatus;
   source: ApprovalGrantSource;
   sourceRequestId?: string;
-  /** Original pre-v4 key retained only so the user can identify and revoke it. */
-  legacyKey?: string;
 }
 
 const CATEGORICAL_TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:+-]{0,159}$/u;
@@ -278,7 +274,6 @@ export function createUserApprovalGrant(
   return {
     ...candidate,
     addedAt,
-    status: 'active',
     source: 'user',
     sourceRequestId,
   };
@@ -307,7 +302,6 @@ export function createInternalAllowlistEntry(
     targetKind: 'tool',
     ...(personaId ? { personaId } : {}),
     addedAt,
-    status: 'active',
     source: 'internal',
   };
 }
@@ -328,43 +322,12 @@ export function hasMatchingActiveApprovalGrant(params: {
   const administrativeKey = buildAllowlistKey(params.toolName, params.args);
 
   return params.allowlist.some((entry) => {
-    if (entry.status !== 'active' || !personaMatches(entry, params.personaId)) return false;
+    if (!personaMatches(entry, params.personaId)) return false;
     if (entry.source === 'internal') {
       return entry.key === params.toolName || entry.key === administrativeKey;
     }
     return entry.source === 'user' && candidate !== undefined && entry.key === candidate.key;
   });
-}
-
-function legacyReviewEntry(value: Record<string, unknown>): AllowlistEntry | undefined {
-  const personaId = isOpaqueId(value.personaId) ? value.personaId : undefined;
-  const addedAt =
-    typeof value.addedAt === 'number' && Number.isFinite(value.addedAt) && value.addedAt >= 0
-      ? value.addedAt
-      : 0;
-  const legacyKey = isCategoricalToken(value.legacyKey)
-    ? value.legacyKey
-    : isCategoricalToken(value.key)
-      ? value.key
-      : undefined;
-  if (!legacyKey) return undefined;
-  const toolName = legacyKey.startsWith('ssh_exec:') ? 'ssh_exec' : legacyKey;
-  if (!isCategoricalToken(toolName)) return undefined;
-
-  const reviewKey = `legacy-review|${encodeURIComponent(legacyKey)}|${encodeURIComponent(personaId || '')}`;
-  return {
-    version: 1,
-    key: reviewKey,
-    toolName,
-    scope: getApprovalScope(toolName),
-    actionClass: 'legacy',
-    targetKind: 'tool',
-    ...(personaId ? { personaId } : {}),
-    addedAt,
-    status: 'review-required',
-    source: 'legacy',
-    legacyKey,
-  };
 }
 
 export function normalizePersistedAllowlist(value: unknown): AllowlistEntry[] {
@@ -373,38 +336,31 @@ export function normalizePersistedAllowlist(value: unknown): AllowlistEntry[] {
   const normalized: AllowlistEntry[] = [];
   const seen = new Set<string>();
   for (const rawEntry of value) {
-    if (!isRecord(rawEntry)) continue;
-
-    let entry: AllowlistEntry | undefined;
     if (
-      rawEntry.status === 'active' &&
-      rawEntry.source === 'user' &&
-      isApprovalGrantCandidate(rawEntry) &&
-      typeof rawEntry.addedAt === 'number' &&
-      Number.isFinite(rawEntry.addedAt) &&
-      rawEntry.addedAt >= 0
+      !isRecord(rawEntry) ||
+      rawEntry.source !== 'user' ||
+      !isApprovalGrantCandidate(rawEntry) ||
+      typeof rawEntry.addedAt !== 'number' ||
+      !Number.isFinite(rawEntry.addedAt) ||
+      rawEntry.addedAt < 0
     ) {
-      entry = {
-        version: 1,
-        key: rawEntry.key,
-        toolName: rawEntry.toolName,
-        scope: rawEntry.scope,
-        actionClass: rawEntry.actionClass,
-        targetKind: rawEntry.targetKind,
-        ...(rawEntry.targetId ? { targetId: rawEntry.targetId } : {}),
-        ...(rawEntry.personaId ? { personaId: rawEntry.personaId } : {}),
-        addedAt: rawEntry.addedAt,
-        status: 'active',
-        source: 'user',
-        ...(isOpaqueId(rawEntry.sourceRequestId)
-          ? { sourceRequestId: rawEntry.sourceRequestId }
-          : {}),
-      };
-    } else {
-      entry = legacyReviewEntry(rawEntry);
+      continue;
     }
-
-    if (!entry) continue;
+    const entry: AllowlistEntry = {
+      version: 1,
+      key: rawEntry.key,
+      toolName: rawEntry.toolName,
+      scope: rawEntry.scope,
+      actionClass: rawEntry.actionClass,
+      targetKind: rawEntry.targetKind,
+      ...(rawEntry.targetId ? { targetId: rawEntry.targetId } : {}),
+      ...(rawEntry.personaId ? { personaId: rawEntry.personaId } : {}),
+      addedAt: rawEntry.addedAt,
+      source: 'user',
+      ...(isOpaqueId(rawEntry.sourceRequestId)
+        ? { sourceRequestId: rawEntry.sourceRequestId }
+        : {}),
+    };
     const identity = `${entry.key}|${entry.personaId || ''}`;
     if (seen.has(identity)) continue;
     seen.add(identity);

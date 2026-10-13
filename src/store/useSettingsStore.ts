@@ -23,11 +23,8 @@ import {
   sanitizeWebSearchProvider,
   sanitizeWorkspaceTargetsForState,
 } from './settingsStoreNormalization';
-import {
-  migrateSettingsState,
-  partializeSettingsState,
-  SETTINGS_STORE_VERSION,
-} from './settingsStorePersistence';
+import { partializeSettingsState, SETTINGS_STORE_VERSION } from './settingsStorePersistence';
+import { startOverFromOtherVersion } from './persistedStoreVersion';
 
 export const useSettingsStore = create<SettingsState>()(
   persist<SettingsState, [], [], AppSettings>(
@@ -445,7 +442,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: STORAGE_KEYS.SETTINGS,
       storage: createJSONStorage<AppSettings>(() => AsyncStorage),
       version: SETTINGS_STORE_VERSION,
-      migrate: migrateSettingsState,
+      migrate: startOverFromOtherVersion,
       partialize: partializeSettingsState,
     },
   ),

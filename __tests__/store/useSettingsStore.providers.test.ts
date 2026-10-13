@@ -345,10 +345,4 @@ describe('useSettingsStore preference settings', () => {
     useSettingsStore.getState().setDisableLongTermMemory(0 as any);
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(false);
   });
-
-  it('normalizes the legacy direct conversation mode alias when migrating', async () => {
-    const persistOptions = (useSettingsStore as any).persist.getOptions();
-    const migrated = await persistOptions.migrate({ defaultConversationMode: 'direct' }, 8);
-    expect(migrated.defaultConversationMode).toBe('chitchat');
-  });
 });

@@ -1,4 +1,4 @@
-import { ShieldCheck, ShieldQuestion, Trash2 } from 'lucide-react-native';
+import { ShieldCheck, Trash2 } from 'lucide-react-native';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -45,59 +45,38 @@ export const ApprovalPermissionsSection: React.FC<ApprovalPermissionsSectionProp
         </View>
       ) : (
         entries.map((entry) => {
-          const needsReview = entry.status === 'review-required';
-          const statusColor = needsReview ? colors.warning : colors.success;
           const revokeLabel = t('approvalHistory.permissions.revokeLabel', {
             tool: entry.toolName,
           });
 
           return (
-            <View
-              key={`${entry.key}:${entry.personaId || 'all'}`}
-              style={[styles.card, needsReview && { borderColor: colors.warning }]}
-            >
+            <View key={`${entry.key}:${entry.personaId || 'all'}`} style={styles.card}>
               <View style={styles.cardHeader}>
-                {needsReview ? (
-                  <ShieldQuestion size={18} color={statusColor} />
-                ) : (
-                  <ShieldCheck size={18} color={statusColor} />
-                )}
+                <ShieldCheck size={18} color={colors.success} />
                 <Text style={styles.toolName} numberOfLines={1}>
                   {entry.toolName}
                 </Text>
-                <View style={[styles.statusBadge, { borderColor: statusColor }]}>
-                  <Text style={[styles.statusText, { color: statusColor }]}>
-                    {needsReview
-                      ? t('approvalHistory.permissions.reviewRequired')
-                      : t('approvalHistory.permissions.active')}
+                <View style={[styles.statusBadge, { borderColor: colors.success }]}>
+                  <Text style={[styles.statusText, { color: colors.success }]}>
+                    {t('approvalHistory.permissions.active')}
                   </Text>
                 </View>
               </View>
 
-              {needsReview ? (
+              {entry.actionClass !== entry.toolName && (
                 <Text style={styles.detail}>
-                  {t('approvalHistory.permissions.legacyDescription', {
-                    permission: entry.legacyKey || entry.toolName,
+                  {t('approvalHistory.permissions.actionLabel', {
+                    action: entry.actionClass,
                   })}
                 </Text>
-              ) : (
-                <>
-                  {entry.actionClass !== entry.toolName && (
-                    <Text style={styles.detail}>
-                      {t('approvalHistory.permissions.actionLabel', {
-                        action: entry.actionClass,
-                      })}
-                    </Text>
-                  )}
-                  <Text style={styles.detail}>{targetDescription(entry, t)}</Text>
-                  {entry.personaId && (
-                    <Text style={styles.detail}>
-                      {t('approvalHistory.permissions.personaLabel', {
-                        persona: entry.personaId,
-                      })}
-                    </Text>
-                  )}
-                </>
+              )}
+              <Text style={styles.detail}>{targetDescription(entry, t)}</Text>
+              {entry.personaId && (
+                <Text style={styles.detail}>
+                  {t('approvalHistory.permissions.personaLabel', {
+                    persona: entry.personaId,
+                  })}
+                </Text>
               )}
 
               <TouchableOpacity
