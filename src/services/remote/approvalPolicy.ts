@@ -30,10 +30,6 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
   requireApproval: false,
   alwaysApproveTools: [
     'ssh_exec',
-    'ssh_write_file',
-    'ssh_rename_path',
-    'ssh_delete_path',
-    'ssh_make_directory',
     'workspace_launch_browser',
     'workspace_delegate_task',
     'browser_navigate',
@@ -90,14 +86,11 @@ export const DEFAULT_POLICY: ApprovalPolicy = {
     'web_fetch',
     'read_file',
     'list_files',
-    'ssh_list_directory',
-    'ssh_read_file',
+    'ssh_fs',
     'workspace_status',
     'browser_snapshot',
     'browser_screenshot',
-    'browser_console',
-    'browser_errors',
-    'browser_network',
+    'browser_inspect',
     'browser_status',
     'browser_pdf',
     'expo_eas_status',
@@ -117,6 +110,11 @@ export function requiresActionApproval(toolName: string, args?: Record<string, u
   }
 
   switch (toolName) {
+    case 'ssh_fs': {
+      // Listing and reading a remote host are read-only; every other action changes it.
+      const action = String(args?.action || '').toLowerCase();
+      return action !== 'list' && action !== 'read';
+    }
     case 'browser_cookies':
     case 'browser_storage': {
       const action = String(args?.action || 'get').toLowerCase();

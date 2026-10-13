@@ -90,9 +90,7 @@ const NON_REUSABLE_TOOL_NAMES = new Set([
   'share_text',
   'share_url',
   'sms_compose',
-  'ssh_delete_path',
-  'ssh_rename_path',
-  'ssh_write_file',
+  'ssh_fs',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

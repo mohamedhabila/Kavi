@@ -59,10 +59,7 @@ const ALWAYS_CONFIRM = new Set<string>([
   'screen_record',
   'haptic_feedback',
   'cron',
-  'ssh_write_file',
-  'ssh_delete_path',
-  'ssh_rename_path',
-  'ssh_make_directory',
+  'ssh_fs',
 ]);
 
 export const useToolPermissionsStore = create<ToolPermissionsState>()(
