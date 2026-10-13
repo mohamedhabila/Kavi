@@ -334,8 +334,9 @@ describe('scheduled job conversation transcript', () => {
     mockChatState.conversations = [conversation];
     mockChatState.activeConversationId = conversation.id;
     mockRunOrchestrator.mockImplementationOnce(
-      async (options: { personaId?: string }, callbacks: OrchestratorCallbacks) => {
+      async (options: { personaId?: string; model?: string }, callbacks: OrchestratorCallbacks) => {
         expect(options.personaId).toBe('travel-guide');
+        expect(options.model).toBe('job-model');
         emitSchedulerFinal(callbacks, 'Chitchat response.');
         callbacks.onDone?.();
       },

@@ -112,7 +112,8 @@ function ensureScheduledConversation(params: {
 
 /**
  * A scheduled run is a turn in the conversation: it runs with the persona a foreground turn
- * would use, and never rewrites the conversation's mode, persona or model.
+ * would use and leaves the conversation's persona and model alone. Like any turn, it can
+ * escalate a chitchat conversation to agentic when it discovers a tool chitchat may not call.
  */
 export function resolveScheduledExecutionPersona(conversationId: string): string {
   return resolveForegroundConversationExecutionContext({
