@@ -211,6 +211,27 @@ describe('resolveTurnToolSurface discovery decay', () => {
     expect(names.has('workspace_note_write')).toBe(false);
   });
 
+  // With code only in the catalog, the model added thirty amounts by hand and got them
+  // wrong (0/4); with javascript declared from the first turn it computed them (4/4).
+  it('declares javascript from the first turn, so exact work is computed', () => {
+    const javascript: ToolDefinition = {
+      name: 'javascript',
+      description: 'Run JavaScript.',
+      input_schema: { type: 'object', properties: { code: { type: 'string' } } },
+      contract: { category: 'code', capabilities: ['compute'], resourceKinds: ['unknown'] },
+    };
+    const surface = resolveTurnToolSurface({
+      allTools: [...discoveryTools, javascript],
+      pendingAsyncMonitorToolNames: new Set<string>(),
+      observedToolNames: [],
+      recentContinuationToolNames: new Set<string>(),
+      activatedCatalogToolNames: new Set<string>(),
+      includeToolCatalog: false,
+    });
+
+    expect(selectedNames(surface).has('javascript')).toBe(true);
+  });
+
   it('exposes the discovery entrypoint when asked', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,

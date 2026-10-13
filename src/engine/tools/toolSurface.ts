@@ -22,6 +22,11 @@ import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestCl
  * calendar, contacts, location, and device state — are present from the first turn so
  * an ordinary request does not cost a `tool_catalog` round-trip before it can start.
  * Every promoted native tool is read-only; mutations stay behind discovery and approval.
+ *
+ * `javascript` is here because exact work is everyday work: with code only in the
+ * catalog the model added thirty amounts by hand and got them wrong (ledger 0/4, all
+ * three arithmetic long tasks 7/12); with its schema on the surface it computed them
+ * (12/12) at about a tenth more tokens. It still asks for approval before it runs.
  */
 export const DEFAULT_CORE_TOOL_ORDER = [
   REQUEST_CLARIFICATION_TOOL_NAME,
@@ -42,6 +47,7 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   'contacts_search',
   'location_current',
   'device_query',
+  'javascript',
 ] as const;
 
 const STABLE_TOOL_SURFACE_ORDER_VALUES = [
@@ -78,6 +84,7 @@ const STABLE_TOOL_SURFACE_ORDER_VALUES = [
   'location_current',
   'device_query',
   'notification_send',
+  'javascript',
 ] as const;
 
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(

@@ -25,6 +25,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'list_files',
       'web_search',
       'web_fetch',
+      'javascript',
       'tool_catalog',
       'tool_describe',
     ]);
@@ -47,6 +48,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'list_files',
       'web_search',
       'web_fetch',
+      'javascript',
       'tool_catalog',
       'tool_describe',
     ]);
