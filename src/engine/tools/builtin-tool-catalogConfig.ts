@@ -3,7 +3,6 @@ import type { ToolCatalogCategoryConfig } from './builtin-tool-catalogTypes';
 export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> = {
   files: {
     tools: ['glob_search', 'text_search', 'read_file', 'list_files', 'write_file', 'file_edit'],
-    purpose: 'Search, read, create, and edit files in the conversation workspace.',
   },
   browser: {
     tools: [
@@ -18,9 +17,6 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'browser_select',
       'browser_drag',
       'browser_wait',
-      'browser_console',
-      'browser_errors',
-      'browser_network',
       'browser_cookies',
       'browser_storage',
       'browser_status',
@@ -29,17 +25,16 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'browser_download',
       'browser_pdf',
       'browser_fill_form',
+      'browser_inspect',
+      'browser_stop',
       'browser_dialog',
     ],
-    purpose: 'Launch and control websites interactively.',
   },
   workspace: {
     tools: ['workspace_status', 'workspace_launch_browser', 'workspace_delegate_task'],
-    purpose: 'Inspect and control configured external workspace targets.',
   },
   web: {
     tools: ['web_search', 'web_fetch'],
-    purpose: 'Search the web and fetch online documentation or pages.',
   },
   canvas: {
     tools: [
@@ -52,21 +47,9 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'canvas_eval',
       'canvas_snapshot',
     ],
-    purpose: 'Create, inspect, read, update, evaluate, and capture session canvas previews.',
   },
   ssh: {
-    tools: [
-      'ssh_exec',
-      'ssh_background_job_status',
-      'ssh_background_job_wait',
-      'ssh_list_directory',
-      'ssh_read_file',
-      'ssh_write_file',
-      'ssh_rename_path',
-      'ssh_delete_path',
-      'ssh_make_directory',
-    ],
-    purpose: 'Execute commands and work with files on configured SSH targets.',
+    tools: ['ssh_exec', 'ssh_fs', 'ssh_background_job_status', 'ssh_background_job_wait'],
   },
   expo: {
     tools: [
@@ -83,12 +66,9 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'expo_eas_workflow_wait',
       'expo_eas_graphql',
     ],
-    purpose: 'Inspect or operate Expo and EAS projects, builds, updates, and workflows.',
   },
   github: {
     tools: [],
-    purpose:
-      'Commit, inspect, and monitor GitHub repositories through installed skill or MCP tools.',
   },
   sessions: {
     tools: [
@@ -104,15 +84,12 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'sessions_yield',
       'wait',
     ],
-    purpose: 'Manage sub-agents, background sessions, and waiting states.',
   },
   agents: {
     tools: ['agents'],
-    purpose: 'Inspect, switch, or configure agent/persona behavior.',
   },
   calendar: {
     tools: ['calendar_list', 'calendar_events', 'calendar_create_event', 'calendar_update_event'],
-    purpose: 'Inspect device calendars and create or update events.',
   },
   contacts: {
     tools: [
@@ -125,12 +102,9 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'contacts_search_full',
       'contacts_get_full',
     ],
-    purpose:
-      'Pick, inspect, edit, create, and share device contacts with privacy-first native flows.',
   },
   notifications: {
     tools: ['notification_send', 'reminder'],
-    purpose: 'Send local device notifications now, or schedule and cancel them as reminders.',
   },
   native: {
     tools: [
@@ -162,7 +136,6 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'camera_clip',
       'screen_record',
     ],
-    purpose: 'Device, clipboard, notifications, location, sharing, and other mobile utility tools.',
   },
   media: {
     tools: [
@@ -173,33 +146,20 @@ export const TOOL_CATALOG_CATEGORIES: Record<string, ToolCatalogCategoryConfig> 
       'image_generate',
       'image_edit',
     ],
-    purpose: 'Select, inspect, capture, generate, or edit media and speech.',
   },
   memory: {
     tools: ['memory_remember', 'memory_search', 'memory_forget'],
-    purpose: 'Remember, search and forget long-term memories and earlier conversations.',
   },
   automation: {
     tools: ['cron', 'notification_send', 'reminder'],
-    purpose: 'Create scheduled tasks, cron jobs, and user alerts.',
   },
   code: {
     tools: ['javascript', 'python'],
-    purpose:
-      'Run sandboxed JavaScript or Python for calculations, data transformation, script execution, and capability-extension workflows.',
   },
   pdf: {
     tools: ['pdf_read'],
-    purpose: 'Read and extract content from PDF documents.',
   },
   interaction: {
     tools: ['poll_create'],
-    purpose: 'Interactive response helpers such as polls.',
   },
 };
-
-export const TOOL_CATALOG_AVAILABLE_CATEGORIES = [
-  ...Object.keys(TOOL_CATALOG_CATEGORIES),
-  'mcp',
-  'skills',
-];

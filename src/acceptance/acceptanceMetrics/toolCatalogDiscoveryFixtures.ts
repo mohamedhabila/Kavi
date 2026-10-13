@@ -81,7 +81,7 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
           {
             id: 'tc-search',
             name: 'tool_catalog',
-            arguments: '{"query":"memory_search","capabilities":["read"]}',
+            arguments: '{"query":"memory_search"}',
             status: 'completed',
           },
         ],
@@ -92,9 +92,7 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
         content: JSON.stringify({
           mode: 'search',
           query: 'memory_search',
-          capabilities: ['read'],
           tools: [{ name: 'memory_search' }],
-          totalMatches: 1,
         }),
         toolCallId: 'tc-search',
         timestamp: 3,
@@ -129,7 +127,7 @@ export const TOOL_CATALOG_DISCOVERY_FIXTURES: ReadonlyArray<ToolCatalogDiscovery
           tool: {
             name: 'memory_search',
             description: 'Search memory.',
-            contract: { capabilities: ['read', 'verify'] },
+            input_schema: { type: 'object', properties: {} },
           },
         }),
         toolCallId: 'tc-describe',

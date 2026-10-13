@@ -297,7 +297,6 @@ describe('e2eRunReport artifacts', () => {
       expect(failedTrace).toContain('goal-evidence-complete');
       expect(failedTrace).toContain('"toolCatalogResult"');
       expect(failedTrace).toContain('"memory_search"');
-      expect(failedTrace).toContain('"totalMatches": 1');
       expect(failedTrace).not.toContain('SECRET-TRACE-ARG');
       expect(failedTrace).not.toContain('SECRET-TRACE-RESULT');
       const traceIndexPath = join(runDir, 'redacted-traces', 'index.json');

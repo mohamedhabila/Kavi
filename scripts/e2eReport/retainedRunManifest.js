@@ -112,7 +112,7 @@ function validateTraceArtifacts(runDir, runId, report) {
         'gitSha',
         'trace',
       ]) ||
-      artifact.schemaVersion !== 'e2e-redacted-trace-v2' ||
+      artifact.schemaVersion !== 'e2e-redacted-trace-v3' ||
       artifact.generatedAt !== report.generatedAt ||
       artifact.retentionReason !== artifactReference.retentionReason ||
       artifact.provider !== report.runMetadata.provider ||

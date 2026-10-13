@@ -80,12 +80,10 @@ describe('TOOL_DEFINITIONS', () => {
     expect(python.description).not.toContain('requests via micropip');
   });
 
-  it('tool_catalog description exposes structural search and category browse', () => {
+  it('tool_catalog takes only the query it searches with', () => {
     const toolCatalog = TOOL_DEFINITIONS.find((t) => t.name === 'tool_catalog')!;
-    expect(toolCatalog.description).toContain('query and/or capabilities');
-    expect(toolCatalog.description).toContain('empty overview call');
-    expect(toolCatalog.input_schema.properties.query).toBeDefined();
-    expect(toolCatalog.input_schema.properties.capabilities).toBeDefined();
+    expect(Object.keys(toolCatalog.input_schema.properties)).toEqual(['query']);
+    expect(toolCatalog.input_schema.required).toEqual(['query']);
   });
 
   it('sessions_spawn exposes a compact delegated worker contract', () => {

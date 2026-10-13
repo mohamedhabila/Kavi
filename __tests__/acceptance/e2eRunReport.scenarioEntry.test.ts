@@ -99,7 +99,7 @@ describe('e2eRunReport scenario entries', () => {
       weakPatternRubricCount: 0,
     });
     expect(entry.trace).toMatchObject({
-      schemaVersion: 'e2e-redacted-trace-v2',
+      schemaVersion: 'e2e-redacted-trace-v3',
       fixtureId: 'file-write-read',
       toolCallCount: 1,
       graphStatus: 'finalized',
@@ -353,11 +353,6 @@ describe('e2eRunReport scenario entries', () => {
     expect(entry.trace?.toolResults[3]).toMatchObject({
       name: 'tool_catalog',
       toolCatalogResult: {
-        capabilityCount: 2,
-        capabilities: ['read'],
-        capabilityHashes: expect.arrayContaining([
-          expect.objectContaining({ hash: expect.stringContaining('sha256:') }),
-        ]),
         toolNames: [],
         toolNameHashes: [expect.objectContaining({ hash: expect.stringContaining('sha256:') })],
         activationNames: [],

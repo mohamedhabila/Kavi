@@ -88,7 +88,7 @@ function projectTurn(value) {
 
 function projectPublicRedactedTrace(value) {
   const source = asRecord(value);
-  if (!source || source.schemaVersion !== 'e2e-redacted-trace-v2') {
+  if (!source || source.schemaVersion !== 'e2e-redacted-trace-v3') {
     return null;
   }
   const fixtureId = isPublicEvaluationId(source.fixtureId) ? source.fixtureId : null;
@@ -133,7 +133,7 @@ function projectPublicRedactedTrace(value) {
     source.graphStatus === null ? null : safeEnum(source.graphStatus, SAFE_GRAPH_STATUSES);
   if (graphStatus === undefined) return null;
   return {
-    schemaVersion: 'e2e-redacted-trace-v2',
+    schemaVersion: 'e2e-redacted-trace-v3',
     fixtureId,
     conversationIdHash,
     completed: source.completed,

@@ -74,7 +74,7 @@ export const SESSION_TOOL_ACTIVATION_FIXTURES: ReadonlyArray<SessionToolActivati
           {
             id: 'tc-search',
             name: 'tool_catalog',
-            arguments: '{"query":"pdf_read","capabilities":["read"]}',
+            arguments: '{"query":"pdf_read"}',
             status: 'completed',
           },
         ],

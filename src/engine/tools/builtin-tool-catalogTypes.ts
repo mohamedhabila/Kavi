@@ -7,48 +7,20 @@ export type ToolCatalogDescribedTool = Pick<
 
 export type ToolCatalogCategoryConfig = {
   tools: string[];
-  purpose: string;
 };
 
-export type ToolCatalogCapabilitySummary = {
-  capabilities: string[];
-  resourceKinds: string[];
-  sideEffects: string[];
-  providesEvidence: string[];
-  workflowStages: string[];
-  produces: Array<{ kind: string; field?: string }>;
-  consumes: Array<{ kind: string; field?: string; required?: boolean }>;
-  precedes: string[];
-  requiresPermissionEvidence: string[];
-};
-
-export type ToolCatalogActivation = {
-  name: string;
-  eligible: boolean;
-  callableNow: boolean;
-  reason: 'discoverable' | 'callable_now';
-};
-
-export type ToolCatalogSearchToolEntry = {
+/** One search result: enough to choose the tool; its full contract arrives once callable. */
+export type ToolCatalogEntry = {
   name: string;
   description: string;
-  category: string;
   source: 'built-in' | 'mcp' | 'skill';
-  schemaVersion: string;
+  /** For MCP and skill tools: lets activation confirm the definition has not changed since. */
   schemaDigest?: string;
-  purpose?: string;
-  serverName?: string;
-  skillName?: string;
-  capabilitySummary?: ToolCatalogCapabilitySummary;
-  activation: ToolCatalogActivation;
-};
-
-export type ToolCatalogSearchSkillEntry = {
-  id: string;
-  name: string;
-  description: string;
-  invocationPolicy: string;
-  location: string;
+  activation: {
+    name: string;
+    eligible: true;
+    callableNow: boolean;
+  };
 };
 
 export type ToolCatalogMcpServerTool = {
@@ -104,9 +76,7 @@ export type ToolCatalogSkillCatalog = {
 };
 
 export type ExecuteToolCatalogArgs = {
-  category?: string;
   query?: string;
-  capabilities?: string[];
 };
 
 export type ExecuteToolCatalogOptions = {

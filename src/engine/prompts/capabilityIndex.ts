@@ -97,16 +97,15 @@ export function buildCapabilityIndexPromptSection(params: {
 
   const lines = [
     '## Capability Index',
-    'Available this run. If one is not on this turn’s surface, expose it with tool_catalog using',
-    'the category shown, then call it. If the user asks for something a listed capability covers,',
-    'look it up with tool_catalog before saying it is unavailable.',
+    'Available this run. A tool named here can be called directly; for anything else, search',
+    'tool_catalog for what you need to do. Search before saying something is unavailable.',
     ...shownCategories.map((category) =>
       renderCategoryLine(category, byCategory.get(category) ?? []),
     ),
   ];
   if (omittedCategoryCount > 0) {
     lines.push(
-      `- ${omittedCategoryCount} further categories; call tool_catalog with no arguments to list them.`,
+      `- ${omittedCategoryCount} further categories; search tool_catalog for what you need.`,
     );
   }
 

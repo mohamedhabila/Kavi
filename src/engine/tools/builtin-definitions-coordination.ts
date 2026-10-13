@@ -1,47 +1,19 @@
 import { ToolDefinition } from '../../types/tool';
-import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from './builtin-tool-catalogConfig';
 
 export const TOOL_CATALOG_TOOL: ToolDefinition = {
   name: 'tool_catalog',
   description:
-    'Discover tools from the mobile catalog. Prefer query and/or capabilities for a natural-language intent or when multiple resource domains could apply. Use category only when the target resource domain is explicit. Use the empty overview call only to inspect categories first.',
+    'Find tools for a task. The tools that best match the query are returned and can be called on your next step.',
   input_schema: {
     type: 'object',
     properties: {
-      category: {
-        type: 'string',
-        description:
-          'Optional exact resource-domain filter from the declared enum. Automation is for recurring or deferred assistant tasks and cron jobs; calendar is only for device calendar events; notifications is only for user alerts. Prefer query when the domain is uncertain.',
-        enum: TOOL_CATALOG_AVAILABLE_CATEGORIES,
-      },
       query: {
         type: 'string',
         description:
-          'Optional structural search query. Tokens are matched against tool names, categories, capabilities, and MCP server identifiers.',
-      },
-      capabilities: {
-        type: 'array',
-        description:
-          'Optional capability hints for the needed workflow. Example: ["read", "verify"].',
-        items: {
-          type: 'string',
-          enum: [
-            'discover',
-            'read',
-            'write',
-            'commit',
-            'push',
-            'deploy',
-            'monitor',
-            'wait',
-            'verify',
-            'coordinate',
-            'compute',
-          ],
-        },
+          'What you need to do, in a few words (for example "record a short camera clip" or "draft an SMS").',
       },
     },
-    required: [],
+    required: ['query'],
   },
   contract: {
     category: 'tools',
@@ -57,7 +29,7 @@ export const TOOL_CATALOG_TOOL: ToolDefinition = {
 export const TOOL_DESCRIBE_TOOL: ToolDefinition = {
   name: 'tool_describe',
   description:
-    'Return the full contract and input schema for one tool by name. Use after catalog search when you need the exact invocation shape.',
+    'Return one tool’s description and input schema by name, to call it with the right arguments.',
   input_schema: {
     type: 'object',
     properties: {

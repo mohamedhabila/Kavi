@@ -44,41 +44,7 @@ const SAFE_TOOL_STATUSES = new Set([
   'yielded',
 ]);
 
-const SAFE_TOOL_CAPABILITIES = new Set([
-  'discover',
-  'read',
-  'write',
-  'commit',
-  'push',
-  'deploy',
-  'monitor',
-  'wait',
-  'verify',
-  'coordinate',
-  'compute',
-]);
 const SAFE_CATALOG_MODES = new Set(['describe', 'search']);
-const SAFE_CATALOG_CATEGORIES = new Set([
-  'files',
-  'browser',
-  'workspace',
-  'web',
-  'canvas',
-  'ssh',
-  'expo',
-  'github',
-  'sessions',
-  'agents',
-  'calendar',
-  'contacts',
-  'native',
-  'media',
-  'memory',
-  'pdf',
-  'interaction',
-  'mcp',
-  'skills',
-]);
 const SAFE_STATUS_FIELD_PATHS = new Set(['ok', 'status', 'code', 'errorClass', 'error']);
 
 function projectToolCall(value) {
@@ -124,50 +90,21 @@ function projectToolCatalogResult(value) {
   if (!source) {
     return null;
   }
-  const capabilityCount = nonNegativeInteger(source.capabilityCount);
-  const capabilityHashes = projectHashArray(source.capabilityHashes, 64);
   const toolNames = projectSafeToolNameArray(source.toolNames);
   const toolNameHashes = projectHashArray(source.toolNameHashes, MAX_TRACE_ITEMS);
   const activationNames = projectSafeToolNameArray(source.activationNames);
   const activationNameHashes = projectHashArray(source.activationNameHashes, MAX_TRACE_ITEMS);
-  if (
-    capabilityCount === null ||
-    !capabilityHashes ||
-    !toolNames ||
-    !toolNameHashes ||
-    !activationNames ||
-    !activationNameHashes ||
-    !Array.isArray(source.capabilities)
-  ) {
+  if (!toolNames || !toolNameHashes || !activationNames || !activationNameHashes) {
     return null;
   }
   const mode = safeEnum(source.mode, SAFE_CATALOG_MODES);
-  const category = safeEnum(source.category, SAFE_CATALOG_CATEGORIES);
   const modeHash = source.modeHash === undefined ? undefined : projectHash(source.modeHash);
-  const categoryHash =
-    source.categoryHash === undefined ? undefined : projectHash(source.categoryHash);
-  if (
-    (source.modeHash !== undefined && !modeHash) ||
-    (source.categoryHash !== undefined && !categoryHash)
-  ) {
-    return null;
-  }
-  const totalMatches =
-    source.totalMatches === undefined ? undefined : nonNegativeInteger(source.totalMatches);
-  if (source.totalMatches !== undefined && totalMatches === null) {
+  if (source.modeHash !== undefined && !modeHash) {
     return null;
   }
   return {
     ...(mode ? { mode } : {}),
     ...(modeHash ? { modeHash } : {}),
-    ...(category ? { category } : {}),
-    ...(categoryHash ? { categoryHash } : {}),
-    capabilities: source.capabilities
-      .filter((capability) => SAFE_TOOL_CAPABILITIES.has(capability))
-      .slice(0, 64),
-    capabilityCount,
-    capabilityHashes,
-    ...(totalMatches !== undefined ? { totalMatches } : {}),
     toolNames,
     toolNameHashes,
     activationNames,

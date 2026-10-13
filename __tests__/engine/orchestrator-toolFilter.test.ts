@@ -223,7 +223,7 @@ describe('Orchestrator — toolFilter', () => {
             { type: 'token', content: '' },
             {
               type: 'tool_call',
-              toolCall: { id: 'tc-catalog', name: 'tool_catalog', arguments: '{"category":"mcp"}' },
+              toolCall: { id: 'tc-catalog', name: 'tool_catalog', arguments: '{"query":"inspect MCP capabilities"}' },
             },
             { type: 'done', content: '' },
           ],
@@ -254,7 +254,7 @@ describe('Orchestrator — toolFilter', () => {
 
     expect(mockExecuteTool).toHaveBeenCalledWith(
       'tool_catalog',
-      '{"category":"mcp"}',
+      '{"query":"inspect MCP capabilities"}',
       'conv-filter-catalog-context',
       expect.objectContaining({
         availableToolNames: ['read_file', 'tool_catalog'],

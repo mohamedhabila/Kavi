@@ -637,7 +637,7 @@ references explicitly based at `retention_root`; each path includes its run id.
 The uploaded artifact includes that retention tree. It may contain structural
 redacted traces, but never raw or private traces.
 
-The current public trace contract is `e2e-redacted-trace-v2`. Each turn is a
+The current public trace contract is `e2e-redacted-trace-v3`. Each turn is a
 closed projection of the immutable run result: actual route and mode,
 completion states, hashed user and final-response identities, bounded AgentRun
 counters, memory deltas and persistence-receipt counts, native state

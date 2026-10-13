@@ -1,5 +1,3 @@
-import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from '../../engine/tools/builtin-tool-catalogConfig';
-import type { ToolCapability } from '../../engine/tools/capabilityRegistry';
 import type { E2EToolCallRecord, E2EToolResultRecord } from './types';
 import {
   buildValueFingerprint,
@@ -8,7 +6,6 @@ import {
   parseJsonValue,
   readFieldPath,
   schemaDigest,
-  uniqueSorted,
   type E2ERedactedHash,
   type E2ERedactedValueFingerprint,
 } from './e2eTraceRedaction';
@@ -65,12 +62,6 @@ export type E2ERedactedStatusFieldTrace = E2ERedactedValueFingerprint & {
 export type E2ERedactedToolCatalogResultTrace = {
   mode?: E2ESafeToolCatalogMode;
   modeHash?: E2ERedactedHash;
-  category?: string;
-  categoryHash?: E2ERedactedHash;
-  capabilities: ToolCapability[];
-  capabilityCount: number;
-  capabilityHashes: E2ERedactedHash[];
-  totalMatches?: number;
   toolNames: string[];
   toolNameHashes: E2ERedactedHash[];
   activationNames: string[];
@@ -90,21 +81,7 @@ export type E2ERedactedToolResultTrace = {
 
 const STATUS_FIELD_PATHS = ['ok', 'status', 'code', 'errorClass', 'error'] as const;
 const SAFE_TOOL_STATUS_SET = new Set<string>(SAFE_TOOL_STATUSES);
-const SAFE_TOOL_CAPABILITY_SET = new Set<string>([
-  'discover',
-  'read',
-  'write',
-  'commit',
-  'push',
-  'deploy',
-  'monitor',
-  'wait',
-  'verify',
-  'coordinate',
-  'compute',
-]);
 const SAFE_TOOL_CATALOG_MODE_SET = new Set<string>(['describe', 'search']);
-const SAFE_TOOL_CATALOG_CATEGORY_SET = new Set<string>(TOOL_CATALOG_AVAILABLE_CATEGORIES);
 export function buildToolCallTrace(call: E2EToolCallRecord): E2ERedactedToolCallTrace {
   const parsedArguments = parseJsonObject(call.arguments);
   return {
@@ -190,29 +167,14 @@ function buildToolCatalogResultTrace(parsed: unknown): E2ERedactedToolCatalogRes
       return typeof name === 'string' ? name : undefined;
     })
     .filter((name): name is string => typeof name === 'string');
-  const allCapabilities = Array.isArray(record.capabilities)
-    ? uniqueSorted(
-        record.capabilities.filter((value): value is string => typeof value === 'string'),
-      )
-    : [];
   const mode = safeAllowedString<E2ESafeToolCatalogMode>(record.mode, SAFE_TOOL_CATALOG_MODE_SET);
-  const category = safeAllowedString<string>(record.category, SAFE_TOOL_CATALOG_CATEGORY_SET);
   const modeHash = hashOptionalString(record.mode);
-  const categoryHash = hashOptionalString(record.category);
   const redactedToolNames = buildRedactedToolNameList(toolNames);
   const redactedActivationNames = buildRedactedToolNameList(activationNames);
 
   return {
     ...(mode ? { mode } : {}),
     ...(modeHash ? { modeHash } : {}),
-    ...(category ? { category } : {}),
-    ...(categoryHash ? { categoryHash } : {}),
-    capabilities: allCapabilities.filter((capability) =>
-      SAFE_TOOL_CAPABILITY_SET.has(capability),
-    ) as ToolCapability[],
-    capabilityCount: allCapabilities.length,
-    capabilityHashes: allCapabilities.map(hashString),
-    ...(typeof record.totalMatches === 'number' ? { totalMatches: record.totalMatches } : {}),
     toolNames: redactedToolNames.names,
     toolNameHashes: redactedToolNames.nameHashes,
     activationNames: redactedActivationNames.names,

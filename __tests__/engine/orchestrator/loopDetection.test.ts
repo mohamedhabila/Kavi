@@ -204,19 +204,19 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
-    it('should stop repeated tool_catalog discovery after a few identical category results', async () => {
+    it('should stop repeated tool_catalog discovery after a few identical search results', async () => {
       (executeTool as jest.Mock).mockResolvedValue({
         status: 'completed',
         content: JSON.stringify({
-          mode: 'category',
-          category: 'browser',
+          mode: 'search',
+          query: 'browser',
           tools: [{ name: 'browser_navigate', description: 'Navigate browser pages.' }],
         }),
       });
 
       const toolCallEvent = {
         type: 'tool_call',
-        toolCall: { id: 'tc', name: 'tool_catalog', arguments: '{"category":"browser"}' },
+        toolCall: { id: 'tc', name: 'tool_catalog', arguments: '{"query":"browser"}' },
       };
 
       for (let i = 0; i < 6; i++) {

@@ -117,7 +117,7 @@ describe('Orchestrator', () => {
       ).toBe(false);
     });
 
-    it('keeps agentic catalog and browser tools available after catalog browse', async () => {
+    it('keeps agentic catalog and browser tools available after a catalog search', async () => {
       // browser_* tools are gated behind developer mode, like the other device/workspace
       // control tools; this test exercises catalog-driven browser tool discovery itself,
       // so it opts in explicitly rather than exercising the (separately tested) default gate.
@@ -126,7 +126,8 @@ describe('Orchestrator', () => {
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
         content: JSON.stringify({
-          category: 'browser',
+          mode: 'search',
+          query: 'browser',
           tools: [
             { name: 'browser_navigate', description: 'Navigate browser pages.' },
             { name: 'browser_click', description: 'Click browser elements.' },
@@ -140,7 +141,7 @@ describe('Orchestrator', () => {
           [
             {
               type: 'tool_call',
-              toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{"category":"browser"}' },
+              toolCall: { id: 'tc1', name: 'tool_catalog', arguments: '{"query":"browser"}' },
             },
             { type: 'done', content: '' },
           ],
@@ -197,7 +198,7 @@ describe('Orchestrator', () => {
       expect(secondTurnTools.has('browser_click')).toBe(true);
       expect(executeTool).toHaveBeenCalledWith(
         'tool_catalog',
-        '{"category":"browser"}',
+        '{"query":"browser"}',
         'conv1',
         expect.any(Object),
       );

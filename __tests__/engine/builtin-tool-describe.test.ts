@@ -3,26 +3,56 @@ jest.mock('../../src/services/memory/policy', () => ({
   isLongTermMemoryEnabled: jest.fn(() => true),
 }));
 
+let mockMcpTools: unknown[] = [];
+jest.mock('../../src/services/mcp/manager', () => ({
+  mcpManager: {
+    getAllStatuses: () => [],
+    getAllToolDefinitions: () => mockMcpTools,
+  },
+}));
+
 import { executeToolDescribe } from '../../src/engine/tools/builtin-tool-describe';
 import { parseCompletedToolOutcome, parseFailedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('executeToolDescribe', () => {
-  it('returns full contract for a built-in tool', async () => {
+  beforeEach(() => {
+    mockMcpTools = [];
+  });
+
+  it('returns a built-in tool’s description and input schema', async () => {
     const result = await executeToolDescribe({ name: 'memory_search' });
     const parsed = parseCompletedToolOutcome(result);
 
-    expect(parsed.mode).toBe('describe');
-    expect(parsed.tool.name).toBe('memory_search');
-    expect(parsed.tool.source).toBe('built-in');
-    expect(parsed.tool.schemaVersion).toBe('tool-catalog-entry-v1');
-    expect(parsed.tool.schemaDigest).toMatch(/^schema-fnv1a32:[0-9a-f]{8}$/);
-    expect(parsed.tool.contract?.capabilities).toContain('read');
-    expect(parsed.tool.input_schema).toBeDefined();
-    expect(parsed.tool.activation).toMatchObject({
-      name: 'memory_search',
-      eligible: true,
-      callableNow: true,
-      reason: 'callable_now',
+    expect(parsed).toEqual({
+      mode: 'describe',
+      tool: {
+        name: 'memory_search',
+        description: expect.any(String),
+        source: 'built-in',
+        input_schema: expect.objectContaining({ type: 'object' }),
+        activation: { name: 'memory_search', eligible: true, callableNow: true },
+      },
+    });
+  });
+
+  it('describes a connected MCP tool with the digest activation checks', async () => {
+    mockMcpTools = [
+      {
+        name: 'mcp__srv-1__search_docs',
+        description: 'Search docs',
+        input_schema: { type: 'object', properties: { q: { type: 'string' } } },
+      },
+    ];
+
+    const parsed = parseCompletedToolOutcome(
+      await executeToolDescribe({ name: 'mcp__srv-1__search_docs' }),
+    );
+
+    expect(parsed.tool).toMatchObject({
+      name: 'mcp__srv-1__search_docs',
+      source: 'mcp',
+      schemaDigest: expect.stringMatching(/^schema-fnv1a32:[0-9a-f]{8}$/),
+      input_schema: { type: 'object', properties: { q: { type: 'string' } } },
     });
   });
 

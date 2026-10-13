@@ -81,8 +81,8 @@ describe('memory tool definitions', () => {
     });
   });
 
-  it('lists the memory tools under the memory category', async () => {
-    const outcome = await executeToolCatalog({ category: 'memory' });
+  it('finds the memory tools by what they do', async () => {
+    const outcome = await executeToolCatalog({ query: 'remember search or forget a memory' });
     const listed = JSON.stringify(JSON.parse(outcome.content));
     for (const tool of MEMORY_TOOLS) expect(listed).toContain(tool.name);
   });

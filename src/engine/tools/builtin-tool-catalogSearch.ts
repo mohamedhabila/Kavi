@@ -1,350 +1,169 @@
-import { TOOL_CATALOG_AVAILABLE_CATEGORIES } from './builtin-tool-catalogConfig';
-import type {
-  ExecuteToolCatalogOptions,
-  ToolCatalogSearchToolEntry,
-} from './builtin-tool-catalogTypes';
-import {
-  buildToolCatalogSearchIndex,
-  type CatalogSearchableEntry,
-} from './builtin-tool-catalogSearchIndex';
-import {
-  entryMatchesAnyCapability,
-  entryMatchesCapabilities,
-  entryMatchesCategory,
-  entryMatchesQuery,
-  mergeCatalogMatches,
-  normalizeCapabilityFilters,
-  scoreEntryQueryMatch,
-} from './builtin-tool-catalogSearchMatching';
-import { tokenizeStructuralIdentifiers } from './builtin-tool-catalogSearchTokens';
-import { buildToolCatalogWorkflowEdges } from './builtin-tool-catalogWorkflowEdges';
+// ---------------------------------------------------------------------------
+// Kavi — Tool catalog search
+// ---------------------------------------------------------------------------
+// Ranks the catalog's tools for what the model says it needs, with BM25 over each tool's
+// name and description (Robertson & Zaragoza, "The Probabilistic Relevance Framework: BM25
+// and Beyond", 2009 — the ranking Anthropic's tool search tool uses). Terms are Unicode
+// letter and number runs, so a query in any script is read the same way, and a tool name
+// counts as its parts ("sms_compose" reads "sms compose").
+//
+// There are no category or capability filters: the model guessed them, and a wrong guess
+// hid the tool it needed. Replaying a live run's 39 catalog calls, 59% found a tool the turn
+// went on to need with the filters and 88% with this ranking alone; also adding the
+// producers of the results' required inputs found no more.
+// ---------------------------------------------------------------------------
 
-export {
-  buildToolCatalogActivation,
-  buildToolCatalogSearchIndex,
-  isToolCatalogVisible,
-  TOOL_CATALOG_ENTRY_SCHEMA_VERSION,
-} from './builtin-tool-catalogSearchIndex';
-export { resolveToolCatalogCategoryName } from './builtin-tool-catalogSearchMatching';
-export {
-  scoreStructuralIdentifierToken,
-  tokenizeStructuralIdentifiers,
-} from './builtin-tool-catalogSearchTokens';
+import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
+import { TOOL_CATALOG_CATEGORIES } from './builtin-tool-catalogConfig';
+import { getDynamicMcpCatalog, getDynamicSkillCatalog } from './builtin-tool-catalogDynamic';
+import type { ExecuteToolCatalogOptions, ToolCatalogEntry } from './builtin-tool-catalogTypes';
+import { TOOL_DEFINITIONS } from './definitions';
 
-interface ToolCatalogSearchResult {
-  tools: ToolCatalogSearchToolEntry[];
-  capabilityFiltersRelaxed: boolean;
+/** Results per search. */
+const TOOL_CATALOG_SEARCH_LIMIT = 8;
+/** Description shown per result; the full contract comes with the tool once it is callable. */
+const TOOL_CATALOG_DESCRIPTION_MAX_CHARS = 240;
+const BM25_K1 = 1.2;
+const BM25_B = 0.75;
+
+const TERM_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+
+interface IndexedTool {
+  entry: ToolCatalogEntry;
+  terms: string[];
+  termCounts: Map<string, number>;
 }
 
-export function searchToolCatalogEntries(params: {
-  query?: string;
-  capabilities?: ReadonlyArray<string>;
-  category?: string;
-  options?: ExecuteToolCatalogOptions;
-  limit?: number;
-}): ToolCatalogSearchToolEntry[] {
-  return searchToolCatalogEntriesWithMetadata(params).tools;
+function toolCatalogTerms(text: string): string[] {
+  return (text.normalize('NFKC').toLocaleLowerCase().match(TERM_PATTERN) ?? []).filter(
+    (term) => Array.from(term).length >= 2,
+  );
 }
 
-function searchToolCatalogEntriesWithMetadata(params: {
-  query?: string;
-  capabilities?: ReadonlyArray<string>;
-  category?: string;
-  options?: ExecuteToolCatalogOptions;
-  limit?: number;
-}): ToolCatalogSearchResult {
-  const queryTokens = tokenizeStructuralIdentifiers(params.query?.trim() ?? '');
-  const requiredCapabilities = normalizeCapabilityFilters(params.capabilities);
-  const category = params.category?.trim().toLowerCase();
-  const limit = Math.max(1, params.limit ?? 25);
-  const searchIndex = buildToolCatalogSearchIndex(params.options);
-  let capabilityFiltersRelaxed = false;
-  let matches = searchInitialCatalogEntries(searchIndex, {
-    queryTokens,
-    requiredCapabilities,
-    category,
-  });
-  let workflowSeeds = matches;
+export function isToolCatalogVisible(
+  toolName: string,
+  options?: ExecuteToolCatalogOptions,
+): boolean {
+  return options?.visibleToolNames ? options.visibleToolNames.has(toolName) : true;
+}
 
-  if (matches.length === 0 && requiredCapabilities.length > 0) {
-    matches = searchCapabilityFallbackEntries(searchIndex, {
-      queryTokens,
-      requiredCapabilities,
-      category,
-    });
-    workflowSeeds = matches;
-  }
-  if (matches.length === 0 && queryTokens.length > 0 && requiredCapabilities.length > 0) {
-    matches = searchInitialCatalogEntries(searchIndex, {
-      queryTokens,
-      requiredCapabilities: [],
-      category,
-    });
-    if (matches.length > 0) {
-      capabilityFiltersRelaxed = true;
-      workflowSeeds = matches;
+export function buildToolCatalogActivation(
+  toolName: string,
+  options?: ExecuteToolCatalogOptions,
+): ToolCatalogEntry['activation'] {
+  return {
+    name: toolName,
+    eligible: true,
+    callableNow: options?.availableToolNames ? options.availableToolNames.has(toolName) : true,
+  };
+}
+
+function indexTool(entry: ToolCatalogEntry): IndexedTool {
+  const terms = toolCatalogTerms(`${entry.name.replace(/_+/g, ' ')} ${entry.description}`);
+  const termCounts = new Map<string, number>();
+  for (const term of terms) termCounts.set(term, (termCounts.get(term) ?? 0) + 1);
+  return {
+    entry: {
+      ...entry,
+      description: truncateGraphemesWithSuffix(
+        entry.description,
+        TOOL_CATALOG_DESCRIPTION_MAX_CHARS,
+        '…',
+      ),
+    },
+    terms,
+    termCounts,
+  };
+}
+
+function buildToolCatalogIndex(options?: ExecuteToolCatalogOptions): IndexedTool[] {
+  const definitions = new Map(TOOL_DEFINITIONS.map((tool) => [tool.name, tool]));
+  const indexed = new Map<string, IndexedTool>();
+  for (const [category, config] of Object.entries(TOOL_CATALOG_CATEGORIES)) {
+    // GitHub tools come from MCP servers and skills, indexed below.
+    if (category === 'github') continue;
+    for (const name of config.tools) {
+      const tool = definitions.get(name);
+      if (!tool || indexed.has(name) || !isToolCatalogVisible(name, options)) continue;
+      indexed.set(
+        name,
+        indexTool({
+          name,
+          description: tool.description,
+          source: 'built-in',
+          activation: buildToolCatalogActivation(name, options),
+        }),
+      );
     }
   }
-  if (matches.length === 0 && category) {
-    matches = searchCategoryFallbackEntries(searchIndex, {
-      requiredCapabilities,
-      category,
-      matchAnyCapability: false,
-    });
-  }
-  if (matches.length === 0 && category && requiredCapabilities.length > 0) {
-    matches = searchCategoryFallbackEntries(searchIndex, {
-      requiredCapabilities,
-      category,
-      matchAnyCapability: true,
-    });
-  }
-  if (matches.length === 0 && !category && requiredCapabilities.length > 0) {
-    matches = searchIndex
-      .filter((entry) => entryMatchesAnyCapability(entry, requiredCapabilities))
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }
-  if (category && category !== 'native' && requiredCapabilities.length > 0) {
-    matches = mergeCatalogMatches(
-      matches,
-      searchCategoryFallbackEntries(searchIndex, {
-        requiredCapabilities,
-        category,
-        matchAnyCapability: true,
+  for (const tool of getDynamicMcpCatalog().tools) {
+    if (indexed.has(tool.name) || !isToolCatalogVisible(tool.name, options)) continue;
+    indexed.set(
+      tool.name,
+      indexTool({
+        name: tool.name,
+        description: `${tool.description} (${tool.serverName})`,
+        source: 'mcp',
+        ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
+        activation: buildToolCatalogActivation(tool.name, options),
       }),
     );
   }
-  if (category && category !== 'native') {
-    matches = mergeCatalogMatches(
-      matches,
-      searchCategoryNeighborhoodEntries(searchIndex, { category }),
+  for (const tool of getDynamicSkillCatalog().tools) {
+    if (indexed.has(tool.name) || !isToolCatalogVisible(tool.name, options)) continue;
+    indexed.set(
+      tool.name,
+      indexTool({
+        name: tool.name,
+        description: tool.description,
+        source: 'skill',
+        ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
+        activation: buildToolCatalogActivation(tool.name, options),
+      }),
     );
   }
+  return Array.from(indexed.values());
+}
 
-  if (workflowSeeds.length > 0) {
-    matches = mergeCatalogMatches(
-      matches,
-      searchWorkflowPrerequisiteEntries(searchIndex, workflowSeeds),
-    );
+function rankByBm25(index: ReadonlyArray<IndexedTool>, query: string): IndexedTool[] {
+  const queryTerms = new Set(toolCatalogTerms(query));
+  if (queryTerms.size === 0 || index.length === 0) return [];
+  const averageLength = index.reduce((sum, tool) => sum + tool.terms.length, 0) / index.length;
+  const documentFrequency = new Map<string, number>();
+  for (const tool of index) {
+    for (const term of tool.termCounts.keys()) {
+      if (queryTerms.has(term)) documentFrequency.set(term, (documentFrequency.get(term) ?? 0) + 1);
+    }
   }
-
-  capabilityFiltersRelaxed ||=
-    requiredCapabilities.length > 0 &&
-    matches.some((entry) => !entryMatchesCapabilities(entry, requiredCapabilities));
-
-  return {
-    tools: matches.slice(0, limit).map(projectSearchEntry),
-    capabilityFiltersRelaxed,
-  };
-}
-
-export function buildToolCatalogSearchResponse(params: {
-  query?: string;
-  capabilities?: ReadonlyArray<string>;
-  category?: string;
-  options?: ExecuteToolCatalogOptions;
-}): string {
-  const query = params.query?.trim();
-  const capabilities = normalizeCapabilityFilters(params.capabilities);
-  const rawCategory = params.category?.trim().toLowerCase();
-  const category =
-    rawCategory && TOOL_CATALOG_AVAILABLE_CATEGORIES.includes(rawCategory)
-      ? rawCategory
-      : undefined;
-  let searchResult = searchToolCatalogEntriesWithMetadata({
-    query,
-    capabilities,
-    category,
-    options: params.options,
-  });
-  if (searchResult.tools.length === 0 && capabilities.length > 0 && query && !category) {
-    searchResult = searchToolCatalogEntriesWithMetadata({
-      capabilities,
-      options: params.options,
-    });
-  }
-  const tools = searchResult.tools;
-  const suggestedCategories =
-    category && tools.length === 0
-      ? Array.from(
-          new Set(
-            searchToolCatalogEntriesWithMetadata({
-              query,
-              capabilities,
-              options: params.options,
-            }).tools.map((tool) => tool.category),
-          ),
-        )
-          .filter((candidate) => candidate !== category)
-          .slice(0, 5)
-      : [];
-  const projectedTools = tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    category: tool.category,
-    source: tool.source,
-    schemaVersion: tool.schemaVersion,
-    ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
-    ...(tool.serverName ? { serverName: tool.serverName } : {}),
-    ...(tool.skillName ? { skillName: tool.skillName } : {}),
-    capabilitySummary: tool.capabilitySummary,
-    activation: tool.activation,
-  }));
-
-  return JSON.stringify({
-    mode: 'search',
-    ...(query ? { query } : {}),
-    ...(capabilities.length > 0 ? { capabilities } : {}),
-    ...(category ? { category } : {}),
-    ...(searchResult.capabilityFiltersRelaxed
-      ? {
-          relaxedFilters: ['capabilities'],
-          relaxationReason: 'query_or_workflow_match_without_all_requested_capabilities',
-        }
-      : {}),
-    ...(category && tools.length === 0
-      ? {
-          recovery: {
-            searchWithoutCategory: true,
-            suggestedCategories,
-          },
-        }
-      : {}),
-    tools: projectedTools,
-    workflowEdges: buildToolCatalogWorkflowEdges(projectedTools),
-    totalMatches: tools.length,
-  });
-}
-
-function searchWorkflowPrerequisiteEntries(
-  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
-  consumers: ReadonlyArray<CatalogSearchableEntry>,
-): CatalogSearchableEntry[] {
-  const consumedKinds = new Set(
-    consumers.flatMap((entry) =>
-      (entry.capabilitySummary?.consumes ?? []).map((consumed) => consumed.kind),
-    ),
-  );
-  if (consumedKinds.size === 0) return [];
-  return searchIndex
-    .filter((entry) =>
-      (entry.capabilitySummary?.produces ?? []).some((produced) =>
-        consumedKinds.has(produced.kind),
-      ),
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function searchInitialCatalogEntries(
-  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
-  params: {
-    queryTokens: ReadonlyArray<string>;
-    requiredCapabilities: ReadonlyArray<string>;
-    category: string | undefined;
-  },
-): CatalogSearchableEntry[] {
-  const exactIdentifierTokens = new Set(
-    params.queryTokens.filter((token) =>
-      searchIndex.some((entry) => entry.name.toLowerCase() === token),
-    ),
-  );
-  if (exactIdentifierTokens.size > 1 && exactIdentifierTokens.size === params.queryTokens.length) {
-    return searchIndex.filter(
-      (entry) =>
-        exactIdentifierTokens.has(entry.name.toLowerCase()) &&
-        entryMatchesCategory(entry, params.category) &&
-        entryMatchesAnyCapability(entry, params.requiredCapabilities),
-    );
-  }
-  return searchIndex
-    .filter(
-      (entry) =>
-        entryMatchesCategory(entry, params.category) &&
-        entryMatchesQuery(entry, params.queryTokens) &&
-        entryMatchesCapabilities(entry, params.requiredCapabilities),
-    )
-    .sort((left, right) => sortByQueryScore(left, right, params.queryTokens));
-}
-
-function searchCapabilityFallbackEntries(
-  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
-  params: {
-    queryTokens: ReadonlyArray<string>;
-    requiredCapabilities: ReadonlyArray<string>;
-    category: string | undefined;
-  },
-): CatalogSearchableEntry[] {
-  return searchIndex
-    .filter(
-      (entry) =>
-        entryMatchesCategory(entry, params.category) &&
-        entryMatchesQuery(entry, params.queryTokens) &&
-        entryMatchesAnyCapability(entry, params.requiredCapabilities),
-    )
-    .sort((left, right) => {
-      const leftStrict = entryMatchesCapabilities(left, params.requiredCapabilities) ? 1 : 0;
-      const rightStrict = entryMatchesCapabilities(right, params.requiredCapabilities) ? 1 : 0;
-      if (leftStrict !== rightStrict) {
-        return rightStrict - leftStrict;
+  return index
+    .map((tool) => {
+      let score = 0;
+      for (const term of queryTerms) {
+        const frequency = tool.termCounts.get(term);
+        if (!frequency) continue;
+        const containing = documentFrequency.get(term) ?? 0;
+        const idf = Math.log(1 + (index.length - containing + 0.5) / (containing + 0.5));
+        score +=
+          (idf * frequency * (BM25_K1 + 1)) /
+          (frequency +
+            BM25_K1 * (1 - BM25_B + (BM25_B * tool.terms.length) / Math.max(averageLength, 1)));
       }
-      return sortByQueryScore(left, right, params.queryTokens);
-    });
-}
-
-function searchCategoryFallbackEntries(
-  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
-  params: {
-    requiredCapabilities: ReadonlyArray<string>;
-    category: string;
-    matchAnyCapability: boolean;
-  },
-): CatalogSearchableEntry[] {
-  const matchesCapabilities = params.matchAnyCapability
-    ? entryMatchesAnyCapability
-    : entryMatchesCapabilities;
-  return searchIndex
-    .filter(
-      (entry) =>
-        entryMatchesCategory(entry, params.category) &&
-        matchesCapabilities(entry, params.requiredCapabilities),
+      return { tool, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.tool.entry.name.localeCompare(right.tool.entry.name),
     )
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .map(({ tool }) => tool);
 }
 
-function searchCategoryNeighborhoodEntries(
-  searchIndex: ReadonlyArray<CatalogSearchableEntry>,
-  params: { category: string },
-): CatalogSearchableEntry[] {
-  return searchIndex
-    .filter((entry) => entryMatchesCategory(entry, params.category))
-    .sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function sortByQueryScore(
-  left: CatalogSearchableEntry,
-  right: CatalogSearchableEntry,
-  queryTokens: ReadonlyArray<string>,
-): number {
-  const scoreDelta =
-    scoreEntryQueryMatch(right, queryTokens) - scoreEntryQueryMatch(left, queryTokens);
-  if (scoreDelta !== 0) {
-    return scoreDelta;
-  }
-  return left.name.localeCompare(right.name);
-}
-
-function projectSearchEntry(entry: CatalogSearchableEntry): ToolCatalogSearchToolEntry {
-  return {
-    name: entry.name,
-    description: entry.description,
-    category: entry.category,
-    source: entry.source,
-    schemaVersion: entry.schemaVersion,
-    ...(entry.schemaDigest ? { schemaDigest: entry.schemaDigest } : {}),
-    ...(entry.purpose ? { purpose: entry.purpose } : {}),
-    ...(entry.serverName ? { serverName: entry.serverName } : {}),
-    ...(entry.skillName ? { skillName: entry.skillName } : {}),
-    ...(entry.capabilitySummary ? { capabilitySummary: entry.capabilitySummary } : {}),
-    activation: entry.activation,
-  };
+/** The catalog tools that best match `query`, best first. */
+export function searchToolCatalog(
+  query: string,
+  options?: ExecuteToolCatalogOptions,
+): ToolCatalogEntry[] {
+  return rankByBm25(buildToolCatalogIndex(options), query)
+    .slice(0, TOOL_CATALOG_SEARCH_LIMIT)
+    .map((tool) => tool.entry);
 }
