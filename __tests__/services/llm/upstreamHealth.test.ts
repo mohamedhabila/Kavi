@@ -2,6 +2,7 @@ import {
   _resetUpstreamToolCallHealthForTests,
   getExcludedUpstreams,
   noteToolCallsServedBy,
+  noteUpstreamCacheResult,
   settleToolCallOutcome,
 } from '../../../src/services/llm/support/upstreamHealth';
 
@@ -93,5 +94,62 @@ describe('upstream tool-call health', () => {
     settleToolCallOutcome({ id: 'direct-2', status: 'failed', failureKind: 'invalid_arguments' });
 
     expect(getExcludedUpstreams(MODEL)).toEqual([]);
+  });
+});
+
+// Every GLM 5.3 Flash upstream lists a cache-read price, but one read 3k of 191k input tokens
+// from cache over 38 calls repeating the prefix before them while another read 91%; the
+// aggregator keeps a conversation on its first upstream, so landing there costs full price.
+describe('upstream prompt-cache health', () => {
+  const PREFIX = 'prompt-prefix-fnv1a32:abc|tools:def';
+  const MINUTE = 60_000;
+
+  function cacheCall(upstream: string, at: number, cacheReadTokens: number, overrides = {}) {
+    noteUpstreamCacheResult({
+      model: MODEL,
+      upstream,
+      prefixDigest: PREFIX,
+      inputTokens: 10_000,
+      cacheReadTokens,
+      now: at,
+      ...overrides,
+    });
+  }
+
+  it('routes around an upstream after three repeated prefixes that read nothing from cache', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    cacheCall('Venice', 0, 0);
+    cacheCall('Venice', 1 * MINUTE, 0);
+    cacheCall('Venice', 2 * MINUTE, 0);
+    expect(getExcludedUpstreams(MODEL, 2 * MINUTE)).toEqual([]);
+
+    cacheCall('Venice', 3 * MINUTE, 0);
+    expect(getExcludedUpstreams(MODEL, 3 * MINUTE)).toEqual(['Venice']);
+    expect(warn).toHaveBeenCalled();
+    expect(getExcludedUpstreams(MODEL, 3 * MINUTE + 2 * 60 * MINUTE + 1)).toEqual([]);
+  });
+
+  it('keeps an upstream whose cache hits, even after some misses', () => {
+    cacheCall('Together', 0, 0);
+    cacheCall('Together', MINUTE, 0);
+    cacheCall('Together', 2 * MINUTE, 0);
+    cacheCall('Together', 3 * MINUTE, 3_776);
+    cacheCall('Together', 4 * MINUTE, 0);
+    cacheCall('Together', 5 * MINUTE, 0);
+
+    expect(getExcludedUpstreams(MODEL, 5 * MINUTE)).toEqual([]);
+  });
+
+  it('expects no hit for a first prefix, a stale one, a short one or an unknown upstream', () => {
+    // Each call starts its prefix anew: more than five minutes passed since the last.
+    for (let index = 0; index < 6; index += 1) cacheCall('Crusoe', index * 6 * MINUTE, 0);
+    // Too short to be cached by every provider, and calls an aggregator did not attribute.
+    for (let index = 0; index < 6; index += 1) {
+      cacheCall('Crusoe', 40 * MINUTE + index * MINUTE, 0, { inputTokens: 1_000 });
+      cacheCall('', 40 * MINUTE + index * MINUTE, 0);
+      cacheCall('Crusoe', 40 * MINUTE + index * MINUTE, 0, { prefixDigest: undefined });
+    }
+
+    expect(getExcludedUpstreams(MODEL, 50 * MINUTE)).toEqual([]);
   });
 });

@@ -151,9 +151,9 @@ export async function sendOpenAICompatibleChat(args: {
   if (structuredOutput) {
     body.response_format = args.buildCompatibleStructuredOutputFormat(structuredOutput);
   }
-  if (requestTools?.length && isOpenRouterProvider) {
-    // Leave out upstreams whose tool calls for this model have recently arrived malformed;
-    // see upstreamHealth.
+  if (isOpenRouterProvider) {
+    // Leave out upstreams that recently sent this model's tool calls malformed or never hit
+    // their prompt cache; see upstreamHealth.
     const excludedUpstreams = getExcludedUpstreams(args.model);
     if (excludedUpstreams.length > 0) {
       body.provider = { ...(body.provider ?? {}), ignore: excludedUpstreams };

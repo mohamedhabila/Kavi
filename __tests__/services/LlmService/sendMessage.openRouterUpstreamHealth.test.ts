@@ -2,11 +2,13 @@ import { LlmService, makeConfig, mockFetch } from '../../helpers/llmServiceHarne
 import {
   _resetUpstreamToolCallHealthForTests,
   noteToolCallsServedBy,
+  noteUpstreamCacheResult,
   settleToolCallOutcome,
 } from '../../../src/services/llm/support/upstreamHealth';
 
-// An upstream whose tool calls for this model keep arriving malformed is left out of the
-// next tool requests — through the person's own OpenRouter key, in the request itself.
+// An upstream whose tool calls for this model keep arriving malformed, or whose prompt cache
+// never hits, is left out of the next requests — through the person's own OpenRouter key, in
+// the request itself.
 
 const MODEL = 'z-ai/glm-5.3-flash';
 const TOOLS = [
@@ -82,12 +84,25 @@ describe('OpenRouter tool requests after malformed tool calls', () => {
 
     expect(body.provider).toBeUndefined();
   });
+});
 
-  it('are not changed for requests without tools', async () => {
-    tripUpstream('InferenceNet');
+describe('OpenRouter requests after an upstream whose prompt cache never hits', () => {
+  it('leave it out of every request, with or without tools', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    for (let minute = 0; minute < 4; minute += 1) {
+      noteUpstreamCacheResult({
+        model: MODEL,
+        upstream: 'Venice',
+        prefixDigest: 'prefix|tools',
+        inputTokens: 10_000,
+        cacheReadTokens: 0,
+        now: Date.now() - (4 - minute) * 60_000,
+      });
+    }
 
-    const body = await sentBody(openRouter(), {});
-
-    expect(body.provider).toBeUndefined();
+    expect((await sentBody(openRouter(), {})).provider).toEqual({ ignore: ['Venice'] });
+    expect((await sentBody(openRouter(), { tools: TOOLS })).provider).toEqual({
+      ignore: ['Venice'],
+    });
   });
 });

@@ -3,6 +3,7 @@ import { estimateTokens } from '../../services/context/tokenCounter';
 import { estimateApiMessagesTokens } from '../../services/context/contentTokens';
 import { getObservedTokenCalibrationFactor } from '../../services/context/tokenCalibration';
 import { recordAndPersistTokenCalibrationObservation } from '../../services/usage/tracker';
+import { noteUpstreamCacheResult } from '../../services/llm/support/upstreamHealth';
 import type { TokenUsage, UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
 import type { ToolDefinition } from '../../types/tool';
 import { createLogger } from '../../utils/logger';
@@ -221,6 +222,17 @@ export function createModelTurnUsageTracker(
       // just tautologically confirm whatever factor is already in effect. Calibration is a
       // side channel: it runs after the usage report and can never withhold it.
       if (hasRealProviderUsage) {
+        const promptCache = params.usageTelemetry?.promptCache;
+        noteUpstreamCacheResult({
+          model: params.requestModel,
+          upstream: latestUsage.upstreamProvider,
+          prefixDigest:
+            promptCache?.cacheablePrefixDigest && promptCache.toolDeclarationDigest
+              ? `${promptCache.cacheablePrefixDigest}|${promptCache.toolDeclarationDigest}`
+              : undefined,
+          inputTokens: latestUsage.inputTokens,
+          cacheReadTokens: latestUsage.cacheReadTokens ?? 0,
+        });
         try {
           recordModelTurnTokenCalibration({
             family: params.calibrationFamily,

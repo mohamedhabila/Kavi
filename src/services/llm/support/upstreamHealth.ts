@@ -1,19 +1,25 @@
 import type { ToolCall } from '../../../types/message';
 import { createLogger } from '../../../utils/logger';
 
-const logger = createLogger('UpstreamToolCallHealth');
+const logger = createLogger('UpstreamHealth');
 
 /**
- * Tool-call health of the upstreams an aggregator routes a model to.
+ * Health of the upstreams an aggregator routes a model to.
  *
- * A routed provider (OpenRouter) serves one model from many upstreams, and an upstream's
- * tool-call parser can be broken while every other one is fine. Measured for GLM 5.3 Flash
- * on OpenRouter: one upstream delivered `update_goals` with its arguments stripped in 5 of
- * 8 forced calls and looped every run it served, while six others never did. People bring
- * their own keys, so nothing can be configured per account: the app watches the tool calls
- * each upstream produces and, after repeated argument faults, asks the aggregator not to
- * route this model there for a while. It is a circuit breaker on a failing dependency,
- * keyed by what was observed, never a list of names.
+ * A routed provider (OpenRouter) serves one model from many upstreams, and one upstream can
+ * be broken while every other one is fine. People bring their own keys, so nothing can be
+ * configured per account: the app watches what each upstream does and, after repeated
+ * failures, asks the aggregator not to route this model there for a while. It is a circuit
+ * breaker on a failing dependency, keyed by what was observed, never a list of names.
+ *
+ * Two failures trip it:
+ * - Tool calls that arrive with their arguments stripped. Measured for GLM 5.3 Flash: one
+ *   upstream did it in 5 of 8 forced calls and looped every run it served; six never did.
+ * - A prompt cache that never hits. Every GLM 5.3 Flash upstream lists a cache-read price,
+ *   yet one read 3k of 191k input tokens from cache over 38 calls that repeated the prefix
+ *   of the call before them, while another read 91%. The aggregator keeps a conversation on
+ *   the upstream that served it first, so a conversation that lands there pays full price
+ *   for its whole context on every call.
  */
 
 /** Consecutive argument faults from one upstream, with no good call between, that trip it. */
@@ -24,8 +30,26 @@ const EXCLUSION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_EXCLUDED_UPSTREAMS_PER_MODEL = 3;
 /** Bound on tool calls awaiting their outcome, so unsettled ones cannot accumulate. */
 const MAX_PENDING_ATTRIBUTIONS = 512;
+/**
+ * Calls that repeat a recent prefix on the same upstream and read nothing from its cache,
+ * with no hit between, that trip it.
+ */
+const TRIP_AFTER_CONSECUTIVE_CACHE_MISSES = 3;
+/**
+ * How recently the same prefix must have been sent for a call to be expected to hit: inside
+ * the shortest provider cache lifetime (five minutes) and the aggregator's ten-minute window.
+ */
+const CACHE_EXPECTED_WITHIN_MS = 5 * 60 * 1000;
+/** Prefixes shorter than this may sit under a provider's caching minimum. */
+const MIN_CACHEABLE_INPUT_TOKENS = 2_048;
+/** Bound on remembered prefixes. */
+const MAX_REMEMBERED_PREFIXES = 256;
 
-type UpstreamHealth = { consecutiveFaults: number; excludedUntil?: number };
+type UpstreamHealth = {
+  consecutiveFaults: number;
+  consecutiveCacheMisses: number;
+  excludedUntil?: number;
+};
 
 const healthByModel = new Map<string, Map<string, UpstreamHealth>>();
 const attributionByToolCallId = new Map<string, { model: string; upstream: string }>();
@@ -38,7 +62,7 @@ function healthFor(model: string, upstream: string): UpstreamHealth {
   }
   let health = byUpstream.get(upstream);
   if (!health) {
-    health = { consecutiveFaults: 0 };
+    health = { consecutiveFaults: 0, consecutiveCacheMisses: 0 };
     byUpstream.set(upstream, health);
   }
   return health;
@@ -90,19 +114,77 @@ export function settleToolCallOutcome(
     return;
   }
 
+  if (health.consecutiveFaults >= TRIP_AFTER_CONSECUTIVE_FAULTS) {
+    trip(
+      attribution.model,
+      attribution.upstream,
+      health,
+      now,
+      'Routing around an upstream whose tool calls arrive malformed.',
+    );
+  }
+}
+
+function trip(
+  model: string,
+  upstream: string,
+  health: UpstreamHealth,
+  now: number,
+  reason: string,
+) {
   const alreadyExcluded = health.excludedUntil !== undefined && health.excludedUntil > now;
-  if (
-    health.consecutiveFaults >= TRIP_AFTER_CONSECUTIVE_FAULTS &&
-    !alreadyExcluded &&
-    countExcluded(attribution.model, now) < MAX_EXCLUDED_UPSTREAMS_PER_MODEL
-  ) {
-    health.excludedUntil = now + EXCLUSION_TTL_MS;
-    health.consecutiveFaults = 0;
-    logger.warn('Routing around an upstream whose tool calls arrive malformed.', {
-      model: attribution.model,
-      upstream: attribution.upstream,
-      excludedForMs: EXCLUSION_TTL_MS,
-    });
+  if (alreadyExcluded || countExcluded(model, now) >= MAX_EXCLUDED_UPSTREAMS_PER_MODEL) return;
+  health.excludedUntil = now + EXCLUSION_TTL_MS;
+  health.consecutiveFaults = 0;
+  health.consecutiveCacheMisses = 0;
+  logger.warn(reason, { model, upstream, excludedForMs: EXCLUSION_TTL_MS });
+}
+
+/** When each prefix was last sent to each upstream, to know which calls should hit. */
+const prefixLastSentAt = new Map<string, number>();
+
+/**
+ * Note how much of a call's input an upstream read from its cache. A call counts only when
+ * the same upstream was sent the same cacheable prefix (system prompt and tools) moments
+ * before, long enough to be cached: that call should read at least that prefix back.
+ */
+export function noteUpstreamCacheResult(params: {
+  model: string;
+  upstream: string | undefined;
+  prefixDigest: string | undefined;
+  inputTokens: number;
+  cacheReadTokens: number;
+  now?: number;
+}): void {
+  const upstream = params.upstream?.trim();
+  if (!upstream || !params.model || !params.prefixDigest) return;
+  if (!(params.inputTokens >= MIN_CACHEABLE_INPUT_TOKENS)) return;
+  const now = params.now ?? Date.now();
+  const key = `${params.model}\u0000${upstream}\u0000${params.prefixDigest}`;
+  const lastSentAt = prefixLastSentAt.get(key);
+  prefixLastSentAt.delete(key);
+  prefixLastSentAt.set(key, now);
+  while (prefixLastSentAt.size > MAX_REMEMBERED_PREFIXES) {
+    const oldest = prefixLastSentAt.keys().next().value;
+    if (oldest === undefined) break;
+    prefixLastSentAt.delete(oldest);
+  }
+  if (lastSentAt === undefined || now - lastSentAt > CACHE_EXPECTED_WITHIN_MS) return;
+
+  const health = healthFor(params.model, upstream);
+  if (params.cacheReadTokens > 0) {
+    health.consecutiveCacheMisses = 0;
+    return;
+  }
+  health.consecutiveCacheMisses += 1;
+  if (health.consecutiveCacheMisses >= TRIP_AFTER_CONSECUTIVE_CACHE_MISSES) {
+    trip(
+      params.model,
+      upstream,
+      health,
+      now,
+      'Routing around an upstream whose prompt cache never hits.',
+    );
   }
 }
 
@@ -121,4 +203,5 @@ export function getExcludedUpstreams(model: string, now: number = Date.now()): s
 export function _resetUpstreamToolCallHealthForTests(): void {
   healthByModel.clear();
   attributionByToolCallId.clear();
+  prefixLastSentAt.clear();
 }

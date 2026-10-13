@@ -25,6 +25,10 @@ import {
   getObservedTokenCalibrationFactor,
   resetTokenCalibrationForTests,
 } from '../../src/services/context/tokenCalibration';
+import {
+  _resetUpstreamToolCallHealthForTests,
+  getExcludedUpstreams,
+} from '../../src/services/llm/support/upstreamHealth';
 
 const FAMILY = 'anthropic';
 
@@ -192,5 +196,40 @@ describe('createModelTurnUsageTracker token calibration', () => {
     tracker.flush({ allowFallback: true, budgetTools: [], requestMessages: [] });
 
     expect(getObservedTokenCalibrationFactor(FAMILY)).toBeGreaterThan(factorAfterFirstFlush);
+  });
+});
+
+describe('createModelTurnUsageTracker upstream cache health', () => {
+  beforeEach(() => {
+    _resetUpstreamToolCallHealthForTests();
+  });
+
+  // The upstream a call landed on is judged by what it read back from cache; the breaker
+  // decides whether that call was expected to hit.
+  it('reports each provider-reported call, with its prefix, to the upstream breaker', () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    for (let call = 0; call < 4; call += 1) {
+      const { tracker } = makeTracker({
+        requestModel: 'z-ai/glm-5.3-flash',
+        usageTelemetry: {
+          promptCache: {
+            eligible: true,
+            enabled: true,
+            estimatedInputTokens: 9_000,
+            thresholdTokens: 1_024,
+            providerFamily: 'openai',
+            mode: 'openai_native',
+            event: 'reuse',
+            reason: 'implicit',
+            cacheablePrefixDigest: 'prompt-prefix-fnv1a32:abc',
+            toolDeclarationDigest: 'tools:def',
+          },
+        },
+      });
+      tracker.mergeSnapshot({ inputTokens: 9_000, outputTokens: 10, upstreamProvider: 'Venice' });
+      tracker.flush({ allowFallback: false, budgetTools: [], requestMessages: [] });
+    }
+
+    expect(getExcludedUpstreams('z-ai/glm-5.3-flash')).toEqual(['Venice']);
   });
 });
