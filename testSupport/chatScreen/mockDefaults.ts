@@ -20,9 +20,8 @@ import {
   mockAddToolCall,
   mockAppendAgentRunCheckpoint,
   mockCompleteAgentRun,
-  mockCreateConversation,
   mockRewindUserMessageForResend,
-  mockGetOrCreateCanonicalThread,
+  mockEnsureConversation,
   mockRecordAgentRunEvidence,
   mockRecordConversationUsage,
   mockSetActiveProviderAndModel,
@@ -89,8 +88,7 @@ export function resetChatScreenTestEnvironment() {
     mockAddMessage,
     mockUpdateMessage,
     mockUpdateMessageEnrichedContent,
-    mockCreateConversation,
-    mockGetOrCreateCanonicalThread,
+      mockEnsureConversation,
     mockSetLoading,
     mockSetActiveConversation,
     mockRewindUserMessageForResend,
@@ -149,20 +147,17 @@ export function resetChatScreenTestEnvironment() {
   mockChatRoute.params = {};
 
   resetMockChatScreenState();
-  mockCreateConversation.mockReturnValue('new-conv');
-  mockGetOrCreateCanonicalThread.mockImplementation(
+  mockEnsureConversation.mockImplementation(
     (
       providerId: string,
       systemPrompt: string,
       modelOverride?: string,
       options?: { activate?: boolean; personaId?: string; mode?: string },
     ) => {
-      const groupKey = options?.personaId || '__default__';
-      const existing = mockChatScreenState.conversations.find(
-        (conversation) =>
-          conversation.isCanonical === true &&
-          (conversation.personaId || '__default__') === groupKey,
-      );
+      const existing =
+        mockChatScreenState.conversations.find(
+          (conversation) => conversation.id === mockChatScreenState.activeConversationId,
+        ) ?? mockChatScreenState.conversations[0];
       let conversationId = existing?.id ?? 'new-conv';
       let suffix = 2;
       while (
@@ -187,7 +182,6 @@ export function resetChatScreenTestEnvironment() {
             updatedAt: timestamp,
             personaId: options?.personaId,
             mode: options?.mode,
-            isCanonical: true,
             usage: {
               entries: [],
               totalInput: 0,

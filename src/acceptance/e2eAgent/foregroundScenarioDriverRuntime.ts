@@ -361,7 +361,7 @@ export function createForegroundScenarioRuntime(
       clearTrackedRunCancellation: clearAgentRunCancellation,
       createId: generateId,
       ensureAgentRunFinalResponse,
-      ensureCanonicalConversation: (options = {}) => {
+      ensureConversation: (options = {}) => {
         const currentSettings = useSettingsStore.getState();
         const providerId = options.providerId ?? currentSettings.activeProviderId;
         if (!providerId) {
@@ -371,7 +371,7 @@ export function createForegroundScenarioRuntime(
         const provider = currentSettings.providers.find((candidate) => candidate.id === providerId);
         return useChatStore
           .getState()
-          .getOrCreateCanonicalThread(
+          .ensureConversation(
             providerId,
             currentSettings.systemPrompt,
             options.model ?? provider?.model,

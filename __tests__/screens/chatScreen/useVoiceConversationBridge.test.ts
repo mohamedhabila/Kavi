@@ -5,6 +5,7 @@ import {
   sendVoiceConversationTurn,
 } from '../../../src/services/voice/voiceConversationBridge';
 import { useChatStore } from '../../../src/store/useChatStore';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useVoiceConversationBridge', () => {
   beforeEach(() => {
@@ -21,9 +22,7 @@ describe('useVoiceConversationBridge', () => {
   });
 
   it('returns the newly persisted final assistant message from the active conversation', async () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openrouter', 'system prompt');
+    const conversationId = addConversation('openrouter', 'system prompt');
     const handleSend = jest.fn(async (input: string) => {
       const store = useChatStore.getState();
       store.addMessage(conversationId, {
@@ -58,9 +57,7 @@ describe('useVoiceConversationBridge', () => {
   });
 
   it('does not replay an old assistant response when the new run produces none', async () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openrouter', 'system prompt');
+    const conversationId = addConversation('openrouter', 'system prompt');
     useChatStore.getState().addMessage(conversationId, {
       id: 'old-assistant',
       role: 'assistant',
@@ -75,9 +72,7 @@ describe('useVoiceConversationBridge', () => {
   });
 
   it('ignores intermediate drafts and returns the final response', async () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openrouter', 'system prompt');
+    const conversationId = addConversation('openrouter', 'system prompt');
     const handleSend = jest.fn(async () => {
       const store = useChatStore.getState();
       store.addMessage(conversationId, {

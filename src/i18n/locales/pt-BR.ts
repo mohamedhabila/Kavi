@@ -219,8 +219,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     starterRememberPrompt: 'Lembre uma preferência que vou compartilhar para a próxima vez.',
     starterCreatePrompt: 'Ajude-me a criar algo a partir de uma foto ou arquivo.',
     starterActPrompt: 'Ajude-me a agir com segurança e pergunte antes de qualquer ação sensível.',
-    continueRecent: 'Continuar uma conversa recente',
-    continueRecentAccessibility: 'Continuar conversa recente: {title}',
     thinking: 'Pensando…',
     toolCall: 'Usando ferramenta: {name}',
     runStopped: {

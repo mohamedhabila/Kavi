@@ -1,5 +1,6 @@
 import { resolveConversationStartsAgentic } from '../../../../src/engine/graph/conversation/resolveConversationRuntimeMode';
 import { useChatStore } from '../../../../src/store/useChatStore';
+import { addConversation } from '../../../helpers/chatConversationFixtures';
 
 describe('resolveConversationStartsAgentic', () => {
   beforeEach(() => {
@@ -11,9 +12,7 @@ describe('resolveConversationStartsAgentic', () => {
   });
 
   it('follows the conversation\'s persisted mode for a non-SuperAgent persona in agentic mode', () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'system', undefined, {
+    const conversationId = addConversation('openai', 'system', undefined, {
         personaId: 'default',
         mode: 'agentic',
       });
@@ -26,9 +25,7 @@ describe('resolveConversationStartsAgentic', () => {
   });
 
   it('follows the conversation into chitchat even when the persona is SuperAgent', () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'system', undefined, {
+    const conversationId = addConversation('openai', 'system', undefined, {
         personaId: 'super-agent',
         mode: 'chitchat',
       });

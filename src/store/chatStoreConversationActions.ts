@@ -3,6 +3,7 @@ import { generateId } from '../utils/id';
 import { getDefaultConversationTitle } from '../utils/conversation';
 import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
+import type { Conversation, ConversationMode } from '../types/conversation';
 import type { ChatState } from './chatStoreTypes';
 import { deleteConversationMemory } from '../services/memory/core/memoryCapture';
 import { createLogger } from '../utils/logger';
@@ -24,11 +25,40 @@ function buildEmptyConversationUsage() {
   };
 }
 
+
+/** A new, empty conversation, attached to the default workspace target when one is set. */
+export function buildConversation(params: {
+  providerId: string;
+  systemPrompt: string;
+  modelOverride?: string;
+  personaId?: string;
+  mode?: ConversationMode;
+}): Conversation {
+  const now = Date.now();
+  const workspaceTargetId = resolveConversationWorkspaceTargetId();
+  return {
+    id: generateId(),
+    title: getDefaultConversationTitle(),
+    messages: [],
+    providerId: params.providerId,
+    modelOverride: params.modelOverride,
+    systemPrompt: params.systemPrompt,
+    createdAt: now,
+    updatedAt: now,
+    personaId: params.personaId,
+    mode: params.mode,
+    usage: buildEmptyConversationUsage(),
+    logs: [],
+    agentRuns: [],
+    ...(workspaceTargetId ? { workspaceTargetId } : {}),
+  };
+}
+
 const logger = createLogger('ChatStoreConversations');
 
 /**
- * Remove a deleted conversation's archived history. The deletion itself must not fail on it:
- * whatever is left is removed when the app next starts.
+ * Remove archived history while clearing the chat history. The clear itself must not fail on
+ * it: whatever is left is removed when the app next starts.
  */
 function removeArchivedHistory(remove: () => void): void {
   try {
@@ -48,8 +78,7 @@ export function createConversationStoreActions(
   get: ChatStoreGet,
 ): Pick<
   ChatState,
-  | 'createConversation'
-  | 'getOrCreateCanonicalThread'
+  | 'ensureConversation'
   | 'setActiveConversation'
   | 'clearAllConversations'
   | 'updateModelInConversation'
@@ -57,105 +86,36 @@ export function createConversationStoreActions(
   | 'updateModeInConversation'
 > {
   return {
-    createConversation: (providerId, systemPrompt, modelOverride, options) => {
-      const now = Date.now();
-      const id = generateId();
-      const replaceCanonical = options?.replaceCanonical === true;
-      const workspaceTargetId = resolveConversationWorkspaceTargetId();
-      const newConversation = {
-        id,
-        title: getDefaultConversationTitle(),
-        messages: [],
-        providerId,
-        modelOverride,
-        systemPrompt,
-        createdAt: now,
-        updatedAt: now,
-        personaId: options?.personaId,
-        mode: options?.mode,
-        ...(replaceCanonical ? { isCanonical: true } : { isStandaloneThread: true }),
-        usage: buildEmptyConversationUsage(),
-        logs: [],
-        agentRuns: [],
-        ...(workspaceTargetId ? { workspaceTargetId } : {}),
-      };
-      set((state) => {
-        const personaKey = options?.personaId?.length ? options.personaId : '__default__';
-        const existingConversations = replaceCanonical
-          ? state.conversations.map((conversation) => {
-              const conversationPersonaKey = conversation.personaId?.length
-                ? conversation.personaId
-                : '__default__';
-              if (
-                conversation.archivedFromMigration ||
-                !conversation.isCanonical ||
-                conversationPersonaKey !== personaKey
-              ) {
-                return conversation;
-              }
-              return {
-                ...conversation,
-                isCanonical: false,
-                archivedFromMigration: true,
-              };
-            })
-          : state.conversations;
-        return {
-          conversations: [newConversation, ...existingConversations],
-          activeConversationId: options?.activate === false ? state.activeConversationId : id,
-        };
-      });
-      requestChatStorePersistenceCheckpoint();
-      return id;
-    },
-
-    getOrCreateCanonicalThread: (providerId, systemPrompt, modelOverride, options) => {
-      const groupKey =
-        options?.personaId && options.personaId.length > 0 ? options.personaId : '__default__';
-      const { conversations } = get();
-      const existingCandidates = conversations.filter((c) => {
-        if (c.isStandaloneThread || c.archivedFromMigration) return false;
-        if (!c.isCanonical) return false;
-        const ownKey = c.personaId && c.personaId.length > 0 ? c.personaId : '__default__';
-        return ownKey === groupKey;
-      });
+    ensureConversation: (providerId, systemPrompt, modelOverride, options) => {
+      const { conversations, activeConversationId } = get();
       const existing =
-        existingCandidates.length > 0
-          ? existingCandidates.reduce((best, c) => (c.updatedAt > best.updatedAt ? c : best))
-          : undefined;
+        conversations.find((conversation) => conversation.id === activeConversationId) ??
+        conversations.reduce<Conversation | undefined>(
+          (latest, conversation) =>
+            !latest || conversation.updatedAt > latest.updatedAt ? conversation : latest,
+          undefined,
+        );
       if (existing) {
-        if (options?.activate !== false) {
+        if (options?.activate !== false && existing.id !== activeConversationId) {
           set({ activeConversationId: existing.id });
           requestChatStorePersistenceCheckpoint();
         }
         return existing.id;
       }
-      const now = Date.now();
-      const id = generateId();
-      const workspaceTargetId = resolveConversationWorkspaceTargetId();
-      const newConversation = {
-        id,
-        title: getDefaultConversationTitle(),
-        messages: [],
+      const conversation = buildConversation({
         providerId,
-        modelOverride,
         systemPrompt,
-        createdAt: now,
-        updatedAt: now,
+        modelOverride,
         personaId: options?.personaId,
         mode: options?.mode,
-        isCanonical: true,
-        usage: buildEmptyConversationUsage(),
-        logs: [],
-        agentRuns: [],
-        ...(workspaceTargetId ? { workspaceTargetId } : {}),
-      };
+      });
       set((state) => ({
-        conversations: [newConversation, ...state.conversations],
-        activeConversationId: options?.activate === false ? state.activeConversationId : id,
+        conversations: [conversation, ...state.conversations],
+        activeConversationId:
+          options?.activate === false ? state.activeConversationId : conversation.id,
       }));
       requestChatStorePersistenceCheckpoint();
-      return id;
+      return conversation.id;
     },
 
     setActiveConversation: (id) => {

@@ -211,8 +211,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     starterRememberPrompt: '请记住我接下来会分享的一个偏好，以便下次使用。',
     starterCreatePrompt: '请帮我根据照片或文件创作内容。',
     starterActPrompt: '请帮我安全地执行操作，并在任何敏感操作前征求我的同意。',
-    continueRecent: '继续最近的聊天',
-    continueRecentAccessibility: '继续最近的聊天：{title}',
     thinking: '思考中…',
     toolCall: '使用工具：{name}',
     runStopped: {

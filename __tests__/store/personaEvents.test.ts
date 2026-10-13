@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../src/store/useChatStore';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 beforeEach(() => {
   useChatStore.setState({
@@ -13,7 +14,7 @@ beforeEach(() => {
 });
 
 const seedConversationWithMessage = (personaId?: string) => {
-  const convId = useChatStore.getState().createConversation('p1', 'sys');
+  const convId = addConversation('p1', 'sys');
   if (personaId) {
     useChatStore.setState((state) => ({
       conversations: state.conversations.map((c) => (c.id === convId ? { ...c, personaId } : c)),
@@ -32,7 +33,7 @@ const personaEventsOf = (convId: string) =>
 
 describe('updatePersonaInConversation — personaEvents log', () => {
   it('does not record an event for an empty conversation (no messages)', () => {
-    const convId = useChatStore.getState().createConversation('p1', 'sys');
+    const convId = addConversation('p1', 'sys');
     useChatStore.getState().updatePersonaInConversation(convId, 'work');
     expect(personaEventsOf(convId)).toEqual([]);
     const conv = useChatStore.getState().conversations.find((c) => c.id === convId);

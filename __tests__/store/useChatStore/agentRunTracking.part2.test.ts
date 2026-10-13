@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('agent run tracking part 2', () => {
     it('preserves the current phase by default when late worker updates target an earlier phase', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-phase-regression',
         goal: 'Keep later workflow phases stable.',
@@ -64,7 +65,7 @@ describe('useChatStore', () => {
     });
 
     it('allows work to reclaim the current phase when regression is explicitly permitted', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-phase-regression-allowed',
         goal: 'Let resumed execution move back into work.',
@@ -122,7 +123,7 @@ describe('useChatStore', () => {
     });
 
     it('records and upserts structured workflow evidence on a specific run', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-evidence',
         goal: 'Capture structured workflow evidence.',
@@ -183,7 +184,7 @@ describe('useChatStore', () => {
     });
 
     it('skips redundant progress-only phase and summary updates', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-progress',
         goal: 'Track worker progress efficiently.',
@@ -243,7 +244,7 @@ describe('useChatStore', () => {
     });
 
     it('should retain the initial checkpoint anchor for long-running sessions while trimming the oldest middle entries', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-long',
         goal: 'Keep a durable execution timeline.',
@@ -282,7 +283,7 @@ describe('useChatStore', () => {
     });
 
     it('should complete the active run and clear the active run id', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-3',
         goal: 'Finish the work.',
@@ -328,7 +329,7 @@ describe('useChatStore', () => {
     });
 
     it('should keep a run active while waiting for background workers', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-4',
         goal: 'Wait for the delegated workers.',

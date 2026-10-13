@@ -22,7 +22,6 @@ import { createUsageStoreActions } from './chatStoreUsageActions';
 import type { ChatState } from './chatStoreTypes';
 
 export type { ChatState } from './chatStoreTypes';
-export { collapseConversationsToCanonical } from './chatStoreNormalization';
 
 export const useChatStore = create<ChatState>()(
   persist(

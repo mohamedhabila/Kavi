@@ -7,6 +7,7 @@ import {
   waitForModelProjectionAvailability,
 } from '../../src/store/modelProjectionOwnership';
 import type { ModelProjectionOwner } from '../../src/types/conversation';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const firstOwner: ModelProjectionOwner = {
   surface: 'foreground',
@@ -22,7 +23,7 @@ const secondOwner: ModelProjectionOwner = {
 };
 
 function createConversation(): string {
-  const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  const conversationId = addConversation('provider-1', 'Be helpful.');
   useChatStore.getState().addMessage(conversationId, {
     id: 'request-1',
     role: 'user',
@@ -64,7 +65,7 @@ describe('model projection ownership', () => {
   });
 
   it('atomically claims a scheduled projection with its user and assistant turns', () => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+    const conversationId = addConversation('provider-1', 'Be helpful.');
 
     expect(
       claimModelProjection({

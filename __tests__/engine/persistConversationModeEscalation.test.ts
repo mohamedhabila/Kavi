@@ -1,5 +1,6 @@
 import { persistConversationModeEscalation } from '../../src/engine/graph/conversation/persistModeEscalation';
 import { useChatStore } from '../../src/store/useChatStore';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 function findConversation(conversationId: string) {
   return useChatStore.getState().conversations.find((entry) => entry.id === conversationId);
@@ -15,12 +16,10 @@ describe('persistConversationModeEscalation', () => {
   });
 
   function seedChitchatConversation(): string {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'system', undefined, {
-        personaId: 'default',
-        mode: 'chitchat',
-      });
+    const conversationId = addConversation('openai', 'system', undefined, {
+      personaId: 'default',
+      mode: 'chitchat',
+    });
     useChatStore.getState().addMessage(conversationId, {
       id: 'user-1',
       role: 'user',

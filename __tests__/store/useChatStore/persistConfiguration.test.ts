@@ -79,43 +79,6 @@ describe('useChatStore', () => {
       expect(JSON.stringify(migrated)).not.toContain(retiredSecret);
     });
 
-    it('collapses pre-v7 conversations into one canonical thread per persona', async () => {
-      const persistOptions = (useChatStore as any).persist.getOptions();
-      const migrated = await persistOptions.migrate(
-        {
-          conversations: [
-            {
-              id: 'r-old',
-              title: 'Old',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'researcher',
-              createdAt: 1,
-              updatedAt: 100,
-            },
-            {
-              id: 'r-new',
-              title: 'Newer',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'researcher',
-              createdAt: 2,
-              updatedAt: 300,
-            },
-          ],
-          activeConversationId: 'r-new',
-        },
-        6,
-      );
-
-      const byId = Object.fromEntries(migrated.conversations.map((c: any) => [c.id, c]));
-      expect(byId['r-new'].isCanonical).toBe(true);
-      expect(byId['r-old'].archivedFromMigration).toBe(true);
-      expect(byId['r-old'].isCanonical).not.toBe(true);
-    });
-
     it('does not invent completion metadata for legacy assistant messages', async () => {
       const persistOptions = (useChatStore as any).persist.getOptions();
       const migrated = await persistOptions.migrate(
@@ -321,84 +284,5 @@ describe('useChatStore', () => {
       expect(run.controlGraph).toBeUndefined();
     });
 
-    it('collapses same-version persisted conversations during merge', () => {
-      const persistOptions = (useChatStore as any).persist.getOptions();
-      const merged = persistOptions.merge(
-        {
-          conversations: [
-            {
-              id: 'r-old',
-              title: 'Old',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'researcher',
-              createdAt: 1,
-              updatedAt: 100,
-            },
-            {
-              id: 'r-new',
-              title: 'Newer',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'researcher',
-              createdAt: 2,
-              updatedAt: 300,
-            },
-          ],
-          activeConversationId: 'r-old',
-        },
-        useChatStore.getState(),
-      );
-
-      const byId = Object.fromEntries(merged.conversations.map((c: any) => [c.id, c]));
-      expect(byId['r-new'].isCanonical).toBe(true);
-      expect(byId['r-old'].archivedFromMigration).toBe(true);
-      expect(byId['r-old'].isCanonical).not.toBe(true);
-      expect(merged.activeConversationId).toBe('r-new');
-    });
-
-    it('redirects the active conversation to the newest canonical when persisted state contains malformed archived canonicals', () => {
-      const persistOptions = (useChatStore as any).persist.getOptions();
-      const merged = persistOptions.merge(
-        {
-          conversations: [
-            {
-              id: 'legacy-main',
-              title: 'Legacy Main',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'super-agent',
-              isCanonical: true,
-              createdAt: 1,
-              updatedAt: 100,
-            },
-            {
-              id: 'fresh-main',
-              title: 'Fresh Main',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'super-agent',
-              isCanonical: true,
-              archivedFromMigration: true,
-              createdAt: 2,
-              updatedAt: 300,
-            },
-          ],
-          activeConversationId: 'legacy-main',
-        },
-        useChatStore.getState(),
-      );
-
-      const byId = Object.fromEntries(merged.conversations.map((c: any) => [c.id, c]));
-      expect(byId['fresh-main'].isCanonical).toBe(true);
-      expect(byId['fresh-main'].archivedFromMigration).toBe(false);
-      expect(byId['legacy-main'].archivedFromMigration).toBe(true);
-      expect(byId['legacy-main'].isCanonical).toBe(false);
-      expect(merged.activeConversationId).toBe('fresh-main');
-    });
   });
 });

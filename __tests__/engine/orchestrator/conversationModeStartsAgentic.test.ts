@@ -19,6 +19,7 @@ import {
 } from '../../helpers/orchestratorHarness';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { useSettingsStore } from '../../../src/store/useSettingsStore';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('Orchestrator conversation mode drives the tool surface', () => {
   beforeEach(() => {
@@ -34,9 +35,7 @@ describe('Orchestrator conversation mode drives the tool surface', () => {
   });
 
   it('gives a non-SuperAgent persona in an agentic conversation the agentic tool baseline', async () => {
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'You are helpful', undefined, {
+    const conversationId = addConversation('openai', 'You are helpful', undefined, {
         personaId: 'default',
         mode: 'agentic',
       });
@@ -84,9 +83,7 @@ describe('Orchestrator conversation mode drives the tool surface', () => {
           }
         : undefined,
     );
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'You are helpful', undefined, {
+    const conversationId = addConversation('openai', 'You are helpful', undefined, {
         personaId: 'super-agent',
         mode: 'chitchat',
       });
@@ -123,9 +120,7 @@ describe('Orchestrator conversation mode drives the tool surface', () => {
 
   it('dispatches the first mobile_ui_action call of a run', async () => {
     useSettingsStore.setState({ developerModeEnabled: true });
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('openai', 'You are helpful', undefined, {
+    const conversationId = addConversation('openai', 'You are helpful', undefined, {
         personaId: 'default',
         mode: 'agentic',
       });

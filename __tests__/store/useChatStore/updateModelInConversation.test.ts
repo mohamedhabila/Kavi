@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('updateModelInConversation', () => {
     it('should update provider and model for conversation', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.getState().updateModelInConversation(convId, 'p2', 'gpt-5-mini');
 
@@ -17,8 +18,8 @@ describe('useChatStore', () => {
     });
 
     it('should not alter other conversations', () => {
-      const id1 = useChatStore.getState().createConversation('p1', 's');
-      const id2 = useChatStore.getState().createConversation('p1', 's');
+      const id1 = addConversation('p1', 's');
+      const id2 = addConversation('p1', 's');
 
       useChatStore.getState().updateModelInConversation(id1, 'p2', 'gpt-5-mini');
 

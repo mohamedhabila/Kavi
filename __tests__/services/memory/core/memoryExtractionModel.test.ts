@@ -11,6 +11,7 @@ import { resolveMemoryExtractionModel } from '../../../../src/services/memory/co
 import { useSettingsStore } from '../../../../src/store/useSettingsStore';
 import { useChatStore } from '../../../helpers/chatStoreHarness';
 import type { LlmProviderConfig } from '../../../../src/types/provider';
+import { addConversation } from '../../../helpers/chatConversationFixtures';
 
 const provider: LlmProviderConfig = {
   id: 'openrouter',
@@ -38,7 +39,7 @@ beforeEach(() => {
 
 describe('memory extraction model', () => {
   it('records each call in the conversation usage as memory, with its duration', async () => {
-    const conversationId = useChatStore.getState().createConversation(provider.id, 'Be helpful.');
+    const conversationId = addConversation(provider.id, 'Be helpful.');
     mockSendMessage.mockResolvedValue({
       choices: [{ message: { content: '{"operations":[]}' } }],
       usage: { prompt_tokens: 420, completion_tokens: 12, total_tokens: 432 },
@@ -65,7 +66,7 @@ describe('memory extraction model', () => {
   });
 
   it('records nothing when the provider reports no usage', async () => {
-    const conversationId = useChatStore.getState().createConversation(provider.id, 'Be helpful.');
+    const conversationId = addConversation(provider.id, 'Be helpful.');
     mockSendMessage.mockResolvedValue({ choices: [{ message: { content: '{"operations":[]}' } }] });
 
     const call = await resolveMemoryExtractionModel();

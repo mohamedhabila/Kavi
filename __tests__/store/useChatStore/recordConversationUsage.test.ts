@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('recordConversationUsage', () => {
     it('should append usage entries and aggregate totals', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.getState().recordConversationUsage(convId, {
         model: 'gpt-5.4',
@@ -50,7 +51,7 @@ describe('useChatStore', () => {
     });
 
     it('should preserve provider-reported total tokens when greater than input plus output', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.getState().recordConversationUsage(convId, {
         model: 'gemini-2.5-pro',
@@ -78,7 +79,7 @@ describe('useChatStore', () => {
     });
 
     it('should preserve usage attribution metadata on entries', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.getState().recordConversationUsage(convId, {
         model: 'gpt-5.4',
@@ -107,7 +108,7 @@ describe('useChatStore', () => {
     });
 
     it('should dedupe image usage entries by tool call id', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.getState().recordConversationUsage(convId, {
         model: 'gpt-image-2',

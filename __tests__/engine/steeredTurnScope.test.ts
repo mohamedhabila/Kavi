@@ -8,6 +8,7 @@ import type { Conversation } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
 import { useChatStore } from '../helpers/chatStoreHarness';
 import { tools, userMessage } from '../helpers/turnToolSurfaceHarness';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 // A message sent while a run works ("steering") is read by that run at its next step and
 // continues its turn. Everything scoped to "the current turn" must keep looking back to
@@ -115,7 +116,7 @@ describe('budget windowing across a steer', () => {
 
 describe('retrying a steered answer', () => {
   it('resends the request with the words of every steer, and drops the steer marker', () => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+    const conversationId = addConversation('provider-1', 'Be helpful.');
     for (const message of [
       { id: 'request', role: 'user' as const, content: 'Plan the offsite.', timestamp: 1 },
       ...toolStep('tc-1', 'web_search', '{}', 'ok', 2),
@@ -153,7 +154,7 @@ describe('retrying a steered answer', () => {
   });
 
   it('opens a new turn when an edited steer is resent', () => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+    const conversationId = addConversation('provider-1', 'Be helpful.');
     useChatStore.getState().addMessage(conversationId, {
       id: 'request',
       role: 'user',

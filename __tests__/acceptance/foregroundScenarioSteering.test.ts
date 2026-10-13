@@ -1,5 +1,6 @@
 import { scheduleForegroundScenarioSteer } from '../../src/acceptance/e2eAgent/foregroundScenarioSteering';
 import { useChatStore } from '../../src/store/useChatStore';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 function addToolResult(conversationId: string, id: string) {
   useChatStore.getState().addMessage(conversationId, {
@@ -16,7 +17,7 @@ describe('scheduleForegroundScenarioSteer', () => {
   });
 
   it('sends the steer once the turn has returned enough tool results, and only once', async () => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'system');
+    const conversationId = addConversation('provider-1', 'system');
     addToolResult(conversationId, 'earlier');
     const messageStartIndex = useChatStore
       .getState()
@@ -40,7 +41,7 @@ describe('scheduleForegroundScenarioSteer', () => {
   });
 
   it('sends nothing when the turn ends before reaching the count', async () => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'system');
+    const conversationId = addConversation('provider-1', 'system');
     const send = jest.fn().mockResolvedValue(undefined);
 
     const steer = scheduleForegroundScenarioSteer({

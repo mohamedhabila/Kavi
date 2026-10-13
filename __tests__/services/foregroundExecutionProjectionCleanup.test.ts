@@ -20,6 +20,7 @@ import {
 import { flushChatStorePersistenceNow } from '../../src/store/chatStorePersistence';
 import { claimModelProjection } from '../../src/store/modelProjectionOwnership';
 import { _resetThrottledStorageStateForTests } from '../../src/store/throttledStorage';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const DIGEST = 'a'.repeat(64);
 const sqliteMock = jest.requireMock('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
@@ -34,7 +35,7 @@ function journalOptions() {
 }
 
 async function seedOwnedGeneration(shouldActivate = true) {
-  const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  const conversationId = addConversation('provider-1', 'Be helpful.');
   useChatStore.getState().addMessage(conversationId, {
     id: 'request-1',
     role: 'user',
@@ -118,7 +119,7 @@ it('keeps an active owner but releases a terminal owner left by a crash', async 
 it.each(['terminal_review_pending', 'surfaced_worker_output_pending'])(
   'terminalizes a %s placeholder before releasing a reservation with no journal row',
   async (pendingFinishReason) => {
-    const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+    const conversationId = addConversation('provider-1', 'Be helpful.');
     useChatStore.getState().addMessage(conversationId, {
       id: `request-missing-${pendingFinishReason}`,
       role: 'user',
@@ -174,7 +175,7 @@ it.each(['terminal_review_pending', 'surfaced_worker_output_pending'])(
 );
 
 it('does not misclassify a scheduler projection as a missing foreground journal reservation', async () => {
-  const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  const conversationId = addConversation('provider-1', 'Be helpful.');
   useChatStore.getState().addMessage(conversationId, {
     id: 'scheduler-request',
     role: 'user',

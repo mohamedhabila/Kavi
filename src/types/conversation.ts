@@ -59,9 +59,6 @@ export interface Conversation {
   updatedAt: number;
   personaId?: string;
   mode?: ConversationMode;
-  folderId?: string;
-  tags?: string[];
-  pinned?: boolean;
   usage?: ConversationUsageSummary;
   logs?: ConversationLogEntry[];
   agentRuns?: AgentRun[];
@@ -69,9 +66,5 @@ export interface Conversation {
   workspaceTargetId?: string;
   modelProjectionOwner?: ModelProjectionOwner;
 
-  /** User-created top-level chat with independent history and workspace ownership. */
-  isStandaloneThread?: boolean;
-  isCanonical?: boolean;
-  archivedFromMigration?: boolean;
   personaEvents?: PersonaSwitchEvent[];
 }

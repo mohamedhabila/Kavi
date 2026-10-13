@@ -80,7 +80,7 @@ describe('foreground run supersession', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     const setChatError = jest.fn();
@@ -167,7 +167,7 @@ describe('foreground run supersession', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     configureReadyPreflight(conversation, provider);
@@ -216,7 +216,7 @@ describe('foreground run supersession', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     useRealRequestRegistry(context);
@@ -305,7 +305,7 @@ describe('foreground run supersession', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     context.helpers.getConversation = () => latestConversation;

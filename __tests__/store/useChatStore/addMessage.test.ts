@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('addMessage', () => {
     it('should add a message to the conversation', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         role: 'user',
         content: 'Hello',
@@ -22,7 +23,7 @@ describe('useChatStore', () => {
     });
 
     it('should auto-title from the first user message', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         role: 'user',
         content: 'What is the weather today?',
@@ -33,7 +34,7 @@ describe('useChatStore', () => {
     });
 
     it('should not re-title after first message', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         role: 'user',
         content: 'First message',
@@ -48,7 +49,7 @@ describe('useChatStore', () => {
     });
 
     it('should use custom id if provided', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'custom-id',
         role: 'user',
@@ -60,7 +61,7 @@ describe('useChatStore', () => {
     });
 
     it('preserves an explicit source timestamp for replay and import', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'historical-message',
         role: 'user',
@@ -74,8 +75,8 @@ describe('useChatStore', () => {
     });
 
     it('should not modify other conversations', () => {
-      const convId1 = useChatStore.getState().createConversation('p1', 's');
-      const convId2 = useChatStore.getState().createConversation('p2', 's');
+      const convId1 = addConversation('p1', 's');
+      const convId2 = addConversation('p2', 's');
       useChatStore.getState().addMessage(convId1, {
         role: 'user',
         content: 'Test',
@@ -86,7 +87,7 @@ describe('useChatStore', () => {
     });
 
     it('should cap messages at 500, preserving the first message', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       // Add first (system/greeting) message
       useChatStore.getState().addMessage(convId, {
@@ -114,7 +115,7 @@ describe('useChatStore', () => {
     });
 
     it('should not cap when under 500 messages', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       for (let i = 0; i < 10; i++) {
         useChatStore.getState().addMessage(convId, {

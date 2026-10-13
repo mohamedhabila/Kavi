@@ -14,7 +14,7 @@ import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { createDefaultConversations } from '../../../testSupport/chatScreen/fixtures';
 import {
   mockAddMessage,
-  mockGetOrCreateCanonicalThread,
+  mockEnsureConversation,
 } from '../../../testSupport/chatScreen/storeMocks';
 import {
   mockGetProviderApiKey,
@@ -117,9 +117,9 @@ describe('ChatScreen composer send flow', () => {
     ).toBeTruthy();
   });
 
-  it('uses the canonical conversation when none is active', async () => {
+  it('uses the one conversation when none is active', async () => {
     mockChatScreenState.activeConversationId = null;
-    mockGetOrCreateCanonicalThread.mockReturnValueOnce('conv1');
+    mockEnsureConversation.mockReturnValueOnce('conv1');
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
     const input = getByPlaceholderText('Message...');
     fireEvent.changeText(input, 'Hello');
@@ -127,7 +127,7 @@ describe('ChatScreen composer send flow', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+      expect(mockEnsureConversation).toHaveBeenCalledWith(
         'openai',
         'You are helpful',
         'gpt-5.4',
@@ -201,7 +201,7 @@ describe('ChatScreen composer send flow', () => {
         model: 'qwen-2.5-1.5b-instruct',
       },
     ];
-    mockGetOrCreateCanonicalThread.mockReturnValueOnce('conv1');
+    mockEnsureConversation.mockReturnValueOnce('conv1');
     mockGetProviderApiKey.mockResolvedValue('');
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
@@ -210,7 +210,7 @@ describe('ChatScreen composer send flow', () => {
     fireEvent.press(sendIcon.parent || sendIcon);
 
     await waitFor(() => {
-      expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+      expect(mockEnsureConversation).toHaveBeenCalledWith(
         'local-qwen',
         'You are helpful',
         'qwen-2.5-1.5b-instruct',

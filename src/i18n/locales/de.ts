@@ -216,8 +216,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     starterCreatePrompt: 'Helfen Sie mir, aus einem Foto oder einer Datei etwas zu erstellen.',
     starterActPrompt:
       'Helfen Sie mir, sicher zu handeln, und fragen Sie vor sensiblen Aktionen nach.',
-    continueRecent: 'Einen letzten Chat fortsetzen',
-    continueRecentAccessibility: 'Letzten Chat fortsetzen: {title}',
     thinking: 'Denke…',
     toolCall: 'Tool verwenden: {name}',
     runStopped: {

@@ -9,6 +9,7 @@ import {
   resetModelProjectionIntentCoordinatorForTests,
 } from '../../src/store/modelProjectionIntentCoordinator';
 import { useChatStore } from '../../src/store/useChatStore';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 jest.mock('../../src/services/startupRecovery', () => ({
   waitForPersistedAgentRecoveryReadiness: jest.fn(),
@@ -50,7 +51,7 @@ function createParams(
     })),
     editingMessageId: null,
     ensureAgentRunFinalResponse: jest.fn(),
-    ensureCanonicalConversation: jest.fn(),
+    ensureConversation: jest.fn(),
     forceNextScrollRef: { current: false },
     generateId: () => 'message-1',
     isAgenticMode: true,
@@ -83,8 +84,8 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('targets the live active conversation when send runs before the screen rerenders', async () => {
-    const parentId = useChatStore.getState().createConversation('openai', 'system');
-    const sideId = useChatStore.getState().createConversation('openai', 'system');
+    const parentId = addConversation('openai', 'system');
+    const sideId = addConversation('openai', 'system');
 
     const addMessage = jest.fn();
     const clearComposerDraft = jest.fn();
@@ -119,7 +120,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('does not append the user turn until recovery and the current projection owner release', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     let releaseProjection = () => {};
     mockedWaitForProjection.mockImplementationOnce(
       () =>
@@ -166,7 +167,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('coalesces concurrent writes to one conversation before either can append', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     let releaseProjection = () => {};
     mockedWaitForProjection.mockImplementationOnce(
       () =>
@@ -203,7 +204,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('holds foreground intent across the user mutation and synchronous run handoff', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     const addMessage = jest.fn(() => {
       expect(hasModelProjectionIntent(conversationId)).toBe(true);
     });
@@ -225,7 +226,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('passes voice-specific run guidance through the canonical foreground runner', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     const runChat = jest.fn().mockResolvedValue(undefined);
     const { result } = renderHook(() =>
       useForegroundConversationActions(createParams(conversationId, { runChat })),
@@ -244,7 +245,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('starts an assistant retry from a freshly identified user turn', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     useChatStore.getState().addMessage(conversationId, {
       id: 'original-user',
       role: 'user',
@@ -294,7 +295,7 @@ describe('useForegroundConversationActions', () => {
   });
 
   it('leaves send, edit, and retry state untouched when projection availability fails', async () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
     const addMessage = jest.fn();
     const rewindUserMessageForResend = jest.fn();
     const runChat = jest.fn();
@@ -341,7 +342,7 @@ describe('useForegroundConversationActions', () => {
     });
 
     it('go back to the composer when the person stops the run', () => {
-      const conversationId = useChatStore.getState().createConversation('openai', 'system');
+      const conversationId = addConversation('openai', 'system');
       queueSteers(conversationId);
       const returnTextToComposer = jest.fn();
       const { result } = renderHook(() =>
@@ -360,7 +361,7 @@ describe('useForegroundConversationActions', () => {
     });
 
     it('go back to the composer when the person retries an answer', async () => {
-      const conversationId = useChatStore.getState().createConversation('openai', 'system');
+      const conversationId = addConversation('openai', 'system');
       useChatStore.getState().addMessage(conversationId, {
         id: 'request',
         role: 'user',

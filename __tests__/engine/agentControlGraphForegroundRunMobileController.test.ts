@@ -77,7 +77,7 @@ describe('foreground mobile controller binding', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -229,7 +229,7 @@ describe('foreground mobile controller binding', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -366,7 +366,7 @@ describe('foreground mobile controller binding', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(

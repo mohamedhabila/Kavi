@@ -5,7 +5,6 @@ import {
   CalendarClock,
   CheckCircle2,
   FilePlus2,
-  History,
   MessageCircleQuestion,
   Search,
   ShieldCheck,
@@ -17,18 +16,11 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { type AppPalette, useAppTheme } from '../../theme/useAppTheme';
 import { ForwardChevronIcon } from '../navigation/DirectionalIcons';
 
-type RecentConversation = {
-  id: string;
-  title: string;
-};
-
 type AssistantStartProps = {
   hasProviderReady: boolean;
   onOpenProviderSetup: () => void;
-  onResumeConversation: (conversationId: string) => void;
   onSelectStarter: (prompt: string) => void;
   providerName?: string;
-  recentConversation?: RecentConversation;
 };
 
 type Starter = {
@@ -73,10 +65,8 @@ const STARTERS: Starter[] = [
 export function AssistantStart({
   hasProviderReady,
   onOpenProviderSetup,
-  onResumeConversation,
   onSelectStarter,
   providerName,
-  recentConversation,
 }: AssistantStartProps) {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -138,26 +128,6 @@ export function AssistantStart({
         </>
       )}
 
-      {recentConversation ? (
-        <TouchableOpacity
-          style={styles.recentButton}
-          onPress={() => onResumeConversation(recentConversation.id)}
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.continueRecentAccessibility', {
-            title: recentConversation.title,
-          })}
-          testID="assistant-start-recent"
-        >
-          <History size={19} color={colors.textSecondary} />
-          <View style={styles.recentTextBlock}>
-            <Text style={styles.recentLabel}>{t('chat.continueRecent')}</Text>
-            <Text style={styles.recentTitle} numberOfLines={2}>
-              {recentConversation.title}
-            </Text>
-          </View>
-          <ForwardChevronIcon size={17} color={colors.textTertiary} />
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 }
@@ -274,31 +244,5 @@ const createStyles = (colors: AppPalette) =>
       color: colors.text,
       fontSize: 15,
       fontWeight: '600',
-    },
-    recentButton: {
-      width: '100%',
-      minHeight: 56,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      marginTop: 16,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 14,
-      backgroundColor: colors.surfaceAlt,
-    },
-    recentTextBlock: {
-      flex: 1,
-      gap: 2,
-    },
-    recentLabel: {
-      color: colors.textSecondary,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    recentTitle: {
-      color: colors.text,
-      fontSize: 14,
-      fontWeight: '700',
     },
   });

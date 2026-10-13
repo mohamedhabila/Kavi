@@ -59,7 +59,6 @@ import { useTerminalBackgroundReviewQueue } from './useTerminalBackgroundReviewQ
 import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
-import { getNavigableConversations } from '../utils/conversationNavigation';
 import { useVoiceConversationBridge } from './chatScreen/useVoiceConversationBridge';
 import { useChatScreenNavigation } from './chatScreen/useChatScreenNavigation';
 import { usePreparedChatDraft } from './usePreparedChatDraft';
@@ -79,9 +78,8 @@ export const ChatScreen: React.FC = () => {
     conversations,
     activeConversation,
     activeConversationId,
-    setActiveConversation,
     resetConversationContext,
-    getOrCreateCanonicalThread,
+    ensureConversation: ensureStoredConversation,
     addMessage,
     updateMessage,
     updateMessageEnrichedContent,
@@ -236,14 +234,6 @@ export const ChatScreen: React.FC = () => {
     ],
   );
   const hasProviderReady = Boolean(conversationStartSelection?.model);
-  const recentConversation = useMemo(
-    () =>
-      getNavigableConversations(conversations).find(
-        (conversation) =>
-          conversation.id !== activeConversationId && conversation.messages.length > 0,
-      ),
-    [activeConversationId, conversations],
-  );
   const {
     handleOpenConversationSettings,
     handleOpenDeveloperTools,
@@ -271,7 +261,7 @@ export const ChatScreen: React.FC = () => {
   });
 
   const {
-    ensureCanonicalConversation,
+    ensureConversation,
     resolveConversationFinalizationContext,
     resolveConversationFinalizationContextRef,
   } = useConversationGraphController({
@@ -280,7 +270,7 @@ export const ChatScreen: React.FC = () => {
     activeProviderId,
     effectiveMode,
     effectivePersonaId,
-    getOrCreateCanonicalThread,
+    ensureStoredConversation,
     noProviderMessage: t('chat.noProvider'),
     providers,
     setActiveProviderAndModel,
@@ -413,7 +403,7 @@ export const ChatScreen: React.FC = () => {
     clearTrackedRunCancellation: clearAgentRunCancellation,
     createId: generateId,
     ensureAgentRunFinalResponse,
-    ensureCanonicalConversation,
+    ensureConversation,
     getConversation,
     getConversations,
     isCurrentForegroundRequest,
@@ -494,7 +484,7 @@ export const ChatScreen: React.FC = () => {
     rewindUserMessageForResend,
     editingMessageId,
     ensureAgentRunFinalResponse,
-    ensureCanonicalConversation,
+    ensureConversation,
     forceNextScrollRef,
     generateId,
     isAgenticMode,
@@ -658,10 +648,8 @@ export const ChatScreen: React.FC = () => {
         followLatestOnLayout={followLatestOnLayout}
         maybeScrollToBottom={maybeScrollToBottom}
         onOpenProviderSetup={handleOpenProviderSetup}
-        onResumeConversation={setActiveConversation}
         personaSwitchMarkersByMessageId={personaSwitchMarkersByMessageId}
         providerName={conversationStartSelection?.provider.name}
-        recentConversation={recentConversation}
         resolvedDisplayMessages={resolvedDisplayMessages}
         returnTextToComposer={returnTextToComposer}
         scrollToBottom={scrollToBottom}

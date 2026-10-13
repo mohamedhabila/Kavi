@@ -54,18 +54,11 @@ export interface ChatState {
   activeConversationId: string | null;
   isLoading: boolean;
 
-  createConversation: (
-    providerId: string,
-    systemPrompt: string,
-    modelOverride?: string,
-    options?: {
-      activate?: boolean;
-      personaId?: string;
-      mode?: ConversationMode;
-      replaceCanonical?: boolean;
-    },
-  ) => string;
-  getOrCreateCanonicalThread: (
+  /**
+   * Kavi is one conversation: returns it (the active one, else the most recent), creating it
+   * only when there is none. `activate: false` leaves the active conversation as it is.
+   */
+  ensureConversation: (
     providerId: string,
     systemPrompt: string,
     modelOverride?: string,

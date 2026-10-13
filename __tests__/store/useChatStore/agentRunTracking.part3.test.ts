@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('agent run tracking part 3', () => {
     it('should persist pending async operations on a running run', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-async',
         goal: 'Monitor the workflow.',
@@ -61,7 +62,7 @@ describe('useChatStore', () => {
     });
 
     it('should update a specific historical run without mutating the active run', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const oldRunId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-5',
         goal: 'First workflow.',
@@ -114,7 +115,7 @@ describe('useChatStore', () => {
     });
 
     it('should recover interrupted foreground runs on app restart', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-7',
         role: 'user',
@@ -147,7 +148,7 @@ describe('useChatStore', () => {
     });
 
     it('should recover pending async-operation runs on app restart', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-async-restart',
         role: 'user',
@@ -205,7 +206,7 @@ describe('useChatStore', () => {
     });
 
     it('should recover background-worker runs from terminal worker state on app restart', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-8',
         role: 'user',
@@ -265,7 +266,7 @@ describe('useChatStore', () => {
     });
 
     it('does not treat a persisted final as proof that pending async work is stale', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-8b',
         role: 'user',
@@ -353,7 +354,7 @@ describe('useChatStore', () => {
     });
 
     it('reconciles a persisted final with FINALIZED on restart', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-constrained-restart',
         role: 'user',

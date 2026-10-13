@@ -220,8 +220,6 @@ export const en: TranslationMap = {
     starterRememberPrompt: 'Remember a preference I will share for next time.',
     starterCreatePrompt: 'Help me create something from a photo or file.',
     starterActPrompt: 'Help me take an action safely and ask before anything sensitive.',
-    continueRecent: 'Continue a recent chat',
-    continueRecentAccessibility: 'Continue recent chat: {title}',
     thinking: 'Thinking...',
     toolCall: 'Using tool: {name}',
     runStopped: {

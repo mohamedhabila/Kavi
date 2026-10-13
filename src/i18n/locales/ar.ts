@@ -228,8 +228,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     starterRememberPrompt: 'تذكّر تفضيلاً سأشاركه معك للمرة القادمة.',
     starterCreatePrompt: 'ساعدني في إنشاء شيء من صورة أو ملف.',
     starterActPrompt: 'ساعدني على التصرف بأمان واطلب إذني قبل أي إجراء حساس.',
-    continueRecent: 'متابعة محادثة أخيرة',
-    continueRecentAccessibility: 'متابعة المحادثة الأخيرة: {title}',
     thinking: 'جارٍ التفكير…',
     toolCall: 'استخدام الأداة: {name}',
     runStopped: {

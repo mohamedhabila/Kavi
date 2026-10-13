@@ -12,7 +12,6 @@ import {
 } from '../../../testSupport/chatScreen/mockDefaults';
 import { mockChatScreenState } from '../../../testSupport/chatScreen/state';
 import { mockNavigate } from '../../../testSupport/chatScreen/componentMocks';
-import { mockSetActiveConversation } from '../../../testSupport/chatScreen/storeMocks';
 
 describe('ChatScreen UX performance contracts', () => {
   beforeEach(resetChatScreenTestEnvironment);
@@ -88,29 +87,4 @@ describe('ChatScreen UX performance contracts', () => {
     });
   });
 
-  it('resumes the most recent non-empty conversation from the start state', () => {
-    mockChatScreenState.conversations = [
-      {
-        ...mockChatScreenState.conversations[0],
-        id: 'empty-conversation',
-        title: 'New Conversation',
-        messages: [],
-        updatedAt: 20,
-      },
-      {
-        ...mockChatScreenState.conversations[0],
-        id: 'recent-conversation',
-        title: 'Weekend trip ideas',
-        updatedAt: 10,
-      },
-    ];
-    mockChatScreenState.activeConversationId = 'empty-conversation';
-
-    const { getByTestId, getByText } = render(<ChatScreen />);
-
-    expect(getByText('Weekend trip ideas')).toBeTruthy();
-    fireEvent.press(getByTestId('assistant-start-recent'));
-
-    expect(mockSetActiveConversation).toHaveBeenCalledWith('recent-conversation');
-  });
 });

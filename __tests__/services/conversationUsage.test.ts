@@ -6,6 +6,7 @@ import {
 } from '../../src/services/usage/conversationUsage';
 import { clearUsageData, getSessionUsage } from '../../src/services/usage/tracker';
 import { useChatStore } from '../../src/store/useChatStore';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 beforeEach(() => {
   useChatStore.setState({
@@ -89,7 +90,7 @@ describe('conversationUsage', () => {
   });
 
   it('records conversation usage, session totals, and usage logs', () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
 
     recordConversationUsageEvent({
       conversationId,
@@ -217,7 +218,7 @@ describe('conversationUsage', () => {
   });
 
   it('forces on-device conversation usage cost to zero even when a caller passes an estimate', () => {
-    const conversationId = useChatStore.getState().createConversation('gemma-local', 'system');
+    const conversationId = addConversation('gemma-local', 'system');
 
     recordConversationUsageEvent({
       conversationId,
@@ -241,7 +242,7 @@ describe('conversationUsage', () => {
   });
 
   it('records image tool usage on the conversation ledger exactly once', () => {
-    const conversationId = useChatStore.getState().createConversation('openai', 'system');
+    const conversationId = addConversation('openai', 'system');
 
     const toolCall = {
       id: 'tool-image-1',

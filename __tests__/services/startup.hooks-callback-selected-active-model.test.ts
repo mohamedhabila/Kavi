@@ -29,8 +29,7 @@ const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const mockChatStoreState = {
   conversations: [] as any[],
   activeConversationId: 'active-conversation',
-  createConversation: jest.fn(),
-  getOrCreateCanonicalThread: jest.fn(),
+  ensureConversation: jest.fn(),
   updateModelInConversation: jest.fn(),
   addMessage: jest.fn(),
   updateMessage: jest.fn(),
@@ -187,8 +186,13 @@ beforeEach(() => {
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });
-  mockChatStoreState.createConversation.mockImplementation(
+  mockChatStoreState.ensureConversation.mockImplementation(
     (providerId, systemPrompt, modelOverride, options) => {
+      const existing =
+        mockChatStoreState.conversations.find(
+          (conversation) => conversation.id === mockChatStoreState.activeConversationId,
+        ) ?? mockChatStoreState.conversations[0];
+      if (existing) return existing.id;
       const id = `conv-${mockChatStoreState.conversations.length + 1}`;
       mockChatStoreState.conversations.unshift({
         id,
@@ -200,29 +204,6 @@ beforeEach(() => {
       if (options?.activate !== false) {
         mockChatStoreState.activeConversationId = id;
       }
-      return id;
-    },
-  );
-  mockChatStoreState.getOrCreateCanonicalThread.mockImplementation(
-    (providerId, systemPrompt, modelOverride) => {
-      const existing = mockChatStoreState.conversations.find(
-        (conversation) =>
-          conversation.providerId === providerId &&
-          conversation.systemPrompt === systemPrompt &&
-          conversation.modelOverride === modelOverride,
-      );
-      if (existing) {
-        return existing.id;
-      }
-
-      const id = `canonical-${mockChatStoreState.conversations.length + 1}`;
-      mockChatStoreState.conversations.unshift({
-        id,
-        providerId,
-        systemPrompt,
-        modelOverride,
-        messages: [],
-      });
       return id;
     },
   );

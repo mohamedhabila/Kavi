@@ -44,7 +44,7 @@ describe('foreground run projection reservation', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     let resolvePreflight:
@@ -82,7 +82,7 @@ describe('foreground run projection reservation', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue({ kind: 'missing_provider' });
@@ -114,7 +114,7 @@ describe('foreground run projection reservation', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     context.durability.flushChatState.mockRejectedValueOnce(new Error('first flush failed'));
@@ -139,7 +139,7 @@ describe('foreground run projection reservation', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     const registry = createForegroundRequestRegistry();
@@ -216,7 +216,7 @@ describe('foreground run projection reservation', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue({ kind: 'missing_provider' });

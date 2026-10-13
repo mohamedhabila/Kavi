@@ -4,11 +4,12 @@
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
 import { buildToolEffectReceipt } from '../../../src/engine/toolExecution/toolEffectReceipt';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('updateToolCallStatus', () => {
     it('should update tool call status and result', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'assistant',
@@ -27,7 +28,7 @@ describe('useChatStore', () => {
     });
 
     it('promotes completed image_generate results into assistant attachments', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'assistant',
@@ -65,7 +66,7 @@ describe('useChatStore', () => {
     });
 
     it('promotes completed image_edit results into assistant attachments', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'assistant',
@@ -109,7 +110,7 @@ describe('useChatStore', () => {
     });
 
     it('should handle failure status with error', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'assistant',
@@ -128,7 +129,7 @@ describe('useChatStore', () => {
 
     it('should ignore redundant terminal tool status updates', () => {
       const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000001000);
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'assistant',
@@ -170,7 +171,7 @@ describe('useChatStore', () => {
         transportState: 'returned',
         recordedAt: 500,
       });
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-receipt',
         role: 'assistant',

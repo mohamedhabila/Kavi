@@ -212,8 +212,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     starterRememberPrompt: '次回のために、これから伝える好みを覚えてください。',
     starterCreatePrompt: '写真やファイルから何かを作るのを手伝ってください。',
     starterActPrompt: '安全に操作し、機密性の高い操作の前に確認してください。',
-    continueRecent: '最近のチャットを続ける',
-    continueRecentAccessibility: '最近のチャットを続ける：{title}',
     thinking: '考え中…',
     toolCall: 'ツールを使用中: {name}',
     runStopped: {

@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('agent run tracking part 1', () => {
     it('should start a structured agent run with initial phases and checkpoint', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-1',
@@ -57,7 +58,7 @@ describe('useChatStore', () => {
     });
 
     it('should update the active run phase, summary, and checkpoints', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-2',
         goal: 'Ship the patch.',
@@ -110,7 +111,7 @@ describe('useChatStore', () => {
     });
 
     it('stores the plan and active task inside the durable control graph', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-route-state',
         goal: 'Apply the remote changes.',
@@ -169,7 +170,7 @@ describe('useChatStore', () => {
     });
 
     it('stores durable agent control graph state for resumed tool boundaries', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-control-graph',
         goal: 'Resume only after tool results are recorded.',
@@ -223,7 +224,7 @@ describe('useChatStore', () => {
     });
 
     it('keeps async wait state graph-owned when control graph is updated', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const runId = useChatStore.getState().startAgentRun(convId, {
         userMessageId: 'msg-user-control-graph-async',
         goal: 'Resume async work from graph state.',

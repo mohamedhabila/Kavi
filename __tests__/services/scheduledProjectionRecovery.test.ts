@@ -1,4 +1,5 @@
 import type { CronJob } from '../../src/services/cron/types';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
 
@@ -44,7 +45,7 @@ function runningJob(overrides: Partial<CronJob> = {}): CronJob {
 }
 
 function seedStaleProjection(job: CronJob): string {
-  const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  const conversationId = addConversation('provider-1', 'Be helpful.');
   claimScheduledProjection({
     job,
     conversationId,

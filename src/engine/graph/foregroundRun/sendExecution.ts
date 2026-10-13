@@ -39,7 +39,7 @@ export type ForegroundConversationSendContext = {
   attachmentWorkspaceImportFailedMessage: string;
   clearComposerDraft: (draftKey: string) => void;
   defaultConversationMode: Conversation['mode'];
-  ensureCanonicalConversation: ForegroundConversationRunHelpers['ensureCanonicalConversation'];
+  ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   generateId: () => string;
   getLiveActiveConversationId: () => string | null;
   isAgenticMode: boolean;
@@ -120,7 +120,7 @@ export async function executeForegroundConversationSend(
 
   const resolvedConversationId =
     context.getLiveActiveConversationId() ??
-    context.ensureCanonicalConversation({
+    context.ensureConversation({
       personaId: context.isAgenticMode ? SUPER_AGENT_PERSONA_ID : undefined,
       mode: context.defaultConversationMode,
       reportMissingProvider: true,

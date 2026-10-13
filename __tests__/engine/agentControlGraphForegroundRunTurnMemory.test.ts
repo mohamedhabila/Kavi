@@ -46,7 +46,7 @@ describe('foreground turn capture', () => {
       const context = createExecutionContext({
         conversation,
         providers: [provider],
-        ensureCanonicalConversation: jest.fn(),
+        ensureConversation: jest.fn(),
         recordConversationTurnMemory: jest.fn(),
       });
       mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -85,7 +85,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -114,7 +114,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -144,7 +144,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -172,7 +172,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     context.helpers.ensureAgentRunFinalResponse = jest.fn().mockResolvedValue(undefined);
@@ -201,7 +201,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -232,7 +232,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -264,7 +264,7 @@ describe('foreground turn capture', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(

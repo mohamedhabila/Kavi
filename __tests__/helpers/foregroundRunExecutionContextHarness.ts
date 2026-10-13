@@ -76,7 +76,7 @@ export function createExecutionContext(params: {
   resetConversationContext?: jest.Mock;
   providers: LlmProviderConfig[];
   recordConversationTurnMemory: jest.Mock;
-  ensureCanonicalConversation: jest.Mock;
+  ensureConversation: jest.Mock;
   /** Append messages the run adds to the conversation instead of discarding them. */
   persistAddedMessages?: boolean;
 }) {
@@ -304,7 +304,7 @@ export function createExecutionContext(params: {
       clearTrackedRunCancellation: noOp,
       createId: () => `generated-${++idSequence}`,
       ensureAgentRunFinalResponse,
-      ensureCanonicalConversation: params.ensureCanonicalConversation,
+      ensureConversation: params.ensureConversation,
       getConversation: (conversationId: string) =>
         conversationId === currentConversation.id ? currentConversation : undefined,
       getConversations: () => [currentConversation],

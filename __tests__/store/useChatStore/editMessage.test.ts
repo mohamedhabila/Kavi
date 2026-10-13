@@ -4,11 +4,12 @@
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
 import { sanitizeConversationForPersistence } from '../../../src/store/chatPersistence';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('rewindUserMessageForResend', () => {
     it('replaces the user provenance identity while retaining its position and truncating the tail', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'user', content: 'First' });
       useChatStore
         .getState()
@@ -33,7 +34,7 @@ describe('useChatStore', () => {
 
     it('should rewind workflow and logs but preserve billed usage after truncation', () => {
       const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000003000);
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
 
       useChatStore.setState((state) => ({
         conversations: state.conversations.map((conversation) =>
@@ -134,7 +135,7 @@ describe('useChatStore', () => {
     });
 
     it('allocates a distinct code-owned identity for every repeated edit without mutating prior messages', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'prior-user',
         role: 'user',
@@ -215,7 +216,7 @@ describe('useChatStore', () => {
     });
 
     it('persists and reloads only the replacement identity and rejects non-user targets', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const store = useChatStore.getState();
       store.addMessage(convId, { id: 'user-old', role: 'user', content: 'Original', timestamp: 1 });
       store.addMessage(convId, {

@@ -9,7 +9,6 @@ import {
   MAX_PERSISTED_MESSAGES,
   MAX_PERSISTED_REASONING_MESSAGES,
   MAX_PERSISTED_SYSTEM_PROMPT_CHARS,
-  MAX_PERSISTED_TAGS,
 } from './chatPersistenceLimits';
 import { sanitizeAgentRun } from './chatPersistenceAgentRuns';
 import { selectMessagesForPersistence } from './chatMessagePersistenceSelection';
@@ -49,7 +48,6 @@ export function sanitizeConversationForPersistence(conversation: Conversation): 
     systemPrompt:
       truncateText(conversation.systemPrompt, MAX_PERSISTED_SYSTEM_PROMPT_CHARS) ||
       conversation.systemPrompt,
-    tags: conversation.tags?.slice(0, MAX_PERSISTED_TAGS),
     messages: messages.map((message, index) =>
       sanitizeMessage(message, {
         preserveReplay: index >= replayStart,

@@ -74,13 +74,13 @@ describe('foreground run target-conversation execution context', () => {
     const targetProvider = createProvider('target-provider', 'target-model');
     const finalizationProvider = { ...targetProvider, apiKey: 'hydrated-key' };
     const resetConversationContext = jest.fn(() => true);
-    const ensureCanonicalConversation = jest.fn(() => 'new-conversation');
+    const ensureConversation = jest.fn(() => 'new-conversation');
     const recordConversationTurnMemory = jest.fn();
     const context = createExecutionContext({
       conversation,
       resetConversationContext,
       providers: [staleProvider, targetProvider],
-      ensureCanonicalConversation,
+      ensureConversation,
       recordConversationTurnMemory,
     });
 
@@ -111,7 +111,7 @@ describe('foreground run target-conversation execution context', () => {
       }),
       expect.any(Object),
     );
-    expect(ensureCanonicalConversation).not.toHaveBeenCalled();
+    expect(ensureConversation).not.toHaveBeenCalled();
     expect(resetConversationContext).toHaveBeenCalledWith(conversation.id);
     expect(recordConversationTurnMemory).toHaveBeenCalledWith(
       conversation.id,
@@ -170,7 +170,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     let markReady = () => {};
@@ -210,7 +210,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -235,7 +235,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
 
@@ -262,7 +262,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -287,7 +287,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -317,7 +317,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -344,7 +344,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -367,7 +367,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     mockedResolveForegroundRunPreflight.mockResolvedValue(
@@ -398,7 +398,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
@@ -439,7 +439,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     const registry = createForegroundRequestRegistry();
@@ -512,7 +512,7 @@ describe('foreground run target-conversation execution context', () => {
     const context = createExecutionContext({
       conversation: firstConversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
     });
     context.helpers.getConversation = (conversationId: string) =>

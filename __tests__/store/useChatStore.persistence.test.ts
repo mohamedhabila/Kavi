@@ -9,6 +9,7 @@ import { CHAT_STORE_CHECKPOINT_DELAY_MS } from '../../src/store/chatStorePersist
 import { useChatStore } from '../../src/store/useChatStore';
 import { normalizePersistedAgentRun } from '../../src/store/agentRuns/shared';
 import { prepareAgentRunResumeForOrchestrator } from '../../src/engine/graph/runResumePreparation';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const expoFileSystemMock = jest.requireMock('expo-file-system') as {
   __resetStore: () => void;
@@ -58,7 +59,7 @@ afterEach(async () => {
 
 describe('useChatStore persistence checkpoints', () => {
   it('persists a new conversation before the normal throttle window', async () => {
-    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
+    const id = useChatStore.getState().ensureConversation('provider1', 'System prompt');
 
     await advanceBeforeCheckpoint();
     expect(readPersistedChatState()?.state?.conversations ?? []).toHaveLength(0);
@@ -77,7 +78,7 @@ describe('useChatStore persistence checkpoints', () => {
   });
 
   it('persists the latest user message on the fast checkpoint schedule', async () => {
-    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
+    const id = useChatStore.getState().ensureConversation('provider1', 'System prompt');
     await advancePastCheckpoint();
 
     useChatStore.getState().addMessage(id, {
@@ -138,7 +139,7 @@ describe('useChatStore persistence checkpoints', () => {
   });
 
   it('persists bounded workflow evidence on the checkpoint schedule', async () => {
-    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
+    const id = addConversation('provider1', 'System prompt');
     await advancePastCheckpoint();
 
     useChatStore.getState().addMessage(id, {
@@ -179,7 +180,7 @@ describe('useChatStore persistence checkpoints', () => {
   });
 
   it('reloads the exact active task request and its immutable anchor after compaction', async () => {
-    const id = useChatStore.getState().createConversation('provider1', 'System prompt');
+    const id = addConversation('provider1', 'System prompt');
     await advancePastCheckpoint();
     const workflowTaskAnchor = {
       sourceMessageId: 'msg-original-task',

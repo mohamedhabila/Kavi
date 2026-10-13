@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('applyConversationCompaction', () => {
     it('should replace the persisted transcript with the compacted message set', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-old-user',
         role: 'user',
@@ -62,7 +63,7 @@ describe('useChatStore', () => {
     });
 
     it('preserves the exact source request while its agent run is active', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       const sourceRequest = {
         id: 'msg-active-request',
         role: 'user' as const,
@@ -115,7 +116,7 @@ describe('useChatStore', () => {
     });
 
     it('does not promote model-only tool transcript repairs into durable chat', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'durable-user',
         role: 'user',

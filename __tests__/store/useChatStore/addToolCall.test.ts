@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('addToolCall', () => {
     it('should add a tool call to a message', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {
@@ -25,7 +26,7 @@ describe('useChatStore', () => {
     });
 
     it('should upsert an existing tool call instead of appending a duplicate', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {
@@ -55,7 +56,7 @@ describe('useChatStore', () => {
     });
 
     it('should upsert synthetic placeholder ids within the same assistant message', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {
@@ -86,7 +87,7 @@ describe('useChatStore', () => {
     });
 
     it('should upsert a logical tool call when streaming metadata upgrades the id', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {
@@ -141,7 +142,7 @@ describe('useChatStore', () => {
     });
 
     it('should append distinct tool calls when provider output indexes restart at zero', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {
@@ -193,7 +194,7 @@ describe('useChatStore', () => {
     });
 
     it('should skip no-op tool call upserts', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, { id: 'msg1', role: 'assistant', content: '' });
 
       useChatStore.getState().addToolCall(convId, 'msg1', {

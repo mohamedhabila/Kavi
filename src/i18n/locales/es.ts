@@ -224,8 +224,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     starterCreatePrompt: 'Ayúdame a crear algo a partir de una foto o un archivo.',
     starterActPrompt:
       'Ayúdame a actuar de forma segura y pregunta antes de cualquier acción delicada.',
-    continueRecent: 'Continuar un chat reciente',
-    continueRecentAccessibility: 'Continuar chat reciente: {title}',
     thinking: 'Pensando…',
     toolCall: 'Usando herramienta: {name}',
     runStopped: {

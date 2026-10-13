@@ -18,7 +18,7 @@ import {
   mockOpenDrawer,
   mockSetParams,
 } from '../../../testSupport/chatScreen/componentMocks';
-import { mockGetOrCreateCanonicalThread } from '../../../testSupport/chatScreen/storeMocks';
+import { mockEnsureConversation } from '../../../testSupport/chatScreen/storeMocks';
 
 describe('ChatScreen rendering and layout', () => {
   beforeEach(resetChatScreenTestEnvironment);
@@ -30,10 +30,10 @@ describe('ChatScreen rendering and layout', () => {
     expect(getByText('Hi there!')).toBeTruthy();
   });
 
-  it('bootstraps the canonical conversation when no conversation is active', () => {
+  it('bootstraps the one conversation when none is active', () => {
     mockChatScreenState.activeConversationId = null;
     render(<ChatScreen />);
-    expect(mockGetOrCreateCanonicalThread).toHaveBeenCalledWith(
+    expect(mockEnsureConversation).toHaveBeenCalledWith(
       'openai',
       'You are helpful',
       'gpt-5.4',
@@ -283,7 +283,7 @@ describe('ChatScreen rendering and layout', () => {
     }
   });
 
-  it('renders the guided assistant start while the canonical conversation is being materialized', () => {
+  it('renders the guided assistant start while the conversation is being created', () => {
     mockChatScreenState.activeConversationId = null;
     const { getByTestId, getByText } = render(<ChatScreen />);
 

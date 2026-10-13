@@ -6,6 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { useChatStore } from '../helpers/chatStoreHarness';
 import { sanitizeUsage } from '../../src/store/chatPersistenceUsage';
 import type { ConversationUsageEntry } from '../../src/types/usage';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 function usageEntry(overrides: Partial<ConversationUsageEntry> = {}): ConversationUsageEntry {
   return {
@@ -23,7 +24,7 @@ function usageEntry(overrides: Partial<ConversationUsageEntry> = {}): Conversati
 
 describe('upstream provider on recorded usage', () => {
   it('keeps the upstream a router served the call from on the conversation entry', () => {
-    const id = useChatStore.getState().createConversation('p1', 's');
+    const id = addConversation('p1', 's');
 
     useChatStore
       .getState()
@@ -61,7 +62,7 @@ describe('upstream provider on recorded usage', () => {
   });
 
   it('keeps a measured call duration and drops one that is not a number', () => {
-    const id = useChatStore.getState().createConversation('p1', 's');
+    const id = addConversation('p1', 's');
     useChatStore
       .getState()
       .recordConversationUsage(id, { ...usageEntry(), source: 'memory', durationMs: 840 });

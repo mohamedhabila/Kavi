@@ -68,10 +68,8 @@ type ChatScreenConversationPaneProps = {
   }>;
   maybeScrollToBottom: (animated: boolean) => void;
   onOpenProviderSetup: () => void;
-  onResumeConversation: (conversationId: string) => void;
   personaSwitchMarkersByMessageId: Map<string, PersonaSwitchMarker>;
   providerName?: string;
-  recentConversation?: { id: string; title: string };
   resolvedDisplayMessages: ResolvedDisplayMessageItem[];
   returnTextToComposer: (conversationId: string, text: string) => void;
   scrollToBottom: (animated: boolean) => void;
@@ -126,10 +124,8 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
     listMetricsRef,
     maybeScrollToBottom,
     onOpenProviderSetup,
-    onResumeConversation,
     personaSwitchMarkersByMessageId,
     providerName,
-    recentConversation,
     resolvedDisplayMessages,
     returnTextToComposer,
     scrollToBottom,
@@ -198,19 +194,15 @@ export function ChatScreenConversationPane(props: ChatScreenConversationPaneProp
       <AssistantStart
         hasProviderReady={hasProviderReady}
         onOpenProviderSetup={onOpenProviderSetup}
-        onResumeConversation={onResumeConversation}
         onSelectStarter={handleComposerTextChange}
         providerName={providerName}
-        recentConversation={recentConversation}
       />
     ),
     [
       handleComposerTextChange,
       hasProviderReady,
       onOpenProviderSetup,
-      onResumeConversation,
       providerName,
-      recentConversation,
     ],
   );
   const handleListLayout = useCallback(

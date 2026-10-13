@@ -8,12 +8,13 @@ jest.mock('expo-sqlite', () => {
 });
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('clearAllConversations', () => {
     it('should remove all conversations and clear active id', () => {
-      useChatStore.getState().createConversation('p1', 's');
-      useChatStore.getState().createConversation('p2', 's');
+      addConversation('p1', 's');
+      addConversation('p2', 's');
       expect(useChatStore.getState().conversations).toHaveLength(2);
 
       useChatStore.getState().clearAllConversations();

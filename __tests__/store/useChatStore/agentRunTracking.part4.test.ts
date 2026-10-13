@@ -4,11 +4,12 @@
 
 import { AMBIGUOUS_EFFECT_RESTART_ERROR } from '../../../src/services/executionJournal/toolEffectRestartProjection';
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('agent run tracking part 4', () => {
     it('keeps typed provider failures in review even when arbitrary output contains restart prose', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-9',
         role: 'user',
@@ -68,7 +69,7 @@ describe('useChatStore', () => {
     });
 
     it('should fail app-restart-interrupted background-worker runs instead of reopening them for pilot review', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-10',
         role: 'user',
@@ -132,7 +133,7 @@ describe('useChatStore', () => {
     // Without its execution owner the effect cannot be looked up, so the call is reported as
     // possibly applied and the run settles; holding it `recovering` blocked the conversation.
     it('settles in-flight tool calls whose exact execution ownership is unavailable', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg-user-11',
         role: 'user',

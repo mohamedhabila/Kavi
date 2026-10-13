@@ -19,6 +19,7 @@ import { searchMemoryTurns } from '../../src/services/memory/core/memoryTurnsSto
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../helpers/chatStoreHarness';
 import { resetSettingsStore } from '../helpers/settingsStoreFixtures';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -71,7 +72,7 @@ describe('settings memory opt-out transition', () => {
   });
 
   it('never captures what was said while memory was off', () => {
-    const conversationId = useChatStore.getState().createConversation('provider', 'model');
+    const conversationId = addConversation('provider', 'model');
     addClosedTurn(conversationId, 'before-opt-out', 10);
     publishConversationTurnMemory(conversationId, 'before-opt-out');
 
@@ -90,7 +91,7 @@ describe('settings memory opt-out transition', () => {
   });
 
   it('applies the same transitions to settings replacement', () => {
-    const conversationId = useChatStore.getState().createConversation('provider', 'model');
+    const conversationId = addConversation('provider', 'model');
 
     useSettingsStore.getState().replaceAllSettings({ disableLongTermMemory: true });
     expect(useSettingsStore.getState().disableLongTermMemory).toBe(true);

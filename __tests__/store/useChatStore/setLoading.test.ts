@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('setLoading', () => {
@@ -15,7 +16,7 @@ describe('useChatStore', () => {
     });
 
     it('forces on-device usage entries to remain zero-cost', () => {
-      const convId = useChatStore.getState().createConversation('gemma-local', 'system');
+      const convId = addConversation('gemma-local', 'system');
 
       useChatStore.getState().recordConversationUsage(convId, {
         model: 'gemma-4-E2B-it',

@@ -10,6 +10,7 @@ import {
   useChatStore,
 } from '../helpers/subAgentHarness';
 import { DEFAULT_SUB_AGENT_MAX_ITERATIONS } from '../../src/services/agents/lifecycle/runConfig';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 describe('Sub-Agent Service', () => {
   installSubAgentTestHarness();
@@ -204,7 +205,7 @@ describe('Sub-Agent Service', () => {
 
     it('records streamed worker usage on the parent conversation', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      const parentConversationId = useChatStore.getState().createConversation('test', 'system');
+      const parentConversationId = addConversation('test', 'system');
 
       runOrchestrator.mockImplementationOnce((_opts: any, callbacks: any) => {
         callbacks.onUsage?.({
@@ -250,7 +251,7 @@ describe('Sub-Agent Service', () => {
 
     it('records hidden worker-finalizer usage on the parent conversation', async () => {
       const { runOrchestrator } = require('../../src/engine/orchestrator');
-      const parentConversationId = useChatStore.getState().createConversation('test', 'system');
+      const parentConversationId = addConversation('test', 'system');
       sendMessageSpy.mockResolvedValueOnce(
         makeStructuredFinalizerResponse('Finalized worker summary.', 'incomplete', {
           inputTokens: 60,

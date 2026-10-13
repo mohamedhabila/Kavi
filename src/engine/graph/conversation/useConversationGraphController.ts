@@ -8,7 +8,7 @@ import {
 } from '../../../services/llm/support/providerSupport';
 import type {
   ForegroundConversationRunHelpers,
-  EnsureCanonicalConversationOptions,
+  EnsureConversationOptions,
 } from '../foregroundRun/executionTypes';
 import type { ResolvedFinalizationProviderContext } from '../foregroundRun/contracts';
 import {
@@ -29,7 +29,7 @@ type UseConversationGraphControllerParams = {
   activeProviderId: string | null;
   effectiveMode: Conversation['mode'];
   effectivePersonaId: string;
-  getOrCreateCanonicalThread: ChatStoreState['getOrCreateCanonicalThread'];
+  ensureStoredConversation: ChatStoreState['ensureConversation'];
   noProviderMessage: string;
   providers: SettingsStoreState['providers'];
   setActiveProviderAndModel: SettingsStoreState['setActiveProviderAndModel'];
@@ -42,7 +42,7 @@ type UseConversationGraphControllerParams = {
 };
 
 export function useConversationGraphController(params: UseConversationGraphControllerParams): {
-  ensureCanonicalConversation: ForegroundConversationRunHelpers['ensureCanonicalConversation'];
+  ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   handleModelSelect: (providerId: string, model: string) => void;
   handlePersonaSelect: (personaId: string) => void;
   handleToggleMode: () => void;
@@ -62,8 +62,8 @@ export function useConversationGraphController(params: UseConversationGraphContr
     [params.activeModel, params.activeProviderId, params.providers],
   );
 
-  const ensureCanonicalConversation = useCallback(
-    (options?: EnsureCanonicalConversationOptions) => {
+  const ensureConversation = useCallback(
+    (options?: EnsureConversationOptions) => {
       const selection = resolveConversationStartDefaults();
       const providerId = options?.providerId ?? selection?.providerId;
       if (!providerId) {
@@ -74,7 +74,7 @@ export function useConversationGraphController(params: UseConversationGraphContr
       }
 
       const model = options?.model ?? selection?.model ?? undefined;
-      return params.getOrCreateCanonicalThread(providerId, params.systemPrompt, model, {
+      return params.ensureStoredConversation(providerId, params.systemPrompt, model, {
         activate: options?.activate,
         personaId: options?.personaId,
         mode: options?.mode,
@@ -88,13 +88,13 @@ export function useConversationGraphController(params: UseConversationGraphContr
       return;
     }
 
-    ensureCanonicalConversation({
+    ensureConversation({
       personaId: params.effectivePersonaId,
       mode: params.effectiveMode,
       reportMissingProvider: false,
     });
   }, [
-    ensureCanonicalConversation,
+    ensureConversation,
     params.activeConversationId,
     params.effectiveMode,
     params.effectivePersonaId,
@@ -150,7 +150,7 @@ export function useConversationGraphController(params: UseConversationGraphContr
       const nextMode = resolveConversationModeForPersona(personaId);
       let conversationId = params.activeConversationId;
       if (!conversationId) {
-        conversationId = ensureCanonicalConversation({
+        conversationId = ensureConversation({
           personaId,
           mode: nextMode,
           reportMissingProvider: true,
@@ -163,14 +163,14 @@ export function useConversationGraphController(params: UseConversationGraphContr
       params.updatePersonaInConversation(conversationId, personaId);
       params.updateModeInConversation(conversationId, nextMode);
     },
-    [ensureCanonicalConversation, params],
+    [ensureConversation, params],
   );
 
   const handleToggleMode = useCallback(() => {
     const nextMode = params.effectiveMode === 'agentic' ? 'chitchat' : 'agentic';
     let conversationId = params.activeConversationId;
     if (!conversationId) {
-      conversationId = ensureCanonicalConversation({
+      conversationId = ensureConversation({
         personaId: resolveConversationPersonaForMode({ nextMode }),
         mode: nextMode,
         reportMissingProvider: true,
@@ -190,10 +190,10 @@ export function useConversationGraphController(params: UseConversationGraphContr
 
     params.updateModeInConversation(conversationId, nextMode);
     params.updatePersonaInConversation(conversationId, nextPersonaId, { recordEvent: false });
-  }, [ensureCanonicalConversation, params]);
+  }, [ensureConversation, params]);
 
   return {
-    ensureCanonicalConversation,
+    ensureConversation,
     handleModelSelect,
     handlePersonaSelect,
     handleToggleMode,

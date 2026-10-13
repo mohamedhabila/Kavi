@@ -509,7 +509,7 @@ describe('scheduled job conversation transcript', () => {
       output: 'Recovered on retry.',
       conversationId: 'scheduled-conversation',
     });
-    expect(mockChatState.createConversation).toHaveBeenCalledTimes(1);
+    expect(mockChatState.ensureConversation).toHaveBeenCalledTimes(1);
     expect(abortAllScheduledJobExecutions()).toBe(0);
   });
 
@@ -582,7 +582,7 @@ describe('scheduled job conversation transcript', () => {
       executeScheduledJob(scheduledJob(), { lifecycleEpoch: staleEpoch }),
     ).rejects.toMatchObject({ name: 'SchedulerAppBackgroundAbortError' });
 
-    expect(mockChatState.createConversation).not.toHaveBeenCalled();
+    expect(mockChatState.ensureConversation).not.toHaveBeenCalled();
     expect(mockChatState.conversations).toEqual([]);
     expect(mockRunOrchestrator).not.toHaveBeenCalled();
   });

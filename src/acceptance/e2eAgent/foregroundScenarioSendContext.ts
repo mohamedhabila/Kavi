@@ -57,7 +57,7 @@ export function createForegroundScenarioSendContextFactory(
     // No composer surface in acceptance runs; the chat screen clears its draft here.
     clearComposerDraft: () => {},
     defaultConversationMode: params.defaultMode,
-    ensureCanonicalConversation: params.context.helpers.ensureCanonicalConversation,
+    ensureConversation: params.context.helpers.ensureConversation,
     generateId,
     getLiveActiveConversationId: () => activeConversationId,
     isAgenticMode: params.defaultMode === 'agentic',

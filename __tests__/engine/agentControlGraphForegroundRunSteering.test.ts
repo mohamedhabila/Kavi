@@ -62,7 +62,7 @@ describe('foreground run steering', () => {
     const context = createExecutionContext({
       conversation,
       providers: [provider],
-      ensureCanonicalConversation: jest.fn(),
+      ensureConversation: jest.fn(),
       recordConversationTurnMemory: jest.fn(),
       persistAddedMessages: true,
     });

@@ -10,6 +10,7 @@ import {
   indexClosedTurn,
   searchMemoryTurns,
 } from '../../../src/services/memory/core/memoryTurnsStore';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -41,7 +42,7 @@ afterAll(() => {
 describe('rewinding a user message for resend', () => {
   it('removes the rewound turns from the past-turn index and keeps earlier ones', () => {
     const store = useChatStore.getState();
-    const conversationId = store.createConversation('p1', 's');
+    const conversationId = addConversation('p1', 's');
     store.addMessage(conversationId, {
       id: 'kept-user',
       role: 'user',

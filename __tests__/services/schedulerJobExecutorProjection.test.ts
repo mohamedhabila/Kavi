@@ -1,5 +1,6 @@
 import type { CronJob } from '../../src/services/cron/types';
 import type { ModelProjectionOwner } from '../../src/types/conversation';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const mockFlushChatStorePersistenceNow = jest.fn().mockResolvedValue(undefined);
 
@@ -45,7 +46,7 @@ function scheduledJob(overrides: Partial<CronJob> = {}): CronJob {
 }
 
 function createConversation(): string {
-  return useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  return addConversation('provider-1', 'Be helpful.');
 }
 
 function snapshotConversation(conversationId: string): string {

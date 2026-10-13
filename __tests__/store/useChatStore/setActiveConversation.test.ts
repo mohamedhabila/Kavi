@@ -3,11 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('useChatStore', () => {
   describe('setActiveConversation', () => {
     it('should set the active conversation id', () => {
-      const id = useChatStore.getState().createConversation('p1', 's');
+      const id = addConversation('p1', 's');
       useChatStore.getState().setActiveConversation(null);
       expect(useChatStore.getState().activeConversationId).toBeNull();
 

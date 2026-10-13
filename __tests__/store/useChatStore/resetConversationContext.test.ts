@@ -11,6 +11,7 @@ import {
   loadAllArchivedMessages,
 } from '../../../src/services/transcriptArchive/transcriptArchive';
 import type { Message } from '../../../src/types/message';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -18,7 +19,7 @@ const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => 
 // and into the transcript archive, where the person can still scroll back to them.
 
 function seedConversation(): string {
-  const id = useChatStore.getState().createConversation('p1', 'system');
+  const id = addConversation('p1', 'system');
   const messages: Array<Pick<Message, 'id' | 'role' | 'content'>> = [
     { id: 'u1', role: 'user', content: 'Plan the Lisbon weekend' },
     { id: 'a1', role: 'assistant', content: 'Day one Alfama, day two Sintra.' },
@@ -89,7 +90,7 @@ describe('resetting a conversation’s context', () => {
   });
 
   it('reports false when there is nothing to reset', () => {
-    const id = useChatStore.getState().createConversation('p1', 'system');
+    const id = addConversation('p1', 'system');
 
     expect(useChatStore.getState().resetConversationContext(id)).toBe(false);
     expect(useChatStore.getState().resetConversationContext('missing')).toBe(false);

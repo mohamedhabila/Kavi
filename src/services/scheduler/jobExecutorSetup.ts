@@ -96,19 +96,13 @@ export function resolveScheduledExecutionConversation(params: {
       ? chatState.activeConversationId || undefined
       : undefined);
   const executionMode = job.payload.mode;
-  const conversationId = existingConversationId
-    ? existingConversationId
-    : job.sessionTarget === 'main'
-      ? chatState.getOrCreateCanonicalThread(provider.id, systemPrompt, model, {
-          activate: false,
-          personaId: executionMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
-          mode: executionMode,
-        })
-      : chatState.createConversation(provider.id, systemPrompt, model, {
-          activate: false,
-          personaId: executionMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
-          mode: executionMode,
-        });
+  const conversationId =
+    existingConversationId ??
+    chatState.ensureConversation(provider.id, systemPrompt, model, {
+      activate: false,
+      personaId: executionMode === 'agentic' ? SUPER_AGENT_PERSONA_ID : undefined,
+      mode: executionMode,
+    });
   return { chatState: useChatStore.getState(), conversationId };
 }
 

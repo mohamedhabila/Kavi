@@ -34,7 +34,7 @@ type UseForegroundConversationRunnerParams = {
   clearTrackedRunCancellation: ForegroundConversationRunHelpers['clearTrackedRunCancellation'];
   createId: ForegroundConversationRunHelpers['createId'];
   ensureAgentRunFinalResponse: ForegroundConversationRunHelpers['ensureAgentRunFinalResponse'];
-  ensureCanonicalConversation: ForegroundConversationRunHelpers['ensureCanonicalConversation'];
+  ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   getConversation: ForegroundConversationRunHelpers['getConversation'];
   getConversations: ForegroundConversationRunHelpers['getConversations'];
   isCurrentForegroundRequest: ForegroundConversationRunRequestActions['isCurrentForegroundRequest'];
@@ -79,7 +79,7 @@ export function useForegroundConversationRunner(
         clearTrackedRunCancellation: params.clearTrackedRunCancellation,
         createId: params.createId,
         ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponse,
-        ensureCanonicalConversation: params.ensureCanonicalConversation,
+        ensureConversation: params.ensureConversation,
         getConversation: params.getConversation,
         getConversations: params.getConversations,
         getResumeAgentRun: () => params.resumeAgentRunRef.current,
@@ -112,7 +112,7 @@ export function useForegroundConversationRunner(
       params.clearTrackedRunCancellation,
       params.createId,
       params.ensureAgentRunFinalResponse,
-      params.ensureCanonicalConversation,
+      params.ensureConversation,
       params.getConversation,
       params.getConversations,
       params.isCurrentForegroundRequest,

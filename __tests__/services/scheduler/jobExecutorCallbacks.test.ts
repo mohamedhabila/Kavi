@@ -3,6 +3,7 @@ import { createScheduledJobOrchestratorCallbacks } from '../../../src/services/s
 import { createScheduledJobRetryPolicy } from '../../../src/services/scheduler/jobExecutorRetryPolicy';
 import { createAgentControlGraphTerminalOutcomeTracker } from '../../../src/engine/graph/terminalOutcome';
 import type { Attachment } from '../../../src/types/attachment';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 function buildPdfAttachment(overrides: Partial<Attachment> = {}): Attachment {
   return {
@@ -55,7 +56,7 @@ describe('createScheduledJobOrchestratorCallbacks — onUserMessageAttachmentsUp
 
   beforeEach(() => {
     useChatStore.setState({ conversations: [], activeConversationId: null, isLoading: false });
-    conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+    conversationId = addConversation('provider-1', 'Be helpful.');
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 

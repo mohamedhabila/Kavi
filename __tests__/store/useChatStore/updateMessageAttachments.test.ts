@@ -4,6 +4,7 @@
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
 import type { Attachment } from '../../../src/types/attachment';
+import { addConversation } from '../../helpers/chatConversationFixtures';
 
 const makePdfAttachment = (overrides: Partial<Attachment> = {}): Attachment => ({
   id: 'att-1',
@@ -18,7 +19,7 @@ const makePdfAttachment = (overrides: Partial<Attachment> = {}): Attachment => (
 describe('useChatStore', () => {
   describe('updateMessageAttachments', () => {
     it('records a structured document-input refusal reason onto the attachment', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'user',
@@ -37,7 +38,7 @@ describe('useChatStore', () => {
     });
 
     it('records the exceeded byte ceiling alongside the size-limit refusal', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'user',
@@ -61,7 +62,7 @@ describe('useChatStore', () => {
     });
 
     it('is a no-op when the attachments are already equal', () => {
-      const convId = useChatStore.getState().createConversation('p1', 's');
+      const convId = addConversation('p1', 's');
       useChatStore.getState().addMessage(convId, {
         id: 'msg1',
         role: 'user',

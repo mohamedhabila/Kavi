@@ -114,19 +114,20 @@ function updateMockMessage(
 export const mockChatState = {
   conversations: [] as Conversation[],
   activeConversationId: null as string | null,
-  createConversation: jest.fn(
+  ensureConversation: jest.fn(
     (
       _providerId: string,
       _systemPrompt: string,
       _model: string,
       _options: Record<string, unknown>,
     ) => {
+      const existing = mockChatState.conversations[0];
+      if (existing) return existing.id;
       const conversation = mockConversation('scheduled-conversation');
       mockChatState.conversations.push(conversation);
       return conversation.id;
     },
   ),
-  getOrCreateCanonicalThread: jest.fn(),
   updateModeInConversation: jest.fn((conversationId: string, mode: Conversation['mode']) => {
     findMockConversation(conversationId).mode = mode;
   }),

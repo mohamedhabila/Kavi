@@ -7,6 +7,7 @@ import {
 } from '../../src/store/modelProjectionIntentCoordinator';
 import type { ModelProjectionOwner } from '../../src/types/conversation';
 import type { Message } from '../../src/types/message';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 function owner(requestMessageId = 'scheduled-request'): ModelProjectionOwner {
   return {
@@ -19,7 +20,7 @@ function owner(requestMessageId = 'scheduled-request'): ModelProjectionOwner {
 }
 
 function createConversation(messages: Message[] = []): string {
-  const conversationId = useChatStore.getState().createConversation('provider-1', 'Be helpful.');
+  const conversationId = addConversation('provider-1', 'Be helpful.');
   for (const message of messages) {
     useChatStore.getState().addMessage(conversationId, message);
   }

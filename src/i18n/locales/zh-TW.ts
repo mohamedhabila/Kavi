@@ -211,8 +211,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     starterRememberPrompt: '請記住我接下來會分享的一個偏好，以便下次使用。',
     starterCreatePrompt: '請幫我根據照片或檔案創作內容。',
     starterActPrompt: '請幫我安全地執行操作，並在任何敏感操作前徵求我的同意。',
-    continueRecent: '繼續最近的聊天',
-    continueRecentAccessibility: '繼續最近的聊天：{title}',
     thinking: '思考中…',
     toolCall: '使用工具：{name}',
     runStopped: {

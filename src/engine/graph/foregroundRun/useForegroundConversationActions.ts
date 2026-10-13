@@ -42,7 +42,7 @@ type UseForegroundConversationActionsParams = {
   rewindUserMessageForResend: ChatStoreState['rewindUserMessageForResend'];
   editingMessageId: string | null;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
-  ensureCanonicalConversation: ForegroundConversationRunHelpers['ensureCanonicalConversation'];
+  ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   forceNextScrollRef: MutableRefObject<boolean>;
   generateId: () => string;
   isAgenticMode: boolean;
@@ -84,7 +84,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     rewindUserMessageForResend,
     editingMessageId,
     ensureAgentRunFinalResponse,
-    ensureCanonicalConversation,
+    ensureConversation,
     forceNextScrollRef,
     generateId,
     isAgenticMode,
@@ -195,7 +195,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       attachmentWorkspaceImportFailedMessage,
       clearComposerDraft,
       defaultConversationMode,
-      ensureCanonicalConversation,
+      ensureConversation,
       generateId,
       getLiveActiveConversationId,
       isAgenticMode,
@@ -215,7 +215,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       attachmentWorkspaceImportFailedMessage,
       clearComposerDraft,
       defaultConversationMode,
-      ensureCanonicalConversation,
+      ensureConversation,
       forceNextScrollRef,
       generateId,
       getLiveActiveConversationId,

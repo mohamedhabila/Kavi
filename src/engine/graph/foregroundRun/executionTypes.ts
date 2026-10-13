@@ -29,7 +29,7 @@ import type {
 } from '../../../store/modelProjectionOwnership';
 import type { RecordConversationTurnMemory } from '../../../services/memory/core/memoryCapture';
 
-export type EnsureCanonicalConversationOptions = {
+export type EnsureConversationOptions = {
   providerId?: string;
   model?: string;
   personaId?: string;
@@ -128,7 +128,7 @@ export interface ForegroundConversationRunHelpers {
   clearTrackedRunCancellation: (conversationId: string, runId: string) => void;
   createId: () => string;
   ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
-  ensureCanonicalConversation: (options?: EnsureCanonicalConversationOptions) => string | null;
+  ensureConversation: (options?: EnsureConversationOptions) => string | null;
   getConversation: (conversationId: string) => Conversation | undefined;
   getConversations: () => Conversation[];
   getResumeAgentRun: () => ResumeAgentRun | null;

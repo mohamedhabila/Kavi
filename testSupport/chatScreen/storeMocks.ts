@@ -1,8 +1,7 @@
 import { mockChatScreenState, mockGetConversations } from './state';
 import { mockPersonas } from './componentMocks';
 export const mockUpdateMessageEnrichedContent = jest.fn();
-export const mockCreateConversation = jest.fn().mockReturnValue('new-conv');
-export const mockGetOrCreateCanonicalThread = jest.fn().mockReturnValue('new-conv');
+export const mockEnsureConversation = jest.fn().mockReturnValue('new-conv');
 export const mockAddMessage = jest.fn();
 export const mockUpdateMessage = jest.fn();
 export const mockSetLoading = jest.fn();
@@ -36,8 +35,7 @@ jest.mock('../../src/store/useChatStore', () => {
     activeConversationId: mockChatScreenState.activeConversationId,
     isLoading: mockChatScreenState.loadingState,
     setActiveConversation: mockSetActiveConversation,
-    createConversation: mockCreateConversation,
-    getOrCreateCanonicalThread: mockGetOrCreateCanonicalThread,
+    ensureConversation: mockEnsureConversation,
     addMessage: mockAddMessage,
     updateMessage: mockUpdateMessage,
     updateMessageEnrichedContent: mockUpdateMessageEnrichedContent,

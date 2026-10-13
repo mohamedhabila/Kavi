@@ -39,8 +39,8 @@ function createContext(overrides: Partial<ForegroundConversationSendContext> = {
       calls.push('clearComposerDraft');
     }),
     defaultConversationMode: 'chat',
-    ensureCanonicalConversation: jest.fn(() => {
-      calls.push('ensureCanonicalConversation');
+    ensureConversation: jest.fn(() => {
+      calls.push('ensureConversation');
       return 'created-conversation';
     }),
     generateId: () => 'generated-message-id',
@@ -94,7 +94,7 @@ describe('executeForegroundConversationSend', () => {
 
     await executeForegroundConversationSend({ context, text: 'hello' });
 
-    expect(context.ensureCanonicalConversation).not.toHaveBeenCalled();
+    expect(context.ensureConversation).not.toHaveBeenCalled();
     // Without caller options the only run option is the send's latency timeline.
     expect(context.runChat).toHaveBeenCalledWith('active-conversation', {
       latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
@@ -124,7 +124,7 @@ describe('executeForegroundConversationSend', () => {
 
     await executeForegroundConversationSend({ context, text: 'hello' });
 
-    expect(context.ensureCanonicalConversation).toHaveBeenCalledWith(
+    expect(context.ensureConversation).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'agentic', reportMissingProvider: true }),
     );
     expect(context.runChat).toHaveBeenCalledWith('created-conversation', {

@@ -28,6 +28,7 @@ import { prepareMemoryPromptSection } from '../../src/services/memory/core/memor
 import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { useChatStore } from '../helpers/chatStoreHarness';
+import { addConversation } from '../helpers/chatConversationFixtures';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
@@ -43,7 +44,7 @@ function useExtraction(next: ExtractionScript): void {
 }
 
 function startConversation(): string {
-  return useChatStore.getState().createConversation('provider', 'Be helpful.');
+  return addConversation('provider', 'Be helpful.');
 }
 
 async function closeTurn(conversationId: string, user: string, reply: string): Promise<string> {
