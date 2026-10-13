@@ -13,6 +13,8 @@ import {
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
 import { installNativeToolExecutionEnvironment } from '../../src/engine/tools/native/executionEnvironment';
 import { executeToolInner } from '../../src/engine/tools/toolDispatchRouter';
+import { buildToolEffectReceipt } from '../../src/engine/toolExecution/toolEffectReceipt';
+import { classifyEffectDispatchReceipt } from '../../src/services/executionJournal/effectDispatchReceiptClassification';
 import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('E2E native mobile fixtures', () => {
@@ -147,7 +149,7 @@ describe('E2E native mobile fixtures', () => {
     );
     expect(invalidCreateRaw.status).toBe('failed');
     expect(JSON.parse(invalidCreateRaw.content)).toEqual({
-      status: 'error',
+      status: 'invalid_request',
       code: 'missing_required_argument',
       tool: 'calendar_create_event',
       missingRequiredArguments: ['title'],
@@ -333,6 +335,28 @@ describe('E2E native mobile fixtures', () => {
     });
   });
 
+  it('settles a rejected SMS recipient as a failed call the model can correct', async () => {
+    const raw = await executeToolInner(
+      'sms_compose',
+      JSON.stringify({ recipients: ['Avery'], message: 'Hello Avery' }),
+      'conv-mobile-contact-e2e',
+    );
+    const receipt = await buildToolEffectReceipt({
+      toolCallId: 'tc-sms-rejected',
+      toolName: 'sms_compose',
+      argumentsText: JSON.stringify({ recipients: ['Avery'], message: 'Hello Avery' }),
+      resultText: raw.content,
+      transportState: 'returned',
+      resultIsError: true,
+      executionRunId: 'run-sms-rejected',
+    });
+
+    expect(receipt.effectState).toBe('failed');
+    expect(classifyEffectDispatchReceipt('external_run', receipt)?.requiresReconciliation).toBe(
+      false,
+    );
+  });
+
   it('rejects non-phone SMS recipients without mutating fixture state', async () => {
     const raw = await executeToolInner(
       'sms_compose',
@@ -345,7 +369,7 @@ describe('E2E native mobile fixtures', () => {
 
     expect(raw.status).toBe('failed');
     expect(JSON.parse(raw.content)).toEqual({
-      status: 'error',
+      status: 'invalid_request',
       code: 'invalid_phone_number',
       tool: 'sms_compose',
       error:

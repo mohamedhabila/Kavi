@@ -187,9 +187,13 @@ function parseFixtureArgs(argsString: string): Record<string, unknown> {
   }
 }
 
+// Argument rejections carry the status the native action service gives them
+// (NativeActionError's 'invalid_request'): a rejection the effect contract does not map reads
+// as an unknown effect, which ends the run as "may have changed external state" instead of
+// letting the model correct its call, as the app does.
 function buildMissingRequiredArgsError(name: string, missing: string[]): E2ENativeMobileOutcome {
   return failedE2ENativeOutcome({
-    status: 'error',
+    status: 'invalid_request',
     code: 'missing_required_argument',
     tool: name,
     missingRequiredArguments: missing,
@@ -203,7 +207,7 @@ function buildInvalidFixtureArgsError(
   code = 'invalid_arguments',
 ): E2ENativeMobileOutcome {
   return failedE2ENativeOutcome({
-    status: 'error',
+    status: 'invalid_request',
     code,
     tool: name,
     error: message,
