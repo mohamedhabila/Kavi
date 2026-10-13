@@ -2,8 +2,10 @@ import {
   areSameLogicalToolCall,
   findMatchingToolCallIndex,
   findMatchingToolCallIndexWithinMessage,
+  mergeMatchingToolCall,
 } from '../../src/utils/toolCallMatching';
 import type { ToolCall } from '../../src/types/message';
+import type { ToolEffectReceipt } from '../../src/types/toolEffectReceipt';
 
 function makeToolCall(overrides: Partial<ToolCall> = {}): ToolCall {
   return {
@@ -220,5 +222,18 @@ describe('toolCallMatching', () => {
     });
 
     expect(findMatchingToolCallIndexWithinMessage([existing], incoming)).toBe(-1);
+  });
+
+  // The chat's record of what a reply did comes from these receipts; a later snapshot of
+  // the same call that carries none must not erase them.
+  it('keeps the receipts of a call when a later snapshot of it carries none', () => {
+    const receipts = [{ receiptId: 'ter_1' } as ToolEffectReceipt];
+    const merged = mergeMatchingToolCall(
+      makeToolCall({ effectReceipts: receipts }),
+      makeToolCall({ effectReceipts: undefined, result: 'done' }),
+    );
+
+    expect(merged.effectReceipts).toBe(receipts);
+    expect(merged.result).toBe('done');
   });
 });

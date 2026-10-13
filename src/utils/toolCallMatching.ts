@@ -181,6 +181,7 @@ export function mergeMatchingToolCall(
     progressText: incomingToolCall.progressText ?? existingToolCall?.progressText,
     result: incomingToolCall.result ?? existingToolCall?.result,
     error: incomingToolCall.error ?? existingToolCall?.error,
+    effectReceipts: incomingToolCall.effectReceipts ?? existingToolCall?.effectReceipts,
   };
 }
 
