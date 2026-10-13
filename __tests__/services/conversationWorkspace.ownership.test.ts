@@ -5,69 +5,27 @@ import {
 } from '../../src/services/conversationWorkspace/ownership';
 
 describe('conversation workspace ownership', () => {
-  it('keeps a canonical conversation as its own workspace target', () => {
-    expect(
-      resolveConversationWorkspaceTarget({
-        conversationId: 'conv-root',
-        conversations: [{ id: 'conv-root', isSideThread: false } as any],
-      }),
-    ).toEqual({ workspaceConversationId: 'conv-root' });
-  });
-
-  it('resolves a side thread to its parent workspace and keeps the side thread as a read fallback', () => {
-    expect(
-      resolveConversationWorkspaceTarget({
-        conversationId: 'conv-side',
-        conversations: [
-          { id: 'conv-root', isSideThread: false } as any,
-          {
-            id: 'conv-side',
-            isSideThread: true,
-            parentConversationId: 'conv-root',
-          } as any,
-        ],
-      }),
-    ).toEqual({
+  it('keeps a conversation as its own workspace target', () => {
+    expect(resolveConversationWorkspaceTarget({ conversationId: 'conv-root' })).toEqual({
       workspaceConversationId: 'conv-root',
-      workspaceReadFallbackConversationId: 'conv-side',
     });
   });
 
-  it('follows sub-agent ancestry and then side-thread ancestry to the shared workspace root', () => {
-    expect(
-      resolveConversationWorkspaceTarget({
-        conversationId: 'sub-child',
-        conversations: [
-          { id: 'conv-root', isSideThread: false } as any,
-          {
-            id: 'conv-side',
-            isSideThread: true,
-            parentConversationId: 'conv-root',
-          } as any,
-        ],
-        subAgents: [{ sessionId: 'sub-child', parentConversationId: 'conv-side' } as any],
-      }),
-    ).toEqual({
+  it('follows sub-agent ancestry to the conversation that owns the workspace', () => {
+    const subAgents = [
+      { sessionId: 'sub-parent', parentConversationId: 'conv-root' },
+      { sessionId: 'sub-child', parentConversationId: 'sub-parent' },
+    ] as any;
+
+    expect(resolveConversationWorkspaceTarget({ conversationId: 'sub-child', subAgents })).toEqual({
       workspaceConversationId: 'conv-root',
       workspaceReadFallbackConversationId: 'sub-child',
     });
-
     expect(
-      resolveConversationWorkspaceReadTarget({
-        conversationId: 'sub-child',
-        conversations: [
-          { id: 'conv-root', isSideThread: false } as any,
-          {
-            id: 'conv-side',
-            isSideThread: true,
-            parentConversationId: 'conv-root',
-          } as any,
-        ],
-        subAgents: [{ sessionId: 'sub-child', parentConversationId: 'conv-side' } as any],
-      }),
+      resolveConversationWorkspaceReadTarget({ conversationId: 'sub-child', subAgents }),
     ).toEqual({
       workspaceConversationId: 'conv-root',
-      workspaceReadFallbackConversationIds: ['sub-child', 'conv-side'],
+      workspaceReadFallbackConversationIds: ['sub-child', 'sub-parent'],
     });
   });
 
@@ -77,14 +35,8 @@ describe('conversation workspace ownership', () => {
     );
     expect(() =>
       resolveConversationWorkspaceTarget({
-        conversationId: 'conv-side',
-        conversations: [
-          {
-            id: 'conv-side',
-            isSideThread: true,
-            parentConversationId: ' conv-private',
-          } as any,
-        ],
+        conversationId: 'sub-child',
+        subAgents: [{ sessionId: 'sub-child', parentConversationId: ' conv-private' } as any],
       }),
     ).toThrow('conversation_workspace_parent_id_invalid');
     expect(() =>

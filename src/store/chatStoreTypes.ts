@@ -71,19 +71,6 @@ export interface ChatState {
     modelOverride?: string,
     options?: { activate?: boolean; personaId?: string; mode?: ConversationMode },
   ) => string;
-  createSideThread: (
-    parentConversationId: string,
-    options?: {
-      title?: string;
-      systemPrompt?: string;
-      providerId?: string;
-      modelOverride?: string;
-      personaId?: string;
-      mode?: ConversationMode;
-      activate?: boolean;
-    },
-  ) => string | null;
-  discardSideThread: (id: string) => boolean;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
   /** Names a chat; whitespace is collapsed, and an empty name leaves the title as it was. */

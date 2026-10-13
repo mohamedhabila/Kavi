@@ -62,7 +62,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     noChatMatches: 'Aucune discussion correspondante',
     noChatMatchesHint: 'Essayez un autre titre ou effacez la recherche.',
     clearChatSearch: 'Effacer la recherche',
-    sideThread: 'Discussion secondaire',
     activity: 'Activité',
     library: 'Bibliothèque',
     more: 'Plus',
@@ -270,12 +269,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     openConversationOptions: 'Ouvrir les options de conversation',
     conversationOptions: 'Options de conversation',
     conversationSettings: 'Réglages de la conversation',
-    startSideThread: 'Démarrer un fil parallèle',
-    discardSideThread: 'Abandonner le fil parallèle',
-    discardSideThreadConfirmTitle: 'Abandonner cette conversation parallèle ?',
-    discardSideThreadConfirmBody:
-      'Les messages de cette conversation parallèle seront supprimés. La conversation principale restera inchangée.',
-    discardSideThreadAction: 'Abandonner la conversation',
     conversationUnavailableTitle: 'Conversation indisponible',
     conversationUnavailableHint:
       'Revenez à l’Assistant et choisissez une conversation pour continuer.',

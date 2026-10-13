@@ -35,7 +35,7 @@ import type { Message } from '../../../../src/types/message';
 
 const expoSqlite = require('expo-sqlite') as { __resetExpoSqliteForTests: () => void };
 
-type Thread = Pick<Conversation, 'id' | 'isSideThread' | 'messages'>;
+type Thread = Pick<Conversation, 'id' | 'messages'>;
 
 function user(id: string, content: string, timestamp: number): Message {
   return { id, role: 'user', content, timestamp };
@@ -51,8 +51,8 @@ function reply(id: string, content: string, timestamp: number): Message {
   };
 }
 
-function thread(id: string, messages: Message[], extra: Partial<Thread> = {}): Thread {
-  return { id, messages, ...extra };
+function thread(id: string, messages: Message[]): Thread {
+  return { id, messages };
 }
 
 function indexedTurns(query = 'kayak'): string[] {
@@ -109,16 +109,12 @@ describe('publishing a closed turn', () => {
     expect(rowCount('memory_turns')).toBe(1);
   });
 
-  it('captures nothing while memory is off, for a side thread, or for a reply that is not final', () => {
+  it('captures nothing while memory is off or for a reply that is not final', () => {
     const draft: Message = { id: 'draft', role: 'assistant', content: 'Thinking…', timestamp: 12 };
-    const conversations = [
-      thread('conv-1', [...firstTurn, draft]),
-      thread('side-1', firstTurn, { isSideThread: true }),
-    ];
+    const conversations = [thread('conv-1', [...firstTurn, draft])];
 
     publishConversationTurnMemory('conv-1', 'draft', conversations);
     publishConversationTurnMemory('conv-1', 'missing', conversations);
-    publishConversationTurnMemory('side-1', 'a1', conversations);
     useSettingsStore.setState({ disableLongTermMemory: true });
     publishConversationTurnMemory('conv-1', 'a1', conversations);
 
@@ -132,10 +128,7 @@ describe('catching up after a launch', () => {
     publishConversationTurnMemory('conv-1', 'a1', [thread('conv-1', firstTurn)]);
     mockScheduleMemoryExtraction.mockClear();
 
-    catchUpMemoryCapture([
-      thread('conv-1', [...firstTurn, ...secondTurn]),
-      thread('side-1', secondTurn, { isSideThread: true }),
-    ]);
+    catchUpMemoryCapture([thread('conv-1', [...firstTurn, ...secondTurn])]);
 
     expect(indexedTurns().sort()).toEqual(['conv-1/u1', 'conv-1/u2']);
     expect(readCaptureCursor('conv-1')?.indexedThroughAt).toBe(21);

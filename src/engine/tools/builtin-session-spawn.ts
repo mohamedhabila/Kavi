@@ -108,7 +108,6 @@ export async function executeSessionSpawn(
     );
     const currentSessionContext = getSessionContext(exactConversationId);
     const liveWorkers = listActiveSubAgents();
-    const conversations = useChatStore.getState().conversations;
     const currentSessionParentConversationId = resolveOptionalExactDurableScopeId(
       currentSession?.parentConversationId,
       'session_spawn_agent_parent_id_invalid',
@@ -131,7 +130,6 @@ export async function executeSessionSpawn(
         currentSessionContext?.config.workspaceReadFallbackConversationId,
       derivedTarget: resolveConversationWorkspaceTarget({
         conversationId: parentConversationId,
-        conversations,
         subAgents: liveWorkers,
       }),
     });

@@ -82,9 +82,9 @@ describe('useForegroundConversationActions', () => {
     mockedWaitForProjection.mockResolvedValue(undefined);
   });
 
-  it('targets the live active side thread when send runs before the screen rerenders', async () => {
+  it('targets the live active conversation when send runs before the screen rerenders', async () => {
     const parentId = useChatStore.getState().createConversation('openai', 'system');
-    const sideId = useChatStore.getState().createSideThread(parentId)!;
+    const sideId = useChatStore.getState().createConversation('openai', 'system');
 
     const addMessage = jest.fn();
     const clearComposerDraft = jest.fn();
@@ -101,13 +101,13 @@ describe('useForegroundConversationActions', () => {
     );
 
     await act(async () => {
-      await result.current.handleSend('hello from side thread');
+      await result.current.handleSend('hello from the active conversation');
     });
 
     expect(addMessage).toHaveBeenCalledWith(
       sideId,
       expect.objectContaining({
-        content: 'hello from side thread',
+        content: 'hello from the active conversation',
         id: 'message-1',
         role: 'user',
       }),

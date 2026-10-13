@@ -24,9 +24,7 @@ function makeConversation(overrides: Partial<Conversation>): Conversation {
     updatedAt: overrides.updatedAt ?? 0,
     personaId: overrides.personaId,
     mode: overrides.mode,
-    isSideThread: overrides.isSideThread,
     isStandaloneThread: overrides.isStandaloneThread,
-    parentConversationId: overrides.parentConversationId,
     isCanonical: overrides.isCanonical,
     archivedFromMigration: overrides.archivedFromMigration,
   } as Conversation;
@@ -67,23 +65,6 @@ describe('collapseConversationsToCanonical (v6→v7)', () => {
     expect(byId.w1.isCanonical).toBe(true);
     expect(byId.r1.archivedFromMigration).not.toBe(true);
     expect(byId.w1.archivedFromMigration).not.toBe(true);
-  });
-
-  it('never modifies side threads or rebrands archived rows', () => {
-    const out = collapseConversationsToCanonical([
-      makeConversation({ id: 'main', updatedAt: 100 }),
-      makeConversation({
-        id: 'side',
-        updatedAt: 200,
-        parentConversationId: 'main',
-        isSideThread: true,
-      }),
-    ]);
-    const byId = Object.fromEntries(out.map((c) => [c.id, c]));
-    expect(byId.side.isSideThread).toBe(true);
-    expect(byId.side.isCanonical).not.toBe(true);
-    expect(byId.side.archivedFromMigration).not.toBe(true);
-    expect(byId.main.isCanonical).toBe(true);
   });
 
   it('never folds standalone chats into the persona canonical', () => {
@@ -196,7 +177,7 @@ describe('getOrCreateCanonicalThread', () => {
     expect(useChatStore.getState().conversations).toHaveLength(2);
   });
 
-  it('does not reuse archived or side-thread conversations as the canonical', () => {
+  it('does not reuse archived conversations as the canonical', () => {
     useChatStore.setState({
       conversations: [
         makeConversation({
@@ -205,20 +186,12 @@ describe('getOrCreateCanonicalThread', () => {
           archivedFromMigration: true,
           updatedAt: 1,
         }),
-        makeConversation({
-          id: 'side',
-          personaId: 'researcher',
-          parentConversationId: 'old',
-          isSideThread: true,
-          updatedAt: 2,
-        }),
       ],
     });
     const id = useChatStore
       .getState()
       .getOrCreateCanonicalThread('openai', 'sys', 'gpt-x', { personaId: 'researcher' });
     expect(id).not.toBe('old');
-    expect(id).not.toBe('side');
     const created = useChatStore.getState().conversations.find((c) => c.id === id);
     expect(created!.isCanonical).toBe(true);
   });

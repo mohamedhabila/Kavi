@@ -89,56 +89,18 @@ describe('conversation workspace fallbacks', () => {
     expect(result).toEqual(['session-a']);
   });
 
-  it('uses the canonical parent as primary while preserving side-thread and worker fallbacks', () => {
-    const result = resolveConversationWorkspaceReadScope({
-      conversationId: 'conv-side',
-      conversations: [
-        { id: 'conv-root', isSideThread: false },
-        { id: 'conv-side', isSideThread: true, parentConversationId: 'conv-root' },
-      ],
-      messages: [
-        {
-          subAgentEvent: {
-            type: 'sub-agent',
-            event: 'completed',
-            snapshot: {
-              sessionId: 'session-complete',
-              parentConversationId: 'conv-side',
-              depth: 1,
-              startedAt: 1,
-              updatedAt: 2,
-              status: 'completed',
-              sandboxPolicy: 'inherit',
-            },
-          },
-        } as any,
-      ],
-      liveSubAgents: [],
-    });
-
-    expect(result).toEqual({
-      workspaceConversationId: 'conv-root',
-      fallbackConversationIds: ['conv-side', 'session-complete'],
-    });
-  });
-
-  it('includes live workers only from conversations that share the canonical workspace', () => {
+  it('includes live workers only from the conversation that owns the workspace', () => {
     const result = resolveConversationWorkspaceReadScope({
       conversationId: 'conv-root',
-      conversations: [
-        { id: 'conv-root', isSideThread: false },
-        { id: 'conv-side', isSideThread: true, parentConversationId: 'conv-root' },
-        { id: 'conv-private', isSideThread: false },
-      ],
       liveSubAgents: [
-        { sessionId: 'session-side', parentConversationId: 'conv-side' },
+        { sessionId: 'session-root', parentConversationId: 'conv-root' },
         { sessionId: 'session-private', parentConversationId: 'conv-private' },
       ],
     });
 
     expect(result).toEqual({
       workspaceConversationId: 'conv-root',
-      fallbackConversationIds: ['session-side'],
+      fallbackConversationIds: ['session-root'],
     });
   });
 
@@ -146,7 +108,6 @@ describe('conversation workspace fallbacks', () => {
     expect(() =>
       resolveConversationWorkspaceReadScope({
         conversationId: ' conv-private',
-        conversations: [],
         liveSubAgents: [],
       }),
     ).toThrow('conversation_workspace_id_invalid');

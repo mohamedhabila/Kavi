@@ -40,8 +40,6 @@ export function selectChatScreenChatSlice(state: ChatState) {
     updateModelInConversation: state.updateModelInConversation,
     updatePersonaInConversation: state.updatePersonaInConversation,
     updateModeInConversation: state.updateModeInConversation,
-    createSideThread: state.createSideThread,
-    discardSideThread: state.discardSideThread,
   };
 }
 

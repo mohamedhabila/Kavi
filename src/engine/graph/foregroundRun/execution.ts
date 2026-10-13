@@ -279,10 +279,7 @@ async function executeReservedForegroundConversationRun(
   const guardRunCallback = () =>
     isCurrentRunInvocation() &&
     (!projectionOwner || context.durability.ownsModelProjection(conversationId, projectionOwner));
-  const workspaceTarget = resolveConversationWorkspaceTarget({
-    conversationId,
-    conversations: context.helpers.getConversations(),
-  });
+  const workspaceTarget = resolveConversationWorkspaceTarget({ conversationId });
   let hasCompletedRunCallbacks = false;
   const completeRunOnce = async (task: () => Promise<void> | void) => {
     if (!isCurrentRunInvocation() || hasCompletedRunCallbacks) {

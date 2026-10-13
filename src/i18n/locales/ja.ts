@@ -62,7 +62,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     noChatMatches: '一致するチャットはありません',
     noChatMatchesHint: '別のタイトルを試すか、検索をクリアしてください。',
     clearChatSearch: '検索をクリア',
-    sideThread: 'サイドチャット',
     activity: 'アクティビティ',
     library: 'ライブラリ',
     more: 'その他',
@@ -255,12 +254,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     openConversationOptions: '会話オプションを開く',
     conversationOptions: '会話オプション',
     conversationSettings: '会話設定',
-    startSideThread: 'サイドスレッドを開始',
-    discardSideThread: 'サイドスレッドを破棄',
-    discardSideThreadConfirmTitle: 'このサイドチャットを破棄しますか？',
-    discardSideThreadConfirmBody:
-      'このサイドチャットのメッセージは削除されます。メインの会話は変更されません。',
-    discardSideThreadAction: 'サイドチャットを破棄',
     conversationUnavailableTitle: '会話を利用できません',
     conversationUnavailableHint: 'アシスタントに戻り、続ける会話を選択してください。',
     settingsLockedWhileWorking:

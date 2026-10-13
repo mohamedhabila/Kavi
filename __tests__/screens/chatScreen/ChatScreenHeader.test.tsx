@@ -29,12 +29,10 @@ const colors = {
 const translations: Record<string, string> = {
   'chat.conversationOptions': 'Conversation options',
   'chat.conversationSettings': 'Conversation settings',
-  'chat.discardSideThread': 'Discard side thread',
   'chat.headerStatusReady': 'Ready',
   'chat.headerStatusWorking': 'Working…',
   'chat.openConversationOptions': 'Open conversation options',
   'chat.openMenu': 'Open menu',
-  'chat.startSideThread': 'Start a side thread',
   'chat.usageActivity': 'Usage & activity',
   'common.close': 'Close',
   'nav.developerAndRemoteWork': 'Developer & remote work',
@@ -64,7 +62,6 @@ function createProps(overrides: Record<string, unknown> = {}) {
     onOpenFiles: jest.fn(),
     onOpenMenu: jest.fn(),
     onOpenUsage: jest.fn(),
-    onToggleSideThread: jest.fn(),
     styles,
     t,
     ...overrides,
@@ -108,24 +105,11 @@ describe('ChatScreenHeader', () => {
     expect(getByText('Conversation settings')).toBeTruthy();
     expect(getByText('Files & creations')).toBeTruthy();
     expect(getByText('Usage & activity')).toBeTruthy();
-    expect(getByText('Start a side thread')).toBeTruthy();
+    expect(queryByText('Start a side thread')).toBeNull();
     expect(getByText('Developer & remote work')).toBeTruthy();
 
     fireEvent.press(getByTestId('chat-open-conversation-settings'));
     expect(props.onOpenConversationSettings).toHaveBeenCalledTimes(1);
     expect(queryByText('Conversation options')).toBeNull();
-  });
-
-  it('uses the safe discard action for a side conversation', () => {
-    const props = createProps({
-      activeConversation: { ...conversation, isSideThread: true },
-    });
-    const { getByTestId, getByText } = render(<ChatScreenHeader {...props} />);
-
-    fireEvent.press(getByTestId('chat-open-conversation-options'));
-    expect(getByText('Discard side thread')).toBeTruthy();
-    fireEvent.press(getByTestId('chat-discard-side-thread'));
-
-    expect(props.onToggleSideThread).toHaveBeenCalledTimes(1);
   });
 });

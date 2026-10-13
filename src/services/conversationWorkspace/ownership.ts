@@ -1,11 +1,9 @@
-import type { Conversation } from '../../types/conversation';
 import type { SubAgentSnapshot } from '../../types/subAgent';
 import {
   requireExactDurableScopeId,
   resolveOptionalExactDurableScopeId,
 } from '../../utils/durableScopeIdentity';
 
-type ConversationOwnershipLink = Pick<Conversation, 'id' | 'parentConversationId' | 'isSideThread'>;
 type SubAgentOwnershipLink = Pick<SubAgentSnapshot, 'sessionId' | 'parentConversationId'>;
 
 export type ConversationWorkspaceTarget = {
@@ -56,7 +54,6 @@ export function resolveConfiguredConversationWorkspaceTarget(params: {
 
 export function resolveConversationWorkspaceReadTarget(params: {
   conversationId: string;
-  conversations?: ReadonlyArray<ConversationOwnershipLink>;
   subAgents?: ReadonlyArray<SubAgentOwnershipLink>;
 }): ConversationWorkspaceReadTarget {
   const initialConversationId = requireExactDurableScopeId(
@@ -64,12 +61,6 @@ export function resolveConversationWorkspaceReadTarget(params: {
     'conversation_workspace_id_invalid',
   );
 
-  const conversationsById = new Map(
-    (params.conversations ?? []).map((conversation): [string, ConversationOwnershipLink] => [
-      requireExactDurableScopeId(conversation.id, 'conversation_workspace_link_id_invalid'),
-      conversation,
-    ]),
-  );
   const subAgentsBySessionId = new Map(
     (params.subAgents ?? []).map((subAgent): [string, SubAgentOwnershipLink] => [
       requireExactDurableScopeId(subAgent.sessionId, 'conversation_workspace_session_id_invalid'),
@@ -94,18 +85,6 @@ export function resolveConversationWorkspaceReadTarget(params: {
       continue;
     }
 
-    const conversation = conversationsById.get(workspaceConversationId);
-    const sideThreadParentConversationId = conversation?.isSideThread
-      ? resolveOptionalExactDurableScopeId(
-          conversation.parentConversationId,
-          'conversation_workspace_parent_id_invalid',
-        )
-      : undefined;
-    if (sideThreadParentConversationId) {
-      workspaceConversationId = sideThreadParentConversationId;
-      continue;
-    }
-
     break;
   }
 
@@ -119,7 +98,6 @@ export function resolveConversationWorkspaceReadTarget(params: {
 
 export function resolveConversationWorkspaceTarget(params: {
   conversationId: string;
-  conversations?: ReadonlyArray<ConversationOwnershipLink>;
   subAgents?: ReadonlyArray<SubAgentOwnershipLink>;
 }): ConversationWorkspaceTarget {
   const target = resolveConversationWorkspaceReadTarget(params);

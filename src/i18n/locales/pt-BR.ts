@@ -62,7 +62,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     noChatMatches: 'Nenhuma conversa correspondente',
     noChatMatchesHint: 'Tente outro título ou limpe a busca.',
     clearChatSearch: 'Limpar busca',
-    sideThread: 'Conversa paralela',
     activity: 'Atividade',
     library: 'Biblioteca',
     more: 'Mais',
@@ -262,12 +261,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     openConversationOptions: 'Abrir opções da conversa',
     conversationOptions: 'Opções da conversa',
     conversationSettings: 'Configurações da conversa',
-    startSideThread: 'Iniciar conversa paralela',
-    discardSideThread: 'Descartar conversa paralela',
-    discardSideThreadConfirmTitle: 'Descartar esta conversa paralela?',
-    discardSideThreadConfirmBody:
-      'As mensagens desta conversa paralela serão excluídas. A conversa principal não será alterada.',
-    discardSideThreadAction: 'Descartar conversa paralela',
     conversationUnavailableTitle: 'Conversa indisponível',
     conversationUnavailableHint: 'Volte ao Assistente e escolha uma conversa para continuar.',
     settingsLockedWhileWorking:

@@ -26,10 +26,10 @@ describe('conversation navigation', () => {
     const result = getNavigableConversations([
       conversation('older', 10),
       conversation('archived', 30, { archivedFromMigration: true }),
-      conversation('side', 20, { isSideThread: true, parentConversationId: 'older' }),
+      conversation('newer', 20),
     ]);
 
-    expect(result.map((item) => item.id)).toEqual(['side', 'older']);
+    expect(result.map((item) => item.id)).toEqual(['newer', 'older']);
   });
 
   it('preserves store order when activity timestamps match', () => {

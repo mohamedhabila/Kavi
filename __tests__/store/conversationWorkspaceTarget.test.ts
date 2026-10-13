@@ -47,39 +47,4 @@ describe('conversation workspace target attachment', () => {
     expect(conversation?.workspaceTargetId).toBe('workspace-1');
   });
 
-  it('inherits the parent workspace target for side threads', () => {
-    useSettingsStore
-      .getState()
-      .addWorkspaceTarget(
-        makeWorkspaceTarget({ id: 'workspace-parent', rootPath: '/workspace/parent' }),
-      );
-    const parentId = useChatStore.getState().createConversation('openai', 'sys');
-
-    useChatStore.setState((state) => ({
-      conversations: state.conversations.map((entry) =>
-        entry.id === parentId ? { ...entry, workspaceTargetId: 'workspace-parent' } : entry,
-      ),
-    }));
-
-    const sideId = useChatStore.getState().createSideThread(parentId);
-    const sideThread = useChatStore.getState().conversations.find((entry) => entry.id === sideId);
-
-    expect(sideThread?.workspaceTargetId).toBe('workspace-parent');
-  });
-
-  it('falls back to the default workspace target when the parent has none', () => {
-    useSettingsStore.getState().addWorkspaceTarget(makeWorkspaceTarget());
-    const parentId = useChatStore.getState().createConversation('openai', 'sys');
-
-    useChatStore.setState((state) => ({
-      conversations: state.conversations.map((entry) =>
-        entry.id === parentId ? { ...entry, workspaceTargetId: undefined } : entry,
-      ),
-    }));
-
-    const sideId = useChatStore.getState().createSideThread(parentId);
-    const sideThread = useChatStore.getState().conversations.find((entry) => entry.id === sideId);
-
-    expect(sideThread?.workspaceTargetId).toBe('workspace-1');
-  });
 });

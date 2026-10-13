@@ -105,8 +105,6 @@ export const ChatScreen: React.FC = () => {
     updatePersonaInConversation,
     updateModeInConversation,
   } = chatSlice;
-  const createSideThread = chatSlice.createSideThread;
-  const discardSideThread = chatSlice.discardSideThread;
 
   const settingsSlice = useSettingsStore(useShallow(selectChatScreenSettingsSlice));
   const {
@@ -563,15 +561,11 @@ export const ChatScreen: React.FC = () => {
     handleOpenSubAgentDetails,
     handleShareWorkspaceFile,
     handleShowEarlierMessages,
-    handleToggleSideThread,
     handleViewCanvas,
     handleViewFiles,
   } = useChatScreenUiCallbacks({
     activeConversation: activeConversation ?? undefined,
     activeConversationId,
-    conversations,
-    createSideThread,
-    discardSideThread,
     hiddenSourceMessageCount,
     loadEarlierArchivedMessages,
     navigation,
@@ -603,7 +597,6 @@ export const ChatScreen: React.FC = () => {
         onOpenFiles={handleViewFiles}
         onOpenMenu={() => navigation.openDrawer()}
         onOpenUsage={handleOpenUsage}
-        onToggleSideThread={handleToggleSideThread}
         styles={styles}
         t={t}
       />

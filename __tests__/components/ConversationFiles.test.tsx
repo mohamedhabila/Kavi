@@ -683,7 +683,7 @@ describe('ConversationFiles', () => {
     expect(await findByText('No files yet')).toBeTruthy();
   });
 
-  it('identifies a parent workspace when side-thread files are shown', async () => {
+  it('identifies the parent workspace when a worker’s files are shown', async () => {
     const { findByText } = render(
       <ConversationFiles
         visible={true}

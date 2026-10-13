@@ -57,8 +57,6 @@ export function createConversationStoreActions(
   ChatState,
   | 'createConversation'
   | 'getOrCreateCanonicalThread'
-  | 'createSideThread'
-  | 'discardSideThread'
   | 'setActiveConversation'
   | 'deleteConversation'
   | 'renameConversation'
@@ -98,7 +96,6 @@ export function createConversationStoreActions(
                 ? conversation.personaId
                 : '__default__';
               if (
-                conversation.isSideThread ||
                 conversation.archivedFromMigration ||
                 !conversation.isCanonical ||
                 conversationPersonaKey !== personaKey
@@ -126,7 +123,7 @@ export function createConversationStoreActions(
         options?.personaId && options.personaId.length > 0 ? options.personaId : '__default__';
       const { conversations } = get();
       const existingCandidates = conversations.filter((c) => {
-        if (c.isSideThread || c.isStandaloneThread || c.archivedFromMigration) return false;
+        if (c.isStandaloneThread || c.archivedFromMigration) return false;
         if (!c.isCanonical) return false;
         const ownKey = c.personaId && c.personaId.length > 0 ? c.personaId : '__default__';
         return ownKey === groupKey;
@@ -168,57 +165,6 @@ export function createConversationStoreActions(
       }));
       requestChatStorePersistenceCheckpoint();
       return id;
-    },
-
-    createSideThread: (parentConversationId, options) => {
-      const { conversations } = get();
-      const parent = conversations.find((c) => c.id === parentConversationId);
-      if (!parent) return null;
-      if (parent.isSideThread) return null;
-
-      const now = Date.now();
-      const id = generateId();
-      const workspaceTargetId = resolveConversationWorkspaceTargetId(parent.workspaceTargetId);
-      const sideThread = {
-        id,
-        title: options?.title ?? `↳ ${parent.title}`,
-        messages: [],
-        providerId: options?.providerId ?? parent.providerId,
-        modelOverride: options?.modelOverride ?? parent.modelOverride,
-        systemPrompt: options?.systemPrompt ?? parent.systemPrompt,
-        createdAt: now,
-        updatedAt: now,
-        personaId: options?.personaId ?? parent.personaId,
-        mode: options?.mode ?? parent.mode,
-        parentConversationId,
-        isSideThread: true,
-        usage: buildEmptyConversationUsage(),
-        logs: [],
-        agentRuns: [],
-        ...(workspaceTargetId ? { workspaceTargetId } : {}),
-      };
-      set((state) => ({
-        conversations: [sideThread, ...state.conversations],
-        activeConversationId: options?.activate === false ? state.activeConversationId : id,
-      }));
-      requestChatStorePersistenceCheckpoint();
-      return id;
-    },
-
-    discardSideThread: (id) => {
-      const { conversations } = get();
-      const target = conversations.find((c) => c.id === id);
-      if (!target || !target.isSideThread) return false;
-      deleteConversationMemory(target.id);
-      set((state) => ({
-        conversations: state.conversations.filter((c) => c.id !== id),
-        activeConversationId:
-          state.activeConversationId === id
-            ? (target.parentConversationId ?? null)
-            : state.activeConversationId,
-      }));
-      requestChatStorePersistenceCheckpoint();
-      return true;
     },
 
     setActiveConversation: (id) => {

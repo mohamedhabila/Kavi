@@ -104,18 +104,6 @@ describe('useChatStore', () => {
               createdAt: 2,
               updatedAt: 300,
             },
-            {
-              id: 'side',
-              title: 'Side',
-              messages: [],
-              providerId: 'openai',
-              systemPrompt: 'sys',
-              personaId: 'researcher',
-              parentConversationId: 'r-old',
-              isSideThread: true,
-              createdAt: 3,
-              updatedAt: 400,
-            },
           ],
           activeConversationId: 'r-new',
         },
@@ -126,8 +114,6 @@ describe('useChatStore', () => {
       expect(byId['r-new'].isCanonical).toBe(true);
       expect(byId['r-old'].archivedFromMigration).toBe(true);
       expect(byId['r-old'].isCanonical).not.toBe(true);
-      expect(byId['side'].isSideThread).toBe(true);
-      expect(byId['side'].archivedFromMigration).not.toBe(true);
     });
 
     it('does not invent completion metadata for legacy assistant messages', async () => {

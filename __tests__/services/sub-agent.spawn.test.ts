@@ -162,17 +162,17 @@ describe('Sub-Agent Service', () => {
 
       await spawnSubAgent(
         {
-          parentConversationId: 'side-thread-1',
+          parentConversationId: 'conversation-1',
           workspaceConversationId: 'parent-conversation',
-          workspaceReadFallbackConversationId: 'side-thread-1',
+          workspaceReadFallbackConversationId: 'conversation-1',
           prompt: 'delegate work',
         },
         mockProvider,
       );
 
       expect(capturedOptions.workspaceConversationId).toBe('parent-conversation');
-      expect(capturedOptions.workspaceReadFallbackConversationId).toBe('side-thread-1');
-      expect(capturedOptions.usageConversationId).toBe('side-thread-1');
+      expect(capturedOptions.workspaceReadFallbackConversationId).toBe('conversation-1');
+      expect(capturedOptions.usageConversationId).toBe('conversation-1');
     });
 
     it.each([

@@ -62,7 +62,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     noChatMatches: 'No hay chats coincidentes',
     noChatMatchesHint: 'Prueba con otro título o borra la búsqueda.',
     clearChatSearch: 'Borrar búsqueda',
-    sideThread: 'Chat secundario',
     activity: 'Actividad',
     library: 'Biblioteca',
     more: 'Más',
@@ -267,12 +266,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     openConversationOptions: 'Abrir opciones de conversación',
     conversationOptions: 'Opciones de conversación',
     conversationSettings: 'Ajustes de conversación',
-    startSideThread: 'Iniciar hilo paralelo',
-    discardSideThread: 'Descartar hilo paralelo',
-    discardSideThreadConfirmTitle: '¿Descartar este chat paralelo?',
-    discardSideThreadConfirmBody:
-      'Se eliminarán los mensajes de este chat paralelo. La conversación principal no cambiará.',
-    discardSideThreadAction: 'Descartar chat paralelo',
     conversationUnavailableTitle: 'Conversación no disponible',
     conversationUnavailableHint: 'Vuelve al Asistente y elige una conversación para continuar.',
     settingsLockedWhileWorking:

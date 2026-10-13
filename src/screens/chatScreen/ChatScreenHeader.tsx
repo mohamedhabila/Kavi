@@ -3,12 +3,10 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'reac
 import {
   BarChart3,
   FolderOpen,
-  GitBranch,
   Menu,
   MoreHorizontal,
   Settings2,
   SquareTerminal,
-  Trash2,
   X,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,21 +27,19 @@ type ChatScreenHeaderProps = {
   onOpenFiles: () => void;
   onOpenMenu: () => void;
   onOpenUsage: () => void;
-  onToggleSideThread: () => void;
   styles: ReturnType<typeof createStyles>;
   t: TranslationFn;
 };
 
 type MenuRowProps = {
   Icon: typeof Settings2;
-  danger?: boolean;
   label: string;
   onPress: () => void;
   props: ChatScreenHeaderProps;
   testID: string;
 };
 
-function ConversationMenuRow({ Icon, danger, label, onPress, props, testID }: MenuRowProps) {
+function ConversationMenuRow({ Icon, label, onPress, props, testID }: MenuRowProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -56,14 +52,11 @@ function ConversationMenuRow({ Icon, danger, label, onPress, props, testID }: Me
       testID={testID}
     >
       <View style={props.styles.conversationMenuRowIcon}>
-        <Icon size={20} color={danger ? props.colors.danger : props.colors.textSecondary} />
+        <Icon size={20} color={props.colors.textSecondary} />
       </View>
       <Text
         numberOfLines={2}
-        style={[
-          props.styles.conversationMenuRowText,
-          danger ? props.styles.conversationMenuRowDangerText : null,
-        ]}
+        style={props.styles.conversationMenuRowText}
       >
         {label}
       </Text>
@@ -188,22 +181,6 @@ export function ChatScreenHeader(props: ChatScreenHeaderProps) {
                     onPress={() => runAndClose(props.onOpenUsage)}
                     props={props}
                     testID="chat-open-usage"
-                  />
-                  <ConversationMenuRow
-                    Icon={props.activeConversation.isSideThread ? Trash2 : GitBranch}
-                    danger={props.activeConversation.isSideThread}
-                    label={
-                      props.activeConversation.isSideThread
-                        ? props.t('chat.discardSideThread')
-                        : props.t('chat.startSideThread')
-                    }
-                    onPress={() => runAndClose(props.onToggleSideThread)}
-                    props={props}
-                    testID={
-                      props.activeConversation.isSideThread
-                        ? 'chat-discard-side-thread'
-                        : 'chat-start-side-thread'
-                    }
                   />
                   <View style={props.styles.conversationMenuDivider} />
                 </>

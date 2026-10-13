@@ -210,7 +210,6 @@ export function stopForegroundConversationRuns(params: {
         if (cancellationSettled) {
           const workspaceTarget = resolveConversationWorkspaceTarget({
             conversationId: params.conversationId,
-            conversations: params.conversation ? [params.conversation] : [],
           });
           void params.actions
             .ensureAgentRunFinalResponse?.({

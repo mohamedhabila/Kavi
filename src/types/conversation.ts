@@ -69,8 +69,6 @@ export interface Conversation {
   workspaceTargetId?: string;
   modelProjectionOwner?: ModelProjectionOwner;
 
-  parentConversationId?: string;
-  isSideThread?: boolean;
   /** User-created top-level chat with independent history and workspace ownership. */
   isStandaloneThread?: boolean;
   isCanonical?: boolean;

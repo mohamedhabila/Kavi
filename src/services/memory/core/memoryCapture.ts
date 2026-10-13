@@ -4,8 +4,8 @@
 // When a turn closes, its round is indexed as a past turn and its thread is queued for
 // background extraction; both are idempotent, so publishing a turn twice is harmless and
 // nothing needs to remember that it happened. A launch catches up on turns closed while the
-// app was killed. Side threads keep no memory, and nothing is captured while memory is
-// off; turning it back on moves every thread's cursor past what was said meanwhile.
+// app was killed. Nothing is captured while memory is off; turning it back on moves every
+// thread's cursor past what was said meanwhile.
 // ---------------------------------------------------------------------------
 
 import type { Conversation } from '../../../types/conversation';
@@ -38,7 +38,7 @@ const logger = createLogger('memory.capture');
 /** Captures the turn the reply `replyMessageId` closed in chat thread `conversationId`. */
 export type RecordConversationTurnMemory = (conversationId: string, replyMessageId: string) => void;
 
-type CaptureThread = Pick<Conversation, 'id' | 'isSideThread' | 'messages'>;
+type CaptureThread = Pick<Conversation, 'id' | 'messages'>;
 
 function isClosedReply(message: Message): boolean {
   return (
@@ -68,7 +68,7 @@ export function publishConversationTurnMemory(
 ): void {
   if (!isLongTermMemoryEnabled()) return;
   const thread = conversations.find((candidate) => candidate.id === conversationId);
-  if (!thread || thread.isSideThread) return;
+  if (!thread) return;
   const reply = thread.messages.find((message) => message.id === replyMessageId);
   if (!reply || !isClosedReply(reply)) return;
   try {
@@ -83,7 +83,6 @@ export function publishConversationTurnMemory(
 export function catchUpMemoryCapture(conversations: ReadonlyArray<CaptureThread>): void {
   if (!isLongTermMemoryEnabled()) return;
   for (const thread of conversations) {
-    if (thread.isSideThread) continue;
     try {
       const indexedThroughAt = readCaptureCursor(thread.id)?.indexedThroughAt ?? 0;
       for (const message of thread.messages) {

@@ -16,6 +16,8 @@ import {
 } from '../../src/acceptance/e2eAgent/sandboxMemory';
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
+import { captureForegroundScenarioMemoryItems } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
+import { deleteConversationMemory } from '../../src/services/memory/core/memoryCapture';
 import { getMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
 import type { Message } from '../../src/types/message';
 
@@ -327,10 +329,12 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
           return;
         }
         if (action === 'answer_question') {
-          const sideThreadId = `${session.rootConversationId}-question-${session.turnCount}-${randomUUID()}`;
+          // Kavi is one conversation, so a read-only question runs in a throwaway one: memory
+          // reads span conversations, and what the question left in memory is deleted with it.
+          const questionConversationId = `${session.rootConversationId}-question-${session.turnCount}-${randomUUID()}`;
           const result = await runForegroundScenario({
             provider,
-            conversationId: sideThreadId,
+            conversationId: questionConversationId,
             conversationTitle: 'AMemGym read-only question',
             systemPrompt,
             initialMessages: [],
@@ -345,28 +349,18 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
                 route: 'forced_chitchat',
               },
             ],
-            beforeTurns: ({ conversationId }) => {
-              const current = useChatStore.getState();
-              const target = current.conversations.find(
-                (conversation) => conversation.id === conversationId,
-              );
-              if (!target) throw new Error('bridge_side_thread_unavailable');
-              useChatStore.setState({
-                conversations: current.conversations.map((conversation) =>
-                  conversation.id === conversationId
-                    ? {
-                        ...conversation,
-                        isSideThread: true,
-                        parentConversationId: session.rootConversationId,
-                      }
-                    : conversation,
-                ),
-                activeConversationId: conversationId,
-              });
-            },
           });
+          deleteConversationMemory(questionConversationId);
+          useChatStore.setState((current) => ({
+            conversations: current.conversations.filter(
+              (conversation) => conversation.id !== questionConversationId,
+            ),
+            activeConversationId: session.rootConversationId,
+          }));
           const turn = requireCompletedTurn(result);
-          if (result.memoryItems.indexedTurnCount !== session.indexedTurnCount) {
+          if (
+            captureForegroundScenarioMemoryItems().indexedTurnCount !== session.indexedTurnCount
+          ) {
             throw new Error('amemgym_question_turn_wrote_memory');
           }
           sendJson(response, 200, {

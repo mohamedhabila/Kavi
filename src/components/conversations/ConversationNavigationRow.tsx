@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Check, GitBranch, MessageCircle, MoreHorizontal } from 'lucide-react-native';
+import { Check, MessageCircle, MoreHorizontal } from 'lucide-react-native';
 import type { Conversation } from '../../types/conversation';
 import type { AppPalette } from '../../theme/useAppTheme';
 import { useTranslation } from '../../i18n/useTranslation';
@@ -29,11 +29,10 @@ export const ConversationNavigationRow: React.FC<ConversationNavigationRowProps>
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const title = conversation.title.trim() || t('nav.newConversation');
-  const sideThreadLabel = conversation.isSideThread ? t('nav.sideThread') : null;
 
   return (
     <TouchableOpacity
-      accessibilityLabel={sideThreadLabel ? `${title}, ${sideThreadLabel}` : title}
+      accessibilityLabel={title}
       accessibilityRole="button"
       accessibilityState={busy ? { selected, busy } : { selected }}
       {...(busy ? { disabled: true } : {})}
@@ -43,17 +42,12 @@ export const ConversationNavigationRow: React.FC<ConversationNavigationRowProps>
       testID={testID}
     >
       <View style={styles.iconWrap}>
-        {conversation.isSideThread ? (
-          <GitBranch size={17} color={selected ? colors.primary : colors.textSecondary} />
-        ) : (
-          <MessageCircle size={17} color={selected ? colors.primary : colors.textSecondary} />
-        )}
+        <MessageCircle size={17} color={selected ? colors.primary : colors.textSecondary} />
       </View>
       <View style={styles.textWrap}>
         <Text style={[styles.title, selected ? styles.titleSelected : null]} numberOfLines={2}>
           {title}
         </Text>
-        {sideThreadLabel ? <Text style={styles.subtitle}>{sideThreadLabel}</Text> : null}
       </View>
       {selected ? <Check size={17} color={colors.primary} /> : null}
       {busy ? (
@@ -119,10 +113,5 @@ const createStyles = (colors: AppPalette) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 20,
-    },
-    subtitle: {
-      marginTop: 1,
-      color: colors.textTertiary,
-      fontSize: 11,
     },
   });

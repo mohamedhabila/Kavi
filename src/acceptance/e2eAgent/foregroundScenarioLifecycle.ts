@@ -141,7 +141,6 @@ export function startNewForegroundScenarioConversation(params: {
   const memoryScope = {
     memoryConversationId: resolveConversationWorkspaceTarget({
       conversationId,
-      conversations: useChatStore.getState().conversations,
     }).workspaceConversationId,
     sourceThreadId: conversationId,
   };

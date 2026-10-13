@@ -62,7 +62,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     noChatMatches: 'لا توجد محادثات مطابقة',
     noChatMatchesHint: 'جرّب عنوانًا مختلفًا أو امسح البحث.',
     clearChatSearch: 'مسح البحث',
-    sideThread: 'محادثة فرعية',
     activity: 'النشاط',
     library: 'المكتبة',
     more: 'المزيد',
@@ -271,12 +270,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     openConversationOptions: 'فتح خيارات المحادثة',
     conversationOptions: 'خيارات المحادثة',
     conversationSettings: 'إعدادات المحادثة',
-    startSideThread: 'بدء محادثة جانبية',
-    discardSideThread: 'إغلاق المحادثة الجانبية',
-    discardSideThreadConfirmTitle: 'هل تريد حذف هذه المحادثة الجانبية؟',
-    discardSideThreadConfirmBody:
-      'سيتم حذف رسائل هذه المحادثة الجانبية، وستبقى المحادثة الرئيسية دون تغيير.',
-    discardSideThreadAction: 'حذف المحادثة الجانبية',
     conversationUnavailableTitle: 'المحادثة غير متاحة',
     conversationUnavailableHint: 'ارجع إلى المساعد واختر محادثة للمتابعة.',
     settingsLockedWhileWorking:

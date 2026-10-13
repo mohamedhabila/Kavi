@@ -61,7 +61,6 @@ export const ConversationFilesScreen: React.FC = () => {
     () =>
       resolveConversationWorkspaceReadScope({
         conversationId,
-        conversations,
         messages: conversation?.messages,
         usageEntries: conversation?.usage?.entries,
         agentRuns: conversation?.agentRuns,
@@ -108,7 +107,6 @@ export const ConversationFilesScreen: React.FC = () => {
 
       const eventWorkspaceScope = resolveConversationWorkspaceReadScope({
         conversationId: ownerConversationId,
-        conversations,
         liveSubAgents,
       });
 

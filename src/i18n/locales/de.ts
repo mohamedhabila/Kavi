@@ -62,7 +62,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     noChatMatches: 'Keine passenden Chats',
     noChatMatchesHint: 'Versuchen Sie einen anderen Titel oder löschen Sie die Suche.',
     clearChatSearch: 'Suche löschen',
-    sideThread: 'Nebenchat',
     activity: 'Aktivität',
     library: 'Bibliothek',
     more: 'Mehr',
@@ -259,12 +258,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     openConversationOptions: 'Gesprächsoptionen öffnen',
     conversationOptions: 'Gesprächsoptionen',
     conversationSettings: 'Gesprächseinstellungen',
-    startSideThread: 'Nebenstrang starten',
-    discardSideThread: 'Nebenstrang verwerfen',
-    discardSideThreadConfirmTitle: 'Diesen Nebenchat verwerfen?',
-    discardSideThreadConfirmBody:
-      'Nachrichten in diesem Nebenchat werden gelöscht. Das Hauptgespräch bleibt unverändert.',
-    discardSideThreadAction: 'Nebenchat verwerfen',
     conversationUnavailableTitle: 'Gespräch nicht verfügbar',
     conversationUnavailableHint:
       'Kehren Sie zum Assistenten zurück und wählen Sie ein Gespräch aus.',

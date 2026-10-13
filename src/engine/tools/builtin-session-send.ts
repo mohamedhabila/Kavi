@@ -117,7 +117,6 @@ export async function executeSessionSend(
       derivedTarget: parentConversationId
         ? resolveConversationWorkspaceTarget({
             conversationId: parentConversationId,
-            conversations,
             subAgents: listActiveSubAgents(),
           })
         : undefined,

@@ -1,5 +1,4 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
-import { Alert } from 'react-native';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { shareConversationWorkspaceFile } from '../../services/share/localShare';
 import type { Attachment } from '../../types/attachment';
@@ -15,9 +14,6 @@ type SubAgentSnapshot = NonNullable<Message['subAgentEvent']>['snapshot'];
 type UseChatScreenUiCallbacksParams = {
   activeConversation?: Conversation;
   activeConversationId: string | null;
-  conversations: ReadonlyArray<Conversation>;
-  createSideThread?: (conversationId: string) => void;
-  discardSideThread?: (conversationId: string) => void;
   /** In-memory messages not yet shown; archived history pages in after them. */
   hiddenSourceMessageCount: number;
   loadEarlierArchivedMessages: () => void;
@@ -37,16 +33,12 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
   handleOpenSubAgentDetails: (snapshot: SubAgentSnapshot) => void;
   handleShareWorkspaceFile: (attachment: Attachment) => Promise<void>;
   handleShowEarlierMessages: () => void;
-  handleToggleSideThread: () => void;
   handleViewCanvas: () => void;
   handleViewFiles: (path?: string) => void;
 } {
   const {
     activeConversation,
     activeConversationId,
-    conversations,
-    createSideThread,
-    discardSideThread,
     navigation,
     setChatError,
     setEditingContent,
@@ -86,26 +78,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     navigationRef.current.navigate('Canvas' as any);
   }, []);
 
-  const handleToggleSideThread = useCallback(() => {
-    if (!activeConversation) {
-      return;
-    }
-
-    if (activeConversation.isSideThread) {
-      Alert.alert(t('chat.discardSideThreadConfirmTitle'), t('chat.discardSideThreadConfirmBody'), [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('chat.discardSideThreadAction'),
-          style: 'destructive',
-          onPress: () => discardSideThread?.(activeConversation.id),
-        },
-      ]);
-      return;
-    }
-
-    createSideThread?.(activeConversation.id);
-  }, [activeConversation, createSideThread, discardSideThread, t]);
-
   const handleShareWorkspaceFile = useCallback(
     async (attachment: Attachment) => {
       if (!activeConversationId || !attachment.workspacePath) {
@@ -115,7 +87,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
       try {
         const workspaceScope = resolveConversationWorkspaceReadScope({
           conversationId: activeConversationId,
-          conversations,
           messages: activeConversation?.messages,
           usageEntries: activeConversation?.usage?.entries,
           agentRuns: activeConversation?.agentRuns,
@@ -140,7 +111,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     [
       activeConversationId,
       activeConversation,
-      conversations,
       setChatError,
       shareFileFailedMessage,
       t,
@@ -169,7 +139,6 @@ export function useChatScreenUiCallbacks(params: UseChatScreenUiCallbacksParams)
     handleOpenSubAgentDetails,
     handleShareWorkspaceFile,
     handleShowEarlierMessages,
-    handleToggleSideThread,
     handleViewCanvas,
     handleViewFiles,
   };

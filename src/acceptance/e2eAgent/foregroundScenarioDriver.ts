@@ -144,7 +144,6 @@ async function runScenarioIsolated(
     let memoryScope: ForegroundScenarioMemoryScope = {
       memoryConversationId: resolveConversationWorkspaceTarget({
         conversationId: input.conversationId,
-        conversations: useChatStore.getState().conversations,
       }).workspaceConversationId,
       sourceThreadId: input.conversationId,
     };

@@ -131,7 +131,4 @@ export const createChatHeaderStyles = (colors: AppPalette) =>
       fontSize: 15,
       fontWeight: '600',
     },
-    conversationMenuRowDangerText: {
-      color: colors.danger,
-    },
   }) as const;

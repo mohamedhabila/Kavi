@@ -63,7 +63,6 @@ export const en: TranslationMap = {
     noChatMatches: 'No matching chats',
     noChatMatchesHint: 'Try a different title or clear the search.',
     clearChatSearch: 'Clear search',
-    sideThread: 'Side chat',
     activity: 'Activity',
     library: 'Library',
     more: 'More',
@@ -263,12 +262,6 @@ export const en: TranslationMap = {
     openConversationOptions: 'Open conversation options',
     conversationOptions: 'Conversation options',
     conversationSettings: 'Conversation settings',
-    startSideThread: 'Start a side thread',
-    discardSideThread: 'Discard side thread',
-    discardSideThreadConfirmTitle: 'Discard this side chat?',
-    discardSideThreadConfirmBody:
-      'Messages in this side chat will be deleted. The main conversation will stay unchanged.',
-    discardSideThreadAction: 'Discard side chat',
     conversationUnavailableTitle: 'Conversation unavailable',
     conversationUnavailableHint: 'Return to the Assistant and choose a conversation to continue.',
     settingsLockedWhileWorking:

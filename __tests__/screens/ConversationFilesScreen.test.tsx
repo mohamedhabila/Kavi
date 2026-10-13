@@ -171,52 +171,6 @@ describe('ConversationFilesScreen', () => {
     );
   });
 
-  it('uses the canonical parent workspace for a side thread and returns the editor to that thread', () => {
-    mockRouteParams = { conversationId: 'conv-side' };
-    mockConversations = [
-      {
-        id: 'conv-root',
-        title: 'Main conversation',
-        messages: [],
-        usage: { entries: [] },
-        updatedAt: 100,
-      },
-      {
-        id: 'conv-side',
-        title: 'Side thread',
-        parentConversationId: 'conv-root',
-        isSideThread: true,
-        messages: [],
-        usage: { entries: [] },
-        updatedAt: 200,
-      },
-    ];
-
-    const { getByText } = render(<ConversationFilesScreen />);
-
-    expect(capturedConversationFilesProps).toEqual(
-      expect.objectContaining({
-        conversationId: 'conv-root',
-        fallbackConversationIds: ['conv-side'],
-        workspaceLabel: 'Main conversation',
-        refreshToken: '200:100:0',
-      }),
-    );
-
-    fireEvent.press(getByText('open-text-file'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('CodeEditor', {
-      source: 'local',
-      conversationId: 'conv-root',
-      filePath: 'src/App.tsx',
-      content: 'console.log(1);',
-      returnToConversationFiles: {
-        conversationId: 'conv-side',
-        initialDirectoryPath: 'src',
-      },
-    });
-  });
-
   it('includes live sub-agent workspace ids and passes a refresh token to the explorer', () => {
     mockConversations = [
       {
