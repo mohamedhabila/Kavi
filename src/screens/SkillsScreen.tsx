@@ -241,7 +241,6 @@ export const SkillsScreen: React.FC = () => {
           title: t('common.error'),
           message: t('skills.installFailedGeneric'),
           error: err,
-          technicalDetailsLabel: t('common.technicalDetails'),
         });
       }
       setInstallingId(null);
@@ -297,7 +296,6 @@ export const SkillsScreen: React.FC = () => {
             title: t('common.error'),
             message: t('skills.installFailedGeneric'),
             error: err,
-            technicalDetailsLabel: t('common.technicalDetails'),
           });
         })
         .finally(() => setInstallingId(null));

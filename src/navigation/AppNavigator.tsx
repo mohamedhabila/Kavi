@@ -31,7 +31,6 @@ import { ApprovalHistoryScreen } from '../screens/ApprovalHistoryScreen';
 import { Sidebar } from '../components/sidebar/Sidebar';
 import { CanvasSurfacePresenter } from '../components/canvas/CanvasSurfacePresenter';
 import { OnboardingWizard } from '../components/onboarding/OnboardingWizard';
-import { withDeveloperModeGate } from './withDeveloperModeGate';
 import { getNavigationTheme, useAppTheme } from '../theme/useAppTheme';
 import {
   isStoreHydrated,
@@ -59,28 +58,6 @@ import {
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
 const navigationRef = createNavigationContainerRef<any>();
-
-const GatedDeveloperWorkScreen = withDeveloperModeGate(
-  DeveloperWorkScreen,
-  'nav.developerAndRemoteWork',
-  'developer-work-locked',
-);
-const GatedGatewayScreen = withDeveloperModeGate(GatewayScreen, 'nav.gateway', 'gateway-locked');
-const GatedRemoteWorkScreen = withDeveloperModeGate(
-  RemoteWorkScreen,
-  'nav.remoteWork',
-  'remote-work-locked',
-);
-const GatedTerminalScreen = withDeveloperModeGate(
-  TerminalScreen,
-  'nav.terminal',
-  'terminal-locked',
-);
-const GatedCodeEditorScreen = withDeveloperModeGate(
-  CodeEditorScreen,
-  'nav.codeEditor',
-  'code-editor-locked',
-);
 
 export const AppNavigator: React.FC = () => {
   const { colors } = useAppTheme();
@@ -250,7 +227,7 @@ export const AppNavigator: React.FC = () => {
           <Drawer.Screen name="Activity" component={ActivityScreen} />
           <Drawer.Screen name="Library" component={LibraryScreen} />
           <Drawer.Screen name="More" component={MoreScreen} />
-          <Drawer.Screen name="DeveloperWork" component={GatedDeveloperWorkScreen} />
+          <Drawer.Screen name="DeveloperWork" component={DeveloperWorkScreen} />
           <Drawer.Screen name="ConversationFiles" component={ConversationFilesScreen} />
           <Drawer.Screen name="ConversationSettings" component={ConversationSettingsScreen} />
           <Drawer.Screen name="Settings" component={SettingsScreen} />
@@ -259,10 +236,10 @@ export const AppNavigator: React.FC = () => {
           <Drawer.Screen name="Skills" component={SkillsScreen} />
           <Drawer.Screen name="Canvas" component={CanvasScreen} />
           <Drawer.Screen name="Voice" component={VoiceScreen} />
-          <Drawer.Screen name="Gateway" component={GatedGatewayScreen} />
-          <Drawer.Screen name="RemoteWork" component={GatedRemoteWorkScreen} />
-          <Drawer.Screen name="Terminal" component={GatedTerminalScreen} />
-          <Drawer.Screen name="CodeEditor" component={GatedCodeEditorScreen} />
+          <Drawer.Screen name="Gateway" component={GatewayScreen} />
+          <Drawer.Screen name="RemoteWork" component={RemoteWorkScreen} />
+          <Drawer.Screen name="Terminal" component={TerminalScreen} />
+          <Drawer.Screen name="CodeEditor" component={CodeEditorScreen} />
           <Drawer.Screen name="BrowserSession" component={BrowserSessionScreen} />
           <Drawer.Screen name="AgentRoster" component={AgentRosterScreen} />
           <Drawer.Screen name="ApprovalHistory" component={ApprovalHistoryScreen} />

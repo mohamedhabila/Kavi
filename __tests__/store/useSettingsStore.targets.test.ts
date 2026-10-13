@@ -296,7 +296,6 @@ describe('useSettingsStore persistence settings', () => {
       browserProviders: [makeBrowserProvider()],
       expoAccounts: [makeExpoAccount()],
       expoProjects: [makeExpoProject()],
-      developerModeEnabled: true,
     });
 
     expect(partialized).toEqual(
@@ -305,8 +304,8 @@ describe('useSettingsStore persistence settings', () => {
         browserProviders: [expect.objectContaining({ id: 'browser-1' })],
         expoAccounts: [expect.objectContaining({ id: 'expo-account-1' })],
         expoProjects: [expect.objectContaining({ id: 'expo-project-1' })],
-        developerModeEnabled: true,
       }),
     );
+    expect(partialized).not.toHaveProperty('developerModeEnabled');
   });
 });

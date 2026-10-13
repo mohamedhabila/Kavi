@@ -46,7 +46,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}ث',
     millisecondsShort: '{count}مللي ث',
     versionShort: 'v{version}',
-    technicalDetails: 'التفاصيل التقنية',
   },
   nav: {
     chat: 'المحادثة',
@@ -64,7 +63,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     skills: 'المهارات',
     memory: 'الذاكرة',
     voice: 'محادثة صوتية',
-    mcpStatus: 'حالة MCP',
     connectedServices: 'الخدمات المتصلة',
     gateway: 'البوابة',
     remoteWork: 'العمل عن بُعد',
@@ -133,12 +131,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     openAssistant: 'فتح المساعد',
     advancedTitle: 'تفاصيل العمل المتقدمة',
     advancedHint: 'اعرض بنية العاملين والجلسات وعدد الأدوات.',
-  },
-  developerMode: {
-    lockedTitle: 'وضع المطوّر متوقف',
-    lockedMessage: 'فعّل وضع المطوّر من الإعدادات لاستخدام الطرفية، والجهاز البعيد، والشيفرة، وأدوات الأتمتة.',
-    openSettings: 'فتح الإعدادات',
-    openSettingsAccessibility: 'فتح إعدادات وضع المطوّر',
   },
   chat: {
     responseInterruptedBeforeStart: 'تم إيقاف الرد قبل أن يبدأ التوليد. يُرجى إعادة المحاولة عندما تكون مستعدًا.',
@@ -414,18 +406,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
         inProgress: 'قيد التنفيذ',
         completed: 'تمّت',
       },
-    },
-    agentRunTrace: {
-      header: 'أثر التشغيل',
-      preview: plural({
-        zero: 'التكرار {iteration} · لا أحداث',
-        one: 'التكرار {iteration} · حدث واحد',
-        two: 'التكرار {iteration} · حدثان',
-        few: 'التكرار {iteration} · {count} أحداث',
-        many: 'التكرار {iteration} · {count} حدثًا',
-        other: 'التكرار {iteration} · {count} حدث',
-      }),
-      iteration: 'التكرار {iteration}',
     },
     agentWorkflow: {
       currentWork: 'العمل الحالي',
@@ -787,10 +767,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
       noResultsTitle: 'لا توجد إعدادات مطابقة',
       noResultsHint: 'جرّب مصطلحًا أوسع أو امسح البحث.',
     },
-    developerMode: {
-      title: 'وضع المطوّر',
-      description: 'يكشف أدوات الطرفية، والجهاز البعيد، والشيفرة، والأتمتة لسير العمل المتقدم.',
-    },
     notificationsVoice: {
       voiceHint: 'ابدأ محادثة صوتية وراجع إعداد الميكروفون أو الكلام.',
       automationHint: 'أدِر التذكيرات والمهام الآلية وجاهزية إشعاراتها.',
@@ -828,8 +804,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     personaModelOverride: 'تجاوز النموذج',
     personaModelOverridePlaceholder: 'نموذج اختياري',
     personaThinkingLevel: 'مستوى تفكير الشخصية',
-    personaTemperature: 'الحرارة',
-    personaTemperaturePlaceholder: 'اختياري، مثل 0.7',
     personaSystemPromptPlaceholder: 'تعليمات شخصية مخصصة',
     savePersonaAccessibility: 'احفظ شخصية {name}',
     savePersonaConfiguration: 'حفظ إعدادات الشخصية',

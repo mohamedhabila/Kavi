@@ -16,7 +16,6 @@ export const mockTranslate = (key: string) => (key === 'common.back' ? 'Back' : 
 export const mockSettings = {
   sshTargets: [] as any[],
   workspaceTargets: [] as any[],
-  developerModeEnabled: false,
 };
 
 export const mockReadWorkspaceFile = jest.fn();
@@ -220,7 +219,6 @@ export function resetCodeEditorScreenFixtures() {
   mockCodeEditorScreenState.routeParams = {};
   mockSettings.sshTargets = [];
   mockSettings.workspaceTargets = [];
-  mockSettings.developerModeEnabled = false;
   mockCodeEditorScreenState.editorContent = '';
   mockCodeEditorScreenState.browserSelectedPath = null;
   mockSetEditorReadOnly.mockReset();

@@ -316,41 +316,6 @@ describe('CodeEditorScreen file persistence', () => {
     alertSpy.mockRestore();
   });
 
-  it('reveals the technical detail alongside the generic open-failure message in developer mode', async () => {
-    mockSettings.developerModeEnabled = true;
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockSettings.workspaceTargets = [
-      {
-        id: 'ws-1',
-        name: 'Workspace A',
-        rootPath: '/workspace/project',
-        provider: 'code-server',
-        enabled: true,
-      },
-    ];
-    mockReadWorkspaceFile.mockRejectedValueOnce(new Error('open boom'));
-
-    const { getByText } = render(<CodeEditorScreen />);
-    await act(async () => {
-      fireEvent.press(getByText('open-browser-file'));
-    });
-
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith(
-        'codeEditor.openFailedTitle',
-        expect.stringContaining('codeEditor.openFailedMessage'),
-        undefined,
-      );
-      expect(alertSpy).toHaveBeenCalledWith(
-        'codeEditor.openFailedTitle',
-        expect.stringContaining('open boom'),
-        undefined,
-      );
-    });
-    mockSettings.developerModeEnabled = false;
-    alertSpy.mockRestore();
-  });
-
   it('shows an alert when saving a workspace file fails', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockSettings.workspaceTargets = [

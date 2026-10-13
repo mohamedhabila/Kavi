@@ -10,7 +10,6 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import {
-  mockExecutionSettings,
   mockInstallSkillFromHub,
   mockListClawHubSkills,
   mockSearchClawHub,
@@ -252,39 +251,6 @@ describe('SkillsScreen ClawHub browse and install', () => {
     await waitFor(() => expect(alertSpy).toHaveBeenCalled());
     const [, body] = alertSpy.mock.calls[0];
     expect(body).not.toContain('network boom');
-    alertSpy.mockRestore();
-  });
-
-  it('appends the technical error detail only when developer mode is on', async () => {
-    mockExecutionSettings.developerModeEnabled = true;
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    mockInstallSkillFromHub.mockRejectedValueOnce(new Error('network boom'));
-    mockListClawHubSkills.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'flaky-skill-dev',
-          name: 'Flaky Skill Dev',
-          description: 'Fixture',
-          version: '1.0.0',
-          author: 'ClawHub',
-          tags: [],
-          downloads: 1,
-          rating: 1,
-          installUrl: 'https://example.com/flaky-skill-dev',
-        },
-      ],
-      nextCursor: null,
-    });
-
-    const { getByLabelText, getByText } = render(<SkillsScreen />);
-    fireEvent.press(getByText('Browse'));
-    await waitFor(() => expect(getByText('Flaky Skill Dev')).toBeTruthy());
-    fireEvent.press(getByLabelText('Install Flaky Skill Dev'));
-
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    const [, body] = alertSpy.mock.calls[0];
-    expect(body).toContain('network boom');
-    mockExecutionSettings.developerModeEnabled = false;
     alertSpy.mockRestore();
   });
 

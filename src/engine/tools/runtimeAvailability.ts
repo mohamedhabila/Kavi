@@ -24,7 +24,9 @@ export interface RuntimeToolAvailabilityContext {
   hasDelegableWorkspaceTargets: boolean;
   hasMobileController: boolean;
   hasWebSearchProvider: boolean;
-  hasDeveloperModeEnabled: boolean;
+  hasSshTargets: boolean;
+  hasBrowserProviders: boolean;
+  hasExpoAccounts: boolean;
   /**
    * Resolves whether a named secure-storage secret (e.g. `OPENWEATHER_API_KEY`) is
    * currently configured. Backs `secret:<NAME>` runtime requirements so a code-owned
@@ -49,7 +51,9 @@ export const RUNTIME_TOOL_REQUIREMENTS = {
   DELEGABLE_WORKSPACE_TARGETS: 'delegable_workspace_targets',
   MOBILE_CONTROLLER: 'mobile_controller',
   WEB_SEARCH_PROVIDER: 'web_search_provider',
-  DEVELOPER_MODE: 'developer_mode',
+  SSH_TARGETS: 'ssh_targets',
+  BROWSER_PROVIDERS: 'browser_providers',
+  EXPO_ACCOUNTS: 'expo_accounts',
 } as const;
 
 function isRequirementSatisfied(
@@ -72,8 +76,12 @@ function isRequirementSatisfied(
       return context.hasMobileController;
     case RUNTIME_TOOL_REQUIREMENTS.WEB_SEARCH_PROVIDER:
       return context.hasWebSearchProvider;
-    case RUNTIME_TOOL_REQUIREMENTS.DEVELOPER_MODE:
-      return context.hasDeveloperModeEnabled;
+    case RUNTIME_TOOL_REQUIREMENTS.SSH_TARGETS:
+      return context.hasSshTargets;
+    case RUNTIME_TOOL_REQUIREMENTS.BROWSER_PROVIDERS:
+      return context.hasBrowserProviders;
+    case RUNTIME_TOOL_REQUIREMENTS.EXPO_ACCOUNTS:
+      return context.hasExpoAccounts;
     default:
       // An unrecognized requirement must not silently hide a working tool.
       return true;
@@ -187,7 +195,8 @@ export function hasDelegableWorkspaceTargets(targets?: WorkspaceTargetConfig[]):
 export function getRuntimeToolAvailabilityContext(
   targets?: WorkspaceTargetConfig[],
 ): RuntimeToolAvailabilityContext {
-  const resolvedTargets = targets ?? useSettingsStore.getState().workspaceTargets ?? [];
+  const settings = useSettingsStore.getState();
+  const resolvedTargets = targets ?? settings.workspaceTargets ?? [];
   // Keeps the synchronous snapshot honest without blocking surface selection.
   void refreshSearchProviderReadiness();
   return {
@@ -196,7 +205,15 @@ export function getRuntimeToolAvailabilityContext(
     hasDelegableWorkspaceTargets: hasDelegableWorkspaceTargets(resolvedTargets),
     hasMobileController: false,
     hasWebSearchProvider: isSearchProviderConfiguredSnapshot(),
-    hasDeveloperModeEnabled: useSettingsStore.getState().developerModeEnabled === true,
+    hasSshTargets: (settings.sshTargets ?? []).some(
+      (target) => getSshTargetReadiness(target).launchable,
+    ),
+    hasBrowserProviders: (settings.browserProviders ?? []).some(
+      (provider) => getBrowserProviderReadiness(provider).launchable,
+    ),
+    hasExpoAccounts: (settings.expoAccounts ?? []).some(
+      (account) => account.enabled && Boolean(account.tokenRef?.trim()),
+    ),
     hasConfiguredSecret,
   };
 }

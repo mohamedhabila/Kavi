@@ -12,7 +12,7 @@ type ToolContract = NonNullable<ToolDefinition['contract']>;
 
 function browserActionContract(overrides: Partial<ToolContract> = {}): ToolContract {
   return {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['browser_providers'],
     category: 'browser',
     capabilities: ['read', 'write', 'verify'],
     resourceKinds: ['browser'],
@@ -29,7 +29,7 @@ function browserInteractionContract(): ToolContract {
 
 function browserMonitorContract(overrides: Partial<ToolContract> = {}): ToolContract {
   return {
-    runtimeRequirements: ['developer_mode'],
+    runtimeRequirements: ['browser_providers'],
     category: 'browser',
     capabilities: ['monitor', 'read', 'verify'],
     resourceKinds: ['browser'],

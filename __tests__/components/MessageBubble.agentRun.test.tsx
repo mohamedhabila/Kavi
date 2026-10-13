@@ -1,6 +1,4 @@
 import { render, fireEvent } from '@testing-library/react-native';
-import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   MessageBubble,
   installMessageBubbleTestHarness,
@@ -10,10 +8,6 @@ import {
 
 describe('MessageBubble agent run widgets', () => {
   installMessageBubbleTestHarness();
-
-  afterEach(() => {
-    useSettingsStore.setState({ developerModeEnabled: false });
-  });
 
   it('shows a review footer while the run is being reviewed', () => {
     const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
@@ -102,76 +96,6 @@ describe('MessageBubble agent run widgets', () => {
 
     fireEvent.press(getByTestId('agent-plan-toggle'));
     expect(queryByTestId('agent-plan-details')).toBeNull();
-  });
-
-  it('should render a compact run trace widget and toggle its details', () => {
-    // Engine diagnostics are a developer-mode surface.
-    useSettingsStore.setState({ developerModeEnabled: true });
-    const msg = makeMessage({ role: 'assistant', content: 'Implemented the fix.' });
-    const { getByTestId, getByText, queryByTestId } = render(
-      <MessageBubble
-        message={msg}
-        agentRun={makeAgentRun({
-          controlGraph: {
-            version: 1,
-            status: 'ready',
-            iteration: 2,
-            expectedToolCalls: [],
-            observedToolResults: [],
-            pendingAsyncCount: 0,
-            lastModelToolNames: [],
-            turnDirectives: {
-              forceFinalText: false,
-              requireDelegationTool: false,
-              requireWorkflowTool: false,
-              incompleteFinalTextRecoveryCount: 0,
-            },
-            audit: [
-              {
-                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.TOOL_SURFACE_SELECTED,
-                iteration: 1,
-                timestamp: 100,
-                detail: 'count:2,tokens:100,tools:read_file,web_search',
-              },
-              {
-                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.MEMORY_RETRIEVAL,
-                iteration: 1,
-                timestamp: 110,
-                detail: 'facts:2,episodes:1,sections:1',
-              },
-              {
-                type: GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE,
-                iteration: 2,
-                timestamp: 200,
-                detail: 'decision:hold,reason:async_waiting_finalization_hold',
-              },
-            ],
-            updatedAt: 2,
-            asyncWork: {
-              awaitingBackgroundWorkers: false,
-              pendingOperations: [],
-              updatedAt: 2,
-            },
-          },
-        })}
-      />,
-    );
-
-    expect(getByTestId('agent-run-trace-widget')).toBeTruthy();
-    expect(getByText('Run trace')).toBeTruthy();
-    expect(queryByTestId('agent-run-trace-details')).toBeNull();
-
-    fireEvent.press(getByTestId('agent-run-trace-toggle'));
-
-    expect(getByTestId('agent-run-trace-details')).toBeTruthy();
-    expect(getByTestId('agent-run-trace-iteration-1')).toBeTruthy();
-    expect(getByTestId('agent-run-trace-iteration-2')).toBeTruthy();
-    expect(getByText('TOOL_SURFACE_SELECTED')).toBeTruthy();
-    expect(getByText('MEMORY_RETRIEVAL')).toBeTruthy();
-    expect(getByText('COMPLETION_GATE')).toBeTruthy();
-
-    fireEvent.press(getByTestId('agent-run-trace-toggle'));
-    expect(queryByTestId('agent-run-trace-details')).toBeNull();
   });
 
   it('should render structured sub-agent activity cards instead of raw lifecycle text', () => {

@@ -274,30 +274,6 @@ describe('useSettingsStore preference settings', () => {
     expect(useSettingsStore.getState().maxLinks).toBe(10);
   });
 
-  it('defaults developer mode off and toggles it', () => {
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
-
-    useSettingsStore.getState().setDeveloperModeEnabled(true);
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
-
-    useSettingsStore.getState().setDeveloperModeEnabled(false);
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
-
-    // Coerces non-boolean input the same way other boolean setters do.
-    useSettingsStore.getState().setDeveloperModeEnabled(1 as any);
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
-  });
-
-  it('replaces developerModeEnabled only when explicitly provided', () => {
-    useSettingsStore.getState().setDeveloperModeEnabled(true);
-
-    useSettingsStore.getState().replaceAllSettings({ theme: 'light' });
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(true);
-
-    useSettingsStore.getState().replaceAllSettings({ developerModeEnabled: false });
-    expect(useSettingsStore.getState().developerModeEnabled).toBe(false);
-  });
-
   it('sets memory consolidation provider and mode preferences', () => {
     useSettingsStore.getState().setConsolidationProvider(' provider-1 ');
     expect(useSettingsStore.getState().memoryConsolidationMode).toBe('specific');

@@ -45,7 +45,6 @@ export const en: TranslationMap = {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: 'Technical details',
   },
 
   // ── Navigation ─────────────────────────────────────────────────────────
@@ -65,7 +64,6 @@ export const en: TranslationMap = {
     skills: 'Skills',
     memory: 'Memory',
     voice: 'Voice conversation',
-    mcpStatus: 'MCP Servers',
     connectedServices: 'Connected services',
     gateway: 'Gateway',
     remoteWork: 'Remote Work',
@@ -132,14 +130,6 @@ export const en: TranslationMap = {
     openAssistant: 'Open Assistant',
     advancedTitle: 'Advanced work details',
     advancedHint: 'View worker hierarchy, sessions, and tool counts.',
-  },
-
-  // ── Developer Mode ─────────────────────────────────────────────────────
-  developerMode: {
-    lockedTitle: 'Developer mode is off',
-    lockedMessage: 'Turn on Developer Mode in Settings to use terminal, remote-machine, code, and automation tools.',
-    openSettings: 'Open Settings',
-    openSettingsAccessibility: 'Open developer mode settings',
   },
 
   // ── Chat Screen ────────────────────────────────────────────────────────
@@ -372,14 +362,6 @@ export const en: TranslationMap = {
         inProgress: 'In progress',
         completed: 'Done',
       },
-    },
-    agentRunTrace: {
-      header: 'Run trace',
-      preview: plural({
-        one: 'Iteration {iteration} · {count} event',
-        other: 'Iteration {iteration} · {count} events',
-      }),
-      iteration: 'Iteration {iteration}',
     },
     agentWorkflow: {
       currentWork: 'Current work',
@@ -739,10 +721,6 @@ export const en: TranslationMap = {
       noResultsTitle: 'No matching settings',
       noResultsHint: 'Try a broader term or clear the search.',
     },
-    developerMode: {
-      title: 'Developer mode',
-      description: 'Reveals terminal, remote-machine, code, and automation tools for advanced workflows.',
-    },
     notificationsVoice: {
       voiceHint: 'Start a spoken conversation and review microphone or speech setup.',
       automationHint: 'Manage reminders, automations, and their notification readiness.',
@@ -780,8 +758,6 @@ export const en: TranslationMap = {
     personaModelOverride: 'Model Override',
     personaModelOverridePlaceholder: 'Optional model',
     personaThinkingLevel: 'Persona Thinking Level',
-    personaTemperature: 'Temperature',
-    personaTemperaturePlaceholder: 'Optional, e.g. 0.7',
     personaSystemPromptPlaceholder: 'Custom persona instructions',
     savePersonaAccessibility: 'Save {name} persona',
     savePersonaConfiguration: 'Save Persona Configuration',

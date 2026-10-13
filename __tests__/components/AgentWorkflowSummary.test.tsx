@@ -4,7 +4,6 @@ import { StyleSheet } from 'react-native';
 import { AgentWorkflowSummary } from '../../src/components/chat/AgentWorkflowSummary';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
 import type { AgentRun, AgentRunControlGraphState } from '../../src/types/agentRun';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 jest.mock('../../src/i18n/useTranslation', () => ({
   useTranslation: () => ({
@@ -134,12 +133,8 @@ const expectMobileToggle = (node: { props: { style: unknown } }) => {
   expect(StyleSheet.flatten(node.props.style)).toEqual(expect.objectContaining({ minHeight: 48 }));
 };
 
-describe('AgentWorkflowSummary for everyday use', () => {
-  beforeEach(() => {
-    useSettingsStore.setState({ developerModeEnabled: false });
-  });
-
-  it('hides the run trace outside developer mode', () => {
+describe('AgentWorkflowSummary', () => {
+  it('never shows the engine trace', () => {
     // Regression: the trace listed raw graph event names such as MODEL_TURN_STARTED in
     // every agentic chat.
     const screen = render(<AgentWorkflowSummary run={makeRun()} />);
@@ -170,74 +165,5 @@ describe('AgentWorkflowSummary for everyday use', () => {
     );
 
     expect(screen.queryByTestId('agent-plan-widget')).toBeNull();
-  });
-});
-
-describe('AgentWorkflowSummary in developer mode', () => {
-  beforeEach(() => {
-    useSettingsStore.setState({ developerModeEnabled: true });
-  });
-
-  afterAll(() => {
-    useSettingsStore.setState({ developerModeEnabled: false });
-  });
-
-  it('keeps current work primary while plan and trace details stay collapsed by default', () => {
-    const screen = render(<AgentWorkflowSummary run={makeRun()} />);
-
-    expect(screen.getByTestId('agent-workflow-summary')).toBeTruthy();
-    expect(screen.getByText('Current work')).toBeTruthy();
-    expect(screen.getByText('Audit the repository')).toBeTruthy();
-    expect(screen.getByText('Running')).toBeTruthy();
-    expect(screen.queryByTestId('agent-plan-details')).toBeNull();
-    expect(screen.queryByTestId('agent-run-trace-details')).toBeNull();
-    expectMobileToggle(screen.getByTestId('agent-run-trace-toggle'));
-    expect(screen.getByTestId('agent-run-trace-toggle').props.accessibilityLabel).toBe('Run trace');
-
-    fireEvent.press(screen.getByTestId('agent-run-trace-toggle'));
-    expect(screen.getByTestId('agent-run-trace-iteration-1')).toBeTruthy();
-    expect(screen.getByTestId('agent-run-trace-iteration-2')).toBeTruthy();
-    expect(screen.getByText(GRAPH_OBSERVABILITY_AUDIT_TYPES.TOOL_SURFACE_SELECTED)).toBeTruthy();
-    expect(screen.getByText(GRAPH_OBSERVABILITY_AUDIT_TYPES.COMPLETION_GATE)).toBeTruthy();
-  });
-
-  it('keeps a finished plan compact and counts its completed steps', () => {
-    const screen = render(
-      <AgentWorkflowSummary
-        run={makeRun({
-          status: 'completed',
-          currentPhase: 'deliver',
-          phases: [
-            { key: 'work', title: 'Work', status: 'completed', updatedAt: 2 },
-            { key: 'deliver', title: 'Deliver', status: 'completed', updatedAt: 3 },
-          ],
-          controlGraph: makeControlGraph({
-            plan: [
-              { step: 'Check the answer', status: 'completed' },
-              { step: 'Send it', status: 'completed' },
-            ],
-          }),
-        })}
-      />,
-    );
-
-    expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
-    expect(screen.getByText('2/2')).toBeTruthy();
-    expect(screen.queryByTestId('agent-plan-details')).toBeNull();
-
-    fireEvent.press(screen.getByTestId('agent-plan-toggle'));
-    expect(screen.getAllByText('Done')).toHaveLength(2);
-  });
-
-  it.each([
-    ['waiting_for_user', 'Waiting for you'],
-    ['needs_attention', 'Needs attention'],
-  ] as const)('does not present %s workflow state as Running', (executionPresentation, label) => {
-    const screen = render(
-      <AgentWorkflowSummary run={makeRun()} executionPresentation={executionPresentation} />,
-    );
-
-    expect(screen.getByText(label)).toBeTruthy();
-    expect(screen.queryByText('Running')).toBeNull();
   });
 });

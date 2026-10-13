@@ -46,7 +46,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: '技术详情',
   },
   nav: {
     chat: '聊天',
@@ -64,7 +63,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     skills: '技能',
     memory: '记忆',
     voice: '语音对话',
-    mcpStatus: 'MCP 服务',
     connectedServices: '已连接的服务',
     gateway: '网关',
     remoteWork: '远程工作',
@@ -132,12 +130,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     openAssistant: '打开助手',
     advancedTitle: '高级任务详情',
     advancedHint: '查看工作单元层级、会话和工具调用数量。',
-  },
-  developerMode: {
-    lockedTitle: '开发者模式已关闭',
-    lockedMessage: '请在设置中开启开发者模式，以使用终端、远程主机、代码和自动化工具。',
-    openSettings: '打开设置',
-    openSettingsAccessibility: '打开开发者模式设置',
   },
   chat: {
     responseInterruptedBeforeStart: '在开始生成之前响应被中断。请在准备好后重试。',
@@ -351,13 +343,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
         inProgress: '进行中',
         completed: '已完成',
       },
-    },
-    agentRunTrace: {
-      header: '运行轨迹',
-      preview: plural({
-        other: '迭代 {iteration} · {count} 个事件',
-      }),
-      iteration: '迭代 {iteration}',
     },
     agentWorkflow: {
       currentWork: '当前工作',
@@ -693,10 +678,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '没有匹配的设置',
       noResultsHint: '请尝试更宽泛的关键词或清除搜索。',
     },
-    developerMode: {
-      title: '开发者模式',
-      description: '为高级工作流显示终端、远程主机、代码和自动化工具。',
-    },
     notificationsVoice: {
       voiceHint: '开始语音对话并检查麦克风或语音设置。',
       automationHint: '管理提醒、自动化及其通知状态。',
@@ -733,8 +714,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     personaModelOverride: '模型覆盖',
     personaModelOverridePlaceholder: '可选模型',
     personaThinkingLevel: '角色人格推理级别',
-    personaTemperature: '温度',
-    personaTemperaturePlaceholder: '可选，例如 0.7',
     personaSystemPromptPlaceholder: '自定义角色人格指令',
     savePersonaAccessibility: '保存 {name} 角色人格',
     savePersonaConfiguration: '保存角色人格配置',

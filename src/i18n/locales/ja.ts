@@ -46,7 +46,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: '技術的な詳細',
   },
   nav: {
     chat: 'チャット',
@@ -64,7 +63,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     skills: 'スキル',
     memory: 'メモリー',
     voice: '音声で会話',
-    mcpStatus: 'MCP ステータス',
     connectedServices: '連携サービス',
     gateway: 'ゲートウェイ',
     remoteWork: 'リモート作業',
@@ -133,12 +131,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     openAssistant: 'アシスタントを開く',
     advancedTitle: '作業の詳細情報',
     advancedHint: 'ワーカー階層、セッション、ツール数を表示します。',
-  },
-  developerMode: {
-    lockedTitle: 'デベロッパーモードはオフです',
-    lockedMessage: 'ターミナル、リモートマシン、コード、自動化ツールを使うには、設定でデベロッパーモードをオンにしてください。',
-    openSettings: '設定を開く',
-    openSettingsAccessibility: 'デベロッパーモードの設定を開く',
   },
   chat: {
     responseInterruptedBeforeStart: '生成が始まる前に応答が中断されました。準備ができたら再試行してください。',
@@ -356,13 +348,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
         inProgress: '進行中',
         completed: '完了',
       },
-    },
-    agentRunTrace: {
-      header: '実行トレース',
-      preview: plural({
-        other: '反復 {iteration}・{count} 件のイベント',
-      }),
-      iteration: '反復 {iteration}',
     },
     agentWorkflow: {
       currentWork: '現在の作業',
@@ -718,10 +703,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '一致する設定がありません',
       noResultsHint: 'より広い言葉を試すか、検索をクリアしてください。',
     },
-    developerMode: {
-      title: 'デベロッパーモード',
-      description: '上級者向けのワークフロー用に、ターミナル、リモートマシン、コード、自動化ツールを表示します。',
-    },
     notificationsVoice: {
       voiceHint: '音声会話を開始し、マイクや音声設定を確認します。',
       automationHint: 'リマインダー、自動化、通知の準備状況を管理します。',
@@ -759,8 +740,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     personaModelOverride: 'モデル上書き',
     personaModelOverridePlaceholder: '任意のモデル',
     personaThinkingLevel: 'ペルソナの推論レベル',
-    personaTemperature: '温度',
-    personaTemperaturePlaceholder: '任意。例: 0.7',
     personaSystemPromptPlaceholder: 'カスタムのペルソナ指示',
     savePersonaAccessibility: '{name} ペルソナを保存',
     savePersonaConfiguration: 'ペルソナ設定を保存',

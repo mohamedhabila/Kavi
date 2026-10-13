@@ -93,7 +93,6 @@ const mockSettingsState = {
   linkUnderstandingEnabled: true,
   mediaUnderstandingEnabled: false,
   maxLinks: 5,
-  developerModeEnabled: true,
   replaceAllSettings: mockReplaceAllSettings,
 };
 
@@ -510,7 +509,7 @@ describe('Settings Import/Export', () => {
       expect(s.linkUnderstandingEnabled).toBe(true);
       expect(s.mediaUnderstandingEnabled).toBe(false);
       expect(s.maxLinks).toBe(5);
-      expect(s.developerModeEnabled).toBe(true);
+      expect(s).not.toHaveProperty('developerModeEnabled');
     });
 
     it('importSettings forwards preference fields to replaceAllSettings', () => {
@@ -525,7 +524,7 @@ describe('Settings Import/Export', () => {
           linkUnderstandingEnabled: false,
           mediaUnderstandingEnabled: true,
           maxLinks: 10,
-          developerModeEnabled: false,
+          developerModeEnabled: true,
         },
       } as any);
       expect(result.success).toBe(true);
@@ -538,23 +537,8 @@ describe('Settings Import/Export', () => {
       expect(arg.linkUnderstandingEnabled).toBe(false);
       expect(arg.mediaUnderstandingEnabled).toBe(true);
       expect(arg.maxLinks).toBe(10);
-      expect(arg.developerModeEnabled).toBe(false);
+      expect(arg).not.toHaveProperty('developerModeEnabled');
       expect(mockSetLocale).toHaveBeenCalledWith('ja');
-    });
-
-    it('round-trips developerModeEnabled through export and import', () => {
-      const exported = exportSettings();
-      expect((exported.settings as any).developerModeEnabled).toBe(true);
-
-      const result = importSettings({
-        version: 1,
-        exportedAt: Date.now(),
-        settings: { developerModeEnabled: true },
-      } as any);
-
-      expect(result.success).toBe(true);
-      const arg = mockReplaceAllSettings.mock.calls.at(-1)?.[0];
-      expect(arg.developerModeEnabled).toBe(true);
     });
 
     it('importSettings preserves gemini as a supported web search provider', () => {
@@ -601,7 +585,6 @@ describe('Settings Import/Export', () => {
       const arg = mockReplaceAllSettings.mock.calls[0][0];
       expect(arg).not.toHaveProperty('lastUsedModel');
       expect(arg).not.toHaveProperty('thinkingLevel');
-      expect(arg).not.toHaveProperty('developerModeEnabled');
     });
   });
 });

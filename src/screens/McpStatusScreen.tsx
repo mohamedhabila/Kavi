@@ -234,7 +234,6 @@ export const McpStatusScreen: React.FC = () => {
           title: t('common.error'),
           message: t('mcpStatus.authenticateFailedGeneric'),
           error,
-          technicalDetailsLabel: t('common.technicalDetails'),
         });
       }
 
@@ -436,7 +435,6 @@ export const McpStatusScreen: React.FC = () => {
           title: t('common.error'),
           message: t('mcpStatus.installFailed'),
           error: err,
-          technicalDetailsLabel: t('common.technicalDetails'),
           buttons:
             errObj.code === 'configuration_required'
               ? [

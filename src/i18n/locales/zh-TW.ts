@@ -46,7 +46,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: '技術詳情',
   },
   nav: {
     chat: '聊天',
@@ -64,7 +63,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     skills: '技能',
     memory: '記憶',
     voice: '語音對話',
-    mcpStatus: 'MCP 伺服器',
     connectedServices: '已連線的服務',
     gateway: '閘道',
     remoteWork: '遠端工作',
@@ -132,12 +130,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     openAssistant: '開啟助理',
     advancedTitle: '進階工作詳情',
     advancedHint: '查看工作單元階層、工作階段和工具呼叫數量。',
-  },
-  developerMode: {
-    lockedTitle: '開發者模式已關閉',
-    lockedMessage: '請在設定中開啟開發者模式，以使用終端機、遠端主機、程式碼與自動化工具。',
-    openSettings: '開啟設定',
-    openSettingsAccessibility: '開啟開發者模式設定',
   },
   chat: {
     responseInterruptedBeforeStart: '在開始產生之前回應被中斷。請在準備好後重試。',
@@ -351,13 +343,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
         inProgress: '進行中',
         completed: '已完成',
       },
-    },
-    agentRunTrace: {
-      header: '執行軌跡',
-      preview: plural({
-        other: '迭代 {iteration} · {count} 個事件',
-      }),
-      iteration: '迭代 {iteration}',
     },
     agentWorkflow: {
       currentWork: '目前工作',
@@ -692,10 +677,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       noResultsTitle: '沒有相符的設定',
       noResultsHint: '請嘗試較廣泛的關鍵字或清除搜尋。',
     },
-    developerMode: {
-      title: '開發者模式',
-      description: '為進階工作流程顯示終端機、遠端主機、程式碼與自動化工具。',
-    },
     notificationsVoice: {
       voiceHint: '開始語音對話並檢查麥克風或語音設定。',
       automationHint: '管理提醒、自動化及其通知狀態。',
@@ -732,8 +713,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     personaModelOverride: '模型覆寫',
     personaModelOverridePlaceholder: '可選模型',
     personaThinkingLevel: '角色人格推理等級',
-    personaTemperature: '溫度',
-    personaTemperaturePlaceholder: '可選，例如 0.7',
     personaSystemPromptPlaceholder: '自訂角色人格指示',
     savePersonaAccessibility: '儲存 {name} 角色人格',
     savePersonaConfiguration: '儲存角色人格設定',

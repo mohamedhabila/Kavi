@@ -46,7 +46,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: 'Detalles técnicos',
   },
   nav: {
     chat: 'Chat',
@@ -64,7 +63,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     skills: 'Habilidades',
     memory: 'Memoria',
     voice: 'Conversación por voz',
-    mcpStatus: 'Estado MCP',
     connectedServices: 'Servicios conectados',
     gateway: 'Pasarela',
     remoteWork: 'Trabajo remoto',
@@ -136,12 +134,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     openAssistant: 'Abrir Asistente',
     advancedTitle: 'Detalles avanzados del trabajo',
     advancedHint: 'Ver jerarquía de agentes, sesiones y recuentos de herramientas.',
-  },
-  developerMode: {
-    lockedTitle: 'El modo desarrollador está desactivado',
-    lockedMessage: 'Activa el modo desarrollador en Ajustes para usar la terminal, máquinas remotas, código y herramientas de automatización.',
-    openSettings: 'Abrir ajustes',
-    openSettingsAccessibility: 'Abrir los ajustes del modo desarrollador',
   },
   chat: {
     responseInterruptedBeforeStart: 'La respuesta se interrumpió antes de que pudiera comenzar a generarse. Vuelve a intentarlo cuando estés listo.',
@@ -387,15 +379,6 @@ export const es: TranslationMap = mergeTranslations(en, {
         inProgress: 'En curso',
         completed: 'Hecho',
       },
-    },
-    agentRunTrace: {
-      header: 'Traza de ejecución',
-      preview: plural({
-        one: 'Iteración {iteration} · {count} evento',
-        many: 'Iteración {iteration} · {count} eventos',
-        other: 'Iteración {iteration} · {count} eventos',
-      }),
-      iteration: 'Iteración {iteration}',
     },
     agentWorkflow: {
       currentWork: 'Trabajo actual',
@@ -763,10 +746,6 @@ export const es: TranslationMap = mergeTranslations(en, {
       noResultsTitle: 'No hay ajustes coincidentes',
       noResultsHint: 'Prueba un término más general o borra la búsqueda.',
     },
-    developerMode: {
-      title: 'Modo desarrollador',
-      description: 'Muestra herramientas de terminal, máquina remota, código y automatización para flujos de trabajo avanzados.',
-    },
     notificationsVoice: {
       voiceHint: 'Inicia una conversación hablada y revisa el micrófono o la configuración de voz.',
       automationHint: 'Administra recordatorios, automatizaciones y sus notificaciones.',
@@ -804,8 +783,6 @@ export const es: TranslationMap = mergeTranslations(en, {
     personaModelOverride: 'Reemplazo de modelo',
     personaModelOverridePlaceholder: 'Modelo opcional',
     personaThinkingLevel: 'Nivel de razonamiento de la persona',
-    personaTemperature: 'Temperatura',
-    personaTemperaturePlaceholder: 'Opcional, por ejemplo 0.7',
     personaSystemPromptPlaceholder: 'Instrucciones personalizadas de la persona',
     savePersonaAccessibility: 'Guardar persona {name}',
     savePersonaConfiguration: 'Guardar configuración de la persona',

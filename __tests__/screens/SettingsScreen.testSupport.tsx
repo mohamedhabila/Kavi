@@ -64,7 +64,6 @@ const mockSettings = {
   setPermission: jest.fn(),
   setPersonaOverride: jest.fn(),
   upsertCustomPersona: jest.fn(),
-  setDeveloperModeEnabled: jest.fn(),
 };
 
 const createSettingsRemoteConfigCollections = () =>
@@ -79,7 +78,6 @@ const createSettingsRemoteConfigCollections = () =>
   });
 
 const mockSettingsState = {
-  developerModeEnabled: false,
   providers: [
     {
       id: 'openai',
@@ -275,8 +273,6 @@ jest.mock('../../src/store/useSettingsStore', () => ({
       setLinkUnderstandingEnabled: jest.fn(),
       setMediaUnderstandingEnabled: jest.fn(),
       setMaxLinks: jest.fn(),
-      developerModeEnabled: mockSettingsState.developerModeEnabled,
-      setDeveloperModeEnabled: mockSettings.setDeveloperModeEnabled,
     };
     return selector(state);
   },

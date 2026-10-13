@@ -46,7 +46,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     secondsShort: '{count}s',
     millisecondsShort: '{count}ms',
     versionShort: 'v{version}',
-    technicalDetails: 'Technische Details',
   },
   nav: {
     chat: 'Chat',
@@ -64,7 +63,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     skills: 'Fähigkeiten',
     memory: 'Speicher',
     voice: 'Sprachunterhaltung',
-    mcpStatus: 'MCP-Status',
     connectedServices: 'Verbundene Dienste',
     gateway: 'Gateway',
     remoteWork: 'Remote-Arbeit',
@@ -131,12 +129,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     openAssistant: 'Assistent öffnen',
     advancedTitle: 'Erweiterte Arbeitsdetails',
     advancedHint: 'Worker-Hierarchie, Sitzungen und Werkzeuganzahl anzeigen.',
-  },
-  developerMode: {
-    lockedTitle: 'Entwicklermodus ist aus',
-    lockedMessage: 'Aktivieren Sie den Entwicklermodus in den Einstellungen, um Terminal-, Remote-Gerät-, Code- und Automatisierungstools zu nutzen.',
-    openSettings: 'Einstellungen öffnen',
-    openSettingsAccessibility: 'Entwicklermodus-Einstellungen öffnen',
   },
   chat: {
     responseInterruptedBeforeStart: 'Die Antwort wurde unterbrochen, bevor die Erstellung beginnen konnte. Bitte versuche es erneut, wenn du bereit bist.',
@@ -371,14 +363,6 @@ export const de: TranslationMap = mergeTranslations(en, {
         inProgress: 'In Arbeit',
         completed: 'Erledigt',
       },
-    },
-    agentRunTrace: {
-      header: 'Ausführungsverlauf',
-      preview: plural({
-        one: 'Iteration {iteration} · {count} Ereignis',
-        other: 'Iteration {iteration} · {count} Ereignisse',
-      }),
-      iteration: 'Iteration {iteration}',
     },
     agentWorkflow: {
       currentWork: 'Aktuelle Arbeit',
@@ -743,10 +727,6 @@ export const de: TranslationMap = mergeTranslations(en, {
       noResultsTitle: 'Keine passenden Einstellungen',
       noResultsHint: 'Versuche einen allgemeineren Begriff oder lösche die Suche.',
     },
-    developerMode: {
-      title: 'Entwicklermodus',
-      description: 'Zeigt Terminal-, Remote-Gerät-, Code- und Automatisierungstools für fortgeschrittene Workflows.',
-    },
     notificationsVoice: {
       voiceHint: 'Starte eine Sprachunterhaltung und prüfe Mikrofon- oder Spracheinstellungen.',
       automationHint: 'Verwalte Erinnerungen, Automationen und ihre Benachrichtigungen.',
@@ -785,8 +765,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     personaModelOverride: 'Modell-Override',
     personaModelOverridePlaceholder: 'Optionales Modell',
     personaThinkingLevel: 'Persona-Denkstufe',
-    personaTemperature: 'Temperatur',
-    personaTemperaturePlaceholder: 'Optional, z. B. 0.7',
     personaSystemPromptPlaceholder: 'Benutzerdefinierte Persona-Anweisungen',
     savePersonaAccessibility: 'Persona {name} speichern',
     savePersonaConfiguration: 'Persona-Konfiguration speichern',

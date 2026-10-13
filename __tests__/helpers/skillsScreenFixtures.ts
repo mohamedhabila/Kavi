@@ -29,12 +29,10 @@ export const mockExecutionSettings: {
   mcpServers: any[];
   sshTargets: any[];
   workspaceTargets: any[];
-  developerModeEnabled: boolean;
 } = {
   mcpServers: [],
   sshTargets: [],
   workspaceTargets: [],
-  developerModeEnabled: false,
 };
 
 export const mockEntries: any[] = [];
@@ -128,7 +126,6 @@ export function resetSkillsScreenFixtures() {
     mcpServers: [],
     sshTargets: [],
     workspaceTargets: [],
-    developerModeEnabled: false,
   });
   mockListClawHubSkills.mockReset();
   mockSearchClawHub.mockReset();

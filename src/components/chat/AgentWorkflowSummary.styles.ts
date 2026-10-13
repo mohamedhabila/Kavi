@@ -104,27 +104,6 @@ export const createAgentWorkflowSummaryStyles = (colors: AppPalette) =>
       color: colors.textSecondary,
       fontSize: 11,
     },
-    traceIteration: {
-      gap: 4,
-    },
-    traceIterationTitle: {
-      color: colors.text,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    traceEventRow: {
-      gap: 1,
-      paddingStart: 8,
-    },
-    traceEventType: {
-      color: colors.textSecondary,
-      fontSize: 11,
-      fontWeight: '500',
-    },
-    traceEventDetail: {
-      color: colors.textSecondary,
-      fontSize: 11,
-    },
   });
 
 export type AgentWorkflowSummaryStyles = ReturnType<typeof createAgentWorkflowSummaryStyles>;

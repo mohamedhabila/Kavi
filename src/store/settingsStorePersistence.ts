@@ -31,6 +31,5 @@ export function partializeSettingsState(state: SettingsDataState): AppSettings {
     compactionProvider: state.compactionProvider,
     compactionModel: state.compactionModel,
     disableLongTermMemory: state.disableLongTermMemory,
-    developerModeEnabled: state.developerModeEnabled,
   };
 }

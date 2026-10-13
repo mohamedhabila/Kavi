@@ -3,23 +3,21 @@
 // ---------------------------------------------------------------------------
 // Screens historically surfaced raw `err.message` text straight from thrown
 // exceptions, which can read as a stack-trace fragment to most users. This
-// helper shows a localized, generic message to everyone, and appends the raw
-// technical detail only when Developer Mode is enabled — matching the app's
-// "hide the developer surface" simplification without hiding the detail from
-// engineers who opted into it.
+// helper shows a localized, plain message and sends the technical detail to the
+// log, where diagnosis happens, instead of the screen.
 
 import { Alert, type AlertButton } from 'react-native';
-import { useSettingsStore } from '../store/useSettingsStore';
+import { createLogger } from './logger';
+
+const logger = createLogger('ErrorAlert');
 
 export interface ShowLocalizedErrorAlertOptions {
   /** Localized alert title, e.g. `t('common.error')`. */
   title: string;
-  /** Localized, generic body shown to every user regardless of Developer Mode. */
+  /** Localized, plain body shown to the user. */
   message: string;
   /** The value caught from the failing operation (an `Error`, a string, or anything else). */
   error: unknown;
-  /** Localized label introducing the technical detail, e.g. `t('common.technicalDetails')`. */
-  technicalDetailsLabel?: string;
   /** Extra alert buttons; omitted falls back to the platform default single button. */
   buttons?: AlertButton[];
 }
@@ -43,19 +41,11 @@ export function extractTechnicalErrorMessage(error: unknown): string {
 }
 
 /**
- * Shows a localized error alert whose body is always the generic, user-facing
- * `message`. The raw technical error text is appended only when Developer
- * Mode is on, so non-technical users never see stack-trace-shaped copy.
+ * Shows a localized error alert with the plain, user-facing `message`; the raw
+ * technical error is logged so it is never lost, but never shown as stack-trace-shaped copy.
  */
 export function showLocalizedErrorAlert(options: ShowLocalizedErrorAlertOptions): void {
-  const { title, message, error, technicalDetailsLabel, buttons } = options;
-  const developerModeEnabled = useSettingsStore.getState().developerModeEnabled;
-  const technicalMessage = extractTechnicalErrorMessage(error);
-
-  const body =
-    developerModeEnabled && technicalMessage
-      ? `${message}\n\n${technicalDetailsLabel ? `${technicalDetailsLabel}: ` : ''}${technicalMessage}`
-      : message;
-
-  Alert.alert(title, body, buttons);
+  const { title, message, error, buttons } = options;
+  logger.warn(`${title}: ${message}`, extractTechnicalErrorMessage(error));
+  Alert.alert(title, message, buttons);
 }

@@ -1,5 +1,4 @@
 import { Alert } from 'react-native';
-import { useSettingsStore } from '../../src/store/useSettingsStore';
 import {
   extractTechnicalErrorMessage,
   showLocalizedErrorAlert,
@@ -26,23 +25,23 @@ describe('extractTechnicalErrorMessage', () => {
 
 describe('showLocalizedErrorAlert', () => {
   let alertSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    useSettingsStore.setState({ developerModeEnabled: false } as any);
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
     alertSpy.mockRestore();
-    useSettingsStore.setState({ developerModeEnabled: false } as any);
+    warnSpy.mockRestore();
   });
 
-  it('shows only the generic message when developer mode is off', () => {
+  it('shows the plain message and logs the technical detail instead of showing it', () => {
     showLocalizedErrorAlert({
       title: 'Save Failed',
       message: 'We could not save your changes. Try again.',
       error: new Error('ECONNRESET at socket layer'),
-      technicalDetailsLabel: 'Technical details',
     });
 
     expect(alertSpy).toHaveBeenCalledWith(
@@ -50,26 +49,10 @@ describe('showLocalizedErrorAlert', () => {
       'We could not save your changes. Try again.',
       undefined,
     );
+    expect(JSON.stringify(warnSpy.mock.calls)).toContain('ECONNRESET at socket layer');
   });
 
-  it('appends the technical detail only when developer mode is on', () => {
-    useSettingsStore.setState({ developerModeEnabled: true } as any);
-
-    showLocalizedErrorAlert({
-      title: 'Save Failed',
-      message: 'We could not save your changes. Try again.',
-      error: new Error('ECONNRESET at socket layer'),
-      technicalDetailsLabel: 'Technical details',
-    });
-
-    const [, body] = alertSpy.mock.calls[0];
-    expect(body).toContain('We could not save your changes. Try again.');
-    expect(body).toContain('Technical details: ECONNRESET at socket layer');
-  });
-
-  it('does not append a technical detail block when there is no extractable message', () => {
-    useSettingsStore.setState({ developerModeEnabled: true } as any);
-
+  it('shows the plain message when there is no extractable technical detail', () => {
     showLocalizedErrorAlert({
       title: 'Save Failed',
       message: 'We could not save your changes. Try again.',

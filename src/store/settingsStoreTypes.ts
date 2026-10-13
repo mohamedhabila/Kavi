@@ -40,14 +40,6 @@ export interface SettingsDataState extends AppSettings {
   compactionProvider: string | null;
   compactionModel: string | null;
   disableLongTermMemory: boolean;
-  /**
-   * Gates developer-surface tools (SSH, Expo/EAS, remote browser automation,
-   * external workspace targets, javascript/python code execution, mobile UI
-   * control, and the GitHub service skill) out of the model-facing tool
-   * surface until turned on. See `runtimeAvailability.ts`'s `developer_mode`
-   * requirement key for how this is enforced.
-   */
-  developerModeEnabled: boolean;
 }
 
 export interface SettingsState extends SettingsDataState {
@@ -97,7 +89,6 @@ export interface SettingsState extends SettingsDataState {
   setCompactionProvider: (providerId: string | null) => void;
   setCompactionModel: (model: string | null) => void;
   setDisableLongTermMemory: (disabled: boolean) => void;
-  setDeveloperModeEnabled: (enabled: boolean) => void;
   replaceAllSettings: (settings: Partial<AppSettings>) => void;
 }
 
@@ -130,6 +121,5 @@ export function createDefaultSettingsDataState(): SettingsDataState {
     compactionProvider: null,
     compactionModel: null,
     disableLongTermMemory: false,
-    developerModeEnabled: false,
   };
 }

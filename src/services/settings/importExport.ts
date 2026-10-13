@@ -238,7 +238,6 @@ export function exportSettings(): ExportedSettings {
       linkUnderstandingEnabled: state.linkUnderstandingEnabled,
       mediaUnderstandingEnabled: state.mediaUnderstandingEnabled,
       maxLinks: state.maxLinks,
-      developerModeEnabled: state.developerModeEnabled,
     },
     ...(omittedSensitiveData.length > 0 ? { omittedSensitiveData } : {}),
     hooks: hooks.map((h) => ({ ...h })),
@@ -367,8 +366,6 @@ export function importSettings(data: string | ExportedSettings): ImportResult {
         settingsUpdate.mediaUnderstandingEnabled = settings.mediaUnderstandingEnabled;
       if (typeof settings.maxLinks === 'number' && Number.isFinite(settings.maxLinks))
         settingsUpdate.maxLinks = Math.max(1, Math.min(10, Math.floor(settings.maxLinks)));
-      if (typeof settings.developerModeEnabled === 'boolean')
-        settingsUpdate.developerModeEnabled = settings.developerModeEnabled;
 
       if (
         Array.isArray(settings.sshTargets) &&

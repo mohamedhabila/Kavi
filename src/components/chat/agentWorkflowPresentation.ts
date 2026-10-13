@@ -1,5 +1,4 @@
 import type { AgentPlanStep, AgentRun, AgentRunStatus } from '../../types/agentRun';
-import { buildAgentRunTrace, type AgentRunTraceIteration } from '../../services/agents/runTrace';
 import type { AgentRunExecutionPresentation } from '../../services/agents/activeConversationExecutionState';
 
 type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -12,8 +11,6 @@ export interface AgentWorkflowPresentation {
   plan: AgentPlanStep[];
   statusLabel: string;
   title: string;
-  trace: AgentRunTraceIteration[];
-  traceEventCount: number;
 }
 
 export function formatRunStatusLabel(
@@ -68,7 +65,6 @@ export function buildAgentWorkflowPresentation(
     run.phases.find((phase) => phase.key === run.currentPhase) ??
     run.phases.find((phase) => phase.status === 'active');
   const currentStep = resolveCurrentStep(plan);
-  const trace = buildAgentRunTrace(run.controlGraph);
 
   return {
     currentStep,
@@ -76,7 +72,5 @@ export function buildAgentWorkflowPresentation(
     plan,
     statusLabel: formatRunStatusLabel(run.status, t, executionPresentation),
     title: currentStep?.step ?? activePhase?.title ?? run.goal,
-    trace,
-    traceEventCount: trace.reduce((count, entry) => count + entry.events.length, 0),
   };
 }

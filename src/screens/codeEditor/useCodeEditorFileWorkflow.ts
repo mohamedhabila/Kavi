@@ -234,7 +234,6 @@ export function useCodeEditorFileWorkflow(
           title: openFailedTitle,
           message: openFailedMessage,
           error: err,
-          technicalDetailsLabel: t('common.technicalDetails'),
         });
       } finally {
         if (requestId === remoteOpenRequestIdRef.current && isMountedRef.current) {
@@ -252,7 +251,6 @@ export function useCodeEditorFileWorkflow(
       setLoading,
       setSource,
       setTargetId,
-      t,
     ],
   );
 
@@ -296,7 +294,6 @@ export function useCodeEditorFileWorkflow(
             title: t('codeEditor.saveFailedTitle'),
             message: t('codeEditor.saveFailedMessage'),
             error: err,
-            technicalDetailsLabel: t('common.technicalDetails'),
           });
         }
       } finally {

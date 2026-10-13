@@ -70,7 +70,6 @@ export const GatewayScreen: React.FC = () => {
         title: t('gateway.connectionFailed'),
         message: t('gateway.connectionFailedGeneric'),
         error: err,
-        technicalDetailsLabel: t('common.technicalDetails'),
       });
     }
   }, [gatewayToken, gatewayUrl, t]);
@@ -105,7 +104,6 @@ export const GatewayScreen: React.FC = () => {
         title: t('gateway.pairingFailed'),
         message: t('gateway.pairingFailedGeneric'),
         error: err,
-        technicalDetailsLabel: t('common.technicalDetails'),
       });
     }
   }, [t]);
@@ -129,7 +127,6 @@ export const GatewayScreen: React.FC = () => {
         title: t('common.error'),
         message: t('gateway.listNodesFailedGeneric'),
         error: err,
-        technicalDetailsLabel: t('common.technicalDetails'),
       });
     }
   }, [t]);

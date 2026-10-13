@@ -24,14 +24,17 @@ const capability = {
   timeoutMs: 5_000,
 } as const;
 
-function availability(hasMobileController: boolean, hasDeveloperModeEnabled = true) {
+function availability(hasMobileController: boolean) {
   return {
     hasWorkspaceTargets: false,
     hasBrowserControllableWorkspaceTargets: false,
     hasDelegableWorkspaceTargets: false,
     hasMobileController,
     hasWebSearchProvider: false,
-    hasDeveloperModeEnabled,
+    hasSshTargets: false,
+    hasBrowserProviders: false,
+    hasExpoAccounts: false,
+    hasConfiguredSecret: () => false,
   };
 }
 
@@ -43,15 +46,6 @@ describe('mobile controller tool definition', () => {
     expect(
       filterToolsByRuntimeAvailability([MOBILE_UI_ACTION_TOOL_DEFINITION], availability(true)),
     ).toEqual([MOBILE_UI_ACTION_TOOL_DEFINITION]);
-  });
-
-  it('keeps the canonical tool invisible when developer mode is off, even with an admitted controller', () => {
-    expect(
-      filterToolsByRuntimeAvailability(
-        [MOBILE_UI_ACTION_TOOL_DEFINITION],
-        availability(true, false),
-      ),
-    ).toEqual([]);
   });
 
   it('narrows the model schema to the exact registered capability', () => {

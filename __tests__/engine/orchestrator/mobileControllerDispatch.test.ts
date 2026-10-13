@@ -12,7 +12,6 @@ import {
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
 import { useChatStore } from '../../../src/store/useChatStore';
-import { useSettingsStore } from '../../../src/store/useSettingsStore';
 import { addConversation } from '../../helpers/chatConversationFixtures';
 
 describe('Orchestrator mobile controller dispatch', () => {
@@ -24,12 +23,7 @@ describe('Orchestrator mobile controller dispatch', () => {
     });
   });
 
-  afterEach(() => {
-    useSettingsStore.setState({ developerModeEnabled: false });
-  });
-
   it('dispatches the first mobile_ui_action call of a run', async () => {
-    useSettingsStore.setState({ developerModeEnabled: true });
     const conversationId = addConversation('openai', 'You are helpful');
 
     (executeTool as jest.Mock).mockResolvedValueOnce({

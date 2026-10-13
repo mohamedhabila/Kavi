@@ -17,7 +17,7 @@ import { useSettingsStore } from '../../../src/store/useSettingsStore';
 describe('Orchestrator', () => {
   describe('Tool call handling part 8', () => {
     afterEach(() => {
-      useSettingsStore.setState({ developerModeEnabled: false });
+      useSettingsStore.setState({ browserProviders: [] });
     });
 
     it('restricts pending expo workflows to workflow monitoring tools until the run is terminal', async () => {
@@ -117,10 +117,19 @@ describe('Orchestrator', () => {
     });
 
     it('keeps catalog and browser tools available after a catalog search', async () => {
-      // browser_* tools are gated behind developer mode, like the other device/workspace
-      // control tools; this test exercises catalog-driven browser tool discovery itself,
-      // so it opts in explicitly rather than exercising the (separately tested) default gate.
-      useSettingsStore.setState({ developerModeEnabled: true });
+      // browser_* tools exist once a remote browser provider is set up.
+      useSettingsStore.setState({
+        browserProviders: [
+          {
+            id: 'browser-1',
+            name: 'Browser worker',
+            provider: 'custom',
+            baseUrl: 'https://browser.example.com',
+            authMode: 'none',
+            enabled: true,
+          },
+        ],
+      });
       (executeTool as jest.Mock).mockResolvedValueOnce({
         status: 'completed',
         content: JSON.stringify({

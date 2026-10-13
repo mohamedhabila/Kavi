@@ -5,7 +5,6 @@ import { LOCALE_DISPLAY_NAMES } from '../../src/i18n/registry';
 import {
   renderSettingsScreen,
   settingsMocks,
-  settingsTestState,
   setupSettingsScreenTestSuite,
 } from './SettingsScreen.testSupport';
 
@@ -440,25 +439,12 @@ describe('SettingsScreen general', () => {
     expect(getByTestId('websearch-provider-openai')).toBeTruthy();
   });
 
-  it('hides persona Temperature unless Developer Mode is on', () => {
-    settingsTestState.developerModeEnabled = false;
-    const off = renderSettingsScreen({ destination: 'assistant-personalization' });
-    expect(off.queryByTestId('settings-persona-temperature')).toBeNull();
-    off.unmount();
+  it('keeps persona tuning to what a person decides, with no mode switch anywhere', () => {
+    const personas = renderSettingsScreen({ destination: 'assistant-personalization' });
+    expect(personas.queryByTestId('settings-persona-temperature')).toBeNull();
+    personas.unmount();
 
-    settingsTestState.developerModeEnabled = true;
-    const on = renderSettingsScreen({ destination: 'assistant-personalization' });
-    expect(on.getByTestId('settings-persona-temperature')).toBeTruthy();
-    on.unmount();
-    settingsTestState.developerModeEnabled = false;
-  });
-
-  it('exposes a Developer Mode switch under Developer & remote work with an explanation', () => {
-    const { getByTestId } = renderSettingsScreen({ destination: 'developer-remote-work' });
-    const toggle = getByTestId('settings-developer-mode-switch');
-    expect(toggle.props.value).toBe(false);
-
-    fireEvent(toggle, 'valueChange', true);
-    expect(settingsMocks.setDeveloperModeEnabled).toHaveBeenCalledWith(true);
+    const developer = renderSettingsScreen({ destination: 'developer-remote-work' });
+    expect(developer.queryByTestId('settings-developer-mode-switch')).toBeNull();
   });
 });

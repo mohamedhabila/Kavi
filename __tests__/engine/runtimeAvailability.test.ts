@@ -108,7 +108,9 @@ describe('runtimeAvailability', () => {
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
       hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: true,
+      hasSshTargets: true,
+      hasBrowserProviders: true,
+      hasExpoAccounts: true,
       hasConfiguredSecret: () => false,
     });
     const filteredNames = new Set(filtered.map((tool) => tool.name));
@@ -133,7 +135,9 @@ describe('runtimeAvailability', () => {
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
       hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: true,
+      hasSshTargets: true,
+      hasBrowserProviders: true,
+      hasExpoAccounts: true,
       hasConfiguredSecret: () => false,
     });
 
@@ -156,7 +160,9 @@ describe('runtimeAvailability', () => {
       hasDelegableWorkspaceTargets: true,
       hasMobileController: false,
       hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: true,
+      hasSshTargets: true,
+      hasBrowserProviders: true,
+      hasExpoAccounts: true,
       hasConfiguredSecret: () => false,
     });
 
@@ -165,26 +171,6 @@ describe('runtimeAvailability', () => {
       'workspace_launch_browser',
       'workspace_delegate_task',
     ]);
-  });
-
-  it('hides the workspace control tools when developer mode is off even with targets configured', () => {
-    const tools = [
-      makeTool('workspace_status'),
-      makeTool('workspace_launch_browser'),
-      makeTool('workspace_delegate_task'),
-    ];
-
-    const filtered = filterToolsByRuntimeAvailability(tools, {
-      hasWorkspaceTargets: true,
-      hasBrowserControllableWorkspaceTargets: true,
-      hasDelegableWorkspaceTargets: true,
-      hasMobileController: false,
-      hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: false,
-      hasConfiguredSecret: () => false,
-    });
-
-    expect(filtered).toEqual([]);
   });
 
   it('filters unavailable external workspace tools out of explicit tool selections', () => {
@@ -196,7 +182,9 @@ describe('runtimeAvailability', () => {
         hasDelegableWorkspaceTargets: false,
         hasMobileController: false,
         hasWebSearchProvider: false,
-        hasDeveloperModeEnabled: true,
+        hasSshTargets: true,
+        hasBrowserProviders: true,
+        hasExpoAccounts: true,
         hasConfiguredSecret: () => false,
       },
     );
@@ -213,7 +201,9 @@ describe('runtimeAvailability', () => {
         hasDelegableWorkspaceTargets: true,
         hasMobileController: false,
         hasWebSearchProvider: false,
-        hasDeveloperModeEnabled: true,
+        hasSshTargets: true,
+        hasBrowserProviders: true,
+        hasExpoAccounts: true,
         hasConfiguredSecret: () => false,
       },
     );
@@ -228,7 +218,9 @@ describe('runtimeAvailability', () => {
       hasDelegableWorkspaceTargets: false,
       hasMobileController: true,
       hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: true,
+      hasSshTargets: true,
+      hasBrowserProviders: true,
+      hasExpoAccounts: true,
       hasConfiguredSecret: () => false,
     });
 
@@ -242,7 +234,9 @@ describe('runtimeAvailability', () => {
       hasDelegableWorkspaceTargets: false,
       hasMobileController: false,
       hasWebSearchProvider: false,
-      hasDeveloperModeEnabled: true,
+      hasSshTargets: true,
+      hasBrowserProviders: true,
+      hasExpoAccounts: true,
       hasConfiguredSecret: () => false,
     });
 
@@ -261,7 +255,9 @@ describe('contract-declared runtime requirements', () => {
     hasDelegableWorkspaceTargets: true,
     hasMobileController: true,
     hasWebSearchProvider: true,
-    hasDeveloperModeEnabled: true,
+    hasSshTargets: true,
+    hasBrowserProviders: true,
+    hasExpoAccounts: true,
     hasConfiguredSecret: () => true,
   };
   const UNSATISFIED: RuntimeToolAvailabilityContext = {
@@ -270,7 +266,9 @@ describe('contract-declared runtime requirements', () => {
     hasDelegableWorkspaceTargets: false,
     hasMobileController: false,
     hasWebSearchProvider: false,
-    hasDeveloperModeEnabled: false,
+    hasSshTargets: false,
+    hasBrowserProviders: false,
+    hasExpoAccounts: false,
     hasConfiguredSecret: () => false,
   };
 
@@ -302,51 +300,50 @@ describe('contract-declared runtime requirements', () => {
     expect(isToolRuntimeAvailable('write_file', { ...UNSATISFIED } as never)).toBe(true);
   });
 
-  it('gates every developer-surface tool behind developer_mode', () => {
-    const developerGated = [
-      'ssh_exec',
-      'ssh_background_job_status',
-      'ssh_background_job_wait',
-      'ssh_fs',
-      'expo_eas_create_project',
-      'expo_eas_list_projects',
-      'expo_eas_status',
-      'expo_eas_probe',
-      'expo_eas_build',
-      'expo_eas_update',
-      'expo_eas_submit',
-      'expo_eas_deploy_web',
-      'expo_eas_workflow_runs',
-      'expo_eas_workflow_status',
-      'expo_eas_workflow_wait',
-      'expo_eas_graphql',
-      'browser_launch',
-      'browser_navigate',
-      'browser_click',
-      'javascript',
-      'python',
-      'mobile_ui_action',
-      'skill__github__repos',
-      'skill__github__commit_files',
-    ];
-    for (const toolName of developerGated) {
-      expect(resolveToolRuntimeRequirements(toolName)).toContain('developer_mode');
-      expect(
-        isToolRuntimeAvailable(toolName, { ...SATISFIED, hasDeveloperModeEnabled: false }),
-      ).toBe(false);
-      expect(
-        isToolRuntimeAvailable(toolName, { ...SATISFIED, hasDeveloperModeEnabled: true }),
-      ).toBe(true);
+  it('offers code execution with nothing to set up', () => {
+    for (const toolName of ['javascript', 'python']) {
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual([]);
+      expect(isToolRuntimeAvailable(toolName, UNSATISFIED)).toBe(true);
     }
   });
 
-  it('leaves core file and workflow tools available regardless of developer mode', () => {
-    const undisturbed = ['read_file', 'write_file', 'list_files'];
-    for (const toolName of undisturbed) {
-      expect(resolveToolRuntimeRequirements(toolName)).not.toContain('developer_mode');
-      expect(
-        isToolRuntimeAvailable(toolName, { ...UNSATISFIED, hasDeveloperModeEnabled: false }),
-      ).toBe(true);
+  it('offers each service tool once its service is set up, with no mode to turn on', () => {
+    const toolsByService: ReadonlyArray<[keyof RuntimeToolAvailabilityContext, string[]]> = [
+      [
+        'hasSshTargets',
+        ['ssh_exec', 'ssh_background_job_status', 'ssh_background_job_wait', 'ssh_fs'],
+      ],
+      [
+        'hasExpoAccounts',
+        [
+          'expo_eas_create_project',
+          'expo_eas_list_projects',
+          'expo_eas_status',
+          'expo_eas_probe',
+          'expo_eas_build',
+          'expo_eas_update',
+          'expo_eas_submit',
+          'expo_eas_deploy_web',
+          'expo_eas_workflow_runs',
+          'expo_eas_workflow_status',
+          'expo_eas_workflow_wait',
+          'expo_eas_graphql',
+        ],
+      ],
+      ['hasBrowserProviders', ['browser_launch', 'browser_navigate', 'browser_click']],
+      ['hasMobileController', ['mobile_ui_action']],
+    ];
+    for (const [service, toolNames] of toolsByService) {
+      for (const toolName of toolNames) {
+        expect(isToolRuntimeAvailable(toolName, { ...SATISFIED, [service]: false })).toBe(false);
+        expect(isToolRuntimeAvailable(toolName, { ...UNSATISFIED, [service]: true })).toBe(true);
+      }
+    }
+  });
+
+  it('leaves core file and workflow tools available with nothing set up', () => {
+    for (const toolName of ['read_file', 'write_file', 'list_files']) {
+      expect(isToolRuntimeAvailable(toolName, UNSATISFIED)).toBe(true);
     }
   });
 });
@@ -377,7 +374,9 @@ describe('secret-gated code-owned service skill tools', () => {
     hasDelegableWorkspaceTargets: false,
     hasMobileController: false,
     hasWebSearchProvider: false,
-    hasDeveloperModeEnabled: true,
+    hasSshTargets: true,
+    hasBrowserProviders: true,
+    hasExpoAccounts: true,
     hasConfiguredSecret: () => false,
   };
 
@@ -410,11 +409,9 @@ describe('secret-gated code-owned service skill tools', () => {
     expect(isToolRuntimeAvailable('skill__finance__crypto_price', BASE)).toBe(true);
   });
 
-  it('hides GitHub tools without GITHUB_TOKEN even with developer mode on', () => {
+  it('hides GitHub tools without GITHUB_TOKEN and offers them once it is configured', () => {
     for (const toolName of ['skill__github__repos', 'skill__github__commit_files']) {
-      expect(resolveToolRuntimeRequirements(toolName)).toEqual(
-        expect.arrayContaining(['developer_mode', 'secret:GITHUB_TOKEN']),
-      );
+      expect(resolveToolRuntimeRequirements(toolName)).toEqual(['secret:GITHUB_TOKEN']);
       expect(isToolRuntimeAvailable(toolName, BASE)).toBe(false);
       expect(
         isToolRuntimeAvailable(toolName, {
@@ -437,6 +434,28 @@ describe('secret-gated code-owned service skill tools', () => {
       expect(resolveToolRuntimeRequirements(toolName)).toEqual([]);
       expect(isToolRuntimeAvailable(toolName, BASE)).toBe(true);
     }
+  });
+});
+
+describe('service setup on the real context', () => {
+  afterEach(() => {
+    useSettingsStore.setState({ expoAccounts: [] });
+  });
+
+  it('counts an Expo account as set up only when it is enabled and holds a token', () => {
+    const account = { id: 'expo-1', name: 'Expo', owner: 'me', enabled: true, tokenRef: 'ref' };
+    useSettingsStore.setState({ expoAccounts: [{ ...account, tokenRef: ' ' }] });
+    expect(getRuntimeToolAvailabilityContext().hasExpoAccounts).toBe(false);
+    useSettingsStore.setState({ expoAccounts: [{ ...account, enabled: false }] });
+    expect(getRuntimeToolAvailabilityContext().hasExpoAccounts).toBe(false);
+    useSettingsStore.setState({ expoAccounts: [account] });
+    expect(getRuntimeToolAvailabilityContext().hasExpoAccounts).toBe(true);
+  });
+
+  it('counts a launchable browser provider as set up', () => {
+    expect(getRuntimeToolAvailabilityContext().hasBrowserProviders).toBe(true);
+    useSettingsStore.setState({ browserProviders: [] });
+    expect(getRuntimeToolAvailabilityContext().hasBrowserProviders).toBe(false);
   });
 });
 
