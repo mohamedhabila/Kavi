@@ -4,7 +4,6 @@ import { resolveForegroundRunPreflight } from '../../src/engine/graph/foreground
 import { createForegroundRequestRegistry } from '../../src/engine/graph/foregroundRun/requestRegistry';
 import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
 import { __resetOnDeviceGuardsForTests } from '../../src/services/memory/onDeviceGuards';
-import { admitPendingClarificationReply } from '../../src/services/agents/clarificationReplyAdmission';
 import type { AgentRun } from '../../src/types/agentRun';
 import type { Message } from '../../src/types/message';
 import {
@@ -21,17 +20,9 @@ jest.mock('../../src/engine/graph/foregroundRun/preflight', () => ({
   resolveForegroundRunPreflight: jest.fn(),
 }));
 
-jest.mock('../../src/services/agents/clarificationReplyAdmission', () => {
-  const actual = jest.requireActual('../../src/services/agents/clarificationReplyAdmission');
-  return { ...actual, admitPendingClarificationReply: jest.fn() };
-});
-
 const mockedRunOrchestrator = runOrchestrator as jest.MockedFunction<typeof runOrchestrator>;
 const mockedResolveForegroundRunPreflight = resolveForegroundRunPreflight as jest.MockedFunction<
   typeof resolveForegroundRunPreflight
->;
-const mockedAdmitPendingClarificationReply = admitPendingClarificationReply as jest.MockedFunction<
-  typeof admitPendingClarificationReply
 >;
 
 function useRealRequestRegistry(context: ReturnType<typeof createExecutionContext>): void {
@@ -99,7 +90,7 @@ describe('foreground run supersession', () => {
     expect(mockedRunOrchestrator).not.toHaveBeenCalled();
   });
 
-  it('retargets the durable projection and starts a new run for an admitted task switch', async () => {
+  it('hands a reply that asks for something else to the paused run, with nothing left pending', async () => {
     const waitingRun: AgentRun = {
       id: 'run-awaiting-user',
       userMessageId: 'user-1',
@@ -170,11 +161,6 @@ describe('foreground run supersession', () => {
       recordConversationTurnMemory: jest.fn(),
     });
     configureReadyPreflight(conversation, provider);
-    mockedAdmitPendingClarificationReply.mockResolvedValue({
-      runId: waitingRun.id,
-      disposition: 'new_request',
-      resolvedInformationKeys: [],
-    });
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onAssistantMessage?.('Recovered the planning file.', [], undefined, {
         kind: 'final',
@@ -190,23 +176,20 @@ describe('foreground run supersession', () => {
 
     await executeForegroundConversationRun({ context, conversationId: conversation.id });
 
-    expect(context.store.completeAgentRun).toHaveBeenCalledWith(
+    // No classifier decides first and nothing is cancelled: the model that asked reads the
+    // reply with its tools, and the paused run keeps its workers and plan.
+    expect(context.store.startAgentRun).not.toHaveBeenCalled();
+    expect(context.store.completeAgentRun).not.toHaveBeenCalledWith(
       conversation.id,
       expect.objectContaining({ status: 'cancelled' }),
       waitingRun.id,
     );
-    expect(context.store.startAgentRun).toHaveBeenCalledWith(
-      conversation.id,
-      expect.objectContaining({ userMessageId: 'user-2' }),
-    );
-    expect(context.durability.createModelExecution).toHaveBeenCalledWith(
-      expect.objectContaining({ requestMessageId: 'user-2' }),
-    );
-    expect(context.durability.mutateModelProjection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        owner: expect.objectContaining({ requestMessageId: 'user-1' }),
-      }),
-    );
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
+    const [options] = mockedRunOrchestrator.mock.calls[0];
+    expect(options.agentRunId).toBe(waitingRun.id);
+    expect(options.workflowScopeUserMessageId).toBe('user-1');
+    expect(options.initialAgentControlGraphState?.status).toBe('ready');
+    expect(options.initialAgentControlGraphState?.pendingUserInput).toBeUndefined();
   });
 
   it('lets the newest turn win while the old claimed projection is creating its journal', async () => {

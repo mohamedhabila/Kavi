@@ -20,10 +20,7 @@ import {
   normalizeAgentRunAsyncOperations,
 } from './agentRunAsyncState';
 import { normalizeRequestUnderstandingSnapshot } from './requestUnderstandingProjection';
-import {
-  admitAgentControlGraphClarificationReply,
-  normalizeAgentControlGraphPendingUserInput,
-} from './agentControlGraphClarificationState';
+import { normalizeAgentControlGraphPendingUserInput } from './agentControlGraphClarificationState';
 
 export const AGENT_RUN_CONTROL_GRAPH_VERSION = 1;
 export const MAX_AGENT_RUN_CONTROL_GRAPH_AUDIT_EVENTS = 128;
@@ -405,7 +402,6 @@ export function isAgentRunControlGraphTerminal(
 export function prepareAgentRunControlGraphForResume(
   state: Partial<AgentRunControlGraphState> | undefined,
   params: {
-    resolvedUserInformationKeys?: ReadonlyArray<string>;
     updatedAt?: number;
     reason?: string;
   } = {},
@@ -424,16 +420,12 @@ export function prepareAgentRunControlGraphForResume(
   }
 
   const timestamp = params.updatedAt ?? Date.now();
-  const pendingUserInput = admitAgentControlGraphClarificationReply({
-    pendingUserInput: normalized.pendingUserInput,
-    resolvedUserInformationKeys: params.resolvedUserInformationKeys,
-    updatedAt: timestamp,
-  });
   const previousStatus = normalized.status;
   return {
     ...normalized,
     status: 'ready',
-    pendingUserInput,
+    // A resumed run waits for nothing: the user's reply is in the transcript for the model.
+    pendingUserInput: undefined,
     expectedToolCalls: [],
     observedToolResults: [],
     pendingAsyncCount: 0,

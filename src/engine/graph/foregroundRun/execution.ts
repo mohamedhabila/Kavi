@@ -23,7 +23,6 @@ import { terminalizeAndReleaseForegroundProjectionReservation } from './projecti
 import { resolveForegroundTerminalProjection } from './terminalProjection';
 import { resolveForegroundMobileControllerOutcomeGate } from './mobileControllerOutcome';
 import { buildForegroundOrchestratorMessages } from './modelReadyMessages';
-import { transitionForegroundClarificationAdmission } from './clarificationReplyAdmissionFlow';
 import { resolveForegroundRequestProviderReadiness } from './requestProviderReadiness';
 import { reserveForegroundRunRequest } from './requestReservation';
 import { withAndroidLongHorizonExecutionLease } from '../../../services/androidLongHorizonExecution';
@@ -135,9 +134,9 @@ async function executeReservedForegroundConversationRun(
     return;
   }
   latencyTimeline.mark('request_reserved');
-  let preparedBootstrap = requestReservation.preparedBootstrap;
-  let bootstrap = preparedBootstrap.bootstrap;
-  let resumePreparation = requestReservation.resumePreparation;
+  const preparedBootstrap = requestReservation.preparedBootstrap;
+  const bootstrap = preparedBootstrap.bootstrap;
+  const resumePreparation = requestReservation.resumePreparation;
   let projectionOwner: ModelProjectionOwner | null = requestReservation.projectionOwner;
   let projectionClaimed = true;
   let projectionReleased = false;
@@ -178,42 +177,6 @@ async function executeReservedForegroundConversationRun(
   }
   const { preflight } = providerReadiness;
   latencyTimeline.mark('provider_ready');
-
-  let admissionTransition;
-  try {
-    admissionTransition = await transitionForegroundClarificationAdmission({
-      claim: requestClaim,
-      conversation: runConversation,
-      conversationId,
-      durability: context.durability,
-      foregroundRequestId,
-      isCurrentRunInvocation,
-      onProjectionOwnerChanged: (owner) => {
-        projectionOwner = owner;
-      },
-      options,
-      preflight,
-      preparedBootstrap,
-      projectionOwner,
-      signal: abortController.signal,
-    });
-  } catch (error: unknown) {
-    await closeReservationFailure(
-      `Clarification admission failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    clearForegroundRequestIfCurrent();
-    context.helpers.setChatError(error instanceof Error ? error.message : String(error));
-    return;
-  }
-  if (admissionTransition.kind === 'stopped') {
-    await closeReservationFailure(admissionTransition.detail);
-    clearForegroundRequestIfCurrent();
-    return;
-  }
-  preparedBootstrap = admissionTransition.preparedBootstrap;
-  bootstrap = preparedBootstrap.bootstrap;
-  projectionOwner = admissionTransition.projectionOwner;
-  resumePreparation = admissionTransition.resumePreparation;
 
   if (!isCurrentRunInvocation()) {
     await closeReservationFailure('The request was superseded before generation started.');

@@ -95,11 +95,6 @@ describe('foregroundRun bootstrap', () => {
     const result = buildForegroundRunBootstrapSelection({
       conversation,
       createAssistantMessageId: () => 'assistant-new',
-      clarificationReplyAdmission: {
-        runId: 'run-1',
-        disposition: 'answer',
-        resolvedInformationKeys: ['alarm.time'],
-      },
     });
 
     expect(result.existingRun?.id).toBe('run-1');
@@ -108,7 +103,7 @@ describe('foregroundRun bootstrap', () => {
     expect(result.latestUserMessage?.id).toBe('user-2');
   });
 
-  it('supersedes the paused run when admission identifies a separate request', () => {
+  it('resumes the paused run when the reply asks for something else, so its workers keep running', () => {
     const run = createRunningAgentRun({
       controlGraph: createInitialAgentRunControlGraphState({
         status: 'awaiting_user',
@@ -138,16 +133,12 @@ describe('foregroundRun bootstrap', () => {
     const result = buildForegroundRunBootstrapSelection({
       conversation,
       createAssistantMessageId: () => 'assistant-new',
-      clarificationReplyAdmission: {
-        runId: run.id,
-        disposition: 'new_request',
-        resolvedInformationKeys: [],
-      },
     });
 
-    expect(result.existingRun).toBeUndefined();
-    expect(result.supersededRun?.id).toBe(run.id);
-    expect(result.shouldAbortPreviousForegroundRequest).toBe(true);
+    expect(result.existingRun?.id).toBe(run.id);
+    expect(result.supersededRun).toBeUndefined();
+    expect(result.supersededRunningWorkerCount).toBe(0);
+    expect(result.latestUserMessage?.id).toBe('user-2');
   });
 
   it('reuses a visible incomplete assistant draft when resuming an existing run', () => {

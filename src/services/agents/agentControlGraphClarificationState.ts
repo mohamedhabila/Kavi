@@ -56,28 +56,3 @@ export function normalizeAgentControlGraphPendingUserInput(
     updatedAt: normalizedTimestamp(value.updatedAt),
   };
 }
-
-export function admitAgentControlGraphClarificationReply(params: {
-  pendingUserInput: AgentRunControlGraphPendingUserInput | undefined;
-  resolvedUserInformationKeys: ReadonlyArray<string> | undefined;
-  updatedAt: number;
-}): AgentRunControlGraphPendingUserInput | undefined {
-  if (!params.pendingUserInput) return undefined;
-  const resolvedKeys = new Set(
-    params.resolvedUserInformationKeys?.map((key) => key.trim()).filter(Boolean) ?? [],
-  );
-  const pendingKeys = new Set(
-    params.pendingUserInput.requiredInformation.map((entry) => entry.key),
-  );
-  if ([...resolvedKeys].some((key) => !pendingKeys.has(key))) {
-    throw new Error('clarification_resolution_key_unknown');
-  }
-  return {
-    ...params.pendingUserInput,
-    requiredInformation: params.pendingUserInput.requiredInformation.map((entry) => ({
-      ...entry,
-      resolution: resolvedKeys.has(entry.key) ? 'user_provided' : entry.resolution,
-    })),
-    updatedAt: params.updatedAt,
-  };
-}

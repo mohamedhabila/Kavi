@@ -30,7 +30,7 @@ function resumableRun(): Pick<AgentRun, 'controlGraph' | 'userMessageId' | 'work
 }
 
 describe('agent control graph run resume preparation', () => {
-  it('requires a newer user message before resuming a clarification run', () => {
+  it('resumes a clarification run only once the user replied, with nothing left pending', () => {
     const awaitingUserRun = {
       ...resumableRun(),
       controlGraph: createInitialAgentRunControlGraphState({
@@ -64,61 +64,23 @@ describe('agent control graph run resume preparation', () => {
     const resumed = prepareAgentRunResumeForOrchestrator({
       existingRun: awaitingUserRun,
       messages: [userMessage('user-original'), userMessage('user-response')],
-      resolvedUserInformationKeys: ['alarm.time'],
       updatedAt: 20,
     });
     expect(resumed).toMatchObject({
       kind: 'ready',
       workflowScopeUserMessageId: 'user-original',
-      initialAgentControlGraphState: {
-        status: 'ready',
-        pendingUserInput: {
-          requestedAfterUserMessageId: 'user-original',
-          requiredInformation: [
-            {
-              key: 'alarm.time',
-              requiredFor: 'execution',
-              semanticRole: 'time',
-              resolution: 'user_provided',
-            },
-          ],
-        },
-      },
+      initialAgentControlGraphState: { status: 'ready' },
     });
+    expect(
+      resumed.kind === 'ready'
+        ? resumed.initialAgentControlGraphState?.pendingUserInput
+        : 'unready',
+    ).toBeUndefined();
     expect(
       resumed.initialAgentControlGraphState?.audit.some(
         (event) => event.type === 'RUN_RESUMED_FROM_USER_INPUT_WAIT',
       ),
     ).toBe(true);
-  });
-
-  it('rejects a reply admission key that was never registered by the paused run', () => {
-    const awaitingUserRun = {
-      ...resumableRun(),
-      controlGraph: createInitialAgentRunControlGraphState({
-        status: 'awaiting_user',
-        pendingUserInput: {
-          requestedAfterUserMessageId: 'user-original',
-          requiredInformation: [
-            {
-              key: 'alarm.time',
-              requiredFor: 'execution',
-              semanticRole: 'time',
-              resolution: 'unresolved',
-            },
-          ],
-          updatedAt: 10,
-        },
-      }),
-    };
-
-    expect(() =>
-      prepareAgentRunResumeForOrchestrator({
-        existingRun: awaitingUserRun,
-        messages: [userMessage('user-original'), userMessage('user-response')],
-        resolvedUserInformationKeys: ['alarm.label'],
-      }),
-    ).toThrow('clarification_resolution_key_unknown');
   });
 
   it('resolves workflow scope without a resumable run', () => {

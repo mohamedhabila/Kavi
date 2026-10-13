@@ -5,7 +5,6 @@ import {
   type ForegroundRunBootstrapSelection,
 } from './bootstrap';
 import type { RunChatOptions } from './contracts';
-import type { ClarificationReplyAdmission } from '../../../services/agents/clarificationReplyAdmission';
 
 export type ForegroundRunRequestBootstrapResult = {
   abortController: AbortController;
@@ -55,7 +54,6 @@ export function prepareForegroundRunRequestBootstrap(params: {
   claim: ForegroundRunRequestClaim;
   conversation: Conversation | undefined;
   createAssistantMessageId: () => string;
-  clarificationReplyAdmission?: ClarificationReplyAdmission;
   options?: RunChatOptions;
 }):
   | { kind: 'ready'; prepared: PreparedForegroundRunBootstrap }
@@ -69,7 +67,6 @@ export function prepareForegroundRunRequestBootstrap(params: {
     createAssistantMessageId: params.createAssistantMessageId,
     reuseAgentRunId: requestedReuseRunId,
     assistantDraftMode: params.options?.assistantDraftMode,
-    clarificationReplyAdmission: params.clarificationReplyAdmission,
   });
   if (requestedReuseRunId && bootstrap.existingRun?.id !== requestedReuseRunId) {
     return { kind: 'reuse_unavailable', runId: requestedReuseRunId };

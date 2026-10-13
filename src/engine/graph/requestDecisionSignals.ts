@@ -88,7 +88,8 @@ function policyRequirement(
 }
 
 /**
- * Refines a structural request frame only for an explicit graph-owned resume.
+ * Refines a structural request frame for a resume that waits on asynchronous work. A reply
+ * to a clarifying question needs no refinement: the model that asked reads it with its tools.
  * Every input is code-owned: persisted async state plus the runtime tool authority snapshot.
  */
 export function resolveGraphEntryRequestDecision(params: {
@@ -96,25 +97,6 @@ export function resolveGraphEntryRequestDecision(params: {
   graphSnapshot?: AgentRunControlGraphState;
   toolAuthority: RequestDecisionToolAuthority;
 }): RequestFrame {
-  if (
-    params.frame.continuation === 'resume_waiting_user' &&
-    params.graphSnapshot?.pendingUserInput
-  ) {
-    return resolveRequestDecision({
-      frame: params.frame,
-      requiredInformation: params.graphSnapshot.pendingUserInput.requiredInformation.map(
-        ({ key, requiredFor, resolution }) => ({
-          key,
-          authority: 'user' as const,
-          requiredFor,
-          resolution,
-        }),
-      ),
-      policyDisposition: 'allowed',
-      permissionState: 'not_required',
-      awaitingExternalOperation: false,
-    });
-  }
   if (params.frame.continuation !== 'resume_waiting_async' || !params.graphSnapshot) {
     return params.frame;
   }
