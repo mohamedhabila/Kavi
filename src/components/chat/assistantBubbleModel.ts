@@ -37,6 +37,8 @@ export interface AssistantBubbleViewModel {
   /** Ordered render items; consecutive tool steps arrive folded into one activity item. */
   timelineItems: CompressedTimelineItem[];
   contentSegments: AssistantBubbleSegment[];
+  /** Every tool call of the reply, once each, in order. */
+  toolCalls: ToolCall[];
   activeToolCall?: ToolCall;
   copyText: string;
   contentWarnings: {
@@ -386,6 +388,7 @@ export function buildAssistantBubbleViewModel(params: {
   return {
     timelineItems: compressToolActivityTimeline(buildTimelineItems(orderedSegments)),
     contentSegments,
+    toolCalls: orderedSegments.flatMap((segment) => segment.toolCalls ?? []),
     activeToolCall: resolveActiveToolCall(contentSegments, params.message.toolCalls),
     copyText: contentSegments
       .map((segment) => segment.content)

@@ -1696,6 +1696,32 @@ export const en: TranslationMap = {
   },
 
   // ── Tool Call Display ─────────────────────────────────────────────────
+  runOutcome: {
+    title: 'What was done',
+    savedFile: 'Saved a file',
+    deletedFile: 'Deleted a file',
+    remembered: 'Remembered',
+    forgot: 'Forgot',
+    openedDraft: 'Opened a draft for you to send',
+    savedDraft: 'Saved a draft',
+    sentMessage: 'Sent a message',
+    startedCall: 'Started a call',
+    addedEvent: 'Added to your calendar',
+    updatedEvent: 'Updated your calendar',
+    setReminder: 'Set a reminder',
+    sentNotification: 'Sent a notification',
+    copied: 'Copied to the clipboard',
+    shared: 'Opened sharing',
+    openedContact: 'Opened a contact form',
+    updatedContactAccess: 'Changed contact access',
+    opened: 'Opened',
+    captured: 'Captured media',
+    startedWork: 'Started work in the background',
+    changedAutomation: 'Changed an automation',
+    changedRemote: 'Changed something on a connected service',
+    inProgress: '{action} — in progress',
+    didNotWork: "{action} — didn't go through",
+  },
   toolActivity: {
     completedSteps: plural({
       one: "Completed {count} step",

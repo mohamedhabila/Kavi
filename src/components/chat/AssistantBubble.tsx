@@ -16,6 +16,7 @@ import {
   isFetchOnlyToolRun,
 } from './fetchBatchGrouping';
 import { ToolActivityGroup } from './ToolActivityGroup';
+import { RunOutcomeCard } from './RunOutcomeCard';
 import type { CompressedTimelineItem, ToolActivityTimelineItem } from './toolActivityTimeline';
 import TypingIndicator from './TypingIndicator';
 import { MessageAttachments } from './MessageAttachments';
@@ -308,6 +309,7 @@ export const AssistantBubble: React.FC<AssistantBubbleProps> = React.memo(
             ) : null}
           </View>
           {bubbleMainContent}
+          {!isStreaming ? <RunOutcomeCard toolCalls={bubbleModel.toolCalls} /> : null}
           {reviewStatusText ? (
             <View style={styles.reviewFooter}>
               <View style={styles.reviewPill} testID="assistant-bubble-review-indicator">
