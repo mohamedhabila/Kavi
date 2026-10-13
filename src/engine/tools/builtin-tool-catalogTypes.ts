@@ -5,10 +5,6 @@ export type ToolCatalogDescribedTool = Pick<
   'name' | 'description' | 'contract' | 'input_schema'
 >;
 
-export type ToolCatalogCategoryConfig = {
-  tools: string[];
-};
-
 /** One search result: enough to choose the tool; its full contract arrives once callable. */
 export type ToolCatalogEntry = {
   name: string;

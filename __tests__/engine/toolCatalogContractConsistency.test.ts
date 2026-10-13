@@ -4,30 +4,34 @@ jest.mock('../../src/services/memory/policy', () => ({
 }));
 
 import { executeToolCatalog } from '../../src/engine/tools/builtin-tool-catalog';
-import { TOOL_CATALOG_CATEGORIES } from '../../src/engine/tools/builtin-tool-catalogConfig';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
+import { parseSkillToolName } from '../../src/services/skills/manager';
 import { CRON_TOOL } from '../../src/engine/tools/extended-definitions';
 import { parseCompletedToolOutcome } from '../helpers/toolRuntimeOutcome';
 
 describe('tool_catalog contract consistency', () => {
-  it('lists only registered tools, each found by a search for its own name', async () => {
+  // A registered tool the catalog cannot return is unreachable: share_file was, while a
+  // hand-kept list decided what the catalog held.
+  it('finds every registered built-in tool by a search for its own name', async () => {
     const problems: string[] = [];
-    for (const [category, config] of Object.entries(TOOL_CATALOG_CATEGORIES)) {
-      for (const toolName of config.tools) {
-        if (!TOOL_DEFINITIONS.some((tool) => tool.name === toolName)) {
-          problems.push(`${category}/${toolName}: not a registered tool`);
-          continue;
-        }
-        const { tools } = parseCompletedToolOutcome(
-          await executeToolCatalog({ query: toolName.replace(/_/g, ' ') }),
-        ) as { tools: Array<{ name: string }> };
-        if (!tools.some((tool) => tool.name === toolName)) {
-          problems.push(`${category}/${toolName}: not found by its own name`);
-        }
-      }
+    for (const { name } of TOOL_DEFINITIONS) {
+      if (name === 'tool_catalog' || name === 'tool_describe' || parseSkillToolName(name)) continue;
+      const { tools } = parseCompletedToolOutcome(
+        await executeToolCatalog({ query: name.replace(/_/g, ' ') }),
+      ) as { tools: Array<{ name: string }> };
+      if (!tools.some((tool) => tool.name === name)) problems.push(`${name}: not found`);
     }
 
     expect(problems).toEqual([]);
+  });
+
+  it('never returns the discovery tools themselves', async () => {
+    const { tools } = parseCompletedToolOutcome(
+      await executeToolCatalog({ query: 'tool catalog describe search tools' }),
+    ) as { tools: Array<{ name: string }> };
+
+    expect(tools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(['tool_catalog']));
+    expect(tools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(['tool_describe']));
   });
 
   it('supports unique human-facing scheduled task names without exposing internal IDs', () => {

@@ -11,13 +11,18 @@
 // hid the tool it needed. Replaying a live run's 39 catalog calls, 59% found a tool the turn
 // went on to need with the filters and 88% with this ranking alone; also adding the
 // producers of the results' required inputs found no more.
+//
+// The index is every tool the run may use, read from the registry, the MCP servers and the
+// skills; there is no hand-kept list of catalog tools, which once left a registered tool
+// (share_file) impossible to find.
 // ---------------------------------------------------------------------------
 
 import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
-import { TOOL_CATALOG_CATEGORIES } from './builtin-tool-catalogConfig';
 import { getDynamicMcpCatalog, getDynamicSkillCatalog } from './builtin-tool-catalogDynamic';
 import type { ExecuteToolCatalogOptions, ToolCatalogEntry } from './builtin-tool-catalogTypes';
 import { TOOL_DEFINITIONS } from './definitions';
+import { parseMcpToolName } from '../../services/mcp/bridge';
+import { parseSkillToolName } from '../../services/skills/manager';
 
 /** Results per search. */
 const TOOL_CATALOG_SEARCH_LIMIT = 8;
@@ -27,6 +32,8 @@ const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
 const TERM_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
+/** The discovery tools are always callable; a search never returns them. */
+const DISCOVERY_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_catalog', 'tool_describe']);
 
 interface IndexedTool {
   entry: ToolCatalogEntry;
@@ -77,50 +84,40 @@ function indexTool(entry: ToolCatalogEntry): IndexedTool {
 }
 
 function buildToolCatalogIndex(options?: ExecuteToolCatalogOptions): IndexedTool[] {
-  const definitions = new Map(TOOL_DEFINITIONS.map((tool) => [tool.name, tool]));
   const indexed = new Map<string, IndexedTool>();
-  for (const [category, config] of Object.entries(TOOL_CATALOG_CATEGORIES)) {
-    // GitHub tools come from MCP servers and skills, indexed below.
-    if (category === 'github') continue;
-    for (const name of config.tools) {
-      const tool = definitions.get(name);
-      if (!tool || indexed.has(name) || !isToolCatalogVisible(name, options)) continue;
-      indexed.set(
-        name,
-        indexTool({
-          name,
-          description: tool.description,
-          source: 'built-in',
-          activation: buildToolCatalogActivation(name, options),
-        }),
-      );
-    }
-  }
-  for (const tool of getDynamicMcpCatalog().tools) {
-    if (indexed.has(tool.name) || !isToolCatalogVisible(tool.name, options)) continue;
+  const add = (entry: Omit<ToolCatalogEntry, 'activation'>) => {
+    if (indexed.has(entry.name) || !isToolCatalogVisible(entry.name, options)) return;
     indexed.set(
-      tool.name,
-      indexTool({
-        name: tool.name,
-        description: `${tool.description} (${tool.serverName})`,
-        source: 'mcp',
-        ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
-        activation: buildToolCatalogActivation(tool.name, options),
-      }),
+      entry.name,
+      indexTool({ ...entry, activation: buildToolCatalogActivation(entry.name, options) }),
     );
+  };
+  // MCP and skill tools first: their entries carry the schema digest activation checks.
+  for (const tool of getDynamicMcpCatalog().tools) {
+    add({
+      name: tool.name,
+      description: `${tool.description} (${tool.serverName})`,
+      source: 'mcp',
+      ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
+    });
   }
   for (const tool of getDynamicSkillCatalog().tools) {
-    if (indexed.has(tool.name) || !isToolCatalogVisible(tool.name, options)) continue;
-    indexed.set(
-      tool.name,
-      indexTool({
-        name: tool.name,
-        description: tool.description,
-        source: 'skill',
-        ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
-        activation: buildToolCatalogActivation(tool.name, options),
-      }),
-    );
+    add({
+      name: tool.name,
+      description: tool.description,
+      source: 'skill',
+      ...(tool.schemaDigest ? { schemaDigest: tool.schemaDigest } : {}),
+    });
+  }
+  for (const tool of TOOL_DEFINITIONS) {
+    if (
+      DISCOVERY_TOOL_NAMES.has(tool.name) ||
+      parseSkillToolName(tool.name) ||
+      parseMcpToolName(tool.name)
+    ) {
+      continue;
+    }
+    add({ name: tool.name, description: tool.description, source: 'built-in' });
   }
   return Array.from(indexed.values());
 }

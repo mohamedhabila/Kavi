@@ -1,12 +1,8 @@
-import { TOOL_CATALOG_CATEGORIES } from '../../engine/tools/builtin-tool-catalogConfig';
+import { TOOL_DEFINITIONS } from '../../engine/tools/definitions';
 import { hashString, uniqueSorted, type E2ERedactedHash } from './e2eTraceRedaction';
 
-const SAFE_PUBLIC_TOOL_NAME_SET = new Set<string>([
-  'tool_catalog',
-  'tool_describe',
-  'update_plan',
-  ...Object.values(TOOL_CATALOG_CATEGORIES).flatMap((category) => category.tools),
-]);
+/** Built-in tool names are public; MCP and user skill names are reported only as hashes. */
+const SAFE_PUBLIC_TOOL_NAME_SET = new Set<string>(TOOL_DEFINITIONS.map((tool) => tool.name));
 
 export type E2ERedactedToolName = {
   name?: string;

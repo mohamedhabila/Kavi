@@ -19,6 +19,7 @@ jest.mock('../../src/services/mcp/manager', () => ({
   },
 }));
 jest.mock('../../src/services/skills/manager', () => ({
+  parseSkillToolName: jest.requireActual('../../src/services/skills/manager').parseSkillToolName,
   getSkillToolDefinitions: () => mockSkillTools,
   isSkillCompatible: () => ({ compatible: true }),
   useSkillsStore: { getState: () => ({ getEnabled: () => [] }) },
