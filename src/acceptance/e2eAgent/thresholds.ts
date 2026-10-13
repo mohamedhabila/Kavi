@@ -115,30 +115,23 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'direct-beam-long-dialogue-multi-probe': 520_000,
   'direct-longmemeval-v2-experience-runbook': 360_000,
   'direct-mobileworld-long-horizon-personalization': 420_000,
-  'long-task-expense-report': 400_000,
-  'long-task-trip-organizer': 400_000,
-  'long-task-research-brief': 400_000,
-  'long-task-resume-interrupted': 250_000,
-  'long-task-plan-revision': 350_000,
-  'long-task-feedback-triage': 600_000,
-  'long-task-recover-wrong-folder': 400_000,
-  'long-task-exact-ledger': 250_000,
-  'long-task-chained-investigation': 300_000,
+  // Long tasks: 1.5x the most a passing GLM 5.3 Flash run spent (N=3+), rounded up to 5k,
+  // so a miss is a regression rather than OpenRouter routing noise (~20% between upstreams).
+  'long-task-expense-report': 60_000,
+  'long-task-trip-organizer': 105_000,
+  'long-task-research-brief': 35_000,
+  'long-task-resume-interrupted': 70_000,
+  'long-task-plan-revision': 60_000,
+  'long-task-feedback-triage': 45_000,
+  'long-task-recover-wrong-folder': 60_000,
+  'long-task-exact-ledger': 45_000, // sized on a run that computed with code, the better path
+  'long-task-chained-investigation': 40_000,
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
 export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = new Set([
   'organic-mobile-assistant-continuity',
   'paired-causal-global-preference',
-  'long-task-expense-report',
-  'long-task-trip-organizer',
-  'long-task-research-brief',
-  'long-task-resume-interrupted',
-  'long-task-plan-revision',
-  'long-task-feedback-triage',
-  'long-task-recover-wrong-folder',
-  'long-task-exact-ledger',
-  'long-task-chained-investigation',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */
