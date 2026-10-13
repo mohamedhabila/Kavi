@@ -139,6 +139,6 @@ describe('orchestrator request memory policy', () => {
 
     const result = await pending;
     expect(result.memory.status).toBe('read');
-    expect(isSessionMemoryReadCurrent(result.memory)).toBe(false);
+    expect(isSessionMemoryReadCurrent(result.memory, result.workingMessages)).toBe(false);
   });
 });

@@ -98,16 +98,48 @@ describe('session memory read', () => {
   });
 
   it('stays current while memory is as on or off as it was when read', () => {
-    const readWhileOn = readSessionMemory('conv-1', [userMessage('u1', 'Hello', 1)]);
-    expect(isSessionMemoryReadCurrent(readWhileOn)).toBe(true);
+    const messages = [userMessage('u1', 'Hello', 1)];
+    const readWhileOn = readSessionMemory('conv-1', messages);
+    expect(isSessionMemoryReadCurrent(readWhileOn, messages)).toBe(true);
 
     useSettingsStore.setState({ disableLongTermMemory: true });
-    expect(isSessionMemoryReadCurrent(readWhileOn)).toBe(false);
-    const readWhileOff = readSessionMemory('conv-1', [userMessage('u1', 'Hello', 1)]);
-    expect(isSessionMemoryReadCurrent(readWhileOff)).toBe(true);
+    expect(isSessionMemoryReadCurrent(readWhileOn, messages)).toBe(false);
+    const readWhileOff = readSessionMemory('conv-1', messages);
+    expect(isSessionMemoryReadCurrent(readWhileOff, messages)).toBe(true);
 
     useSettingsStore.setState({ disableLongTermMemory: false });
-    expect(isSessionMemoryReadCurrent(readWhileOff)).toBe(false);
-    expect(isSessionMemoryReadCurrent({ status: 'unavailable' })).toBe(true);
+    expect(isSessionMemoryReadCurrent(readWhileOff, messages)).toBe(false);
+    expect(isSessionMemoryReadCurrent({ status: 'unavailable' }, messages)).toBe(true);
+  });
+
+  // A run read memory once, leaving out every round it carried. When compaction then
+  // replaced some of those rounds with a summary, the run kept the old read: the replaced
+  // rounds were neither in its messages nor recallable from memory.
+  it('is read again once compaction replaced a round it left out', () => {
+    indexMemoryTurn({
+      conversationId: 'conv-1',
+      userMessageId: 'u-old',
+      userText: 'The cabin entrance is the blue door on the left',
+      replyText: 'Noted.',
+      at: 0,
+    });
+    const before = [
+      userMessage('u-old', 'The cabin entrance is the blue door on the left', 1),
+      { id: 'a-old', role: 'assistant' as const, content: 'Noted.', timestamp: 2 },
+      userMessage('u-latest', 'Which cabin entrance do I use?', 3),
+    ];
+    const read = readSessionMemory('conv-1', before);
+    expect(isSessionMemoryReadCurrent(read, before)).toBe(true);
+    if (read.status !== 'read') throw new Error('memory was not read');
+    expect(read.section?.text ?? '').not.toContain('blue door');
+
+    const compacted = [
+      { id: 'summary', role: 'system' as const, content: 'Earlier: a cabin trip.', timestamp: 2 },
+      userMessage('u-latest', 'Which cabin entrance do I use?', 3),
+    ];
+    expect(isSessionMemoryReadCurrent(read, compacted)).toBe(false);
+    const reread = readSessionMemory('conv-1', compacted);
+    if (reread.status !== 'read') throw new Error('memory was not read');
+    expect(reread.section?.text).toContain('blue door');
   });
 });

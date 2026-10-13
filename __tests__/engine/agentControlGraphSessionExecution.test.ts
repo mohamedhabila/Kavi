@@ -197,7 +197,7 @@ describe('agentControlGraphSessionExecution', () => {
     params.initialRuntime.workingMessages = [compactMessage, arabicMessage];
     // Read while memory was off; it is on now, so the read is no longer current.
     params.initialRuntime.memory = { status: 'off' };
-    const refreshed = { status: 'read' as const, section: null };
+    const refreshed = { status: 'read' as const, section: null, carriedUserMessageIds: [] };
     jest.mocked(params.refreshSessionMemory).mockReturnValueOnce(refreshed);
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
@@ -219,9 +219,42 @@ describe('agentControlGraphSessionExecution', () => {
     );
   });
 
+  it('reads memory again once compaction replaced a round the read left out', async () => {
+    const oldRound = { id: 'u-old', role: 'user' as const, content: 'Blue door.', timestamp: 1 };
+    const latest = { id: 'u-latest', role: 'user' as const, content: 'Which door?', timestamp: 3 };
+    const summary = { id: 'summary', role: 'system' as const, content: 'Earlier.', timestamp: 2 };
+    const params = createParams({ maxToolIterations: 2 });
+    params.initialRuntime.workingMessages = [oldRound, latest];
+    params.initialRuntime.memory = {
+      status: 'read',
+      section: null,
+      carriedUserMessageIds: ['u-old', 'u-latest'],
+    };
+    const refreshed = {
+      status: 'read' as const,
+      section: null,
+      carriedUserMessageIds: ['u-latest'],
+    };
+    jest.mocked(params.refreshSessionMemory).mockReturnValueOnce(refreshed);
+    mockedExecuteAgentControlGraphIteration
+      .mockResolvedValueOnce({
+        status: 'continued',
+        runtime: { ...params.initialRuntime, workingMessages: [summary, latest] },
+      })
+      .mockResolvedValueOnce({ status: 'finalized', runtime: params.initialRuntime });
+
+    await executeAgentControlGraphSession(params);
+
+    expect(params.refreshSessionMemory).toHaveBeenCalledTimes(1);
+    expect(params.refreshSessionMemory).toHaveBeenCalledWith([summary, latest]);
+    expect(mockedExecuteAgentControlGraphIteration).toHaveBeenLastCalledWith(
+      expect.objectContaining({ runtime: expect.objectContaining({ memory: refreshed }) }),
+    );
+  });
+
   it('keeps a current memory read for the next step', async () => {
     const params = createParams({ maxToolIterations: 1 });
-    params.initialRuntime.memory = { status: 'read', section: null };
+    params.initialRuntime.memory = { status: 'read', section: null, carriedUserMessageIds: [] };
     mockedExecuteAgentControlGraphIteration.mockResolvedValueOnce({
       status: 'finalized',
       runtime: params.initialRuntime,

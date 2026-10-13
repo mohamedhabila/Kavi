@@ -85,8 +85,8 @@ export async function executeAgentControlGraphSession(
           }),
       }));
 
-      // Memory turned on or off since the last read applies from this iteration on.
-      if (!isSessionMemoryReadCurrent(runtime.memory)) {
+      // Memory turned on or off, or rounds compaction replaced, apply from this iteration on.
+      if (!isSessionMemoryReadCurrent(runtime.memory, runtime.workingMessages)) {
         runtime.memory = params.refreshSessionMemory(runtime.workingMessages);
       }
 
