@@ -20,9 +20,6 @@ jest.mock('../../src/i18n/useTranslation', () => ({
         'chat.agentPlan.stepStatus.pending': 'Pending',
         'chat.agentPlan.stepStatus.inProgress': 'In progress',
         'chat.agentPlan.stepStatus.completed': 'Done',
-        'chat.agentRunTrace.header': 'Run trace',
-        'chat.agentRunTrace.preview': 'Iteration {iteration} · {count} events',
-        'chat.agentRunTrace.iteration': 'Iteration {iteration}',
       };
       return Object.entries(params ?? {}).reduce(
         (text, [name, value]) => text.replace(`{${name}}`, String(value)),
@@ -165,5 +162,55 @@ describe('AgentWorkflowSummary', () => {
     );
 
     expect(screen.queryByTestId('agent-plan-widget')).toBeNull();
+  });
+
+  it('adds nothing to a finished reply that kept no plan', () => {
+    const screen = render(
+      <AgentWorkflowSummary
+        run={makeRun({ status: 'completed', controlGraph: makeControlGraph({ plan: undefined }) })}
+      />,
+    );
+
+    expect(screen.queryByTestId('agent-workflow-summary')).toBeNull();
+  });
+
+  it('keeps the plan, without a status row, once the work is finished', () => {
+    const screen = render(<AgentWorkflowSummary run={makeRun({ status: 'completed' })} />);
+
+    expect(screen.getByTestId('agent-plan-widget')).toBeTruthy();
+    expect(screen.queryByTestId('agent-workflow-current')).toBeNull();
+  });
+
+  it.each([
+    [
+      'waiting for the person',
+      { status: 'running' as const },
+      'waiting_for_user' as const,
+      'Waiting for you',
+    ],
+    ['stopped before finishing', { status: 'failed' as const }, undefined, 'Failed'],
+  ])(
+    'shows the status of a run %s, even without a plan',
+    (_case, overrides, presentation, label) => {
+      const screen = render(
+        <AgentWorkflowSummary
+          run={makeRun({ ...overrides, controlGraph: makeControlGraph({ plan: undefined }) })}
+          executionPresentation={presentation}
+        />,
+      );
+
+      expect(screen.getByTestId('agent-workflow-current')).toBeTruthy();
+      expect(screen.getByText(label)).toBeTruthy();
+    },
+  );
+
+  it('adds nothing while plan-less work is under way, which the reply already shows', () => {
+    const screen = render(
+      <AgentWorkflowSummary
+        run={makeRun({ controlGraph: makeControlGraph({ plan: undefined }) })}
+      />,
+    );
+
+    expect(screen.queryByTestId('agent-workflow-summary')).toBeNull();
   });
 });

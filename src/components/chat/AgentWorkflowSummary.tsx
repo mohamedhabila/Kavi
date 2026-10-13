@@ -34,26 +34,34 @@ const AgentWorkflowSummaryComponent: React.FC<AgentWorkflowSummaryProps> = ({
     run.status === 'running' &&
     executionPresentation !== 'needs_attention' &&
     executionPresentation !== 'waiting_for_user';
+  // Finished work speaks through the reply and what it did, and work in progress already
+  // shows in the reply. The card adds only what the reply cannot: a run that needs the
+  // person or stopped without finishing, and the plan of work that keeps one.
+  const needsPerson = !isPresentedRunning && run.status !== 'completed';
+  const showsStatus = needsPerson || (isPresentedRunning && plan.length > 0);
+  if (!showsStatus && plan.length === 0) return null;
 
   return (
     <View style={styles.container} testID="agent-workflow-summary">
-      <View style={styles.currentRow} testID="agent-workflow-current">
-        <View style={[styles.statusDot, isPresentedRunning ? null : styles.statusDotSettled]} />
-        <View style={styles.currentCopy}>
-          <Text style={styles.eyebrow}>{t('chat.agentWorkflow.currentWork')}</Text>
-          <Text style={styles.currentTitle} numberOfLines={2}>
-            {presentation.title}
-          </Text>
-          {presentation.detail ? (
-            <Text style={styles.currentDetail} numberOfLines={2}>
-              {presentation.detail}
+      {showsStatus ? (
+        <View style={styles.currentRow} testID="agent-workflow-current">
+          <View style={[styles.statusDot, isPresentedRunning ? null : styles.statusDotSettled]} />
+          <View style={styles.currentCopy}>
+            <Text style={styles.eyebrow}>{t('chat.agentWorkflow.currentWork')}</Text>
+            <Text style={styles.currentTitle} numberOfLines={2}>
+              {presentation.title}
             </Text>
-          ) : null}
+            {presentation.detail ? (
+              <Text style={styles.currentDetail} numberOfLines={2}>
+                {presentation.detail}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusPillText}>{presentation.statusLabel}</Text>
+          </View>
         </View>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>{presentation.statusLabel}</Text>
-        </View>
-      </View>
+      ) : null}
 
       {plan.length > 0 ? (
         <View style={styles.section} testID="agent-plan-widget">
