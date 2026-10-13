@@ -193,8 +193,6 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     noProvider: '未配置提供商。请前往设置添加一个。',
     noApiKey: '此提供商未配置 API 密钥。',
     noModel: '未选择模型。',
-    clearAll: '清除所有对话',
-    clearAllConfirm: '这将永久删除您的所有对话历史。',
     exportConversation: '导出对话',
     deleteConversation: '删除对话',
     searchConversations: '搜索对话…',
@@ -478,7 +476,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'MCP 服务器 URL 必须使用 http、https、ws 或 wss。',
     invalidMcpUrlFormat: '请输入有效的 MCP 服务器 URL。',
     data: '数据',
-    clearAllData: '清除所有对话',
+    clearChatHistory: '清除聊天记录',
+    clearChatHistoryConfirm:
+      '这会永久删除你的聊天记录。Kavi 记住的关于你的信息会保留，可在“记忆”中查看。',
     dataDeletionHint:
       '在此清除对话历史。使用“记忆”清除长期记忆。删除提供商和集成，或清空服务密钥字段，以移除已保存的凭据。',
     manageMemory: '管理记忆',

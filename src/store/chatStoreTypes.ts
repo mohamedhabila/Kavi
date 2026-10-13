@@ -64,7 +64,8 @@ export interface ChatState {
     modelOverride?: string,
     options?: { personaId?: string; mode?: ConversationMode },
   ) => string;
-  clearAllConversations: () => void;
+  /** Deletes the chat transcript; what Kavi remembers about the user stays. */
+  clearChatHistory: () => void;
   updateModelInConversation: (conversationId: string, providerId: string, model: string) => void;
   updatePersonaInConversation: (
     conversationId: string,

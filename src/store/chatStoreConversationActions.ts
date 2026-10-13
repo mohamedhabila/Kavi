@@ -5,7 +5,7 @@ import { requestChatStorePersistenceCheckpoint } from './chatStorePersistence';
 import { resolveConversationWorkspaceTargetId } from './chatStoreHelpers';
 import type { Conversation, ConversationMode } from '../types/conversation';
 import type { ChatState } from './chatStoreTypes';
-import { deleteConversationMemory } from '../services/memory/core/memoryCapture';
+import { forgetConversationHistory } from '../services/memory/core/memoryCapture';
 import { createLogger } from '../utils/logger';
 import { deleteAllArchivedMessages } from '../services/transcriptArchive/transcriptArchive';
 
@@ -79,7 +79,7 @@ export function createConversationStoreActions(
 ): Pick<
   ChatState,
   | 'ensureConversation'
-  | 'clearAllConversations'
+  | 'clearChatHistory'
   | 'updateModelInConversation'
   | 'updatePersonaInConversation'
   | 'updateModeInConversation'
@@ -116,8 +116,8 @@ export function createConversationStoreActions(
       return conversation.id;
     },
 
-    clearAllConversations: () => {
-      for (const conversation of get().conversations) deleteConversationMemory(conversation.id);
+    clearChatHistory: () => {
+      for (const conversation of get().conversations) forgetConversationHistory(conversation.id);
       set({ conversations: [], activeConversationId: null });
       removeArchivedHistory(deleteAllArchivedMessages);
       requestChatStorePersistenceCheckpoint();

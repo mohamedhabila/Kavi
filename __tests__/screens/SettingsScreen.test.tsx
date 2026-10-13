@@ -26,7 +26,7 @@ describe('SettingsScreen general', () => {
     expect(getByText('Advanced AI')).toBeTruthy();
     expect(getByText('AI Providers')).toBeTruthy();
     expect(queryByText('MCP Servers')).toBeNull();
-    expect(queryByText('Clear All Conversations')).toBeNull();
+    expect(queryByText('Clear Chat History')).toBeNull();
   });
 
   it('renders a compact, searchable Settings home', () => {
@@ -110,7 +110,7 @@ describe('SettingsScreen general', () => {
   it('limits Memory & privacy to memory and saved-data controls', () => {
     const { getByText, queryByText } = renderSettingsScreen({ destination: 'memory-privacy' });
 
-    expect(getByText('Clear All Conversations')).toBeTruthy();
+    expect(getByText('Clear Chat History')).toBeTruthy();
     expect(queryByText('Appearance')).toBeNull();
     expect(queryByText('MCP Servers')).toBeNull();
   });
@@ -241,9 +241,9 @@ describe('SettingsScreen general', () => {
     expect(queryByText('MCP Servers')).toBeNull();
   });
 
-  it('should show clear all conversations button', () => {
+  it('shows the clear chat history button', () => {
     const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
-    expect(getByText('Clear All Conversations')).toBeTruthy();
+    expect(getByText('Clear Chat History')).toBeTruthy();
   });
 
   it('explains the separate local-data controls and opens memory management', () => {
@@ -269,13 +269,13 @@ describe('SettingsScreen general', () => {
     expect(settingsMocks.navigate).toHaveBeenCalledWith('ApprovalHistory');
   });
 
-  it('should show confirmation dialog when clearing conversations', () => {
+  it('confirms clearing the chat history and says memory stays', () => {
     jest.spyOn(Alert, 'alert');
     const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
-    fireEvent.press(getByText('Clear All Conversations'));
+    fireEvent.press(getByText('Clear Chat History'));
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Clear All Conversations',
-      expect.any(String),
+      'Clear Chat History',
+      expect.stringContaining('What Kavi remembers about you stays'),
       expect.any(Array),
     );
   });
@@ -412,14 +412,14 @@ describe('SettingsScreen general', () => {
     expect(getByTestId('icon-Monitor')).toBeTruthy();
   });
 
-  it('should execute clear all conversations confirmation', () => {
+  it('clears the chat history once confirmed', () => {
     jest.spyOn(Alert, 'alert').mockImplementation((title, msg, buttons: any) => {
       const deleteBtn = buttons?.find((b: any) => b.style === 'destructive');
       deleteBtn?.onPress?.();
     });
     const { getByText } = renderSettingsScreen({ destination: 'memory-privacy' });
-    fireEvent.press(getByText('Clear All Conversations'));
-    expect(settingsMocks.clearAllConversations).toHaveBeenCalled();
+    fireEvent.press(getByText('Clear Chat History'));
+    expect(settingsMocks.clearChatHistory).toHaveBeenCalled();
   });
 
   it('keeps the advanced assistant options collapsed until expanded', () => {

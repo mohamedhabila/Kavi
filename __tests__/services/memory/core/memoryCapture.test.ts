@@ -18,7 +18,7 @@ import {
 import {
   catchUpMemoryCapture,
   clearAllMemory,
-  deleteConversationMemory,
+  forgetConversationHistory,
   publishConversationTurnMemory,
   skipMemoryCaptureToNow,
 } from '../../../../src/services/memory/core/memoryCapture';
@@ -173,8 +173,8 @@ describe('turning memory on', () => {
   });
 });
 
-describe('deleting a conversation', () => {
-  it('deletes its memories, past turns, prompt log and cursor, and nothing of another', () => {
+describe('forgetting a conversation’s history', () => {
+  it('deletes its past turns, prompt log and cursor, keeps every memory, and leaves another alone', () => {
     for (const id of ['conv-1', 'conv-2']) {
       const turn = [
         user(`${id}-u`, 'Book the kayak', 10),
@@ -192,10 +192,10 @@ describe('deleting a conversation', () => {
       });
     }
 
-    deleteConversationMemory('conv-1');
+    forgetConversationHistory('conv-1');
 
     expect(indexedTurns()).toEqual(['conv-2/conv-2-u']);
-    expect(rowCount('memory_items')).toBe(1);
+    expect(rowCount('memory_items')).toBe(2);
     expect(rowCount('memory_prompt_log')).toBe(1);
     expect(readCaptureCursor('conv-1')).toBeNull();
     expect(readCaptureCursor('conv-2')).not.toBeNull();

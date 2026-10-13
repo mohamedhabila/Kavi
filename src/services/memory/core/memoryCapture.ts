@@ -21,7 +21,7 @@ import {
   skipCaptureThrough,
 } from './memoryCaptureCursor';
 import { cancelMemoryExtraction, scheduleMemoryExtraction } from './memoryExtractionWorker';
-import { deleteAllMemoryItems, deleteMemoryItemsFromConversation } from './memoryItemsStore';
+import { deleteAllMemoryItems } from './memoryItemsStore';
 import {
   deleteAllMemoryPromptBuilds,
   deleteMemoryPromptBuildsFromConversation,
@@ -109,10 +109,13 @@ export function skipMemoryCaptureToNow(conversations: ReadonlyArray<CaptureThrea
   }
 }
 
-/** Deleting a conversation deletes what memory kept of it. */
-export function deleteConversationMemory(conversationId: string): void {
+/**
+ * Clearing the chat forgets what was said in it — memory's index of those exchanges, their
+ * prompt log and the capture cursor — and keeps what Kavi remembers about the user, which
+ * the Memory screen manages on its own.
+ */
+export function forgetConversationHistory(conversationId: string): void {
   ensureMemoryCoreSchema(getMemoryDb());
-  deleteMemoryItemsFromConversation(conversationId);
   deleteMemoryTurnsFromConversation(conversationId);
   deleteMemoryPromptBuildsFromConversation(conversationId);
   deleteCaptureCursor(conversationId);

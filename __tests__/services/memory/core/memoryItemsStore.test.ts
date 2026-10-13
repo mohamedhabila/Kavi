@@ -3,11 +3,10 @@ jest.mock('expo-sqlite', () => {
   return makeExpoSqliteMock();
 });
 
-import { closeMemoryDb, getMemoryDb } from '../../../../src/services/memory/database';
+import { closeMemoryDb } from '../../../../src/services/memory/database';
 import { resetMemoryCoreSchemaCacheForTests } from '../../../../src/services/memory/core/memorySchema';
 import {
   addMemoryItem,
-  deleteMemoryItemsFromConversation,
   forgetMemoryItem,
   getCurrentMemoryItem,
   listPinnedMemoryItems,
@@ -139,28 +138,6 @@ describe('memory items', () => {
     expect(search('Lives in')).toEqual([]);
     expect(getCurrentMemoryItem(currentId)).toBeNull();
     expect(forgetMemoryItem(currentId)).toBe(false);
-  });
-
-  it('deletes what was remembered in a conversation when that conversation is deleted', () => {
-    remember('Global fact from conversation one');
-    remember('Global fact from conversation two', { conversationId: 'conv-2' });
-
-    expect(deleteMemoryItemsFromConversation('conv-1')).toBe(1);
-    expect(search('Global fact')).toEqual(['Global fact from conversation two']);
-  });
-
-  it('deletes a correction made in a deleted conversation together with what it replaced', () => {
-    const old = remember('Lives in Utrecht');
-    remember('Lives in Rotterdam', {
-      conversationId: 'conv-2',
-      replaces: (old as { item: { id: string } }).item.id,
-    });
-
-    expect(deleteMemoryItemsFromConversation('conv-2')).toBe(2);
-    expect(
-      getMemoryDb().getFirstSync<{ count: number }>('SELECT COUNT(*) AS count FROM memory_items')
-        ?.count,
-    ).toBe(0);
   });
 
   it('rejects empty and oversized content', () => {

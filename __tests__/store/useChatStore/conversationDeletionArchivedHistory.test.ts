@@ -30,7 +30,7 @@ describe('clearing chat history with archived history', () => {
     archived(first);
     archived(second);
 
-    useChatStore.getState().clearAllConversations();
+    useChatStore.getState().clearChatHistory();
 
     expect(countArchivedMessages(first) + countArchivedMessages(second)).toBe(0);
   });
@@ -42,7 +42,7 @@ describe('clearing chat history with archived history', () => {
       throw new Error('disk full');
     });
 
-    expect(() => useChatStore.getState().clearAllConversations()).not.toThrow();
+    expect(() => useChatStore.getState().clearChatHistory()).not.toThrow();
     expect(useChatStore.getState().conversations).toEqual([]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();

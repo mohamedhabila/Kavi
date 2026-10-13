@@ -196,8 +196,6 @@ export const de: TranslationMap = mergeTranslations(en, {
     noProvider: 'Kein Anbieter konfiguriert. Gehen Sie zu Einstellungen, um einen hinzuzufügen.',
     noApiKey: 'Kein API-Schlüssel für diesen Anbieter konfiguriert.',
     noModel: 'Kein Modell ausgewählt.',
-    clearAll: 'Alle Gespräche löschen',
-    clearAllConfirm: 'Dies löscht Ihren gesamten Gesprächsverlauf dauerhaft.',
     exportConversation: 'Gespräch exportieren',
     deleteConversation: 'Gespräch löschen',
     searchConversations: 'Gespräche durchsuchen…',
@@ -512,7 +510,9 @@ export const de: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'MCP-Server-URL muss http, https, ws oder wss verwenden.',
     invalidMcpUrlFormat: 'Bitte geben Sie eine gültige URL für den MCP-Server ein.',
     data: 'Daten',
-    clearAllData: 'Alle Gespräche löschen',
+    clearChatHistory: 'Chatverlauf löschen',
+    clearChatHistoryConfirm:
+      'Dadurch wird Ihr Chatverlauf dauerhaft gelöscht. Was Kavi über Sie weiß, bleibt erhalten und lässt sich unter „Speicher“ ansehen.',
     dataDeletionHint:
       'Lösche hier den Gesprächsverlauf. Unter Erinnerungen kannst du dauerhafte Erinnerungen löschen. Lösche Anbieter und Integrationen oder leere Dienstschlüsselfelder, um gespeicherte Zugangsdaten zu entfernen.',
     manageMemory: 'Erinnerungen verwalten',

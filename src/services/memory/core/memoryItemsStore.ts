@@ -330,26 +330,6 @@ export function setMemoryItemPinned(id: string, pinned: boolean, now: number): b
   return changed > 0;
 }
 
-/**
- * Deleting a conversation deletes what was remembered in it, each with the history it
- * superseded (as forgetting does), so no remaining item points at a deleted correction.
- */
-export function deleteMemoryItemsFromConversation(conversationId: string): number {
-  const db = readyDb();
-  const deleted = runMemoryCoreTransaction(db, () => {
-    const ids = db
-      .getAllSync<{
-        id: string;
-      }>('SELECT id FROM memory_items WHERE source_conversation_id = ?', conversationId)
-      .map((row) => row.id);
-    let count = 0;
-    for (const id of ids) count += deleteItemChainInTransaction(db, id);
-    return count;
-  });
-  if (deleted > 0) notifyStructuredMemoryChanged(conversationId);
-  return deleted;
-}
-
 export function deleteAllMemoryItems(): void {
   readyDb().runSync('DELETE FROM memory_items');
   notifyStructuredMemoryChanged();

@@ -207,8 +207,6 @@ export const fr: TranslationMap = mergeTranslations(en, {
     noProvider: 'Aucun fournisseur configuré. Allez dans Paramètres pour en ajouter un.',
     noApiKey: 'Pas de clé API configurée pour ce fournisseur.',
     noModel: 'Aucun modèle sélectionné.',
-    clearAll: 'Effacer toutes les conversations',
-    clearAllConfirm: 'Cela supprimera définitivement tout votre historique de conversation.',
     exportConversation: 'Exporter la conversation',
     deleteConversation: 'Supprimer la conversation',
     searchConversations: 'Rechercher des conversations…',
@@ -532,7 +530,9 @@ export const fr: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: "L'URL du serveur MCP doit utiliser http, https, ws, ou wss.",
     invalidMcpUrlFormat: 'Veuillez entrer une URL valide pour le serveur MCP.',
     data: 'Données',
-    clearAllData: 'Effacer toutes les conversations',
+    clearChatHistory: 'Effacer l’historique du chat',
+    clearChatHistoryConfirm:
+      'Cela supprime définitivement votre historique de chat. Ce dont Kavi se souvient à votre sujet est conservé et reste consultable dans Mémoire.',
     dataDeletionHint:
       'Effacez ici l’historique des conversations. Utilisez Mémoire pour effacer les souvenirs durables. Supprimez les fournisseurs et les intégrations, ou videz les champs de clés de service, pour retirer les identifiants enregistrés.',
     manageMemory: 'Gérer la mémoire',

@@ -210,8 +210,6 @@ export const ar: TranslationMap = mergeTranslations(en, {
     noProvider: 'لم يتم تكوين مزود. اذهب إلى الإعدادات لإضافة واحد.',
     noApiKey: 'لم يتم تكوين مفتاح API لهذا المزود.',
     noModel: 'لم يتم اختيار نموذج.',
-    clearAll: 'مسح جميع المحادثات',
-    clearAllConfirm: 'سيتم حذف سجل المحادثات بالكامل نهائياً.',
     exportConversation: 'تصدير المحادثة',
     deleteConversation: 'حذف المحادثة',
     searchConversations: 'بحث في المحادثات…',
@@ -548,7 +546,9 @@ export const ar: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'يجب أن يستخدم رابط خادم MCP بروتوكول http أو https أو ws أو wss.',
     invalidMcpUrlFormat: 'الرجاء إدخال رابط صالح لخادم MCP.',
     data: 'البيانات',
-    clearAllData: 'مسح جميع المحادثات',
+    clearChatHistory: 'مسح سجل الدردشة',
+    clearChatHistoryConfirm:
+      'سيؤدي هذا إلى حذف سجل الدردشة نهائيًا. ما يتذكره Kavi عنك يبقى محفوظًا، ويمكنك مراجعته في الذاكرة.',
     dataDeletionHint:
       'امسح سجل المحادثات من هنا. استخدم الذاكرة لمسح الذكريات الدائمة. احذف مزودي الخدمة وعمليات التكامل، أو أفرغ حقول مفاتيح الخدمات، لإزالة بيانات الاعتماد المحفوظة.',
     manageMemory: 'إدارة الذاكرة',

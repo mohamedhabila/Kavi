@@ -200,8 +200,6 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     noProvider: 'Nenhum provedor configurado. Vá em Configurações para adicionar um.',
     noApiKey: 'Nenhuma chave API configurada para este provedor.',
     noModel: 'Nenhum modelo selecionado.',
-    clearAll: 'Limpar todas as conversas',
-    clearAllConfirm: 'Isso excluirá permanentemente todo o seu histórico de conversas.',
     exportConversation: 'Exportar conversa',
     deleteConversation: 'Excluir conversa',
     searchConversations: 'Pesquisar conversas…',
@@ -522,7 +520,9 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'A URL do servidor MCP deve usar http, https, ws ou wss.',
     invalidMcpUrlFormat: 'Insira uma URL válida para o servidor MCP.',
     data: 'Dados',
-    clearAllData: 'Limpar todas as conversas',
+    clearChatHistory: 'Limpar histórico do chat',
+    clearChatHistoryConfirm:
+      'Isso exclui seu histórico do chat permanentemente. O que o Kavi lembra sobre você continua salvo e pode ser revisto em Memória.',
     dataDeletionHint:
       'Limpe o histórico de conversas aqui. Use Memória para apagar memórias duradouras. Exclua provedores e integrações, ou limpe os campos de chaves de serviço, para remover credenciais salvas.',
     manageMemory: 'Gerenciar memória',

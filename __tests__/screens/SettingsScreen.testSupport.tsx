@@ -48,7 +48,7 @@ const mockSettings = {
   setLocale: jest.fn(),
   i18nSetLocale: jest.fn().mockResolvedValue(undefined),
   setWebSearchProvider: jest.fn(),
-  clearAllConversations: jest.fn(),
+  clearChatHistory: jest.fn(),
   getSecure: jest.fn().mockResolvedValue(''),
   saveSecure: jest.fn().mockResolvedValue(undefined),
   deleteSecure: jest.fn().mockResolvedValue(undefined),
@@ -286,7 +286,7 @@ jest.mock('../../src/store/useSettingsStore', () => ({
 
 jest.mock('../../src/store/useChatStore', () => ({
   useChatStore: (selector: (s: any) => any) =>
-    selector({ clearAllConversations: mockSettings.clearAllConversations }),
+    selector({ clearChatHistory: mockSettings.clearChatHistory }),
 }));
 
 jest.mock('../../src/services/storage/SecureStorage', () => ({

@@ -129,7 +129,7 @@ export const SettingsScreen: React.FC = () => {
   const activeProviderId = useSettingsStore((s) => s.activeProviderId ?? null);
   const developerModeEnabled = useSettingsStore((s) => s.developerModeEnabled);
   const setDeveloperModeEnabled = useSettingsStore((s) => s.setDeveloperModeEnabled);
-  const clearAllConversations = useChatStore((s) => s.clearAllConversations);
+  const clearChatHistory = useChatStore((s) => s.clearChatHistory);
   const permissions = useToolPermissionsStore((s) => s.permissions);
   const setToolPermission = useToolPermissionsStore((s) => s.setPermission);
   const personaOverrides = usePersonaConfigStore((s) => s.overrides);
@@ -288,12 +288,12 @@ export const SettingsScreen: React.FC = () => {
   }, []);
 
   // --- MCP Server Edit ---
-  const handleClearAllConversations = useCallback(() => {
-    Alert.alert(t('chat.clearAll'), t('chat.clearAllConfirm'), [
+  const handleClearChatHistory = useCallback(() => {
+    Alert.alert(t('settings.clearChatHistory'), t('settings.clearChatHistoryConfirm'), [
       { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.delete'), style: 'destructive', onPress: clearAllConversations },
+      { text: t('common.delete'), style: 'destructive', onPress: clearChatHistory },
     ]);
-  }, [clearAllConversations, t]);
+  }, [clearChatHistory, t]);
 
   const handleManageMemory = useCallback(() => {
     navigation.navigate('Memory');
@@ -560,7 +560,7 @@ export const SettingsScreen: React.FC = () => {
                 setCompactionModel={setCompactionModel}
                 onManageMemory={handleManageMemory}
                 onManageApprovals={handleManageApprovals}
-                onClearAllConversations={handleClearAllConversations}
+                onClearChatHistory={handleClearChatHistory}
               />
             ) : null}
 

@@ -17,8 +17,8 @@ import {
 import { useChatStore } from '../../src/store/useChatStore';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 import { captureForegroundScenarioMemoryItems } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
-import { deleteConversationMemory } from '../../src/services/memory/core/memoryCapture';
-import { getMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
+import { forgetConversationHistory } from '../../src/services/memory/core/memoryCapture';
+import { forgetMemoryItem, getMemoryItem } from '../../src/services/memory/core/memoryItemsStore';
 import type { Message } from '../../src/types/message';
 
 type JsonObject = Record<string, unknown>;
@@ -332,6 +332,9 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
           // Kavi is one conversation, so a read-only question runs in a throwaway one: memory
           // reads span conversations, and what the question left in memory is deleted with it.
           const questionConversationId = `${session.rootConversationId}-question-${session.turnCount}-${randomUUID()}`;
+          const itemIdsBeforeQuestion = new Set(
+            captureForegroundScenarioMemoryItems().items.map((item) => item.id),
+          );
           const result = await runForegroundScenario({
             provider,
             conversationId: questionConversationId,
@@ -350,7 +353,10 @@ describeLivePilot('AMemGym — exact foreground-chat live pilot', () => {
               },
             ],
           });
-          deleteConversationMemory(questionConversationId);
+          forgetConversationHistory(questionConversationId);
+          for (const item of captureForegroundScenarioMemoryItems().items) {
+            if (!itemIdsBeforeQuestion.has(item.id)) forgetMemoryItem(item.id);
+          }
           useChatStore.setState((current) => ({
             conversations: current.conversations.filter(
               (conversation) => conversation.id !== questionConversationId,

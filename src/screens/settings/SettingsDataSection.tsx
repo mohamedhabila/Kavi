@@ -30,7 +30,7 @@ type SettingsDataSectionProps = {
   onLayout?: (event: any) => void;
   onManageMemory: () => void;
   onManageApprovals: () => void;
-  onClearAllConversations: () => void;
+  onClearChatHistory: () => void;
 };
 
 const MODE_CHIP_ORDER: ReadonlyArray<{
@@ -75,7 +75,7 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
   onLayout,
   onManageMemory,
   onManageApprovals,
-  onClearAllConversations,
+  onClearChatHistory,
 }) => {
   const compactionSummarizerOff = compactionSummarizer === 'off';
   const compactionAutoSelected = !compactionSummarizerOff && compactionProviderId === null;
@@ -270,12 +270,12 @@ export const SettingsDataSection: React.FC<SettingsDataSectionProps> = ({
 
       <TouchableOpacity
         style={styles.dangerBtn}
-        onPress={onClearAllConversations}
+        onPress={onClearChatHistory}
         accessibilityRole="button"
-        accessibilityLabel={t('settings.clearAllData')}
+        accessibilityLabel={t('settings.clearChatHistory')}
       >
         <Trash2 size={18} color={colors.danger} />
-        <Text style={styles.dangerBtnText}>{t('settings.clearAllData')}</Text>
+        <Text style={styles.dangerBtnText}>{t('settings.clearChatHistory')}</Text>
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />

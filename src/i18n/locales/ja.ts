@@ -194,8 +194,6 @@ export const ja: TranslationMap = mergeTranslations(en, {
     noProvider: 'プロバイダーが設定されていません。設定から追加してください。',
     noApiKey: 'このプロバイダーの API キーが設定されていません。',
     noModel: 'モデルが選択されていません。',
-    clearAll: 'すべての会話を消去',
-    clearAllConfirm: 'これにより、すべての会話履歴が完全に削除されます。',
     exportConversation: '会話をエクスポート',
     deleteConversation: '会話を削除',
     searchConversations: '会話を検索…',
@@ -493,7 +491,9 @@ export const ja: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'MCP サーバー URL は http、https、ws、または wss を使用する必要があります。',
     invalidMcpUrlFormat: '有効な MCP サーバー URL を入力してください。',
     data: 'データ',
-    clearAllData: 'すべての会話を消去',
+    clearChatHistory: 'チャット履歴を消去',
+    clearChatHistoryConfirm:
+      'チャット履歴が完全に削除されます。Kavi が覚えているあなたのことは残り、メモリーで確認できます。',
     dataDeletionHint:
       'ここで会話履歴を削除します。長期記憶を削除するには「メモリー」を使用してください。保存された認証情報を削除するには、プロバイダーや連携を削除するか、サービスキー欄を空にしてください。',
     manageMemory: 'メモリーを管理',

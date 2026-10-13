@@ -193,8 +193,6 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     noProvider: '未設定供應商。請前往設定新增一個。',
     noApiKey: '此供應商未設定 API 金鑰。',
     noModel: '未選擇模型。',
-    clearAll: '清除所有對話',
-    clearAllConfirm: '這將永久刪除您所有的對話紀錄。',
     exportConversation: '匯出對話',
     deleteConversation: '刪除對話',
     searchConversations: '搜尋對話…',
@@ -478,7 +476,9 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     invalidMcpUrl: 'MCP 伺服器 URL 必須使用 http、https、ws 或 wss。',
     invalidMcpUrlFormat: '請輸入有效的 MCP 伺服器 URL。',
     data: '資料',
-    clearAllData: '清除所有對話',
+    clearChatHistory: '清除聊天紀錄',
+    clearChatHistoryConfirm:
+      '這會永久刪除你的聊天紀錄。Kavi 記住的關於你的資訊會保留，可在「記憶」中查看。',
     dataDeletionHint:
       '在此清除對話紀錄。使用「記憶」清除長期記憶。刪除供應商和整合，或清空服務金鑰欄位，以移除已儲存的憑證。',
     manageMemory: '管理記憶',

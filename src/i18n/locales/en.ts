@@ -201,8 +201,6 @@ export const en: TranslationMap = {
     noProvider: 'No provider configured. Go to Settings to add one.',
     noApiKey: 'No API key configured for this provider.',
     noModel: 'No model selected.',
-    clearAll: 'Clear All Conversations',
-    clearAllConfirm: 'This will permanently delete all your chat history.',
     exportConversation: 'Export Conversation',
     deleteConversation: 'Delete Conversation',
     searchConversations: 'Search conversations…',
@@ -511,7 +509,9 @@ export const en: TranslationMap = {
     invalidMcpUrl: 'MCP server URL must use http, https, ws, or wss.',
     invalidMcpUrlFormat: 'Please enter a valid URL for the MCP server.',
     data: 'Data',
-    clearAllData: 'Clear All Conversations',
+    clearChatHistory: 'Clear Chat History',
+    clearChatHistoryConfirm:
+      'This permanently deletes your chat history. What Kavi remembers about you stays, and you can review it in Memory.',
     dataDeletionHint:
       'Clear conversation history here. Use Memory to clear durable memories. Delete providers and integrations, or clear service-key fields, to remove saved credentials.',
     manageMemory: 'Manage Memory',
