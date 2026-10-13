@@ -4,7 +4,7 @@ import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/
 import { createAgentRunAbortError } from '../../services/runtimeError';
 import { upsertPendingToolCall } from '../orchestratorToolTranscript';
 import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
-import { noteToolCallsServedBy } from '../../services/llm/support/upstreamToolCallHealth';
+import { noteToolCallsServedBy } from '../../services/llm/support/upstreamHealth';
 import { createModelProjectionPublisher } from './modelTurnProjectionPublisher';
 import type {
   ExecuteAgentControlGraphModelTurnParams,

@@ -3,7 +3,7 @@ import {
   _resetUpstreamToolCallHealthForTests,
   noteToolCallsServedBy,
   settleToolCallOutcome,
-} from '../../../src/services/llm/support/upstreamToolCallHealth';
+} from '../../../src/services/llm/support/upstreamHealth';
 
 // An upstream whose tool calls for this model keep arriving malformed is left out of the
 // next tool requests — through the person's own OpenRouter key, in the request itself.

@@ -3,7 +3,7 @@ import {
   getExcludedUpstreams,
   noteToolCallsServedBy,
   settleToolCallOutcome,
-} from '../../../src/services/llm/support/upstreamToolCallHealth';
+} from '../../../src/services/llm/support/upstreamHealth';
 
 // On OpenRouter one upstream stripped GLM 5.3 Flash's tool arguments and looped every run
 // it served. People bring their own keys, so the app itself routes around an upstream

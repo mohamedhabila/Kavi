@@ -8,7 +8,7 @@ import {
   _resetUpstreamToolCallHealthForTests,
   getExcludedUpstreams,
   settleToolCallOutcome,
-} from '../../src/services/llm/support/upstreamToolCallHealth';
+} from '../../src/services/llm/support/upstreamHealth';
 
 // The upstream that served a model turn is credited or faulted for the tool calls that
 // turn produced, so an upstream that keeps mangling arguments is routed around.

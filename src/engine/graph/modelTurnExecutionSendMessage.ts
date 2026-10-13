@@ -12,7 +12,7 @@ import {
   normalizeOpenAiCompatibleCompletion,
 } from '../../services/llm/core/streaming/metadataBuilder';
 import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
-import { noteToolCallsServedBy } from '../../services/llm/support/upstreamToolCallHealth';
+import { noteToolCallsServedBy } from '../../services/llm/support/upstreamHealth';
 import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,

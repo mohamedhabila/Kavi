@@ -12,7 +12,7 @@ import type {
 } from '../../support/contracts';
 import { normalizeOpenAICompatibleToolCallMessages } from '../../support/toolArgumentReplay';
 import { applyCompatibleReasoningControl } from './reasoning';
-import { getExcludedUpstreams } from '../../support/upstreamToolCallHealth';
+import { getExcludedUpstreams } from '../../support/upstreamHealth';
 
 export async function sendOpenAICompatibleChat(args: {
   baseUrl: string;
@@ -153,7 +153,7 @@ export async function sendOpenAICompatibleChat(args: {
   }
   if (requestTools?.length && isOpenRouterProvider) {
     // Leave out upstreams whose tool calls for this model have recently arrived malformed;
-    // see upstreamToolCallHealth.
+    // see upstreamHealth.
     const excludedUpstreams = getExcludedUpstreams(args.model);
     if (excludedUpstreams.length > 0) {
       body.provider = { ...(body.provider ?? {}), ignore: excludedUpstreams };

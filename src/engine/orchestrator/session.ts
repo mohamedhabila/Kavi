@@ -20,7 +20,7 @@ import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
 import { buildMobileControllerPublishedHandoff } from '../mobileController/publication';
 import { resolveRuntimeExplicitToolSurfaceToolNames } from '../tools/runtimeAvailability';
-import { settleToolCallOutcome } from '../../services/llm/support/upstreamToolCallHealth';
+import { settleToolCallOutcome } from '../../services/llm/support/upstreamHealth';
 
 const logger = createLogger('Orchestrator');
 
