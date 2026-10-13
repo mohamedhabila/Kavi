@@ -11,22 +11,24 @@
 // must not vary with the current turn's tool surface.
 //
 // Derived from the run's own tool list, so it can never advertise a capability the
-// user has not configured.
+// user has not configured, and grouped by each tool's declared contract category, so a
+// new tool is listed by what it is rather than by a hand-kept name list.
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
-import {
-  getToolManagerCategoryForToolName,
-  mapDeferredCategoryToToolCatalogCategory,
-} from '../tools/toolManagerCategories';
+import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 
-/** Domains listed before the index is truncated. */
-export const MAX_CAPABILITY_INDEX_CATEGORIES = 14;
+/**
+ * Domains listed before the index is truncated. The built-in contracts declare about 30
+ * categories and MCP and skill tools add one each, so a full run fits; the cap only bounds
+ * the prompt if the vocabulary grows.
+ */
+export const MAX_CAPABILITY_INDEX_CATEGORIES = 40;
 /** Tool names shown per domain; the rest are summarized as a count. */
 export const MAX_CAPABILITY_INDEX_TOOLS_PER_CATEGORY = 2;
 
-const EXCLUDED_CATEGORIES = new Set(['other', 'tools']);
+const EXCLUDED_CATEGORIES = new Set(['other']);
 const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
 
 /**
@@ -52,21 +54,17 @@ function collectAvailableToolsByCategory(
       continue;
     }
 
-    const managerCategory = getToolManagerCategoryForToolName(toolName);
-    if (EXCLUDED_CATEGORIES.has(managerCategory)) {
-      continue;
-    }
-    const catalogCategory = mapDeferredCategoryToToolCatalogCategory(managerCategory);
-    if (!catalogCategory) {
+    const category = inferToolCapabilityDescriptor(tool).category;
+    if (!category || EXCLUDED_CATEGORIES.has(category)) {
       continue;
     }
 
-    const existing = byCategory.get(catalogCategory);
+    const existing = byCategory.get(category);
     if (existing) {
       existing.push(toolName);
       continue;
     }
-    byCategory.set(catalogCategory, [toolName]);
+    byCategory.set(category, [toolName]);
   }
 
   return byCategory;

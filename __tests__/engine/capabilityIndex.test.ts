@@ -19,12 +19,28 @@ describe('buildCapabilityIndexPromptSection', () => {
   it('stays inside the prompt budget it is allowed to spend', () => {
     const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
 
-    // Measured against the full registry — the worst case. It sits in the cacheable
-    // prefix, so it is paid once per prefix rather than per turn. The ceiling exists
-    // to catch unbounded growth.
-    expect(estimateTokens(section)).toBeLessThanOrEqual(300);
+    // Measured against the full registry — the worst case (469 tokens when every category
+    // is listed). It sits in the cacheable prefix, so it is paid once per prefix rather
+    // than per turn. The ceiling exists to catch unbounded growth.
+    expect(estimateTokens(section)).toBeLessThanOrEqual(500);
     const categoryLines = section.split('\n').filter((line) => line.startsWith('- '));
     expect(categoryLines.length).toBeLessThanOrEqual(MAX_CAPABILITY_INDEX_CATEGORIES + 1);
+  });
+
+  it('lists every category the run has, grouped by contract category', () => {
+    // A 14-line cap over alphabetically sorted categories used to drop web, ssh, sessions
+    // and the workspace file tools from every full run.
+    const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
+    const categories = section
+      .split('\n')
+      .filter((line) => line.startsWith('- '))
+      .map((line) => line.slice(2).split(':')[0]);
+
+    expect(categories).toEqual(
+      expect.arrayContaining(['web', 'ssh', 'sessions', 'workspace_files', 'calendar', 'contacts']),
+    );
+    expect(section).not.toContain('further categories');
+    expect(section).toContain('- web: web_search, web_fetch');
   });
 
   it('never advertises a capability that is not in this run’s registry', () => {
