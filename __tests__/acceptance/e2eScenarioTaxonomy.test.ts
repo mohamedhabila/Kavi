@@ -49,9 +49,9 @@ const PRODUCT_CONTINUITY_SCENARIO_IDS = new Set([
 
 describe('E2E scenario taxonomy', () => {
   it('covers all registered scenarios without duplicate ids', () => {
-    expect(E2E_AGENT_SCENARIOS).toHaveLength(65);
+    expect(E2E_AGENT_SCENARIOS).toHaveLength(68);
     expect(DELEGATION_E2E_SCENARIOS).toHaveLength(2);
-    expect(ALL_SCENARIOS).toHaveLength(67);
+    expect(ALL_SCENARIOS).toHaveLength(70);
     expect(new Set(ALL_SCENARIOS.map((scenario) => scenario.id)).size).toBe(ALL_SCENARIOS.length);
   });
 

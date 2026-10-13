@@ -571,6 +571,30 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
       'outcome_validators',
     ],
   },
+  'long-task-recover-wrong-folder': {
+    benchmarkFamilies: ['kavi-long-task', 'gaia-adapted'],
+    assessmentDimensions: [
+      'task_completion',
+      'task_understanding',
+      'tool_usage',
+      'token_efficiency',
+      'outcome_validators',
+    ],
+  },
+  'long-task-exact-ledger': {
+    benchmarkFamilies: ['kavi-long-task', 'agentbench-adapted'],
+    assessmentDimensions: [
+      'task_completion',
+      'tool_usage',
+      'tool_discovery',
+      'token_efficiency',
+      'outcome_validators',
+    ],
+  },
+  'long-task-chained-investigation': {
+    benchmarkFamilies: ['kavi-long-task', 'gaia-adapted'],
+    assessmentDimensions: ['task_completion', 'task_understanding', 'token_efficiency'],
+  },
 };
 
 const DEFAULT_REGISTRATION: E2EScenarioBenchmarkRegistration = {

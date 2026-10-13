@@ -47,7 +47,7 @@ export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-13.long-tasks-v5';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-13.long-tasks-v6';
 
 export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 
@@ -121,6 +121,9 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'long-task-resume-interrupted': 250_000,
   'long-task-plan-revision': 350_000,
   'long-task-feedback-triage': 600_000,
+  'long-task-recover-wrong-folder': 400_000,
+  'long-task-exact-ledger': 250_000,
+  'long-task-chained-investigation': 300_000,
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
@@ -133,6 +136,9 @@ export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = ne
   'long-task-resume-interrupted',
   'long-task-plan-revision',
   'long-task-feedback-triage',
+  'long-task-recover-wrong-folder',
+  'long-task-exact-ledger',
+  'long-task-chained-investigation',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */
