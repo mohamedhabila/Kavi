@@ -26,6 +26,16 @@ export const CALENDAR_LIST_TOOL: ToolDefinition = {
   }),
 };
 
+/**
+ * A time the source gives with a zone keeps it: the model copies 09:15 UTC as 09:15Z instead
+ * of converting it to device time itself, which is where cross-timezone times went wrong.
+ */
+const CALENDAR_TIME_FORMAT =
+  'Times are ISO 8601. A plan in the device timezone has no offset (2026-03-20T10:00:00). A time ' +
+  "the source states in UTC or in another place's timezone keeps that zone: copy it as written " +
+  'with its offset or Z (a 09:15 UTC departure is 2026-05-04T09:15:00Z) and never convert it ' +
+  'yourself; the calendar shows it in local time.';
+
 export const CALENDAR_EVENTS_TOOL: ToolDefinition = {
   name: 'calendar_events',
   description:
@@ -57,20 +67,20 @@ export const CALENDAR_EVENTS_TOOL: ToolDefinition = {
 
 export const CALENDAR_CREATE_TOOL: ToolDefinition = {
   name: 'calendar_create_event',
-  description:
-    'Create a new calendar event. Use ISO 8601 dates (e.g. 2025-03-20T10:00:00). endDate must be after startDate. Pass a calendarId when targeting a specific calendar.',
+  description: `Create a new calendar event. ${CALENDAR_TIME_FORMAT} endDate must be after startDate. Pass a calendarId when targeting a specific calendar.`,
   input_schema: {
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Event title' },
       startDate: {
         type: 'string',
-        description: 'Start date/time in ISO 8601 (e.g. 2025-03-20T10:00:00)',
+        description:
+          'Start date-time in ISO 8601: offset-less for device time, or with the zone the source gives',
       },
       endDate: {
         type: 'string',
         description:
-          'End date/time in ISO 8601. Must be after startDate. For 1-hour events, add 1 hour to startDate.',
+          'End date-time in ISO 8601, in the same form as startDate and after it. For a 1-hour event, add 1 hour to startDate.',
       },
       location: { type: 'string', description: 'Event location (optional)' },
       notes: { type: 'string', description: 'Event notes (optional)' },
@@ -102,8 +112,7 @@ export const CALENDAR_CREATE_TOOL: ToolDefinition = {
 
 export const CALENDAR_UPDATE_TOOL: ToolDefinition = {
   name: 'calendar_update_event',
-  description:
-    'Update an existing calendar event by id. Provide only fields that should change. Use ISO 8601 dates when changing startDate or endDate.',
+  description: `Update an existing calendar event by id. Provide only fields that should change. ${CALENDAR_TIME_FORMAT}`,
   input_schema: {
     type: 'object',
     properties: {
