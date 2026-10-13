@@ -189,7 +189,7 @@ Every full private split independently covers all KLAE families, the four
 mode transitions derived from actual turns, positive/negative/mixed controls,
 and short (2-3 turns), medium (4-15 turns), and long (16+ turns) case histories.
 Lifecycle coverage is causal: a relevant user interaction must occur before
-and after a new conversation, background, reboot, or provider-change boundary;
+and after a context-reset, background, reboot, or provider-change boundary;
 kill/relaunch and offline/online windows must be exercised end to end. Each
 opaque longitudinal persona owns exactly one set of cases, has at least 30
 strictly chronological interactions, and spans at least four non-overlapping
@@ -637,7 +637,7 @@ references explicitly based at `retention_root`; each path includes its run id.
 The uploaded artifact includes that retention tree. It may contain structural
 redacted traces, but never raw or private traces.
 
-The current public trace contract is `e2e-redacted-trace-v3`. Each turn is a
+The current public trace contract is `e2e-redacted-trace-v4`. Each turn is a
 closed projection of the immutable run result: actual route and mode,
 completion states, hashed user and final-response identities, bounded AgentRun
 counters, memory deltas and persistence-receipt counts, native state
@@ -649,7 +649,7 @@ permission to publish private input.
 
 Raw scenario evidence is local and opt-in. Set `E2E_PRIVATE_EVIDENCE_DIR` to a
 directory that resolves inside `.private/evals/` to write one unique
-`e2e-private-scenario-evidence-v9` file per attempt. The private file retains
+`e2e-private-scenario-evidence-v10` file per attempt. The private file retains
 requested turns and user-selected modes, final responses, exact memory and
 receipt evidence, the per-turn memory prompt builds used by memory-selection rubrics,
 tool and native results, graph state, and verified relaunch boundaries for

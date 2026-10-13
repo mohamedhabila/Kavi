@@ -3,13 +3,7 @@ import { catchUpMemoryCapture } from '../../services/memory/core/memoryCapture';
 import { cancelMemoryExtraction } from '../../services/memory/core/memoryExtractionWorker';
 import { flushChatStorePersistenceNow } from '../../store/chatStorePersistence';
 import { useChatStore } from '../../store/useChatStore';
-import { resolveConversationPersonaForMode } from '../../engine/graph/conversation/modeTransitions';
-import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
-import type { ConversationMode } from '../../types/conversation';
-import type {
-  ForegroundScenarioLifecycleSnapshot,
-  ForegroundScenarioMemoryScope,
-} from './foregroundScenarioDriverTypes';
+import type { ForegroundScenarioLifecycleSnapshot } from './foregroundScenarioDriverTypes';
 import { captureForegroundScenarioMemoryItems } from './foregroundScenarioMemoryItemsEvidence';
 
 function durableMemoryIdentity(): string {
@@ -90,72 +84,39 @@ export async function relaunchForegroundScenarioApp(params: {
   };
 }
 
-export function startNewForegroundScenarioConversation(params: {
-  currentConversationId: string;
-  providerId: string;
-  model: string;
-  systemPrompt: string;
-  mode: ConversationMode;
-}): Readonly<{
-  conversationId: string;
+/**
+ * The user starts over in the one conversation (/new or /reset): its messages move to the
+ * transcript archive, so the next turn's request carries none of them and only memory can
+ * bring them back. The conversation and durable memory are unchanged.
+ */
+export function resetForegroundScenarioContext(params: { conversationId: string }): Readonly<{
   lifecycle: ForegroundScenarioLifecycleSnapshot;
-  memoryScope: ForegroundScenarioMemoryScope;
 }> {
-  const store = useChatStore.getState();
-  const previousConversation = store.conversations.find(
-    (candidate) => candidate.id === params.currentConversationId,
-  );
-  if (!previousConversation) {
-    throw new Error(`Conversation ${params.currentConversationId} is unavailable.`);
-  }
-  const previousConversationIdentity = JSON.stringify(previousConversation);
+  const before = useChatStore
+    .getState()
+    .conversations.find((candidate) => candidate.id === params.conversationId);
+  if (!before) throw new Error(`Conversation ${params.conversationId} is unavailable.`);
+  const previousLiveMessageCount = before.messages.length;
   const memoryStateBefore = durableMemoryIdentity();
-  const previousConversationMessageCount = previousConversation.messages.length;
-  const conversationId = store.createConversation(
-    params.providerId,
-    params.systemPrompt,
-    params.model,
-    {
-      mode: params.mode,
-      personaId: resolveConversationPersonaForMode({ nextMode: params.mode }),
-    },
-  );
-  if (conversationId === params.currentConversationId) {
-    throw new Error('New-conversation boundary reused the previous conversation identity.');
+  if (!useChatStore.getState().resetConversationContext(params.conversationId)) {
+    throw new Error('Context reset found no messages to archive.');
   }
-  const createdConversation = useChatStore
+  const after = useChatStore
     .getState()
-    .conversations.find((candidate) => candidate.id === conversationId);
-  if (!createdConversation || createdConversation.messages.length !== 0) {
-    throw new Error('New-conversation boundary did not create an empty product conversation.');
+    .conversations.find((candidate) => candidate.id === params.conversationId);
+  if (!after || after.messages.length !== 0) {
+    throw new Error('Context reset left messages in the conversation.');
   }
-  const preservedPreviousConversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === params.currentConversationId);
-  if (
-    !preservedPreviousConversation ||
-    JSON.stringify(preservedPreviousConversation) !== previousConversationIdentity
-  ) {
-    throw new Error('New-conversation boundary changed the previous product conversation.');
-  }
-  const memoryScope = {
-    memoryConversationId: resolveConversationWorkspaceTarget({
-      conversationId,
-    }).workspaceConversationId,
-    sourceThreadId: conversationId,
-  };
   if (durableMemoryIdentity() !== memoryStateBefore) {
-    throw new Error('Durable memory state changed while creating a fresh conversation.');
+    throw new Error('Durable memory state changed while resetting the context.');
   }
   return {
-    conversationId,
-    memoryScope,
     lifecycle: {
-      boundary: 'new_conversation',
-      chatStore: 'fresh_conversation',
+      boundary: 'context_reset',
+      chatStore: 'context_archived',
       memoryStore: 'shared_global',
-      previousConversationMessageCount,
-      newConversationInitialMessageCount: 0,
+      previousLiveMessageCount,
+      liveMessageCountAfter: 0,
     },
   };
 }

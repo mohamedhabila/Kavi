@@ -292,7 +292,7 @@ function validateScenarioInvariant(config: E2EPairedInvariantConfig['scenarioInp
     }
     if (
       turn.lifecycleBefore !== null &&
-      !['app_relaunch', 'new_conversation'].includes(turn.lifecycleBefore)
+      !['app_relaunch', 'context_reset'].includes(turn.lifecycleBefore)
     ) {
       throw new Error(
         `invariantConfig.scenarioInput.userTurns[${index}].lifecycleBefore is unsupported.`,

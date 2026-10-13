@@ -523,32 +523,32 @@ describe('turn stage-attribution rubrics', () => {
   it('requires code-owned proof that a new conversation began without raw history', () => {
     const freshTurn = buildTurn({
       lifecycleBefore: {
-        boundary: 'new_conversation',
-        chatStore: 'fresh_conversation',
+        boundary: 'context_reset',
+        chatStore: 'context_archived',
         memoryStore: 'shared_global',
-        previousConversationMessageCount: 4,
-        newConversationInitialMessageCount: 0,
+        previousLiveMessageCount: 4,
+        liveMessageCountAfter: 0,
       },
     });
     expect(
       evaluateE2ERubric(buildResult(freshTurn), {
         kind: 'turn_lifecycle_boundary',
         turnIndex: 1,
-        boundary: 'new_conversation',
+        boundary: 'context_reset',
       }),
     ).toMatchObject({ passed: true });
 
     const pollutedTurn = buildTurn({
       lifecycleBefore: {
         ...freshTurn.lifecycleBefore!,
-        newConversationInitialMessageCount: 1,
+        liveMessageCountAfter: 1,
       } as never,
     });
     expect(
       evaluateE2ERubric(buildResult(pollutedTurn), {
         kind: 'turn_lifecycle_boundary',
         turnIndex: 1,
-        boundary: 'new_conversation',
+        boundary: 'context_reset',
       }),
     ).toMatchObject({ passed: false });
   });

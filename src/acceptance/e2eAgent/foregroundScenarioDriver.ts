@@ -17,7 +17,7 @@ import {
 } from './e2eNativeMobileFixtures';
 import {
   relaunchForegroundScenarioApp,
-  startNewForegroundScenarioConversation,
+  resetForegroundScenarioContext,
 } from './foregroundScenarioLifecycle';
 import {
   beginForegroundScenarioMemoryPromptCapture,
@@ -178,17 +178,10 @@ async function runScenarioIsolated(
           scenarioDeadline,
         );
         lifecycleBefore = transition.lifecycle;
-      } else if (turn.lifecycleBefore === 'new_conversation') {
-        const transition = startNewForegroundScenarioConversation({
-          currentConversationId,
-          providerId: input.provider.id,
-          model: input.provider.model,
-          systemPrompt: input.systemPrompt,
-          mode: turn.selectedMode ?? input.defaultMode,
-        });
-        currentConversationId = transition.conversationId;
-        memoryScope = transition.memoryScope;
-        lifecycleBefore = transition.lifecycle;
+      } else if (turn.lifecycleBefore === 'context_reset') {
+        lifecycleBefore = resetForegroundScenarioContext({
+          conversationId: currentConversationId,
+        }).lifecycle;
       }
       if (lifecycleBefore) runtime = createForegroundScenarioRuntime(input);
       const memoryPromptCapture = beginForegroundScenarioMemoryPromptCapture({

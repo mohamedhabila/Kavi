@@ -6,7 +6,7 @@ jest.mock('expo-sqlite', () => {
 import { STORAGE_KEYS } from '../../src/constants/storage';
 import {
   relaunchForegroundScenarioApp,
-  startNewForegroundScenarioConversation,
+  resetForegroundScenarioContext,
 } from '../../src/acceptance/e2eAgent/foregroundScenarioLifecycle';
 import { captureForegroundScenarioMemoryItems } from '../../src/acceptance/e2eAgent/foregroundScenarioMemoryItemsEvidence';
 import { addMemoryItem, searchMemoryItems } from '../../src/services/memory/core/memoryItemsStore';
@@ -141,28 +141,21 @@ it('rehydrates the production chat store, reopens memory and catches up on the c
   expect(readPersistedConversationIds()).toEqual(['relaunch-conversation']);
 });
 
-it('creates a fresh product conversation while preserving global memory', () => {
+it('resets the context in the same conversation while preserving global memory', () => {
   addMemoryItem({
     text: 'Default meeting duration is 45 minutes',
     conversationId: 'relaunch-conversation',
     now: 13,
   });
 
-  const transition = startNewForegroundScenarioConversation({
-    currentConversationId: 'relaunch-conversation',
-    providerId: 'provider-relaunch',
-    model: 'model-relaunch',
-    systemPrompt: 'Be helpful.',
-    mode: 'chitchat',
-  });
+  const transition = resetForegroundScenarioContext({ conversationId: 'relaunch-conversation' });
 
-  expect(transition.conversationId).not.toBe('relaunch-conversation');
   expect(transition.lifecycle).toEqual({
-    boundary: 'new_conversation',
-    chatStore: 'fresh_conversation',
+    boundary: 'context_reset',
+    chatStore: 'context_archived',
     memoryStore: 'shared_global',
-    previousConversationMessageCount: 2,
-    newConversationInitialMessageCount: 0,
+    previousLiveMessageCount: 2,
+    liveMessageCountAfter: 0,
   });
   expect(
     searchMemoryItems({
@@ -171,15 +164,12 @@ it('creates a fresh product conversation while preserving global memory', () => 
       includeSensitive: false,
     }).map((item) => item.text),
   ).toEqual(['Default meeting duration is 45 minutes']);
-  expect(
-    useChatStore
-      .getState()
-      .conversations.find((conversation) => conversation.id === transition.conversationId)
-      ?.messages,
-  ).toEqual([]);
+  expect(useChatStore.getState().conversations.map((conversation) => conversation.id)).toEqual([
+    'relaunch-conversation',
+  ]);
   expect(
     useChatStore
       .getState()
       .conversations.find((conversation) => conversation.id === 'relaunch-conversation')?.messages,
-  ).toHaveLength(2);
+  ).toEqual([]);
 });

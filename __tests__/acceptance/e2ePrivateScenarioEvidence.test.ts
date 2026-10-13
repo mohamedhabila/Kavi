@@ -145,7 +145,7 @@ describe('private E2E scenario evidence', () => {
     });
     const serialized = JSON.stringify(evidence);
 
-    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v9');
+    expect(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION).toBe('e2e-private-scenario-evidence-v10');
     expect(evidence.schemaVersion).toBe(E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION);
     expect(evidence.provenance).toEqual(PRIVATE_PROVENANCE);
     expect(evidence.scenario.requestedTurns).toEqual([

@@ -25,7 +25,7 @@ const NEUTRAL_RUBRICS: ReadonlyArray<E2ERubric> = [
   ...completedTurnRubrics(3, 'chitchat'),
   { kind: 'turn_native_invocation_count', turnIndex: 0, expectedCount: 0 },
   { kind: 'turn_native_invocation_count', turnIndex: 1, expectedCount: 0 },
-  { kind: 'turn_lifecycle_boundary', turnIndex: 2, boundary: 'new_conversation' },
+  { kind: 'turn_lifecycle_boundary', turnIndex: 2, boundary: 'context_reset' },
   { kind: 'native_fixture_state', path: 'calendar.updatedEventCount', expectedValue: '0' },
   {
     kind: 'turn_native_invocation_count',
@@ -101,9 +101,9 @@ export const PAIRED_CAUSAL_GLOBAL_PREFERENCE_SCENARIO: E2EScenario = {
   conversationId: 'e2e-paired-causal-global-preference',
   contentClass: 'synthetic_public',
   execution: { initialMode: 'chitchat', route: 'production_auto' },
-  threadTitle: 'Fresh conversation preference use',
+  threadTitle: 'Preference use after a context reset',
   prompt:
-    'Evaluate whether a naturally corrected global preference can support a fresh conversation without raw-history leakage.',
+    'Evaluate whether a naturally corrected global preference still holds after the context resets, without raw-history leakage.',
   userTurns: [
     {
       content:
@@ -113,7 +113,7 @@ export const PAIRED_CAUSAL_GLOBAL_PREFERENCE_SCENARIO: E2EScenario = {
       content: 'Actually, make my usual design-review length 45 minutes from now on, not 30.',
     },
     {
-      lifecycleBefore: 'new_conversation',
+      lifecycleBefore: 'context_reset',
       selectedMode: 'agentic',
       content: `Create one calendar event titled "${EVENT_TITLE}" in my modifiable calendar starting at 2026-07-23T14:00:00Z. Use my usual design-review length. If you cannot determine that duration, do not guess or create anything; ask me for it. Verify any event you create and do not create duplicates.`,
     },

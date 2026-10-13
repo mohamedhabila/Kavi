@@ -78,10 +78,10 @@ export function validateE2EPairedCausalMemoryDefinition(
   if (
     !neutralRubrics.some(
       (rubric) =>
-        rubric.kind === 'turn_lifecycle_boundary' && rubric.boundary === 'new_conversation',
+        rubric.kind === 'turn_lifecycle_boundary' && rubric.boundary === 'context_reset',
     )
   ) {
-    throw new Error('pairedEvaluation neutral guards must prove a fresh-conversation boundary.');
+    throw new Error('pairedEvaluation neutral guards must prove a context-reset boundary.');
   }
   if (!causalRubrics.some((rubric) => rubric.kind === 'turn_memory_selection')) {
     throw new Error('pairedEvaluation causal rubrics must require attributed memory retrieval.');

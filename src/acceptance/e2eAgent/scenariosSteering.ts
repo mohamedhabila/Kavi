@@ -12,7 +12,7 @@ const STEER_SUBJECT = 'e2e-steer-sister';
 const STEER_PREDICATE = 'home_city';
 const STEER_VALUE = 'PORTO-E2E-7';
 
-/** Steer a reading task with a fact to remember, then recall it in a new conversation. */
+/** Steer a reading task with a fact to remember, then recall it after the context resets. */
 export const STEER_MIDRUN_MEMORY_SCENARIO: E2EScenario = {
   id: 'steer-midrun-memory',
   conversationId: 'e2e-steer-midrun-memory',
@@ -34,7 +34,7 @@ export const STEER_MIDRUN_MEMORY_SCENARIO: E2EScenario = {
       },
     },
     {
-      lifecycleBefore: 'new_conversation',
+      lifecycleBefore: 'context_reset',
       content: `What is the \`${STEER_PREDICATE}\` of \`${STEER_SUBJECT}\`?`,
     },
   ],

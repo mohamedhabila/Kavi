@@ -65,7 +65,7 @@ export type E2ERedactedTurnTrace = {
 };
 
 export type E2EScenarioTraceSummary = {
-  schemaVersion: 'e2e-redacted-trace-v3';
+  schemaVersion: 'e2e-redacted-trace-v4';
   fixtureId: string;
   conversationIdHash: E2ERedactedHash;
   completed: boolean;
@@ -119,7 +119,7 @@ export function buildE2EScenarioTraceSummary(params: {
   const { result } = params;
   const lastGraph = result.graphSnapshots[result.graphSnapshots.length - 1];
   return {
-    schemaVersion: 'e2e-redacted-trace-v3',
+    schemaVersion: 'e2e-redacted-trace-v4',
     fixtureId: result.fixtureId,
     conversationIdHash: hashString(result.conversationId),
     completed: result.completed,

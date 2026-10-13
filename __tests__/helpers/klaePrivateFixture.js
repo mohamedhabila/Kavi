@@ -103,7 +103,7 @@ function buildLongSteps(clock) {
 
   user('forced_chitchat');
   user('forced_chitchat');
-  lifecycle('new_conversation');
+  lifecycle('context_reset');
   user('forced_agentic');
   lifecycle('app_background');
   user('forced_chitchat');

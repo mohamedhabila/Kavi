@@ -12,7 +12,7 @@ import {
 import type { E2EScenario, E2EScenarioResult, E2EScenarioTurnTrace } from './types';
 
 export const E2E_PRIVATE_EVIDENCE_DIR_ENV = 'E2E_PRIVATE_EVIDENCE_DIR';
-export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v9';
+export const E2E_PRIVATE_EVIDENCE_SCHEMA_VERSION = 'e2e-private-scenario-evidence-v10';
 
 export type E2EPrivateEvidenceProvenance = Readonly<{
   app: E2EAppSourceRevision;

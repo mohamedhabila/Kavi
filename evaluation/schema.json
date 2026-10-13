@@ -696,7 +696,7 @@
         "event": {
           "type": "string",
           "enum": [
-            "new_conversation",
+            "context_reset",
             "app_background",
             "app_kill",
             "app_relaunch",

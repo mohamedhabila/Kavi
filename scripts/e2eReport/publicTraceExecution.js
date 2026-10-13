@@ -50,26 +50,22 @@ function projectLifecycleBoundaryEvidence(value) {
       memoryStore: 'reopened',
     };
   }
-  const previousConversationMessageCount = nonNegativeInteger(
-    source.previousConversationMessageCount,
-  );
-  const newConversationInitialMessageCount = nonNegativeInteger(
-    source.newConversationInitialMessageCount,
-  );
+  const previousLiveMessageCount = nonNegativeInteger(source.previousLiveMessageCount);
+  const liveMessageCountAfter = nonNegativeInteger(source.liveMessageCountAfter);
   if (
-    source.boundary === 'new_conversation' &&
-    source.chatStore === 'fresh_conversation' &&
+    source.boundary === 'context_reset' &&
+    source.chatStore === 'context_archived' &&
     source.memoryStore === 'shared_global' &&
-    previousConversationMessageCount !== null &&
-    previousConversationMessageCount > 0 &&
-    newConversationInitialMessageCount === 0
+    previousLiveMessageCount !== null &&
+    previousLiveMessageCount > 0 &&
+    liveMessageCountAfter === 0
   ) {
     return {
-      boundary: 'new_conversation',
-      chatStore: 'fresh_conversation',
+      boundary: 'context_reset',
+      chatStore: 'context_archived',
       memoryStore: 'shared_global',
-      previousConversationMessageCount,
-      newConversationInitialMessageCount,
+      previousLiveMessageCount,
+      liveMessageCountAfter,
     };
   }
   return undefined;

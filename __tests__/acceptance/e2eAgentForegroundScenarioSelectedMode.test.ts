@@ -200,18 +200,18 @@ describe('foreground scenario selected mode and outer deadline', () => {
         {
           content: 'What do you remember?',
           route: 'production_auto',
-          lifecycleBefore: 'new_conversation',
+          lifecycleBefore: 'context_reset',
         },
       ],
     });
 
     expect(userMessageCounts).toEqual([1, 1]);
     expect(result.turns[1]?.lifecycleBefore).toEqual({
-      boundary: 'new_conversation',
-      chatStore: 'fresh_conversation',
+      boundary: 'context_reset',
+      chatStore: 'context_archived',
       memoryStore: 'shared_global',
-      previousConversationMessageCount: 2,
-      newConversationInitialMessageCount: 0,
+      previousLiveMessageCount: 2,
+      liveMessageCountAfter: 0,
     });
     expect(
       result.finalConversation.messages.some((message) =>

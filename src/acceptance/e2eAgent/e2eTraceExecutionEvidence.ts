@@ -175,19 +175,19 @@ export function buildLifecycleBoundaryEvidence(
     };
   }
   if (
-    value.boundary === 'new_conversation' &&
-    value.chatStore === 'fresh_conversation' &&
+    value.boundary === 'context_reset' &&
+    value.chatStore === 'context_archived' &&
     value.memoryStore === 'shared_global' &&
-    Number.isSafeInteger(value.previousConversationMessageCount) &&
-    value.previousConversationMessageCount > 0 &&
-    value.newConversationInitialMessageCount === 0
+    Number.isSafeInteger(value.previousLiveMessageCount) &&
+    value.previousLiveMessageCount > 0 &&
+    value.liveMessageCountAfter === 0
   ) {
     return {
-      boundary: 'new_conversation',
-      chatStore: 'fresh_conversation',
+      boundary: 'context_reset',
+      chatStore: 'context_archived',
       memoryStore: 'shared_global',
-      previousConversationMessageCount: value.previousConversationMessageCount,
-      newConversationInitialMessageCount: 0,
+      previousLiveMessageCount: value.previousLiveMessageCount,
+      liveMessageCountAfter: 0,
     };
   }
   throw new Error('Unsupported E2E lifecycle boundary evidence.');

@@ -63,7 +63,7 @@ export function writeRetainedScenarioTraceArtifact(params: {
   const relativePath = posix.join(params.retentionRunId, TRACE_ARTIFACT_DIR_NAME, filename);
   const path = join(traceDir, filename);
   const artifact = {
-    schemaVersion: 'e2e-redacted-trace-v3',
+    schemaVersion: 'e2e-redacted-trace-v4',
     traceId: `${sanitizeTraceFileName(params.generatedAt)}:${params.fixtureId}`,
     generatedAt: params.generatedAt,
     retentionReason: params.retentionReason,

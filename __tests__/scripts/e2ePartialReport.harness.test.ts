@@ -139,7 +139,7 @@ describe('current evaluation partial report contract', () => {
         entries: [
           {
             ...entry,
-            trace: { schemaVersion: 'e2e-redacted-trace-v3', privatePayload: 'not-a-trace' },
+            trace: { schemaVersion: 'e2e-redacted-trace-v4', privatePayload: 'not-a-trace' },
           },
         ],
       }),

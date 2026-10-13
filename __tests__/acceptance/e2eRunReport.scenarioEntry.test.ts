@@ -99,7 +99,7 @@ describe('e2eRunReport scenario entries', () => {
       weakPatternRubricCount: 0,
     });
     expect(entry.trace).toMatchObject({
-      schemaVersion: 'e2e-redacted-trace-v3',
+      schemaVersion: 'e2e-redacted-trace-v4',
       fixtureId: 'file-write-read',
       toolCallCount: 1,
       graphStatus: 'finalized',

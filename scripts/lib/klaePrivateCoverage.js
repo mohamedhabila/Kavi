@@ -10,7 +10,7 @@ const REQUIRED_CONTROL_KINDS = Object.freeze(['positive', 'negative', 'mixed']);
 const REQUIRED_HISTORY_BANDS = Object.freeze(['short', 'medium', 'long']);
 const REQUIRED_LIFECYCLE_BANDS = Object.freeze([
   'immediate_next_turn',
-  'new_conversation',
+  'context_reset',
   'background',
   'kill_relaunch',
   'reboot',
@@ -124,7 +124,7 @@ function lifecycleBands(caseEntry) {
     }
   }
 
-  if (hasUserBeforeAndAfter(steps, 'new_conversation')) bands.add('new_conversation');
+  if (hasUserBeforeAndAfter(steps, 'context_reset')) bands.add('context_reset');
   if (hasUserBeforeAndAfter(steps, 'app_background')) bands.add('background');
   if (hasUserBeforeAndAfter(steps, 'device_reboot')) bands.add('reboot');
   if (hasUserBeforeAndAfter(steps, 'provider_change')) bands.add('provider_change');

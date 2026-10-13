@@ -336,10 +336,10 @@
           "event": "app_relaunch"
         },
         {
-          "id": "new-chat",
+          "id": "context-reset",
           "kind": "lifecycle_event",
           "at": "2026-07-02T08:01:00.000Z",
-          "event": "new_conversation"
+          "event": "context_reset"
         },
         {
           "id": "draft-emergency-message",

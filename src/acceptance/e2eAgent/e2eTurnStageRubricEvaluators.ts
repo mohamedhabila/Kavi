@@ -132,12 +132,12 @@ export function evaluateE2ETurnStageRubric(
       const observed =
         lifecycle?.boundary === 'app_relaunch'
           ? lifecycle.chatStore === 'rehydrated' && lifecycle.memoryStore === 'reopened'
-          : lifecycle?.boundary === 'new_conversation'
-            ? lifecycle.chatStore === 'fresh_conversation' &&
+          : lifecycle?.boundary === 'context_reset'
+            ? lifecycle.chatStore === 'context_archived' &&
               lifecycle.memoryStore === 'shared_global' &&
-              Number.isSafeInteger(lifecycle.previousConversationMessageCount) &&
-              lifecycle.previousConversationMessageCount > 0 &&
-              lifecycle.newConversationInitialMessageCount === 0
+              Number.isSafeInteger(lifecycle.previousLiveMessageCount) &&
+              lifecycle.previousLiveMessageCount > 0 &&
+              lifecycle.liveMessageCountAfter === 0
             : false;
       if (!lifecycle || lifecycle.boundary !== rubric.boundary || !observed) {
         return {

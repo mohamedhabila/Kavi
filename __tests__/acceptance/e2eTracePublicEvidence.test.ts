@@ -272,11 +272,11 @@ describe('public immutable E2E evidence projection', () => {
       lifecycleBefore: E2EScenarioResult['turnTraces'][number]['lifecycleBefore'];
     };
     turn.lifecycleBefore = {
-      boundary: 'new_conversation',
-      chatStore: 'fresh_conversation',
+      boundary: 'context_reset',
+      chatStore: 'context_archived',
       memoryStore: 'shared_global',
-      previousConversationMessageCount: 2,
-      newConversationInitialMessageCount: 0,
+      previousLiveMessageCount: 2,
+      liveMessageCountAfter: 0,
     };
 
     const trace = buildE2EScenarioTraceSummary({ result });
@@ -286,7 +286,7 @@ describe('public immutable E2E evidence projection', () => {
     );
 
     const polluted = JSON.parse(JSON.stringify(trace));
-    polluted.turns[0].lifecycleBefore.newConversationInitialMessageCount = 1;
+    polluted.turns[0].lifecycleBefore.liveMessageCountAfter = 1;
     expect(projectPublicRedactedTrace(polluted)).toBeNull();
   });
 

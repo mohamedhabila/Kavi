@@ -18,7 +18,7 @@ export type ForegroundScenarioRouteDirective =
   | 'forced_chitchat'
   | 'forced_agentic';
 
-export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'new_conversation';
+export type ForegroundScenarioLifecycleBoundary = 'app_relaunch' | 'context_reset';
 
 /** The conversation whose memory a scenario turn reads and writes, and its chat thread. */
 export type ForegroundScenarioMemoryScope = Readonly<{
@@ -33,11 +33,11 @@ export type ForegroundScenarioLifecycleSnapshot =
       memoryStore: 'reopened';
     }>
   | Readonly<{
-      boundary: 'new_conversation';
-      chatStore: 'fresh_conversation';
+      boundary: 'context_reset';
+      chatStore: 'context_archived';
       memoryStore: 'shared_global';
-      previousConversationMessageCount: number;
-      newConversationInitialMessageCount: 0;
+      previousLiveMessageCount: number;
+      liveMessageCountAfter: 0;
     }>;
 
 /**

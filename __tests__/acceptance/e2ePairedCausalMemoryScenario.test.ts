@@ -25,7 +25,7 @@ const MINI_SCENARIO: E2EScenario = {
   prompt: 'Use remembered context in a fresh conversation.',
   rubrics: [
     { kind: 'min_user_turns', min: 1 },
-    { kind: 'turn_lifecycle_boundary', turnIndex: 0, boundary: 'new_conversation' },
+    { kind: 'turn_lifecycle_boundary', turnIndex: 0, boundary: 'context_reset' },
     {
       kind: 'turn_memory_selection',
       turnIndex: 0,
@@ -74,11 +74,11 @@ function conditionResult(product: boolean): E2EScenarioResult {
     turnTraces: [
       buildFixtureTurnTrace({
         lifecycleBefore: {
-          boundary: 'new_conversation',
-          chatStore: 'fresh_conversation',
+          boundary: 'context_reset',
+          chatStore: 'context_archived',
           memoryStore: 'shared_global',
-          previousConversationMessageCount: 2,
-          newConversationInitialMessageCount: 0,
+          previousLiveMessageCount: 2,
+          liveMessageCountAfter: 0,
         },
         native: { ...baseTurn.native, stateAfter },
         memoryPrompt: product
@@ -116,7 +116,7 @@ describe('paired causal-memory scenario and contract', () => {
     expect(E2E_AGENT_SCENARIOS).not.toContain(scenario);
     expect(lookupE2EScenarioBenchmarkMeta(scenario.id).benchmarkFamilies).toEqual(['kavi-core']);
     expect(scenario.userTurns?.[2]).toMatchObject({
-      lifecycleBefore: 'new_conversation',
+      lifecycleBefore: 'context_reset',
       selectedMode: 'agentic',
     });
     const prompt = scenario.userTurns?.map((turn) => turn.content).join('\n') ?? '';
@@ -181,7 +181,7 @@ describe('paired causal-memory scenario and contract', () => {
     expect(plan.conditions[0]?.invariantConfig.scenarioInput).toMatchObject({
       pairedEvaluation: scenario.pairedEvaluation,
       userTurns: expect.arrayContaining([
-        expect.objectContaining({ lifecycleBefore: 'new_conversation' }),
+        expect.objectContaining({ lifecycleBefore: 'context_reset' }),
       ]),
     });
     expect(JSON.stringify(plan)).not.toContain('private-key');

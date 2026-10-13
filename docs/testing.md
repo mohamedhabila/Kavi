@@ -362,8 +362,8 @@ calendar action with attributed memory-retrieval participation, an intentionally
 ambiguous agentic no-op, and recovery of partial workspace state. This flow is
 continuity/retrieval evidence, not standalone causal-memory evidence: the raw
 persisted chat remains available across these relaunches. Causal memory is
-evaluated separately by `paired-causal-global-preference`, whose product-created
-new conversation begins with zero raw messages while retaining owner-global
+evaluated separately by `paired-causal-global-preference`, whose context reset
+leaves zero raw messages in the conversation while retaining owner-global
 memory. Its two passive learning turns must contain zero model-requested tool
 calls of any kind as well as zero native invocations; exact per-turn calls remain
 available in opt-in private evidence. This prevents a non-native effect from
@@ -449,7 +449,7 @@ directory.
 
 For exact local diagnosis, set
 `E2E_PRIVATE_EVIDENCE_DIR=.private/evals/<run-name>`. The runner then writes an
-atomic, owner-only `e2e-private-scenario-evidence-v9` file per attempt with raw
+atomic, owner-only `e2e-private-scenario-evidence-v10` file per attempt with raw
 turn, selected-mode, result, estimated-cost, memory, per-turn memory prompt, native,
 graph, and lifecycle evidence. The setting is intentionally opt-in; the
 directory is gitignored, cannot escape the private root through `..` or symlinks,

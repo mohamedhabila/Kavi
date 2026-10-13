@@ -76,9 +76,9 @@ export function validateForegroundScenarioInput(input: ForegroundScenarioDriverI
     }
     if (
       turn.lifecycleBefore !== undefined &&
-      !['app_relaunch', 'new_conversation'].includes(turn.lifecycleBefore)
+      !['app_relaunch', 'context_reset'].includes(turn.lifecycleBefore)
     ) {
-      throw new Error(`turns[${index}].lifecycleBefore must be app_relaunch or new_conversation.`);
+      throw new Error(`turns[${index}].lifecycleBefore must be app_relaunch or context_reset.`);
     }
     validatePositiveNumber(turn.maxTokens, `turns[${index}].maxTokens`);
     validatePositiveNumber(turn.timeoutMs, `turns[${index}].timeoutMs`);
