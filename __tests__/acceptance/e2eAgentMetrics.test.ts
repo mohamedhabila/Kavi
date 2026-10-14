@@ -21,7 +21,7 @@ import {
   isE2EAgentMetricsPassing,
 } from '../../src/acceptance/e2eAgent/evaluateE2EAgentMetrics';
 import {
-  buildE2EProvider,
+  buildE2EProviderWithDiscoveredCatalog,
   shouldRunE2EAgentEval,
 } from '../../src/acceptance/e2eAgent/providerConfig';
 import { formatE2EAssessmentReportSummary } from '../../src/acceptance/e2eAgent/e2eAssessmentReport';
@@ -62,8 +62,10 @@ describeE2E('E2E agent eval — selected provider', () => {
     teardownE2EMemorySandbox();
   });
 
+  // The provider as the app holds it once its catalog sync ran, which also finds the
+  // workspace an Anthropic key that may act in several must name on every request.
   it('connects with the selected provider config and returns text', async () => {
-    const provider = buildE2EProvider();
+    const provider = await buildE2EProviderWithDiscoveredCatalog();
     expect(provider.apiKey.length).toBeGreaterThan(0);
     expect(provider.baseUrl.length).toBeGreaterThan(0);
     expect(provider.model.length).toBeGreaterThan(0);
