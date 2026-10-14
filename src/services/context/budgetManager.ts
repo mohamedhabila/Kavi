@@ -426,7 +426,7 @@ export function enforceContextBudget(
   const compactionOptions = { pinnedToolNames, family };
 
   let adjustedPrompt = systemPrompt;
-  let adjustedTools = compressToolDefinitions(tools, compactionOptions);
+  let adjustedTools = compressToolDefinitions(tools);
   let adjustedMessages = removeOrphanedToolResults(messages);
 
   if (adjustedMessages.length !== messages.length) {

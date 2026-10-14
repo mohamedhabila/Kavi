@@ -28,7 +28,7 @@ export function evaluateToolSurfaceBudgetFixture(
 
   const pinnedToolNames = new Set<string>();
   const compactionOptions = { pinnedToolNames };
-  const compressedTools = compressToolDefinitions(selectedTools, compactionOptions);
+  const compressedTools = compressToolDefinitions(selectedTools);
   const tokenEstimate = estimateAllToolTokens(compressedTools, compactionOptions);
   const toolsBudget = computeContextBudget(BENCHMARK_MODEL).toolsBudget;
   const hardCap = Math.min(toolsBudget, MAX_TOOL_DEFINITION_TOKENS);

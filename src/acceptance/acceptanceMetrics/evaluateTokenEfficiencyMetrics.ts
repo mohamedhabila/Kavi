@@ -58,7 +58,7 @@ export function evaluateToolDefinitionTokenReductionBenchmark(): AcceptanceFixtu
 
   const pinnedToolNames = new Set(['web_search', 'write_file', 'read_file']);
   const optimizedTokens = estimateAllToolTokens(
-    compressToolDefinitions(surface, { pinnedToolNames }),
+    compressToolDefinitions(surface),
     { pinnedToolNames },
   );
   // Compare the production turn surface with the legacy eager-registry shape.

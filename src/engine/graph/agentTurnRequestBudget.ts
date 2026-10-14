@@ -379,7 +379,7 @@ export async function prepareAgentTurnRequestBudget(
     new Set((params.pinnedToolNames ?? []).map((name) => name.trim()).filter(Boolean)),
   );
   const compactionOptions = { pinnedToolNames: new Set(pinnedToolNames), family: params.requestFamily };
-  const candidateTools = compressToolDefinitions(toolsForIteration, compactionOptions);
+  const candidateTools = compressToolDefinitions(toolsForIteration);
   const budgetResult = enforceContextBudget(
     params.requestModel,
     enrichedSystemPrompt,

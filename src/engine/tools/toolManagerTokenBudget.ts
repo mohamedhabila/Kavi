@@ -11,7 +11,6 @@ import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
  * protected via `pinnedToolNames`, which the caller derives from the tools the run invoked.
  */
 const CORE_TOOL_TOKEN_BUDGET_NAMES: ReadonlySet<string> = DEFAULT_CORE_TOOL_NAMES;
-const MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT = 60;
 const TOOL_DESCRIPTION_CHARACTER_LIMIT = 240;
 
 export interface CompactToolDefinitionOptions {
@@ -27,7 +26,7 @@ export function estimateToolTokens(
 ): number {
   const compactedTool = options?.precompacted
     ? tool
-    : compactToolDefinitionForPrompt(tool, options);
+    : compactToolDefinitionForPrompt(tool);
   const nameTokens = estimateTokens(compactedTool.name, options?.family);
   const descTokens = estimateTokens(compactedTool.description || '', options?.family);
   const schemaTokens = estimateTokens(
@@ -70,7 +69,7 @@ export function enforceToolTokenBudget(
   const compactionOptions = resolveCompactionOptions(pinnedToolNames, options?.family);
   let total = estimateAllToolTokens(tools, compactionOptions);
   if (total <= budgetTokens) {
-    return compressToolDefinitions(tools, compactionOptions);
+    return compressToolDefinitions(tools);
   }
 
   const scored = tools.map((tool) => ({
@@ -98,10 +97,7 @@ export function enforceToolTokenBudget(
     total -= last.tokens;
   }
 
-  return compressToolDefinitions(
-    scored.map((entry) => entry.tool),
-    compactionOptions,
-  );
+  return compressToolDefinitions(scored.map((entry) => entry.tool));
 }
 
 export function compressToolDescription(description: string): string {
@@ -115,22 +111,6 @@ export function compressToolDescription(description: string): string {
   const condensed = sentences.length <= 2 ? description.trim() : sentences.slice(0, 2).join(' ');
 
   return truncateGraphemesWithSuffix(condensed, TOOL_DESCRIPTION_CHARACTER_LIMIT, '...');
-}
-
-export function compressToolDescriptionMinimal(description: string): string {
-  if (!description) return '';
-
-  const firstSentence =
-    description
-      .split(/(?<=[.!?])\s+/)
-      .map((sentence) => sentence.trim())
-      .find(Boolean) ?? description.trim();
-
-  return truncateGraphemesWithSuffix(
-    firstSentence,
-    MINIMAL_TOOL_DESCRIPTION_CHARACTER_LIMIT,
-    '\u2026',
-  );
 }
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
@@ -181,23 +161,10 @@ function compactSchemaForPrompt(value: unknown): unknown {
   return compacted;
 }
 
-function shouldUseMinimalToolDescription(
-  tool: ToolDefinition,
-  options?: CompactToolDefinitionOptions,
-): boolean {
-  if (CORE_TOOL_TOKEN_BUDGET_NAMES.has(tool.name)) {
-    return false;
-  }
-  return !options?.pinnedToolNames?.has(tool.name);
-}
-
-export function compactToolDefinitionForPrompt(
-  tool: ToolDefinition,
-  options?: CompactToolDefinitionOptions,
-): ToolDefinition {
-  const compactedDescription = shouldUseMinimalToolDescription(tool, options)
-    ? compressToolDescriptionMinimal(tool.description || '')
-    : compressToolDescription(tool.description || '');
+export function compactToolDefinitionForPrompt(tool: ToolDefinition): ToolDefinition {
+  // One description form for every tool: a declaration that changed with whether this run had
+  // used the tool broke the provider's prompt cache from that tool onward.
+  const compactedDescription = compressToolDescription(tool.description || '');
   const compactedSchema = compactSchemaForPrompt(tool.input_schema || {});
   const { contract: _contract, ...promptFacingTool } = tool;
 
@@ -208,9 +175,6 @@ export function compactToolDefinitionForPrompt(
   };
 }
 
-export function compressToolDefinitions(
-  tools: ToolDefinition[],
-  options?: CompactToolDefinitionOptions,
-): ToolDefinition[] {
-  return tools.map((tool) => compactToolDefinitionForPrompt(tool, options));
+export function compressToolDefinitions(tools: ToolDefinition[]): ToolDefinition[] {
+  return tools.map((tool) => compactToolDefinitionForPrompt(tool));
 }

@@ -2,7 +2,6 @@ import {
   compactToolDefinitionForPrompt,
   compressToolDefinitions,
   compressToolDescription,
-  compressToolDescriptionMinimal,
   enforceToolTokenBudget,
   estimateAllToolTokens,
   estimateToolTokens,
@@ -66,7 +65,7 @@ describe('toolManagerTokenBudget', () => {
     expect(compressToolDescription(description)).toBe('Sentence one. Sentence two.');
   });
 
-  it('compresses core and non-core tool descriptions during prompt compaction', () => {
+  it('compresses core and non-core tool descriptions the same way', () => {
     const tools = [
       makeTool('read_file', 'Sentence one. Sentence two. Sentence three.'),
       makeTool('sessions_spawn', 'Sentence one. Sentence two. Sentence three.'),
@@ -77,7 +76,7 @@ describe('toolManagerTokenBudget', () => {
 
     expect(result[0].description).toBe('Sentence one. Sentence two.');
     expect(result[1].description).toBe('Sentence one. Sentence two.');
-    expect(result[2].description).toBe('Sentence one.');
+    expect(result[2].description).toBe('Sentence one. Sentence two.');
   });
 
   it('strips verbose schema prose from prompt-facing tool definitions', () => {
@@ -156,25 +155,18 @@ describe('toolManagerTokenBudget', () => {
     });
   });
 
-  it('uses minimal descriptions for non-pinned optional tools', () => {
+  // A declaration that changed with whether the run had used the tool broke the provider's
+  // prompt cache from that tool onward, so every tool gets the same description form.
+  it('gives a tool the same description whether or not the run has used it', () => {
     const tool = makeTool('mcp__docs__search_docs', 'Sentence one. Sentence two. Sentence three.');
-    const result = compactToolDefinitionForPrompt(tool, {
-      pinnedToolNames: new Set(['read_file']),
-    });
-    expect(result.description).toBe('Sentence one.');
-    expect(compressToolDescriptionMinimal(tool.description)).toBe('Sentence one.');
-  });
-
-  it('keeps richer descriptions for pinned goal-capability tools', () => {
-    const tool = makeTool('web_search', 'Sentence one. Sentence two. Sentence three.');
-    const result = compactToolDefinitionForPrompt(tool, {
-      pinnedToolNames: new Set(['web_search']),
-    });
-    expect(result.description).toBe('Sentence one. Sentence two.');
+    expect(compactToolDefinitionForPrompt(tool).description).toBe('Sentence one. Sentence two.');
+    expect(
+      compactToolDefinitionForPrompt(makeTool('web_search', tool.description)).description,
+    ).toBe('Sentence one. Sentence two.');
   });
 });
 
-describe('compressToolDescription / compressToolDescriptionMinimal — grapheme safety', () => {
+describe('compressToolDescription — grapheme safety', () => {
   for (const { name, cluster } of GRAPHEME_CLUSTER_FIXTURES) {
     it(`compressToolDescription never splits ${name} straddling its 240-char budget`, () => {
       const description = buildBoundaryStraddlingText(240, cluster, 100);
@@ -185,26 +177,14 @@ describe('compressToolDescription / compressToolDescriptionMinimal — grapheme 
       expect(endsOnGraphemeBoundary(description, result.slice(0, -'...'.length))).toBe(true);
     });
 
-    it(`compressToolDescriptionMinimal never splits ${name} straddling its 60-char budget`, () => {
-      const description = buildBoundaryStraddlingText(60, cluster, 100);
-      const result = compressToolDescriptionMinimal(description);
-
-      expect(result.endsWith('…')).toBe(true);
-      expectGraphemeSafe(result);
-      expect(endsOnGraphemeBoundary(description, result.slice(0, -'…'.length))).toBe(true);
-    });
-
     it('compactToolDefinitionForPrompt produces a grapheme-safe description that estimateToolTokens then measures', () => {
-      const description = buildBoundaryStraddlingText(60, cluster, 200);
-      // Not a core/pinned tool, so compactToolDefinitionForPrompt takes the minimal
-      // (60-char) description path.
+      const description = buildBoundaryStraddlingText(240, cluster, 200);
       const tool = makeTool('custom_tool', description);
       const compacted = compactToolDefinitionForPrompt(tool);
 
       expectGraphemeSafe(compacted.description);
-      // The minimal path is compressToolDescriptionMinimal, which ends with '…'.
       expect(
-        endsOnGraphemeBoundary(description, compacted.description.slice(0, -'…'.length)),
+        endsOnGraphemeBoundary(description, compacted.description.slice(0, -'...'.length)),
       ).toBe(true);
       // estimateToolTokens compacts internally before estimating (see source), so
       // its token count must match estimating on the already-compacted description
