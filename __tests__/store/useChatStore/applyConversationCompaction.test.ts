@@ -4,6 +4,7 @@
 
 import { useChatStore } from '../../helpers/chatStoreHarness';
 import { addConversation } from '../../helpers/chatConversationFixtures';
+import type { SubAgentMessageEvent } from '../../../src/types/message';
 
 describe('useChatStore', () => {
   describe('applyConversationCompaction', () => {
@@ -178,6 +179,69 @@ describe('useChatStore', () => {
         'compact-tool-repair',
         'durable-assistant',
       ]);
+    });
+
+    // Compaction sees the model's messages, and a sub-agent card is the person's alone, so
+    // writing compaction's output over the transcript deleted every card, even in the tail
+    // it kept (and in the whole transcript when it only cleared old tool results).
+    it('keeps rows only the person sees in the part of the transcript compaction kept', () => {
+      const convId = addConversation('p1', 's');
+      const workerStarted: SubAgentMessageEvent = {
+        type: 'sub-agent',
+        event: 'started',
+        snapshot: {
+          sessionId: 'worker-1',
+          parentConversationId: convId,
+          depth: 1,
+          startedAt: 1,
+          updatedAt: 1,
+          status: 'running',
+          sandboxPolicy: 'safe-only',
+        },
+      };
+      const add = (id: string, role: 'user' | 'assistant', extra: object = {}) =>
+        useChatStore.getState().addMessage(convId, { id, role, content: id, ...extra });
+      add('old-user', 'user');
+      add('old-card', 'assistant', { subAgentEvent: workerStarted });
+      add('old-reply', 'assistant');
+      add('tail-user', 'user');
+      add('tail-card', 'assistant', { subAgentEvent: workerStarted });
+      add('tail-reply', 'assistant');
+      const live = () =>
+        useChatStore
+          .getState()
+          .conversations.find((conversation) => conversation.id === convId)!
+          .messages.map((message) => message.id);
+
+      // Tool clearing hands back every model message, without the cards.
+      useChatStore.getState().applyConversationCompaction(convId, [
+        { id: 'old-user', role: 'user', content: 'old-user', timestamp: 1 },
+        { id: 'old-reply', role: 'assistant', content: 'old-reply', timestamp: 1 },
+        { id: 'tail-user', role: 'user', content: 'tail-user', timestamp: 1 },
+        { id: 'tail-reply', role: 'assistant', content: 'tail-reply', timestamp: 1 },
+      ]);
+      expect(live()).toEqual([
+        'old-user',
+        'old-card',
+        'old-reply',
+        'tail-user',
+        'tail-card',
+        'tail-reply',
+      ]);
+
+      // A summary replaces the rounds before the tail it kept.
+      useChatStore.getState().applyConversationCompaction(convId, [
+        {
+          id: 'summary',
+          role: 'system',
+          content: 'Earlier: an old request.',
+          timestamp: 1,
+          compactionProvenance: { version: 1, dependency: 'transcript_only' },
+        },
+        { id: 'tail-user', role: 'user', content: 'tail-user', timestamp: 1 },
+        { id: 'tail-reply', role: 'assistant', content: 'tail-reply', timestamp: 1 },
+      ]);
+      expect(live()).toEqual(['summary', 'tail-user', 'tail-card', 'tail-reply']);
     });
   });
 });

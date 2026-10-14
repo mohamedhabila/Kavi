@@ -23,7 +23,7 @@ import {
   getProtectedExecutionMessageIds,
   preserveProtectedExecutionMessages,
 } from './chatExecutionMessageProtection';
-import { selectDurableCompactionMessages } from './chatConversationCompaction';
+import { selectCompactedTranscript } from './chatConversationCompaction';
 import { archiveLeavingMessages } from './chatPersistence';
 import { applyHistoryWindow } from './conversationHistoryWindow';
 import { resolveRewindUserMessageEligibility } from './chatStoreUserMessageRewind';
@@ -103,7 +103,7 @@ export function createMessageStoreActions(
           (conversation) => {
             const compacted = preserveProtectedExecutionMessages(
               conversation,
-              selectDurableCompactionMessages(conversation, messages),
+              selectCompactedTranscript(conversation, messages),
             );
             if (compacted.length === 0) {
               return conversation;
