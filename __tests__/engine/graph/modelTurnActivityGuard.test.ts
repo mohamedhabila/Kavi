@@ -88,7 +88,7 @@ describe('model turn activity guard', () => {
     );
     jest.advanceTimersByTime(FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS);
     const normalized = normalizeModelTurnActivityError(new Error('stream ended'), guard);
-    expect(normalized.name).toBe('ModelTurnInactivityTimeoutError');
+    expect(normalized.name).toBe('TimeoutError');
     expect(normalized.message).toContain(`${FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS}ms`);
     guard.dispose();
   });

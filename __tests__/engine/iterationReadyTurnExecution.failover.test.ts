@@ -1,4 +1,9 @@
 import { createFailoverState } from '../../src/engine/failover';
+import {
+  createModelTurnActivityGuard,
+  FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
+  normalizeModelTurnActivityError,
+} from '../../src/engine/graph/modelTurnActivityGuard';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { resolveModelTurnIterationRequest } from '../../src/engine/graph/modelTurn/resolveIterationRequest';
@@ -320,5 +325,38 @@ describe('prepared graph turn directive consumption', () => {
 
     expect(mockExecuteAgentControlGraphModelTurn).toHaveBeenCalledTimes(2);
     expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+  });
+
+  // A foreground turn that went silent was forced into a text-only checkpoint with no tools
+  // (live: GLM 5.3 Flash, 60 s without provider activity), so the run answered without the
+  // work. A stall is a transient failure: the turn runs again, with its tools.
+  it('retries a model turn that went silent instead of forcing a tool-less checkpoint', async () => {
+    jest.useFakeTimers();
+    try {
+      const guard = createModelTurnActivityGuard(
+        undefined,
+        FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS,
+      );
+      jest.advanceTimersByTime(FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS);
+      const stall = normalizeModelTurnActivityError(new Error('stream ended'), guard);
+      guard.dispose();
+      mockExecuteAgentControlGraphModelTurn.mockRejectedValueOnce(stall);
+      const fixture = buildParams();
+      fixture.params.iterationParams.isForegroundRun = true;
+      fixture.params.iterationParams.allProviders = [primaryProvider];
+      fixture.params.iterationParams.failoverState = createFailoverState(
+        [{ providerId: primaryProvider.id, model: primaryProvider.model, priority: 0 }],
+        { providerId: primaryProvider.id, model: primaryProvider.model },
+      );
+
+      const pending = executePreparedAgentControlGraphTurn(fixture.params);
+      await jest.advanceTimersByTimeAsync(1000);
+      const result = await pending;
+
+      expect(result.status).toBe('continued');
+      expect(fixture.params.iterationParams.graph.recordTurnDirectives).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

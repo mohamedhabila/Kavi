@@ -156,28 +156,6 @@ export async function executePreparedAgentControlGraphTurn(params: {
       );
     }
   } catch (streamError: unknown) {
-    // A foreground run whose model turn goes silent past the (tighter) foreground
-    // inactivity timeout gets the same graceful outcome as reaching the iteration or
-    // wall-clock ceiling: one forced text-only checkpoint turn, not a hard failure.
-    // Fires at most once per run; a second inactivity timeout after the checkpoint
-    // has already fired falls through to the ordinary failure/failover handling
-    // below, since retrying an unresponsive model indefinitely is not safe.
-    if (
-      iterationParams.isForegroundRun === true &&
-      runtime.foregroundCheckpointed !== true &&
-      streamError instanceof Error &&
-      streamError.name === 'ModelTurnInactivityTimeoutError'
-    ) {
-      runtime.foregroundCheckpointed = true;
-      iterationParams.graph.recordTurnDirectives(
-        { forceFinalText: true, forcedTextReason: 'foreground_budget_checkpoint' },
-        'foreground_model_turn_inactivity_timeout',
-      );
-      iterationParams.callbacks.onAssistantStreamReset?.();
-      iterationParams.callbacks.onStateChange('thinking');
-      await iterationParams.yieldToUiFrame();
-      return buildResult(runtime, 'continued');
-    }
     if (
       iterationParams.failoverState &&
       !isAbortErrorLike(streamError, iterationParams.signal?.signal) &&

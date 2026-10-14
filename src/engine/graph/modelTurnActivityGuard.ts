@@ -74,7 +74,9 @@ export function normalizeModelTurnActivityError(
     const timeoutError = new Error(
       `Model response timed out after ${guard.timeoutMs}ms without provider activity.`,
     );
-    timeoutError.name = 'ModelTurnInactivityTimeoutError';
+    // The standard name: provider error classification treats it as a transient timeout,
+    // so the turn gets the same backed-off retry as a dropped connection.
+    timeoutError.name = 'TimeoutError';
     return timeoutError;
   }
   return error instanceof Error ? error : new Error(String(error));
