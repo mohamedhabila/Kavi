@@ -27,6 +27,17 @@ function jsonResponse(body: unknown, ok = true, status = 200) {
   };
 }
 
+/**
+ * A key bound to one workspace: the API refuses it the organization's workspace list, so
+ * discovery names no workspace and `models` sees only the model requests.
+ */
+function boundKey(models: jest.Mock) {
+  return (url: string, init: RequestInit) =>
+    url.includes('/organizations/workspaces')
+      ? Promise.resolve(jsonResponse({ error: { type: 'permission_error' } }, false, 403))
+      : models(url, init);
+}
+
 describe('fetchProviderModels — Anthropic live discovery', () => {
   beforeEach(() => {
     clearProviderContextWindowsForTests();
@@ -63,7 +74,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: { 'x-api-key': 'sk-ant-test', 'anthropic-version': '2023-06-01' },
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(result.models).toEqual(['claude-haiku-4-5', 'claude-opus-5']);
@@ -117,7 +128,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: {},
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(performFetch).toHaveBeenCalledTimes(3);
@@ -141,7 +152,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: {},
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(result.models).toEqual(
@@ -170,7 +181,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: {},
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(result.models).toContain('claude-opus-5');
@@ -186,7 +197,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: {},
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(result.models).toHaveLength(7);
@@ -207,7 +218,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       headers: {},
       transport: 'anthropic',
       createTimeoutSignal,
-      performFetch,
+      performFetch: boundKey(performFetch),
     });
 
     expect(result.models).toEqual(['claude-opus-5']);

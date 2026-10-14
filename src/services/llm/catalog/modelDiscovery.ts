@@ -6,6 +6,10 @@ import { getSelectableLocalLlmModels } from '../../localLlm/modelArtifacts';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import type { ModelsWithCapabilities } from '../support/contracts';
 import type { ProviderTransport } from './providerProtocols';
+import {
+  ANTHROPIC_WORKSPACE_HEADER,
+  resolveAnthropicWorkspaceId,
+} from '../providers/anthropic/workspace';
 
 import {
   readAdvertisedContextWindow,
@@ -126,10 +130,38 @@ async function fetchAnthropicModelPage(args: {
 
 /**
  * Live Anthropic Models API discovery (`GET /v1/models`, paginated via
- * `has_more`/`last_id`). Falls back to the static catalog only when the request
- * itself fails — a successful-but-empty response is trusted as-is.
+ * `has_more`/`last_id`), in the workspace the key's requests must name (workspace.ts).
+ * Falls back to the static catalog only when the request itself fails — a
+ * successful-but-empty response is trusted as-is.
  */
 async function discoverAnthropicModels(args: {
+  baseUrl: string;
+  headers: Record<string, string>;
+  currentWorkspaceId?: string;
+  createTimeoutSignal: (ms: number) => AbortSignal;
+  performFetch: (url: string, init: RequestInit) => Promise<Response>;
+}): Promise<ModelsWithCapabilities> {
+  const keyHeaders = { ...args.headers };
+  delete keyHeaders[ANTHROPIC_WORKSPACE_HEADER];
+  const anthropicWorkspaceId = await resolveAnthropicWorkspaceId({
+    baseUrl: args.baseUrl,
+    headers: keyHeaders,
+    ...(args.currentWorkspaceId ? { currentWorkspaceId: args.currentWorkspaceId } : {}),
+    createTimeoutSignal: args.createTimeoutSignal,
+    performFetch: args.performFetch,
+  });
+  const workspaceId =
+    anthropicWorkspaceId === undefined ? args.currentWorkspaceId : anthropicWorkspaceId;
+  const discovered = await listAnthropicModels({
+    ...args,
+    headers: workspaceId
+      ? { ...keyHeaders, [ANTHROPIC_WORKSPACE_HEADER]: workspaceId }
+      : keyHeaders,
+  });
+  return anthropicWorkspaceId === undefined ? discovered : { ...discovered, anthropicWorkspaceId };
+}
+
+async function listAnthropicModels(args: {
   baseUrl: string;
   headers: Record<string, string>;
   createTimeoutSignal: (ms: number) => AbortSignal;
@@ -239,6 +271,7 @@ export async function fetchProviderModels(args: {
     modelCapabilities?: Record<string, ModelCapabilities>;
     kind?: LlmProviderConfig['kind'];
     local?: LlmProviderConfig['local'];
+    anthropicWorkspaceId?: string;
   };
   baseUrl: string;
   headers: Record<string, string>;
@@ -264,6 +297,9 @@ export async function fetchProviderModels(args: {
     return discoverAnthropicModels({
       baseUrl: args.baseUrl,
       headers: args.headers,
+      ...(args.provider.anthropicWorkspaceId
+        ? { currentWorkspaceId: args.provider.anthropicWorkspaceId }
+        : {}),
       createTimeoutSignal: args.createTimeoutSignal,
       performFetch: args.performFetch,
     });

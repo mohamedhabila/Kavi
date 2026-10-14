@@ -5,6 +5,7 @@ import {
   normalizeGeminiBaseUrl,
 } from '../../../constants/api';
 import { resolveProviderTransport } from '../catalog/providerProtocols';
+import { ANTHROPIC_WORKSPACE_HEADER } from '../providers/anthropic/workspace';
 
 export function resolveGeminiBaseUrl(provider: Pick<LlmProviderConfig, 'baseUrl'>): string {
   const configuredBaseUrl = (provider.baseUrl || '').trim();
@@ -37,6 +38,7 @@ export function buildProviderHeaders(
     | 'providerFamily'
     | 'capabilityHints'
     | 'apiKey'
+    | 'anthropicWorkspaceId'
   >,
 ): Record<string, string> {
   const headers: Record<string, string> = {
@@ -50,6 +52,8 @@ export function buildProviderHeaders(
       headers['x-api-key'] = apiKey;
     }
     headers['anthropic-version'] = '2023-06-01';
+    const workspaceId = (provider.anthropicWorkspaceId || '').trim();
+    if (workspaceId) headers[ANTHROPIC_WORKSPACE_HEADER] = workspaceId;
     return headers;
   }
 

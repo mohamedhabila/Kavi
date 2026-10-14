@@ -25,7 +25,7 @@ export function mergeDiscoveredModelCatalog(
   provider: LlmProviderConfig,
   discovered: ModelsWithCapabilities,
 ): LlmProviderConfig {
-  return {
+  const merged: LlmProviderConfig = {
     ...provider,
     availableModels: discovered.models,
     modelCapabilities: {
@@ -37,6 +37,13 @@ export function mergeDiscoveredModelCatalog(
       ...discovered.contextWindows,
     },
   };
+  // A workspace discovery could not determine (undefined) keeps the one found before; a key
+  // bound to one workspace (null) names none.
+  if (discovered.anthropicWorkspaceId === null) delete merged.anthropicWorkspaceId;
+  else if (discovered.anthropicWorkspaceId) {
+    merged.anthropicWorkspaceId = discovered.anthropicWorkspaceId;
+  }
+  return merged;
 }
 
 /**

@@ -114,6 +114,11 @@ export interface LlmProviderConfig {
   baseUrl: string;
   apiKey: string;
   apiKeyRef?: string;
+  /**
+   * Anthropic: the workspace requests run in when the key may act in several (sent as
+   * anthropic-workspace-id). Found at model discovery; unset for a key bound to one.
+   */
+  anthropicWorkspaceId?: string;
   model: string;
   availableModels?: string[];
   modelCapabilities?: Record<string, ModelCapabilities>;

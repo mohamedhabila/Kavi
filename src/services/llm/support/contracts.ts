@@ -12,6 +12,11 @@ export interface ModelsWithCapabilities {
   capabilities: Record<string, ModelCapabilities>;
   /** Context windows the provider advertises, by model id, when it publishes them. */
   contextWindows: Record<string, number>;
+  /**
+   * Anthropic: the workspace the key's requests must name, `null` when the key is bound to
+   * one; absent when discovery could not tell or the provider is not Anthropic.
+   */
+  anthropicWorkspaceId?: string | null;
 }
 
 export interface StreamCallbacks {
