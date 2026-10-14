@@ -1,6 +1,5 @@
 import {
-  buildAgentControlGraphInterruptedRecoveredOutcome,
-  buildAgentControlGraphInterruptedNoEvidenceOutcome,
+  buildAgentControlGraphInterruptedOutcome,
   buildAgentControlGraphInterruptedTurnFailedOutcome,
   buildAgentControlGraphProviderRejectedInterruptedOutcome,
 } from '../../src/engine/graph/interruptedResponseRecovery';
@@ -34,23 +33,10 @@ describe('agent control graph interrupted response recovery', () => {
     });
   });
 
-  it('keeps interrupted runs open for unfinished background or async work', () => {
+  it('keeps an interrupted run open while async work is pending', () => {
     expect(
-      buildAgentControlGraphInterruptedNoEvidenceOutcome({
+      buildAgentControlGraphInterruptedOutcome({
         errorMessage: 'stream closed',
-        runningBackgroundWorkerCount: 2,
-        pendingOperations: [],
-      }),
-    ).toEqual({
-      status: 'failed',
-      checkpointTitle: 'Turn failed',
-      checkpointDetail: 'stream closed',
-    });
-
-    expect(
-      buildAgentControlGraphInterruptedNoEvidenceOutcome({
-        errorMessage: 'stream closed',
-        runningBackgroundWorkerCount: 0,
         pendingOperations: [createPendingOperation()],
       }),
     ).toEqual(
@@ -62,25 +48,16 @@ describe('agent control graph interrupted response recovery', () => {
     );
   });
 
-  it('falls back to terminal turn failure when no recovery evidence or open work exists', () => {
+  it('fails an interrupted run with nothing pending, whatever work it finished', () => {
     expect(
-      buildAgentControlGraphInterruptedNoEvidenceOutcome({
+      buildAgentControlGraphInterruptedOutcome({
         errorMessage: 'stream closed',
-        runningBackgroundWorkerCount: 0,
         pendingOperations: [],
       }),
     ).toEqual({
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',
-    });
-  });
-
-  it('builds the recovered outcome', () => {
-    expect(buildAgentControlGraphInterruptedRecoveredOutcome()).toEqual({
-      status: 'completed',
-      checkpointTitle: 'Response recovered',
-      checkpointDetail: 'Interrupted stream recovered from the verified work.',
     });
   });
 });

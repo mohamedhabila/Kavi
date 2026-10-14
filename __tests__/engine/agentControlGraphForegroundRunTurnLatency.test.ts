@@ -71,7 +71,7 @@ describe('foreground run turn latency stages', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     __resetOnDeviceGuardsForTests();
-    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+    mockedResolveForegroundInterruptedResponseOutcome.mockReturnValue({
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',

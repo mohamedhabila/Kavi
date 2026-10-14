@@ -91,7 +91,6 @@ export function buildAgentControlGraphOpenWorkPhasePresentation(
 }
 
 export function buildAgentControlGraphInterruptedOpenWorkRecovery(params: {
-  runningBackgroundWorkerCount: number;
   pendingOperations: ReadonlyArray<AgentRunAsyncOperation>;
 }): AgentControlGraphInterruptedOpenWorkRecovery | undefined {
   if (params.pendingOperations.length > 0) {

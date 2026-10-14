@@ -31,7 +31,9 @@ describe('ChatScreen run interruption recovery', () => {
 
   afterEach(cleanupChatScreenTestEnvironment);
 
-  it('recovers a response interruption as a completed run when its work is verified', async () => {
+  // An interrupted run used to be read as completed from its verified work and resumed with
+  // tools disabled; it now fails, and the work it finished stays shown as done.
+  it('fails a response interruption even when its work is verified', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -93,8 +95,8 @@ describe('ChatScreen run interruption recovery', () => {
       expect(mockCompleteAgentRun).toHaveBeenCalledWith(
         'conv1',
         expect.objectContaining({
-          status: 'completed',
-          checkpointTitle: 'Response recovered',
+          status: 'failed',
+          checkpointTitle: 'Turn failed',
         }),
         'run-1',
       );
@@ -202,7 +204,7 @@ describe('ChatScreen run interruption recovery', () => {
     );
   });
 
-  it('recovers an interrupted run from persisted completed worker snapshots when live workers are absent', async () => {
+  it('fails an interrupted run whose workers completed, without running it again', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -288,8 +290,8 @@ describe('ChatScreen run interruption recovery', () => {
       expect(mockCompleteAgentRun).toHaveBeenCalledWith(
         'conv1',
         expect.objectContaining({
-          status: 'completed',
-          checkpointTitle: 'Response recovered',
+          status: 'failed',
+          checkpointTitle: 'Turn failed',
         }),
         'run-1',
       );

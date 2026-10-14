@@ -45,7 +45,7 @@ describe('foreground run steering', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     __resetOnDeviceGuardsForTests();
-    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+    mockedResolveForegroundInterruptedResponseOutcome.mockReturnValue({
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',

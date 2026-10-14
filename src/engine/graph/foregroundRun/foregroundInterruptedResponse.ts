@@ -1,91 +1,40 @@
 import {
   type AgentControlGraphInterruptedResponseOutcome,
-  buildAgentControlGraphInterruptedRecoveredOutcome,
-  buildAgentControlGraphInterruptedNoEvidenceOutcome,
+  buildAgentControlGraphInterruptedOutcome,
   buildAgentControlGraphInterruptedTurnFailedOutcome,
   buildAgentControlGraphProviderRejectedInterruptedOutcome,
 } from '../interruptedResponseRecovery';
 import { getAgentRunPendingAsyncOperations } from '../../../services/agents/agentRunAsyncState';
-import {
-  collectAgentRunFinalizationEvidence,
-  hasCompletedExecutionRecoveryEvidence,
-} from '../../../services/agents/lifecycle/finalizePhase';
-import { buildAgentRunMessageScope } from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { isNonRetryableProviderRequestError } from '../../../services/llm/support/requestErrors';
 import { useChatStore } from '../../../store/useChatStore';
-import { ResolvedFinalizationProviderContext } from './contracts';
-import { getReviewableSubAgentsForRun } from '../../../services/agents/subAgentRunTracking';
 
-export async function resolveForegroundInterruptedResponseOutcome(params: {
-  assertNotAborted: () => void;
+/**
+ * How a foreground run ends when its model stream failed after the engine's own retries.
+ * It fails. A run with finished tool work used to be read as completed and resumed with tools
+ * disabled and "deliver the final answer now", so a model cut off mid-task answered without
+ * the tools it still needed; the work it finished stays visible as done instead.
+ */
+export function resolveForegroundInterruptedResponseOutcome(params: {
   conversationId: string;
   error: Error;
-  finalizationProviderContext: ResolvedFinalizationProviderContext;
   runId?: string;
-  signal: AbortSignal;
-}): Promise<AgentControlGraphInterruptedResponseOutcome> {
+}): AgentControlGraphInterruptedResponseOutcome {
   if (isNonRetryableProviderRequestError(params.error)) {
     return buildAgentControlGraphProviderRejectedInterruptedOutcome(params.error.message);
   }
 
-  if (!params.runId) {
+  const targetRun = params.runId
+    ? useChatStore
+        .getState()
+        .conversations.find((candidate) => candidate.id === params.conversationId)
+        ?.agentRuns?.find((candidate) => candidate.id === params.runId)
+    : undefined;
+  if (!targetRun) {
     return buildAgentControlGraphInterruptedTurnFailedOutcome(params.error.message);
   }
 
-  const latestConversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === params.conversationId);
-  const targetRun = latestConversation?.agentRuns?.find(
-    (candidate) => candidate.id === params.runId,
-  );
-
-  if (!latestConversation || !targetRun) {
-    return buildAgentControlGraphInterruptedTurnFailedOutcome(params.error.message);
-  }
-
-  const {
-    liveSnapshots: liveSubAgents,
-    mergedSnapshots: reviewableSubAgents,
-    hasOrphanedRunningSnapshots,
-  } = getReviewableSubAgentsForRun(latestConversation, targetRun);
-  const runningBackgroundWorkerCount = liveSubAgents.filter(
-    (snapshot) => snapshot.status === 'running',
-  ).length;
-  const pendingAsyncOperations = getAgentRunPendingAsyncOperations(targetRun);
-
-  const evidence = collectAgentRunFinalizationEvidence(
-    latestConversation.messages,
-    buildAgentRunMessageScope(targetRun),
-    targetRun.controlGraph?.iteration ?? 0,
-    { liveSubAgentSnapshots: liveSubAgents },
-  );
-
-  if (
-    !hasCompletedExecutionRecoveryEvidence({
-      evidence,
-      liveSubAgentSnapshots: liveSubAgents,
-      pendingAsyncOperationCount: pendingAsyncOperations.length,
-    })
-  ) {
-    return buildAgentControlGraphInterruptedNoEvidenceOutcome({
-      errorMessage: params.error.message,
-      runningBackgroundWorkerCount,
-      pendingOperations: pendingAsyncOperations,
-    });
-  }
-
-  params.assertNotAborted();
-
-  if (
-    hasOrphanedRunningSnapshots ||
-    reviewableSubAgents.some((worker) => worker.status === 'running')
-  ) {
-    return buildAgentControlGraphInterruptedNoEvidenceOutcome({
-      errorMessage: params.error.message,
-      runningBackgroundWorkerCount,
-      pendingOperations: pendingAsyncOperations,
-    });
-  }
-
-  return buildAgentControlGraphInterruptedRecoveredOutcome();
+  return buildAgentControlGraphInterruptedOutcome({
+    errorMessage: params.error.message,
+    pendingOperations: getAgentRunPendingAsyncOperations(targetRun),
+  });
 }

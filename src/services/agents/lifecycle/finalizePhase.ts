@@ -274,27 +274,3 @@ export function canRecoverAgentRunFinalResponse(params: {
 }): boolean {
   return buildAgentControlGraphFinalResponseRecoveryDecision(params).type === 'recover';
 }
-
-export function hasCompletedExecutionRecoveryEvidence(params: {
-  evidence: AgentRunFinalizationEvidence;
-  liveSubAgentSnapshots?: ReadonlyArray<Pick<SubAgentSnapshot, 'status'>>;
-  pendingAsyncOperationCount?: number;
-}): boolean {
-  if (!hasVerifiedFinalizationEvidence(params.evidence)) {
-    return false;
-  }
-
-  if (params.evidence.hasIncompleteToolCalls) {
-    return false;
-  }
-
-  if ((params.pendingAsyncOperationCount ?? 0) > 0) {
-    return false;
-  }
-
-  if ((params.liveSubAgentSnapshots ?? []).some((snapshot) => snapshot.status === 'running')) {
-    return false;
-  }
-
-  return true;
-}

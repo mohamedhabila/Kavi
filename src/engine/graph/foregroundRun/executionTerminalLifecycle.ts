@@ -84,16 +84,6 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
       timestamp,
     });
 
-  const resolveInterruptedResponseOutcome = async (error: Error) =>
-    resolveForegroundInterruptedResponseOutcome({
-      assertNotAborted: () => throwIfAbortSignalTriggered(abort.signal),
-      conversationId,
-      error,
-      finalizationProviderContext,
-      runId,
-      signal: abort.signal,
-    });
-
   return createForegroundRunTerminalLifecycleController({
     clearForegroundRequestIfCurrent,
     clearStreamingDraft: shared.streaming.clearStreamingDraft,
@@ -156,37 +146,20 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         },
         visibleContent,
       });
-      const interruptedOutcome = await resolveInterruptedResponseOutcome(error);
-      throwIfAbortSignalTriggered(abort.signal);
       await handleForegroundInterruptedResponseRecovery({
         appendConversationLog: shared.helpers.appendConversationLog,
         assertNotAborted: () => throwIfAbortSignalTriggered(abort.signal),
-        clearForegroundRequestIfCurrent,
         conversationId,
         currentAssistantMessageId,
         errorMessage: error.message,
         finalizeTrackedRun: trackedRunStore.finalizeRun,
-        flushChatState: shared.durability.flushChatState,
-        markCurrentAssistantDraftIncomplete: (content, finishReason) => {
-          applyForegroundAssistantDraftIncomplete({
-            finishReason,
-            messageId: getCurrentAssistantMessageId(),
-            updateMetadata: (messageId, metadata) => {
-              shared.store.updateMessageAssistantMetadata(conversationId, messageId, metadata);
-            },
-            visibleContent: content,
-          });
-        },
-        outcome: interruptedOutcome,
+        outcome: resolveForegroundInterruptedResponseOutcome({ conversationId, error, runId }),
         recoverAgentRunFinalPreview,
         requestPersistenceCheckpoint: shared.helpers.requestPersistenceCheckpoint,
-        resumeAgentRun: wrapResumeAgentRun(shared.helpers.getResumeAgentRun(), 'failed'),
         runId,
         setAgentRunPhase: shared.store.setAgentRunPhase,
         setChatError: shared.helpers.setChatError,
         signal: abort.signal,
-        updateAgentRunAsyncWork: shared.store.updateAgentRunAsyncWork,
-        updateAgentRunControlGraph: shared.store.updateAgentRunControlGraph,
         updateAgentRunSummary: shared.store.updateAgentRunSummary,
         updateMessage: shared.store.updateMessage,
         updateMessageAssistantMetadata: shared.store.updateMessageAssistantMetadata,

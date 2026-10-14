@@ -192,19 +192,6 @@ describe('agent control graph async finalization', () => {
   it('builds interrupted open-work recovery decisions from graph-owned summaries', () => {
     expect(
       buildAgentControlGraphInterruptedOpenWorkRecovery({
-        runningBackgroundWorkerCount: 1,
-        pendingOperations: [createPendingOperation({ displayName: 'Deploy run' })],
-      }),
-    ).toEqual({
-      keepRunOpen: 'async-operations',
-      checkpointTitle: 'Async monitoring active',
-      checkpointDetail:
-        'Waiting for Deploy run to finish. The supervisor response was interrupted before monitoring could continue.',
-    });
-
-    expect(
-      buildAgentControlGraphInterruptedOpenWorkRecovery({
-        runningBackgroundWorkerCount: 0,
         pendingOperations: [createPendingOperation({ displayName: 'Deploy run' })],
       }),
     ).toEqual({

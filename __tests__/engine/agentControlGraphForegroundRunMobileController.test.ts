@@ -64,7 +64,7 @@ describe('foreground mobile controller binding', () => {
     mockedSettleMobileControllerOutcome.mockReset();
     mockCanWriteLongTermMemory.mockReturnValue(true);
     __resetOnDeviceGuardsForTests();
-    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+    mockedResolveForegroundInterruptedResponseOutcome.mockReturnValue({
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',

@@ -61,7 +61,7 @@ describe('foreground run target-conversation execution context', () => {
     jest.resetAllMocks();
     mockCanWriteLongTermMemory.mockReturnValue(true);
     __resetOnDeviceGuardsForTests();
-    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
+    mockedResolveForegroundInterruptedResponseOutcome.mockReturnValue({
       status: 'failed',
       checkpointTitle: 'Turn failed',
       checkpointDetail: 'stream closed',
@@ -392,7 +392,7 @@ describe('foreground run target-conversation execution context', () => {
     );
   });
 
-  it('closes and releases the old generation before a nested resume may begin', async () => {
+  it('closes and releases an interrupted generation once, without resuming it', async () => {
     const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const context = createExecutionContext({
@@ -406,13 +406,6 @@ describe('foreground run target-conversation execution context', () => {
     mockedResolveForegroundRunPreflight.mockResolvedValue(
       createReadyPreflightResult({ conversation, provider }),
     );
-    mockedResolveForegroundInterruptedResponseOutcome.mockResolvedValue({
-      status: 'failed',
-      checkpointTitle: 'Goals still open',
-      checkpointDetail: 'stream closed',
-      resumePrompt: 'Continue the interrupted run.',
-      resumeUserPrompt: 'Continue.',
-    });
     mockedRunOrchestrator.mockImplementation(async (_options, callbacks) => {
       callbacks.onError(new Error('stream closed'));
       callbacks.onDone();
@@ -427,10 +420,8 @@ describe('foreground run target-conversation execution context', () => {
     expect(context.durability.completeModelExecution.mock.invocationCallOrder[0]).toBeLessThan(
       context.durability.releaseModelProjection.mock.invocationCallOrder[0],
     );
-    expect(context.durability.releaseModelProjection.mock.invocationCallOrder[0]).toBeLessThan(
-      resumeAgentRun.mock.invocationCallOrder[0],
-    );
     expect(context.durability.completeModelExecution).toHaveBeenCalledTimes(1);
+    expect(resumeAgentRun).not.toHaveBeenCalled();
   });
 
   it('waits for an aborted same-conversation owner to release before running the new turn', async () => {

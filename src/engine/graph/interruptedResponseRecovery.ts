@@ -1,18 +1,16 @@
-import type {
-  AgentRunAsyncOperation,
-  AgentRunStatus,
-  AgentRunTerminalReason,
-} from '../../types/agentRun';
+import type { AgentRunAsyncOperation } from '../../types/agentRun';
 import { buildAgentControlGraphInterruptedOpenWorkRecovery } from './asyncOpenWork';
 
+/**
+ * How a run whose model stream failed after the engine's own retries ends. It always fails:
+ * work it finished is shown as done, and the person carries the task on from there. A run
+ * still waiting on async operations stays open so their results can land.
+ */
 export type AgentControlGraphInterruptedResponseOutcome = {
-  status: Exclude<AgentRunStatus, 'running'>;
+  status: 'failed';
   checkpointTitle: string;
   checkpointDetail: string;
-  resumePrompt?: string;
-  resumeUserPrompt?: string;
   keepRunOpen?: 'async-operations';
-  terminalReason?: AgentRunTerminalReason;
 };
 
 export function buildAgentControlGraphProviderRejectedInterruptedOutcome(
@@ -35,13 +33,11 @@ export function buildAgentControlGraphInterruptedTurnFailedOutcome(
   };
 }
 
-export function buildAgentControlGraphInterruptedNoEvidenceOutcome(params: {
+export function buildAgentControlGraphInterruptedOutcome(params: {
   errorMessage: string;
-  runningBackgroundWorkerCount: number;
   pendingOperations: ReadonlyArray<AgentRunAsyncOperation>;
 }): AgentControlGraphInterruptedResponseOutcome {
   const openWorkRecovery = buildAgentControlGraphInterruptedOpenWorkRecovery({
-    runningBackgroundWorkerCount: params.runningBackgroundWorkerCount,
     pendingOperations: params.pendingOperations,
   });
 
@@ -53,17 +49,4 @@ export function buildAgentControlGraphInterruptedNoEvidenceOutcome(params: {
   }
 
   return buildAgentControlGraphInterruptedTurnFailedOutcome(params.errorMessage);
-}
-
-/**
- * The work is verified and nothing is still running, so the interrupted answer is
- * recovered from that evidence. This was the path of every run without goals; with goal
- * gating gone it is the path of every run.
- */
-export function buildAgentControlGraphInterruptedRecoveredOutcome(): AgentControlGraphInterruptedResponseOutcome {
-  return {
-    status: 'completed',
-    checkpointTitle: 'Response recovered',
-    checkpointDetail: 'Interrupted stream recovered from the verified work.',
-  };
 }
