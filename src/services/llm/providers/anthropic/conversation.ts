@@ -26,9 +26,18 @@ function collectAnthropicToolResultIds(content: string | any[]): Set<string> {
   );
 }
 
+/**
+ * An unanswered tool_use goes, and the thinking that led to it goes with it: a turn may not
+ * end in a thinking block ("The final block in an assistant message cannot be `thinking`"),
+ * and that reasoning belongs to a call the history no longer has.
+ */
 function stripAnthropicToolUseBlocks(content: string | any[]): string | any[] {
   const blocks = anthropicContentToBlocks(content).filter(
-    (block) => !isPlainRecord(block) || block.type !== 'tool_use',
+    (block) =>
+      !isPlainRecord(block) ||
+      (block.type !== 'tool_use' &&
+        block.type !== 'thinking' &&
+        block.type !== 'redacted_thinking'),
   );
 
   if (blocks.length === 0) {
