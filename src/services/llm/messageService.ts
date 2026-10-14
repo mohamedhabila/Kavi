@@ -12,7 +12,7 @@ import {
 } from './localProviderRequest';
 import { sendAnthropicMessage } from './providers/anthropic/adapter';
 import { sendGeminiMessage } from './providers/gemini/message';
-import { sendOpenAICompatibleChatMessage } from './providers/openaiChat/message';
+import { sendOpenAICompatibleChatMessage } from './providers/openaiChat/adapter';
 import { sendOpenAIResponsesMessage } from './providers/openaiResponses/message';
 import type { ChatCompletionMessage, MessageRequestOptions } from './support/contracts';
 

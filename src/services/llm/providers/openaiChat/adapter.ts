@@ -4,46 +4,37 @@ import { normalizeToolInputSchema } from '../../../../utils/toolSchema';
 import { tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
 import { createProviderRequestError } from '../../support/providerErrorClassification';
-import type {
-  ChatCompletionMessage,
-  MessageRequestOptions,
-  StructuredOutputOptions,
-  ToolChoiceMode,
-} from '../../support/contracts';
+import type { LlmProviderConfig } from '../../../../types/provider';
+import { isOpenAIReasoningModel, supportsTemperature } from '../../catalog/providerCapabilities';
+import {
+  isGeminiModelName,
+  resolveModelHostedFamily,
+  resolveProviderFamily,
+} from '../../catalog/providerFamilies';
+import { resolveProviderTransport } from '../../catalog/providerProtocols';
+import type { LlmPerformFetch } from '../../core/fetchTransport';
+import { isStrictCompatibleSchema, strictifyOpenAiSchema } from '../../core/schemaTransforms';
+import { normalizeStructuredOutputOptions } from '../../core/structuredOutput';
+import { reorderToolsForPromptCaching } from '../../core/toolCaching';
+import { buildCompatibleToolChoice, shouldDisableParallelToolUse } from '../../core/toolChoice';
+import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
+import { normalizeOpenAIPromptCacheRetention } from '../openaiResponses/helpers';
+import { buildCompatibleStructuredOutputFormat } from './structuredOutput';
 import { normalizeOpenAICompatibleToolCallMessages } from '../../support/toolArgumentReplay';
 import { applyCompatibleReasoningControl } from './reasoning';
 import { getExcludedUpstreams } from '../../support/upstreamHealth';
 
-export async function sendOpenAICompatibleChat(args: {
+export async function sendOpenAICompatibleChatMessage(args: {
+  provider: LlmProviderConfig;
   baseUrl: string;
   headers: Record<string, string>;
   model: string;
   messages: ChatCompletionMessage[];
   options: MessageRequestOptions;
-  isGeminiModel: (model: string) => boolean;
-  supportsTemperature: (model: string) => boolean;
-  isOpenAIReasoningModel: (model: string) => boolean;
-  isOpenAIProvider: () => boolean;
-  isOpenRouterProvider: () => boolean;
-  isAnthropicModel: (model: string) => boolean;
-  buildCompatibleStructuredOutputFormat: (
-    structuredOutput: StructuredOutputOptions,
-  ) => Record<string, any>;
-  buildCompatibleToolChoice: (
-    choice: ToolChoiceMode | undefined,
-  ) => Record<string, any> | string | undefined;
-  shouldDisableParallelToolUse: (choice: ToolChoiceMode | undefined) => boolean;
-  normalizeOpenAIPromptCacheRetention: (
-    retention?: MessageRequestOptions['promptCacheRetention'],
-  ) => 'in_memory' | '24h';
-  reorderToolsForPromptCaching: (
-    tools: NonNullable<MessageRequestOptions['tools']>,
-  ) => NonNullable<MessageRequestOptions['tools']>;
-  normalizeStructuredOutputOptions: (value: unknown) => StructuredOutputOptions | undefined;
-  strictifyOpenAiSchema: (schema: Record<string, any>) => Record<string, any>;
-  isStrictCompatibleSchema: (schema: Record<string, any>) => boolean;
-  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
+  performFetch: LlmPerformFetch;
 }): Promise<any> {
+  const isOpenAIProvider = resolveProviderTransport(args.provider) === 'openai';
+  const isOpenRouterProvider = resolveProviderFamily(args.provider) === 'openrouter';
   const appendDynamicTextToLatestUserMessage = (
     messages: ChatCompletionMessage[],
     dynamicText?: string,
@@ -120,19 +111,18 @@ export async function sendOpenAICompatibleChat(args: {
   };
   const requestTools =
     args.options.tools?.length && args.options.enablePromptCaching
-      ? args.reorderToolsForPromptCaching(args.options.tools)
+      ? reorderToolsForPromptCaching(args.options.tools)
       : args.options.tools;
 
-  if (args.options.stream && args.isGeminiModel(args.model)) {
+  if (args.options.stream && isGeminiModelName(args.model)) {
     body.stream_options = { include_usage: true };
   }
 
   body.max_tokens = args.options.maxTokens ?? resolveModelOutputTokenBudget(args.model);
-  if (args.options.temperature !== undefined && args.supportsTemperature(args.model)) {
+  if (args.options.temperature !== undefined && supportsTemperature(args.model)) {
     body.temperature = args.options.temperature;
   }
-  const structuredOutput = args.normalizeStructuredOutputOptions(args.options.structuredOutput);
-  const isOpenRouterProvider = args.isOpenRouterProvider();
+  const structuredOutput = normalizeStructuredOutputOptions(args.options.structuredOutput);
   if (
     isOpenRouterProvider &&
     (structuredOutput !== undefined || args.options.reasoning_effort !== undefined)
@@ -146,11 +136,11 @@ export async function sendOpenAICompatibleChat(args: {
   applyCompatibleReasoningControl({
     body,
     effort: reasoningEffort,
-    isOpenAIReasoningModel: args.isOpenAIReasoningModel(args.model),
+    isOpenAIReasoningModel: isOpenAIReasoningModel(args.model),
     isOpenRouterProvider,
   });
   if (structuredOutput) {
-    body.response_format = args.buildCompatibleStructuredOutputFormat(structuredOutput);
+    body.response_format = buildCompatibleStructuredOutputFormat(structuredOutput);
   }
   if (isOpenRouterProvider) {
     // Leave out upstreams that recently sent this model's tool calls malformed or never hit
@@ -171,45 +161,45 @@ export async function sendOpenAICompatibleChat(args: {
       // calendar update without the note it was asked to add) and sent all 24 complete in
       // the strict form. The engine reads a null the tool's own schema does not admit as
       // "not given" (omitNullsTheSchemaRejects).
-      const useStrict = tool.strict !== false && args.isStrictCompatibleSchema(normalizedSchema);
+      const useStrict = tool.strict !== false && isStrictCompatibleSchema(normalizedSchema);
 
       return {
         type: 'function',
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: useStrict ? args.strictifyOpenAiSchema(normalizedSchema) : normalizedSchema,
-          ...(useStrict && args.isOpenAIProvider() ? { strict: true } : {}),
+          parameters: useStrict ? strictifyOpenAiSchema(normalizedSchema) : normalizedSchema,
+          ...(useStrict && isOpenAIProvider ? { strict: true } : {}),
         },
       };
     });
-    const toolChoice = args.buildCompatibleToolChoice(args.options.toolChoice);
+    const toolChoice = buildCompatibleToolChoice(args.options.toolChoice);
     if (toolChoice) {
       body.tool_choice = toolChoice;
     }
-    if (args.shouldDisableParallelToolUse(args.options.toolChoice)) {
+    if (shouldDisableParallelToolUse(args.options.toolChoice)) {
       body.parallel_tool_calls = false;
     }
   }
 
-  if (args.isOpenAIProvider() && args.options.enablePromptCaching) {
+  if (isOpenAIProvider && args.options.enablePromptCaching) {
     const promptCacheKey = normalizeOpenAIPromptCacheKey(args.options.promptCacheKey);
     if (promptCacheKey) {
       body.prompt_cache_key = promptCacheKey;
     }
-    body.prompt_cache_retention = args.normalizeOpenAIPromptCacheRetention(
+    body.prompt_cache_retention = normalizeOpenAIPromptCacheRetention(
       args.options.promptCacheRetention,
     );
   }
 
-  if (args.isOpenRouterProvider() && args.options.enablePromptCaching) {
+  if (isOpenRouterProvider && args.options.enablePromptCaching) {
     const sessionId = normalizeOpenRouterSessionId(
       args.options.conversationId ?? args.options.promptCacheKey,
     );
     if (sessionId) {
       body.session_id = sessionId;
     }
-    if (args.isAnthropicModel(args.model)) {
+    if (resolveModelHostedFamily(args.model) === 'anthropic') {
       body.cache_control = { type: 'ephemeral' };
     }
   }
