@@ -16,16 +16,24 @@
 //             thread and everything older has left it: every round is indexed, as capture
 //             indexes each round when it closes, and the older ones reach the model only
 //             through memory. It is how much raw history a request should keep.
+//   extract — the memory arm with background extraction run over the whole history before
+//             the question, through the app's own worker, as it would have run after each
+//             round: what extracted memories add over past rounds alone, and what the store
+//             fills with.
 // ---------------------------------------------------------------------------
 
 import { estimateTokens } from '../../services/context/tokenCounter';
 import { skipCaptureThrough } from '../../services/memory/core/memoryCaptureCursor';
+import {
+  scheduleMemoryExtraction,
+  waitForMemoryExtractionIdle,
+} from '../../services/memory/core/memoryExtractionWorker';
 import { indexClosedTurn } from '../../services/memory/core/memoryTurnsStore';
 import type { Message } from '../../types/message';
 import type { E2EScenario } from '../e2eAgent/types';
 import type { LongMemEvalInstance } from './longMemEvalDataset';
 
-export const LONGMEMEVAL_ARMS = ['memory', 'context', 'window'] as const;
+export const LONGMEMEVAL_ARMS = ['memory', 'context', 'window', 'extract'] as const;
 export type LongMemEvalArm = (typeof LONGMEMEVAL_ARMS)[number];
 
 const HISTORY_MESSAGE_ID_PREFIX = 'lme';
@@ -67,6 +75,15 @@ export function buildLongMemEvalHistoryMessages(instance: LongMemEvalInstance): 
   );
 }
 
+function indexRounds(conversationId: string, messages: ReadonlyArray<Message>): number {
+  let indexed = 0;
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    if (indexClosedTurn({ conversationId, messages, replyMessageId: message.id })) indexed += 1;
+  }
+  return indexed;
+}
+
 /**
  * Indexes every round of the history under `conversationId` and moves the capture cursor past
  * it, so extraction starts at the question; returns how many rounds were kept.
@@ -75,14 +92,25 @@ export function indexLongMemEvalHistory(
   conversationId: string,
   messages: ReadonlyArray<Message>,
 ): number {
-  let indexed = 0;
-  for (const message of messages) {
-    if (message.role !== 'assistant') continue;
-    if (indexClosedTurn({ conversationId, messages, replyMessageId: message.id })) indexed += 1;
-  }
+  const indexed = indexRounds(conversationId, messages);
   const last = messages[messages.length - 1];
   if (last) skipCaptureThrough(conversationId, last.timestamp, Date.now());
   return indexed;
+}
+
+/**
+ * Indexes every round of the history and lets the extraction worker read all of them, as it
+ * would have after each round closed. Resolves once extraction is idle, or with
+ * `settled: false` when `timeoutMs` passes first: the question is still asked.
+ */
+export async function extractLongMemEvalHistory(
+  conversationId: string,
+  messages: ReadonlyArray<Message>,
+  timeoutMs: number,
+): Promise<{ indexed: number; settled: boolean }> {
+  const indexed = indexRounds(conversationId, messages);
+  scheduleMemoryExtraction(conversationId);
+  return { indexed, settled: await waitForMemoryExtractionIdle(timeoutMs) };
 }
 
 /**
@@ -113,7 +141,8 @@ export function buildLongMemEvalScenario(
   arm: LongMemEvalArm,
   windowTokens = 0,
 ): E2EScenario {
-  const history = arm === 'memory' ? [] : buildLongMemEvalHistoryMessages(instance);
+  const history =
+    arm === 'memory' || arm === 'extract' ? [] : buildLongMemEvalHistoryMessages(instance);
   const initialMessages =
     arm === 'context'
       ? history

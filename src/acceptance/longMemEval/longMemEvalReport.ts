@@ -19,6 +19,7 @@ import {
   type LongMemEvalArm,
 } from './longMemEvalScenario';
 import type { E2EScenarioResult } from '../e2eAgent/types';
+import type { LongMemEvalMemoryAudit } from './longMemEvalMemoryAudit';
 
 export type LongMemEvalOutcome = Readonly<{
   questionId: string;
@@ -45,6 +46,14 @@ export type LongMemEvalOutcome = Readonly<{
   evidenceInPrompt: boolean | null;
   /** Share of the rounds that hold the answer that reached the model either way; null when not measured. */
   answerRoundRecall: number | null;
+  /** Background memory work's tokens (extraction, the memory section's selection). */
+  memoryTokens: number;
+  /** Extract arm: whether extraction caught up before the question; null for other arms. */
+  extractionSettled: boolean | null;
+  /** Extract arm: what the store held when the question was asked; null for other arms. */
+  memoryAudit: LongMemEvalMemoryAudit | null;
+  /** How many distinct memories the requests' memory sections showed. */
+  memoryItemsShown: number;
   errors: ReadonlyArray<string>;
 }>;
 
@@ -106,6 +115,13 @@ function roundIdsThatReachedModel(
       turn.memoryPrompt.builds.flatMap((build) => build.turnIds),
     ),
   ]);
+}
+
+/** How many distinct memories the requests' memory sections showed. */
+export function memoryItemsShown(result: E2EScenarioResult): number {
+  return new Set(
+    result.turnTraces.flatMap((turn) => turn.memoryPrompt.builds.flatMap((build) => build.itemIds)),
+  ).size;
 }
 
 /**

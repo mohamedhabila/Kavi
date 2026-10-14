@@ -20,9 +20,11 @@ import {
   summarizeLongMemEval,
   type LongMemEvalOutcome,
 } from '../../src/acceptance/longMemEval/longMemEvalReport';
+import { auditLongMemEvalMemory } from '../../src/acceptance/longMemEval/longMemEvalMemoryAudit';
 import {
   buildLongMemEvalHistoryMessages,
   buildLongMemEvalScenario,
+  extractLongMemEvalHistory,
   indexLongMemEvalHistory,
   selectLongMemEvalWindow,
 } from '../../src/acceptance/longMemEval/longMemEvalScenario';
@@ -30,6 +32,12 @@ import type { Message } from '../../src/types/message';
 import type { E2EScenarioResult } from '../../src/acceptance/e2eAgent/types';
 import { closeMemoryDb } from '../../src/services/memory/database';
 import { readCaptureCursor } from '../../src/services/memory/core/memoryCaptureCursor';
+import { __resetMemoryExtractionWorkerForTests } from '../../src/services/memory/core/memoryExtractionWorker';
+import {
+  addMemoryItem,
+  applyMemoryOperations,
+  listMemoryItems,
+} from '../../src/services/memory/core/memoryItemsStore';
 import { buildMemoryPromptSection } from '../../src/services/memory/core/memoryPrompt';
 import { resetMemoryCoreSchemaCacheForTests } from '../../src/services/memory/core/memorySchema';
 import { listMemoryTurnsAfter } from '../../src/services/memory/core/memoryTurnsStore';
@@ -232,6 +240,61 @@ describe('LongMemEval as a Kavi conversation', () => {
     expect(section?.text).toContain('Mount Rainier');
     expect(section?.turnIds).toContain('lme-0-0');
   });
+
+  it('lets extraction read the whole history for the extract arm, dated as it was said', async () => {
+    const instance = parseLongMemEvalInstance(rawInstance());
+    const history = buildLongMemEvalHistoryMessages(instance);
+    const prompts: string[] = [];
+    __resetMemoryExtractionWorkerForTests({
+      isForegroundActive: () => false,
+      resolveModel: async () => async (prompt: string) => {
+        prompts.push(prompt);
+        return JSON.stringify({
+          focus: null,
+          operations: prompt.includes('Mount Rainier')
+            ? [{ op: 'add', id: null, text: 'The user hiked Mount Rainier' }]
+            : [],
+        });
+      },
+    });
+
+    try {
+      await expect(extractLongMemEvalHistory('thread-1', history, 5_000)).resolves.toEqual({
+        indexed: 2,
+        settled: true,
+      });
+    } finally {
+      __resetMemoryExtractionWorkerForTests();
+    }
+
+    expect(buildLongMemEvalScenario(instance, 'extract')).not.toHaveProperty('initialMessages');
+    expect(prompts).toHaveLength(1);
+    expect(readCaptureCursor('thread-1')?.extractedThroughAt).toBe(history.at(-1)!.timestamp);
+    const [item] = listMemoryItems({ limit: 10, offset: 0 });
+    expect(item).toMatchObject({ text: 'The user hiked Mount Rainier' });
+    expect(item!.updatedAt).toBe(history.at(-1)!.timestamp);
+  });
+
+  it('audits what the store holds: current, replaced and repeated memories', () => {
+    const stored = addMemoryItem({ text: 'Sara lives in Lisbon', conversationId: 'c', now: 1 });
+    addMemoryItem({ text: 'The user drinks oat milk', conversationId: 'c', now: 1 });
+    addMemoryItem({ text: 'the user drinks OAT milk.', conversationId: 'c', now: 2 });
+    applyMemoryOperations({
+      operations: [
+        {
+          op: 'update',
+          id: stored.status === 'created' ? stored.item.id : '',
+          text: 'Sara lives in Porto',
+        },
+      ],
+      conversationId: 'c',
+      sourceMessageId: null,
+      saidAt: 3,
+      commit: () => undefined,
+    });
+
+    expect(auditLongMemEvalMemory()).toEqual({ current: 3, superseded: 1, duplicates: 1 });
+  });
 });
 
 function outcome(overrides: Partial<LongMemEvalOutcome>): LongMemEvalOutcome {
@@ -252,6 +315,10 @@ function outcome(overrides: Partial<LongMemEvalOutcome>): LongMemEvalOutcome {
     memorySearchCalls: 0,
     evidenceInPrompt: true,
     answerRoundRecall: 1,
+    memoryTokens: 0,
+    extractionSettled: null,
+    memoryAudit: null,
+    memoryItemsShown: 0,
     errors: [],
     ...overrides,
   };

@@ -2,8 +2,8 @@
 // LongMemEval — live benchmark run (opt-in)
 // ---------------------------------------------------------------------------
 // Gated: RUN_LONGMEMEVAL=1, LONGMEMEVAL_DATA=<path to a LongMemEval JSON file> and the
-// selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context | window,
-// default memory), LONGMEMEVAL_WINDOW_TOKENS (the window arm's raw-history budget, default
+// selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context | window |
+// extract, default memory), LONGMEMEVAL_WINDOW_TOKENS (the window arm's raw-history budget, default
 // 32000), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_JUDGE_MODEL (default
 // LongMemEval's reference judge), LONGMEMEVAL_OUT (results JSONL path). Run with TZ=UTC:
 // LongMemEval's dates carry no zone and are read as UTC.
@@ -40,17 +40,20 @@ import {
   LONGMEMEVAL_REFERENCE_JUDGE_MODEL,
   parseLongMemEvalJudgeLabel,
 } from '../../src/acceptance/longMemEval/longMemEvalJudge';
+import { auditLongMemEvalMemory } from '../../src/acceptance/longMemEval/longMemEvalMemoryAudit';
 import {
   answerRoundRecall,
   evidenceReachedMemoryPrompt,
   formatLongMemEvalSummary,
   longMemEvalHypothesis,
+  memoryItemsShown,
   summarizeLongMemEval,
   type LongMemEvalOutcome,
 } from '../../src/acceptance/longMemEval/longMemEvalReport';
 import {
   buildLongMemEvalHistoryMessages,
   buildLongMemEvalScenario,
+  extractLongMemEvalHistory,
   indexLongMemEvalHistory,
   LONGMEMEVAL_ARMS,
   type LongMemEvalArm,
@@ -65,6 +68,9 @@ const enabled =
   process.env.RUN_LONGMEMEVAL === '1' && DATA_PATH.length > 0 && shouldRunE2EAgentEval();
 const describeLive = enabled ? describe : describe.skip;
 const QUESTION_TIMEOUT_MS = 600_000;
+/** Extraction reads a history four rounds per call: about 125 calls for one LongMemEval_S history. */
+const EXTRACTION_TIMEOUT_MS = 2_400_000;
+const EXTRACT_QUESTION_TIMEOUT_MS = EXTRACTION_TIMEOUT_MS + QUESTION_TIMEOUT_MS;
 
 function selectedArm(): LongMemEvalArm {
   const arm = process.env.LONGMEMEVAL_ARM?.trim() || 'memory';
@@ -148,20 +154,35 @@ describeLive('LongMemEval (live)', () => {
           (scenario.initialMessages ?? []).map((message) => message.id),
         );
         let result;
+        let extractionSettled: boolean | null = null;
         try {
           result = await runE2EScenario(scenario, {
             provider,
-            ...(arm !== 'context'
+            ...(arm === 'extract'
               ? {
-                  beforeTurns: ({ conversationId }: { conversationId: string }) => {
-                    indexLongMemEvalHistory(conversationId, history);
+                  scenarioTimeoutMs: EXTRACT_QUESTION_TIMEOUT_MS,
+                  beforeTurns: async ({ conversationId }: { conversationId: string }) => {
+                    extractionSettled = (
+                      await extractLongMemEvalHistory(
+                        conversationId,
+                        history,
+                        EXTRACTION_TIMEOUT_MS,
+                      )
+                    ).settled;
                   },
                 }
-              : {}),
+              : arm !== 'context'
+                ? {
+                    beforeTurns: ({ conversationId }: { conversationId: string }) => {
+                      indexLongMemEvalHistory(conversationId, history);
+                    },
+                  }
+                : {}),
           });
         } finally {
           restoreClock();
         }
+        const memoryAudit = arm === 'extract' ? auditLongMemEvalMemory() : null;
         const hypothesis = longMemEvalHypothesis(result);
         const judgeReply = await judgeAnswer(judge, judgeModel, instance, hypothesis);
         const outcome: LongMemEvalOutcome = {
@@ -186,13 +207,17 @@ describeLive('LongMemEval (live)', () => {
               : evidenceReachedMemoryPrompt(instance, result, threadMessageIds),
           answerRoundRecall:
             arm === 'context' ? null : answerRoundRecall(instance, result, threadMessageIds),
+          memoryTokens: result.memoryUsage.totalTokens,
+          extractionSettled,
+          memoryAudit,
+          memoryItemsShown: memoryItemsShown(result),
           errors: result.errors,
         };
         outcomes.push(outcome);
         fs.appendFileSync(outPath, `${JSON.stringify(outcome)}\n`);
         expect(hypothesis.length).toBeGreaterThan(0);
       },
-      QUESTION_TIMEOUT_MS,
+      arm === 'extract' ? EXTRACT_QUESTION_TIMEOUT_MS : QUESTION_TIMEOUT_MS,
     );
   }
 
