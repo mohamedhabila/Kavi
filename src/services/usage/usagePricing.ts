@@ -27,43 +27,43 @@ interface ModalityCostRates {
 }
 
 // Per 1M tokens, from each vendor's pricing page (2026-10-14). OpenAI's GPT-6 and GPT-5.6 rates
-// double (output 1.5x) above 272K input tokens. Gemini 4 Argon and 3.8/3.6 Flash carry launch
+// double (output 1.5x) above 272K input tokens, and their cache writes cost 1.25x input. Gemini 4 Argon and 3.8/3.6 Flash carry launch
 // prices: Argon $4/$20 from 2026-12-01, the Flash models $1.50/$7.50 from 2027-01-01.
 const COST_TABLE: Record<string, ModelCostRates> = {
   'gpt-6-astra': {
     promptThreshold: 272_000,
-    standard: { input: 10, output: 50, cacheRead: 1 },
-    largePrompt: { input: 20, output: 75, cacheRead: 2 },
+    standard: { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1 },
+    largePrompt: { input: 20, output: 75, cacheWrite: 25, cacheRead: 2 },
   },
   'gpt-6.1-sol': {
     promptThreshold: 272_000,
-    standard: { input: 2, output: 10, cacheRead: 0.1 },
-    largePrompt: { input: 4, output: 15, cacheRead: 0.2 },
+    standard: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1 },
+    largePrompt: { input: 4, output: 15, cacheWrite: 5, cacheRead: 0.2 },
   },
   'gpt-6-sol': {
     promptThreshold: 272_000,
-    standard: { input: 2, output: 10, cacheRead: 0.2 },
-    largePrompt: { input: 4, output: 15, cacheRead: 0.4 },
+    standard: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+    largePrompt: { input: 4, output: 15, cacheWrite: 5, cacheRead: 0.4 },
   },
   'gpt-6-luna': {
     promptThreshold: 272_000,
-    standard: { input: 0.1, output: 0.5, cacheRead: 0.01 },
-    largePrompt: { input: 0.2, output: 0.75, cacheRead: 0.02 },
+    standard: { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+    largePrompt: { input: 0.2, output: 0.75, cacheWrite: 0.25, cacheRead: 0.02 },
   },
   'gpt-5.6-sol': {
     promptThreshold: 272_000,
-    standard: { input: 4, output: 20, cacheRead: 0.4 },
-    largePrompt: { input: 8, output: 30, cacheRead: 0.8 },
+    standard: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.4 },
+    largePrompt: { input: 8, output: 30, cacheWrite: 10, cacheRead: 0.8 },
   },
   'gpt-5.6-terra': {
     promptThreshold: 272_000,
-    standard: { input: 2, output: 12, cacheRead: 0.2 },
-    largePrompt: { input: 4, output: 18, cacheRead: 0.4 },
+    standard: { input: 2, output: 12, cacheWrite: 2.5, cacheRead: 0.2 },
+    largePrompt: { input: 4, output: 18, cacheWrite: 5, cacheRead: 0.4 },
   },
   'gpt-5.6-luna': {
     promptThreshold: 272_000,
-    standard: { input: 0.2, output: 1.2, cacheRead: 0.02 },
-    largePrompt: { input: 0.4, output: 1.8, cacheRead: 0.04 },
+    standard: { input: 0.2, output: 1.2, cacheWrite: 0.25, cacheRead: 0.02 },
+    largePrompt: { input: 0.4, output: 1.8, cacheWrite: 0.5, cacheRead: 0.04 },
   },
   'gpt-5.5': { input: 5, output: 30, cacheRead: 0.5 },
   'gpt-5.4': { input: 2.5, output: 15 },

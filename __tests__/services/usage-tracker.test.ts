@@ -231,6 +231,11 @@ describe('Usage Tracker', () => {
       expect(estimateCost('gpt-6-astra', 1_000_000, 1_000_000)).toBeCloseTo(20 + 75, 10);
       expect(estimateCost('gpt-6-astra', 100_000, 1_000_000)).toBeCloseTo(1 + 50, 10);
       expect(estimateCost('gpt-6.1-sol', 100_000, 0)).toBeCloseTo(0.2, 10);
+      // GPT-5.6 and later bill cache writes at 1.25x input.
+      expect(estimateCost('gpt-6.1-sol', 100_000, 0, { cacheWriteTokens: 100_000 })).toBeCloseTo(
+        0.25,
+        10,
+      );
       expect(estimateCost('openai/gpt-6-luna', 100_000, 1_000_000)).toBeCloseTo(0.01 + 0.5, 10);
       expect(estimateCost('gemini-4-argon', 1_000_000, 1_000_000)).toBeCloseTo(2 + 10, 10);
       expect(estimateCost('gemini-3.8-flash', 1_000_000, 1_000_000)).toBeCloseTo(0.75 + 3.75, 10);
