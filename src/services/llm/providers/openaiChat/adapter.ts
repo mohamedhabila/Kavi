@@ -160,7 +160,7 @@ export async function sendOpenAICompatibleChatMessage(args: {
       // calls (a reminder without its title or time, an update without its new time, a
       // calendar update without the note it was asked to add) and sent all 24 complete in
       // the strict form. The engine reads a null the tool's own schema does not admit as
-      // "not given" (omitNullsTheSchemaRejects).
+      // "not given" (decodeToolArgumentsAgainstSchema).
       const useStrict = tool.strict !== false && isStrictCompatibleSchema(normalizedSchema);
 
       return {

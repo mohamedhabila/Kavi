@@ -38,7 +38,7 @@ import {
 } from '../../services/executionJournal/toolEffectDispatchLifecycle';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRuntimeOutcome';
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
-import { omitNullsTheSchemaRejects } from '../../services/llm/core/schemaTransforms';
+import { decodeToolArgumentsAgainstSchema } from '../../services/llm/core/schemaTransforms';
 
 function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
   return lifecycle.groundedRequestScopedTools?.find(
@@ -62,7 +62,7 @@ export async function executeToolCallLifecycle(
   const effectiveToolCall = {
     ...params.tc,
     name,
-    arguments: omitNullsTheSchemaRejects(
+    arguments: decodeToolArgumentsAgainstSchema(
       params.tc.arguments,
       findToolDeclaration(name, params.groundedRequestScopedTools)?.input_schema,
     ),

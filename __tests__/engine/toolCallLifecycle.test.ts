@@ -289,6 +289,34 @@ describe('executeToolCallLifecycle', () => {
     });
   });
 
+  // Traced live on Sonnet 5.5: a call to a tool whose declaration the turn did not send has
+  // no schema to type its values with, so every value arrives as a string. All 9 first
+  // sms_compose calls of a full suite sent `recipients` as a JSON-encoded list and were
+  // refused, and photos_pick `count` came as "2".
+  it('reads a string the registered schema does not admit as the value it encodes', async () => {
+    mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome('{"status":"composer_opened"}'));
+
+    const result = await executeToolCallLifecycle(
+      buildLifecycle({
+        tc: {
+          id: 'tc-sms',
+          name: 'sms_compose',
+          arguments: JSON.stringify({
+            recipients: '["+15550101001"]',
+            message: '42',
+          }),
+        },
+        availableToolNames: new Set(['sms_compose']),
+      }),
+    );
+
+    expect('toolMessage' in result && result.toolMessage.isError).toBeFalsy();
+    expect(JSON.parse(mockedExecuteTool.mock.calls[0][1])).toEqual({
+      recipients: ['+15550101001'],
+      message: '42',
+    });
+  });
+
   it('passes the code-owned current user message only through execution context', async () => {
     mockedExecuteTool.mockResolvedValueOnce(completedToolOutcome('{}'));
     const currentUserMessage = { id: 'user-current', text: 'Raw current request.' };

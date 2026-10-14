@@ -1,5 +1,5 @@
 import {
-  omitNullsTheSchemaRejects,
+  decodeToolArgumentsAgainstSchema,
   strictifyOpenAiSchema,
 } from '../../../../src/services/llm/core/schemaTransforms';
 
@@ -32,7 +32,7 @@ const SCHEMA = {
 };
 
 function decoded(args: unknown): unknown {
-  return JSON.parse(omitNullsTheSchemaRejects(JSON.stringify(args), SCHEMA));
+  return JSON.parse(decodeToolArgumentsAgainstSchema(JSON.stringify(args), SCHEMA));
 }
 
 describe('reading strict-form tool arguments', () => {
@@ -72,10 +72,10 @@ describe('reading strict-form tool arguments', () => {
 
   it('returns text it has nothing to do with unchanged', () => {
     const untouched = '{ "title": "Stretch" }';
-    expect(omitNullsTheSchemaRejects(untouched, SCHEMA)).toBe(untouched);
-    expect(omitNullsTheSchemaRejects('{"title":', SCHEMA)).toBe('{"title":');
-    expect(omitNullsTheSchemaRejects('[null]', SCHEMA)).toBe('[null]');
-    expect(omitNullsTheSchemaRejects('{"count":null}', undefined)).toBe('{"count":null}');
+    expect(decodeToolArgumentsAgainstSchema(untouched, SCHEMA)).toBe(untouched);
+    expect(decodeToolArgumentsAgainstSchema('{"title":', SCHEMA)).toBe('{"title":');
+    expect(decodeToolArgumentsAgainstSchema('[null]', SCHEMA)).toBe('[null]');
+    expect(decodeToolArgumentsAgainstSchema('{"count":null}', undefined)).toBe('{"count":null}');
   });
 
   it('undoes exactly what the strict form adds', () => {
@@ -101,5 +101,61 @@ describe('reading strict-form tool arguments', () => {
       anything: 1,
       when: { kind: 'once' },
     });
+  });
+});
+
+// A model calling a tool whose declaration it was not sent types every value as a string:
+// Claude Sonnet 5.5 sent sms_compose `recipients` as '["+15550101001"]' and photos_pick
+// `count` as "2".
+describe('reading string-typed tool arguments', () => {
+  const MEDIA_SCHEMA = {
+    type: 'object',
+    properties: {
+      recipients: { type: 'array', items: { type: 'string' } },
+      count: { type: 'number' },
+      seconds: { type: 'integer' },
+      loud: { type: 'boolean' },
+      ids: { type: 'array', items: { type: 'number' } },
+      when: { type: 'object', properties: { delaySeconds: { type: 'number' } } },
+      label: { type: 'string' },
+      either: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+      untyped: { description: 'Any JSON value.' },
+    },
+  };
+
+  function read(args: unknown): unknown {
+    return JSON.parse(decodeToolArgumentsAgainstSchema(JSON.stringify(args), MEDIA_SCHEMA));
+  }
+
+  it('decodes a string to the list, number, boolean or object the schema expects', () => {
+    expect(
+      read({
+        recipients: '["+15550101001"]',
+        count: '2',
+        seconds: '3',
+        loud: 'true',
+        when: '{"delaySeconds":"60"}',
+        ids: ['1', 2],
+      }),
+    ).toEqual({
+      recipients: ['+15550101001'],
+      count: 2,
+      seconds: 3,
+      loud: true,
+      when: { delaySeconds: 60 },
+      ids: [1, 2],
+    });
+  });
+
+  it('never touches a position that admits a string, or states no type', () => {
+    const args = { label: '2', either: '2', untyped: '[1]' };
+
+    expect(read(args)).toEqual(args);
+  });
+
+  it('leaves a string that does not encode an admitted value for validation to report', () => {
+    const args = { count: 'two', seconds: '3.5', recipients: '+15550101001', loud: 'null' };
+
+    expect(read(args)).toEqual(args);
   });
 });

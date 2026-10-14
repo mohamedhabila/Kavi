@@ -64,37 +64,85 @@ function objectPropertiesOf(schema: Record<string, any>): Record<string, any> | 
   return variant?.properties;
 }
 
-/** Deletes, in place, every null the schema at its position does not admit; true if any. */
-function deleteNullsTheSchemaRejects(value: unknown, schema: unknown): boolean {
-  if (!isSchemaRecord(schema)) return false;
-  let deleted = false;
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      deleted = deleteNullsTheSchemaRejects(entry, schema.items) || deleted;
-    }
-    return deleted;
-  }
-  const properties = objectPropertiesOf(schema);
-  if (!isSchemaRecord(value) || !properties) return false;
-  for (const [key, entry] of Object.entries(value)) {
-    const propertySchema = properties[key];
-    if (entry === null && propertySchema !== undefined && !schemaAdmitsNull(propertySchema)) {
-      delete value[key];
-      deleted = true;
-    } else {
-      deleted = deleteNullsTheSchemaRejects(entry, propertySchema) || deleted;
-    }
-  }
-  return deleted;
+/** The JSON types a schema admits, its variants' included; empty when it states none. */
+function schemaTypesOf(schema: Record<string, any>): string[] {
+  const variants = [schema.anyOf, schema.oneOf].filter(Array.isArray).flat().filter(isSchemaRecord);
+  return [...normalizeSchemaTypeList(schema.type), ...variants.flatMap(schemaTypesOf)];
+}
+
+function jsonTypeOf(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'number') return Number.isInteger(value) ? 'integer' : 'number';
+  return typeof value;
 }
 
 /**
- * The inverse of `strictifyOpenAiSchema` for the arguments a model returns. The strict form
- * declares every optional property required and nullable, so a null where the tool's own
- * schema admits none means the property was not given. Returns the text unchanged when it is
- * not a JSON object or holds no such null.
+ * The value a string encodes, when the schema at its position admits no string but admits
+ * that value: `"2"` for a number, `"[\"+1555\"]"` for an array. A model calling a tool whose
+ * declaration it was not sent has no schema to type its arguments with, and Claude Sonnet 5.5
+ * then sends every value as a string (9 of 9 first sms_compose calls, photos_pick `count`,
+ * camera_clip `durationSeconds`). Anything else, including a string that does not parse, is
+ * left for preflight to report against the schema.
  */
-export function omitNullsTheSchemaRejects(
+function decodeStringTheSchemaRejects(
+  value: string,
+  schema: Record<string, any>,
+): { decoded: unknown } | undefined {
+  const types = schemaTypesOf(schema);
+  if (types.length === 0 || types.includes('string')) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  const parsedType = jsonTypeOf(parsed);
+  const admitted =
+    parsed !== null &&
+    (types.includes(parsedType) || (parsedType === 'integer' && types.includes('number')));
+  return admitted ? { decoded: parsed } : undefined;
+}
+
+/**
+ * The value read against its schema: a null the schema does not admit dropped (the property
+ * was not given), a string the schema does not admit decoded to what it encodes. Returns the
+ * same value when nothing changed.
+ */
+function decodeAgainstSchema(value: unknown, schema: unknown): unknown {
+  if (!isSchemaRecord(schema)) return value;
+  if (typeof value === 'string') {
+    const decoded = decodeStringTheSchemaRejects(value, schema);
+    return decoded ? decodeAgainstSchema(decoded.decoded, schema) : value;
+  }
+  if (Array.isArray(value)) {
+    const items = value.map((entry) => decodeAgainstSchema(entry, schema.items));
+    return items.some((entry, index) => entry !== value[index]) ? items : value;
+  }
+  const properties = objectPropertiesOf(schema);
+  if (!isSchemaRecord(value) || !properties) return value;
+  let changed = false;
+  const decoded: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const propertySchema = properties[key];
+    if (entry === null && propertySchema !== undefined && !schemaAdmitsNull(propertySchema)) {
+      changed = true;
+      continue;
+    }
+    decoded[key] = decodeAgainstSchema(entry, propertySchema);
+    changed ||= decoded[key] !== entry;
+  }
+  return changed ? decoded : value;
+}
+
+/**
+ * The call a model meant, read against the tool's own schema where every model tool call
+ * enters the engine. A null the schema admits none of means the property was not given: the
+ * strict form (`strictifyOpenAiSchema`) declares every optional property required and
+ * nullable. A string the schema admits none of is decoded to the value it encodes. Returns the
+ * text unchanged when it is not a JSON object or nothing in it needs reading.
+ */
+export function decodeToolArgumentsAgainstSchema(
   argumentsText: string,
   schema: Record<string, any> | undefined,
 ): string {
@@ -105,7 +153,9 @@ export function omitNullsTheSchemaRejects(
   } catch {
     return argumentsText;
   }
-  return deleteNullsTheSchemaRejects(parsed, schema) ? JSON.stringify(parsed) : argumentsText;
+  if (!isSchemaRecord(parsed)) return argumentsText;
+  const decoded = decodeAgainstSchema(parsed, schema);
+  return decoded === parsed ? argumentsText : JSON.stringify(decoded);
 }
 
 function makeSchemaNullable(schema: Record<string, any>): Record<string, any> {
