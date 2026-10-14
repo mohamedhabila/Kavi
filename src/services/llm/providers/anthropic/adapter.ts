@@ -460,7 +460,9 @@ export async function sendAnthropicMessages(args: {
   );
 
   if (!response.ok && response.status === 400 && body.tools?.length) {
-    const errorText = await response.text().catch(() => '');
+    // A response body can be read once: the refusal is kept, so the error carries the
+    // API's reason rather than only "Bad Request".
+    let errorText = await response.text().catch(() => response.statusText);
     if (/schema.*too.*complex/i.test(errorText)) {
       body.tools = body.tools.map((tool: Record<string, any>) => ({
         name: tool.name,
@@ -477,14 +479,14 @@ export async function sendAnthropicMessages(args: {
         },
         args.options.stream ?? false,
       );
+      if (!response.ok) errorText = await response.text().catch(() => response.statusText);
     }
 
     if (!response.ok) {
-      const retryErrorText = await response.text().catch(() => response.statusText);
       throw createProviderRequestError({
         providerFamily: 'anthropic',
         status: response.status,
-        bodyText: retryErrorText,
+        bodyText: errorText,
       });
     }
   } else if (!response.ok) {
