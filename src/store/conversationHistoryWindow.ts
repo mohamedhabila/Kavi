@@ -12,6 +12,12 @@
 // (agentTurnRequestBudget); for a 1M-token model, whose working window is 400k, this is
 // the bound. The gap between limit and target makes a trim rare: the request prefix stays
 // the same for many turns in between, and the prompt cache keeps hitting.
+//
+// 128k, measured on LongMemEval (GLM 5.3 Flash, 60 questions each): recall comes from
+// memory, not raw history. On _M (about 1.2M tokens of history) memory alone answered
+// 40/60 and a 128k window 38/60 at 18x the input tokens; on _S the full history answered
+// fewer than memory alone. The window keeps the live exchange whole, and every turn pays
+// for it when the prompt cache is cold, so it is no larger than that evidence supports.
 // ---------------------------------------------------------------------------
 
 import { estimateImageInputTokens } from '../services/context/contentTokens';
@@ -20,7 +26,7 @@ import type { Message } from '../types/message';
 import { isTurnOpeningUserMessage } from '../utils/steeringMessages';
 import { archiveLeavingMessages } from './chatPersistence';
 
-export const CONVERSATION_HISTORY_TOKEN_LIMIT = 256_000;
+export const CONVERSATION_HISTORY_TOKEN_LIMIT = 128_000;
 /** Share of the limit a trim brings the history back to. */
 const HISTORY_TRIM_TARGET_SHARE = 0.75;
 export const CONVERSATION_HISTORY_TOKEN_TARGET = Math.floor(
