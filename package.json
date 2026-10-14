@@ -103,6 +103,13 @@
     "verify:strict:e2e": "node ./scripts/verify-strict-e2e.js"
   },
   "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [
+          "expo-sharing"
+        ]
+      }
+    },
     "install": {
       "exclude": [
         "react-native-gesture-handler"

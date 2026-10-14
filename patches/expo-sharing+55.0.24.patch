@@ -1,0 +1,43 @@
+diff --git a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/ResolvingShareIntentDataParser.kt b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/ResolvingShareIntentDataParser.kt
+index 5f4d942..dfd5be9 100644
+--- a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/ResolvingShareIntentDataParser.kt
++++ b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/ResolvingShareIntentDataParser.kt
+@@ -25,10 +25,11 @@ class ResolvingShareIntentDataParser {
+     }
+ 
+     private fun handleSendAction(context: Context, intent: Intent, type: String): List<ResolvedSharePayload> {
+-      return if (type == "text/plain") {
++      // A shared text file (text/plain with a stream and no EXTRA_TEXT) is a file, not text.
++      val uri = intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)
++      return if (type == "text/plain" && uri == null) {
+         extractTextPayload(intent)
+       } else {
+-        val uri = intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)
+         listOfNotNull(uri?.let { resolveUri(context, it, type) })
+       }
+     }
+diff --git a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/SimpleShareIntentDataParser.kt b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/SimpleShareIntentDataParser.kt
+index 8dd50e8..45d5229 100644
+--- a/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/SimpleShareIntentDataParser.kt
++++ b/node_modules/expo-sharing/android/src/main/java/expo/modules/sharing/dataParsers/SimpleShareIntentDataParser.kt
+@@ -17,7 +17,9 @@ internal class SimpleShareIntentDataParser {
+     }
+ 
+     private fun handleSendAction(context: Context, intent: Intent, type: String): List<SharePayload> {
+-      return if (type == "text/plain") {
++      // A shared text file (text/plain with a stream and no EXTRA_TEXT) is a file, not text.
++      val stream = intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)
++      return if (type == "text/plain" && stream == null) {
+         val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return emptyList()
+         val isUrl = android.util.Patterns.WEB_URL.matcher(text).matches()
+ 
+@@ -29,8 +31,7 @@ internal class SimpleShareIntentDataParser {
+           }
+         )
+       } else {
+-        val uri = intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)
+-        listOfNotNull(uri?.let { createUriPayload(context, it, type) })
++        listOfNotNull(stream?.let { createUriPayload(context, it, type) })
+       }
+     }
+ 
