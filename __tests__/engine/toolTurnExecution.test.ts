@@ -270,18 +270,11 @@ describe('toolTurnExecution', () => {
     expect(blocker).toBeUndefined();
   });
 
+  // Preflight, not the batch, answers malformed arguments, with what the tool's schema expects.
   it.each([
-    [
-      'runs an effectful call with structured arguments',
-      '{"path":"draft.txt","content":"done"}',
-      undefined,
-    ],
-    [
-      'refuses an effectful call whose arguments do not parse',
-      'not-json',
-      'effect_arguments_invalid',
-    ],
-  ])('%s without any graph bookkeeping', async (_label, argumentsText, expectedCode) => {
+    ['runs an effectful call with structured arguments', '{"path":"draft.txt","content":"done"}'],
+    ['runs an effectful call with no arguments', ''],
+  ])('%s without any graph bookkeeping', async (_label, argumentsText) => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     let blocker: string | undefined;
     mockedExecuteToolCallLifecycle.mockImplementation(async (lifecycle: any) => {
@@ -305,11 +298,7 @@ describe('toolTurnExecution', () => {
     await executeAgentControlGraphToolTurn(params);
 
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
-    if (expectedCode) {
-      expect(JSON.parse(blocker ?? '{}')).toMatchObject({ status: 'error', code: expectedCode });
-    } else {
-      expect(blocker).toBeUndefined();
-    }
+    expect(blocker).toBeUndefined();
   });
 
   it('projects the three-stall recovery guard into tool preflight before dispatch', async () => {

@@ -5,33 +5,17 @@ import { getCodeOwnedToolEffectContract } from './toolEffectReceiptContracts';
 /** A call whose side effects the code-owned contract cannot describe, so it must not run. */
 export interface UnsupportedEffectContract {
   toolName: string;
-  code: 'effect_contract_unavailable' | 'effect_arguments_invalid';
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function argumentsParse(argumentsText: string): boolean {
-  try {
-    return isPlainRecord(JSON.parse(argumentsText) as unknown);
-  } catch {
-    return false;
-  }
+  code: 'effect_contract_unavailable';
 }
 
 /**
- * Whether a call's effects fall outside what its code-owned contract can account for: a
- * tool declaring effects it has no contract for, or an effectful call whose arguments do
- * not parse. Effect-free, operational and unknown-policy tools always run.
+ * Whether a tool declares effects its code-owned contract cannot account for. Effect-free,
+ * operational and unknown-policy tools always run. The call's arguments are not judged
+ * here: preflight validates them against the tool's schema and answers a malformed call
+ * with what the schema expects.
  */
 export function resolveUnsupportedEffectContract(params: {
   toolName: string;
-  argumentsText: string;
 }): UnsupportedEffectContract | null {
   const toolName = normalizeToolName(params.toolName);
   const policy = resolveToolEffectPolicy(toolName);
@@ -43,15 +27,10 @@ export function resolveUnsupportedEffectContract(params: {
   if (policy.effects.includes('unknown') || !contract) {
     return { toolName, code: 'effect_contract_unavailable' };
   }
-  if (contract.completionMode === 'operational') {
+  if (contract.completionMode === 'operational' || contract.effectMode === 'effectful') {
     return null;
   }
-  if (contract.effectMode !== 'effectful') {
-    return { toolName, code: 'effect_contract_unavailable' };
-  }
-  return argumentsParse(params.argumentsText)
-    ? null
-    : { toolName, code: 'effect_arguments_invalid' };
+  return { toolName, code: 'effect_contract_unavailable' };
 }
 
 export function buildUnsupportedEffectContractBlock(

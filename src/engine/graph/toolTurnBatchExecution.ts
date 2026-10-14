@@ -94,10 +94,7 @@ export async function executeAgentControlGraphToolBatch(params: {
   const executionToolFilter = (toolName: string): boolean =>
     params.toolFilter ? params.toolFilter(toolName) : true;
   const unsupportedEffectContracts = params.executableToolCalls.map((toolCall) =>
-    resolveUnsupportedEffectContract({
-      toolName: toolCall.name,
-      argumentsText: toolCall.arguments,
-    }),
+    resolveUnsupportedEffectContract({ toolName: toolCall.name }),
   );
   const workflowBlockerByCallId = new Map<string, string>();
   const hasMixedMobileControllerBoundary =

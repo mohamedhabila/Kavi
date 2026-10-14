@@ -212,6 +212,44 @@ describe('toolTurnBatchExecution', () => {
     expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
   });
 
+  // Traced live on Sonnet 5.5: a call with no arguments streams as an empty arguments text,
+  // which every other stage reads as {}. The effect gate parsed it with JSON.parse alone and
+  // refused screen_record and camera_clip with "cannot prove this mutation", so the model
+  // had to guess the arguments it had chosen to leave at their defaults.
+  it.each(['screen_record', 'camera_clip'])(
+    'runs an effectful %s called with no arguments',
+    async (toolName) => {
+      mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
+        expect(params.workflowToolCallBlocker(params.tc.name, params.tc.arguments)).toBeUndefined();
+        return {
+          toolCallId: params.tc.id,
+          effectiveToolName: params.tc.name,
+          result: '{}',
+          toolMessage: buildToolResultMessage({
+            idPrefix: 'tool',
+            toolCallId: params.tc.id,
+            content: '{}',
+            toolCall: {
+              id: params.tc.id,
+              name: params.tc.name,
+              arguments: params.tc.arguments,
+              status: 'completed',
+            },
+          }),
+        };
+      });
+
+      await executeAgentControlGraphToolBatch(
+        createParams({
+          executableToolCalls: [{ id: `tc-${toolName}`, name: toolName, arguments: '' }],
+          availableToolNames: new Set([toolName]),
+        }),
+      );
+
+      expect(mockedExecuteToolCallLifecycle).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('allows an answer-supporting read-only tool without a completion goal', async () => {
     mockedExecuteToolCallLifecycle.mockImplementation(async (params: any) => {
       expect(params.workflowToolCallBlocker(params.tc.name, params.tc.arguments)).toBeUndefined();
