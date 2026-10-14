@@ -102,7 +102,10 @@ describe('iteration request understanding continuity', () => {
     }));
   });
 
-  it('projects the request route into the prompt on a later iteration, with no goal text', async () => {
+  // The projection is graph state only. As a prompt section it added about 220 tokens of
+  // routing bookkeeping to the uncached tail from the second iteration on, and the changed
+  // tail made every tool loop re-process its turn at full price.
+  it('records the request route in the graph on a later iteration, never in the prompt', async () => {
     const input = params(2);
     await executeAgentControlGraphIteration(input);
 
@@ -119,25 +122,12 @@ describe('iteration request understanding continuity', () => {
     ]);
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
       expect.objectContaining({
-        promptContextSupport: expect.objectContaining({
-          runtimeContext: expect.stringContaining('## Request Understanding Projection (v4)'),
-        }),
+        promptContextSupport: expect.objectContaining({ runtimeContext: 'Runtime context' }),
       }),
-    );
-    const preparation = mockedPrepareModelTurn.mock.calls[0]?.[0];
-    expect(preparation?.promptContextSupport.runtimeContext).toContain('### Code-owned route');
-    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
-      'evidence.tool:write_file',
-    );
-    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
-      'Keep the verified constraint',
-    );
-    expect(preparation?.promptContextSupport.runtimeContext).not.toContain(
-      'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
     );
   });
 
-  it('records a typed summary without adding prompt noise to a simple first turn', async () => {
+  it('records a typed summary on a first turn without touching the prompt', async () => {
     const input = params(1);
     await executeAgentControlGraphIteration(input);
 

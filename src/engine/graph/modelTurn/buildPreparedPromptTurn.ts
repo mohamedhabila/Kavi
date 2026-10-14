@@ -40,12 +40,16 @@ export function buildPreparedModelTurnPrompt(params: {
   const policyAuthorizedPinnedToolNames = params.pinnedToolNames.filter((name) =>
     groundedToolNames.has(name),
   );
+  // The anchor keeps the exact request in view once compaction has dropped it from the
+  // transcript. While the transcript still carries it, a copy only adds tokens, and adding it
+  // from the second iteration on changed the prompt's uncached tail mid-turn, so every tool
+  // loop re-processed the turn at full price.
   const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
-  const transcriptCarriesSoleFirstTurnAnchor =
-    params.iteration === 1 &&
-    params.workingMessages.length === 1 &&
+  const transcriptCarriesAnchor =
     workflowTaskAnchor !== undefined &&
-    messageMatchesWorkflowTaskAnchor(params.workingMessages[0], workflowTaskAnchor);
+    params.workingMessages.some((message) =>
+      messageMatchesWorkflowTaskAnchor(message, workflowTaskAnchor),
+    );
   const prepare = (options: {
     groundedTools: ReadonlyArray<ToolDefinition>;
     longTermMemoryEnabled: boolean;
@@ -73,7 +77,7 @@ export function buildPreparedModelTurnPrompt(params: {
         runtimePolicyPrompt: buildMemoryPolicyPromptSection(options.longTermMemoryEnabled),
         skillPrompts: params.promptContextSupport.skillPrompts,
         workflowRuntimePrompt: params.workflowRuntimePrompt,
-        workflowTaskAnchor: transcriptCarriesSoleFirstTurnAnchor ? undefined : workflowTaskAnchor,
+        workflowTaskAnchor: transcriptCarriesAnchor ? undefined : workflowTaskAnchor,
       },
       toolingEnabledForProvider: params.toolingEnabledForProvider,
     });

@@ -182,11 +182,11 @@ describe('runOrchestrator — compaction resilience', () => {
     );
 
     expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+    // The request stays in view on every call: in the transcript while compaction keeps it,
+    // as the anchor once compaction has dropped it.
     expect(
       mockStreamMessage.mock.calls.every((call) =>
-        String(call[0][0]?.content).includes(
-          JSON.stringify(createWorkflowTaskAnchor(anchorMessage)),
-        ),
+        JSON.stringify(call[0]).includes(anchorMessage.content),
       ),
     ).toBe(true);
     expect(compactSpy.mock.calls.some(([params]) => params.tier === 'aggressive')).toBe(true);

@@ -1,9 +1,6 @@
 import {
-  appendRequestUnderstandingToRuntimeContext,
   normalizeRequestUnderstandingSnapshot,
   projectRequestUnderstanding,
-  renderRequestUnderstandingPromptSection,
-  shouldRenderRequestUnderstandingPrompt,
   summarizeRequestUnderstanding,
 } from '../../src/services/agents/requestUnderstandingProjection';
 import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
@@ -72,19 +69,6 @@ describe('request understanding projection', () => {
       registeredRequiredInformation: { status: 'unknown', reason: 'request_state_unavailable' },
       effectAuthorization: { status: 'unknown', reason: 'request_state_unavailable' },
     });
-  });
-
-  it('renders no goal or bookkeeping text into the prompt', () => {
-    const prompt = renderRequestUnderstandingPromptSection(
-      projectRequestUnderstanding({ requestFrame: frame() }),
-    );
-
-    expect(prompt).toContain('### Code-owned route');
-    expect(prompt).toContain(
-      '- continuation=new; input=text; attachments=0; decision=act; reason=actionable_input',
-    );
-    expect(prompt).toContain('model prose can never grant authority');
-    expect(prompt).not.toMatch(/goal|objective|success condition|constraint/i);
   });
 
   it('fails closed on duplicate or authority-conflicting required information', () => {
@@ -194,23 +178,6 @@ describe('request understanding projection', () => {
     });
   });
 
-  it('renders on continuations and later iterations without adding first-turn noise', () => {
-    const firstTurn = projectRequestUnderstanding({ requestFrame: frame() });
-    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: firstTurn })).toBe(
-      false,
-    );
-    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 2, projection: firstTurn })).toBe(
-      true,
-    );
-
-    const resumed = projectRequestUnderstanding({
-      requestFrame: { ...frame(), continuation: 'resume' },
-    });
-    expect(shouldRenderRequestUnderstandingPrompt({ iteration: 1, projection: resumed })).toBe(
-      true,
-    );
-  });
-
   it('creates and normalizes a closed privacy-safe evaluator snapshot', () => {
     const summary = summarizeRequestUnderstanding(
       projectRequestUnderstanding({ requestFrame: frame() }),
@@ -279,12 +246,5 @@ describe('request understanding projection', () => {
       iteration: 2,
       detail: 'integrity:valid',
     });
-  });
-
-  it('appends the bounded projection to dynamic runtime context', () => {
-    expect(appendRequestUnderstandingToRuntimeContext('runtime', 'projection')).toBe(
-      'runtime\n\nprojection',
-    );
-    expect(appendRequestUnderstandingToRuntimeContext(null, null)).toBeNull();
   });
 });

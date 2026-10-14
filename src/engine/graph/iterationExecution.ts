@@ -1,10 +1,7 @@
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
 import {
-  appendRequestUnderstandingToRuntimeContext,
   areRequestUnderstandingSnapshotsEqual,
   projectRequestUnderstanding,
-  renderRequestUnderstandingPromptSection,
-  shouldRenderRequestUnderstandingPrompt,
   summarizeRequestUnderstanding,
 } from '../../services/agents/requestUnderstandingProjection';
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
@@ -45,13 +42,6 @@ export async function executeAgentControlGraphIteration(
       },
     ]);
   }
-  const requestUnderstandingPrompt = shouldRenderRequestUnderstandingPrompt({
-    iteration: params.iteration,
-    projection: requestUnderstanding,
-  })
-    ? renderRequestUnderstandingPromptSection(requestUnderstanding)
-    : null;
-
   const modelTurnPreparation = await prepareAgentControlGraphModelTurn({
     activeModel: runtime.activeModel,
     activeProvider: runtime.activeProvider,
@@ -66,10 +56,6 @@ export async function executeAgentControlGraphIteration(
       ...params.promptContextSupport,
       graphPlan: graphSnapshot.plan,
       memory: runtime.memory,
-      runtimeContext: appendRequestUnderstandingToRuntimeContext(
-        params.promptContextSupport.runtimeContext,
-        requestUnderstandingPrompt,
-      ),
     },
     requestFrame: params.requestFrame,
     thinkingLevel: params.thinkingLevel,

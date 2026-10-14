@@ -1,11 +1,9 @@
 // ---------------------------------------------------------------------------
 // Tests - Orchestrator: workflow task anchor scoping
 // ---------------------------------------------------------------------------
-// The anchor protects task fidelity across long, delegation-capable execution.
-// It should appear only when the run can delegate (sessions_spawn on its
-// surface) or is itself a delegated worker (recognized here by the absence of
-// workflowScopeUserMessageId, which every interactive foreground chat turn
-// carries but a worker run never sets — see subAgentOrchestratorRun.ts).
+// The anchor protects task fidelity across long, delegation-capable execution: a run that
+// can delegate (sessions_spawn on its surface) or is itself a delegated worker. It is shown
+// only once the transcript no longer carries the request it copies.
 // ---------------------------------------------------------------------------
 
 import {
@@ -56,11 +54,6 @@ describe('Orchestrator', () => {
       expect(apiMessages[0].content).not.toContain(ANCHOR_HEADING);
     });
 
-    // The anchor is deliberately suppressed on an iteration-1 turn whose sole
-    // working message already matches it verbatim (pure redundancy — see
-    // `transcriptCarriesSoleFirstTurnAnchor` in buildPreparedPromptTurn.ts), so
-    // these two cases drive a tool-call round trip and assert on the *second*
-    // model turn, where the anchor's protection against transcript drift matters.
     function toolCallThenFinalTextStreams() {
       mockStreamMessage.mockImplementationOnce(() =>
         createStreamGenerator(
@@ -68,28 +61,21 @@ describe('Orchestrator', () => {
             { type: 'token', content: '' },
             {
               type: 'tool_call',
-              toolCall: { id: 'tc1', name: 'web_search', arguments: '{"query":"vendors"}' },
+              toolCall: { id: 'tc1', name: 'web_search', arguments: '{"queries":["vendors"]}' },
             },
             { type: 'done', content: '' },
           ],
           'tool',
         ),
       );
-      mockStreamMessage.mockImplementationOnce(() =>
-        createStreamGenerator(
-          [
-            { type: 'token', content: 'Done.' },
-            { type: 'done', content: 'Done.' },
-          ],
-          'text',
-        ),
-      );
+      mockStreamMessage.mockImplementationOnce(okStream);
     }
 
-    it('attaches the anchor on later turns when sessions_spawn is on the turn surface', async () => {
+    // A copy of a request the transcript still carries only added tokens, and adding it from
+    // the second iteration on changed the prompt's uncached tail mid-turn.
+    it('leaves the anchor out on every iteration while the transcript carries the request', async () => {
       toolCallThenFinalTextStreams();
 
-      const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
@@ -107,40 +93,41 @@ describe('Orchestrator', () => {
         ],
       };
 
-      await runOrchestrator(options, callbacks);
+      await runOrchestrator(options, makeCallbacks());
 
-      expect(mockStreamMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
-      const secondTurnMessages = mockStreamMessage.mock.calls[1][0];
-      expect(secondTurnMessages[0].content).toContain(ANCHOR_HEADING);
+      expect(mockStreamMessage).toHaveBeenCalledTimes(2);
+      expect(mockStreamMessage.mock.calls[0][0][0].content).not.toContain(ANCHOR_HEADING);
+      expect(mockStreamMessage.mock.calls[1][0][0].content).not.toContain(ANCHOR_HEADING);
     });
 
-    it('attaches the anchor on later turns for a delegated worker run even without sessions_spawn on its surface', async () => {
-      toolCallThenFinalTextStreams();
+    it('attaches the anchor once compaction has dropped the request from the transcript', async () => {
+      mockStreamMessage.mockImplementationOnce(okStream);
 
-      const callbacks = makeCallbacks();
       const options: OrchestratorOptions = {
         provider: makeProvider(),
         model: 'gpt-5.4',
-        conversationId: 'conv-worker',
+        conversationId: 'conv-compacted',
         systemPrompt: 'You are helpful',
-        // Worker runs never set workflowScopeUserMessageId (see subAgentOrchestratorRun.ts).
-        // The worker's own strict tool allowlist deliberately omits sessions_spawn.
-        toolFilter: allowTools(['web_search']),
+        workflowScopeUserMessageId: 'msg1',
+        workflowTaskAnchor: {
+          sourceMessageId: 'msg1',
+          content: 'Research three vendors and summarize them.',
+          attachments: [],
+        },
+        toolFilter: allowTools(['sessions_spawn', 'sessions_wait', 'web_search']),
         messages: [
           {
-            id: 'worker-task-msg',
+            id: 'msg2',
             role: 'user',
-            content: 'You are the worker assigned to one graph-owned task.',
+            content: 'Keep going with the vendor research.',
             timestamp: Date.now(),
           },
         ],
       };
 
-      await runOrchestrator(options, callbacks);
+      await runOrchestrator(options, makeCallbacks());
 
-      expect(mockStreamMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
-      const secondTurnMessages = mockStreamMessage.mock.calls[1][0];
-      expect(secondTurnMessages[0].content).toContain(ANCHOR_HEADING);
+      expect(mockStreamMessage.mock.calls[0][0][0].content).toContain(ANCHOR_HEADING);
     });
   });
 });
