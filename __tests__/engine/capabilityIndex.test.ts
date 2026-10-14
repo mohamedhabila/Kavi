@@ -19,10 +19,10 @@ describe('buildCapabilityIndexPromptSection', () => {
   it('stays inside the prompt budget it is allowed to spend', () => {
     const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
 
-    // Measured against the full registry — the worst case (863 tokens with every tool of
-    // every category named). It sits in the cacheable prefix, so it is paid once per prefix
-    // rather than per turn. The ceiling exists to catch unbounded growth.
-    expect(estimateTokens(section)).toBeLessThanOrEqual(1000);
+    // Measured against the full registry — the worst case (1,258 tokens with every tool of
+    // every category named with its required arguments). It sits in the cacheable prefix, so
+    // it is paid once per prefix rather than per turn. The ceiling catches unbounded growth.
+    expect(estimateTokens(section)).toBeLessThanOrEqual(1500);
     const categoryLines = section.split('\n').filter((line) => line.startsWith('- '));
     expect(categoryLines.length).toBeLessThanOrEqual(MAX_CAPABILITY_INDEX_CATEGORIES + 1);
   });
@@ -51,7 +51,7 @@ describe('buildCapabilityIndexPromptSection', () => {
       expect.arrayContaining(['web', 'ssh', 'sessions', 'workspace_files', 'calendar', 'contacts']),
     );
     expect(section).not.toContain('further categories');
-    expect(section).toContain('- web: web_search, web_fetch');
+    expect(section).toContain('- web: web_search(queries), web_fetch(urls)');
   });
 
   it('never advertises a capability that is not in this run’s registry', () => {
@@ -106,5 +106,14 @@ describe('buildCapabilityIndexPromptSection', () => {
       .filter((line) => line.startsWith('- '))
       .map((line) => line.split(':')[0]);
     expect(reversedCategories).toEqual(forwardCategories);
+  });
+
+  // With only a name, a call to a tool off the turn's surface guessed its arguments: Claude
+  // Sonnet 5.5 sent sms_compose `to` and `body` for `recipients` and `message`.
+  it('names the arguments each tool requires', () => {
+    const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
+
+    expect(section).toContain('sms_compose(recipients, message)');
+    expect(section).toContain('calendar_create_event(title, startDate, endDate)');
   });
 });

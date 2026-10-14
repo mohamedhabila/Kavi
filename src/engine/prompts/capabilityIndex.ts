@@ -57,15 +57,30 @@ function collectAvailableToolsByCategory(
       continue;
     }
 
+    const signature = renderToolSignature(toolName, tool);
     const existing = byCategory.get(category);
     if (existing) {
-      existing.push(toolName);
+      existing.push(signature);
       continue;
     }
-    byCategory.set(category, [toolName]);
+    byCategory.set(category, [signature]);
   }
 
   return byCategory;
+}
+
+/**
+ * A tool's name with the arguments it requires. A tool off the turn's surface is called by
+ * name from this index, and with only a name the model guessed the arguments: Claude Sonnet
+ * 5.5 sent sms_compose `to` and `body` for `recipients` and `message`, and needed a second call.
+ */
+function renderToolSignature(toolName: string, tool: ToolDefinition): string {
+  const required = Array.isArray(tool.input_schema?.required)
+    ? tool.input_schema.required.filter(
+        (name): name is string => typeof name === 'string' && name.length > 0,
+      )
+    : [];
+  return required.length > 0 ? `${toolName}(${required.join(', ')})` : toolName;
 }
 
 /**
@@ -75,8 +90,11 @@ function collectAvailableToolsByCategory(
  * it. Any registered tool can be called by name, so a listed name is one call away; all
  * names cost about 430 more tokens, in the cached prefix.
  */
-function renderCategoryLine(catalogCategory: string, toolNames: ReadonlyArray<string>): string {
-  return `- ${catalogCategory}: ${toolNames.join(', ')}`;
+function renderCategoryLine(
+  catalogCategory: string,
+  toolSignatures: ReadonlyArray<string>,
+): string {
+  return `- ${catalogCategory}: ${toolSignatures.join(', ')}`;
 }
 
 /**
@@ -97,8 +115,9 @@ export function buildCapabilityIndexPromptSection(params: {
 
   const lines = [
     '## Capability Index',
-    'Available this run. A tool named here can be called directly; for anything else, search',
-    'tool_catalog for what you need to do. Search before saying something is unavailable.',
+    'Available this run, each with its required arguments. A tool named here can be called',
+    'directly; for anything else, search tool_catalog for what you need to do. Search before',
+    'saying something is unavailable.',
     ...shownCategories.map((category) =>
       renderCategoryLine(category, byCategory.get(category) ?? []),
     ),
