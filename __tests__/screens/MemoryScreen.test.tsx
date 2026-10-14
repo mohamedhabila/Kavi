@@ -13,7 +13,8 @@ jest.mock('react-native-safe-area-context', () => ({
 
 let mockRouteParams: Record<string, unknown> = {};
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: () => undefined,
+  // Like the real hook on a focused screen: runs the effect again whenever it changes.
+  useFocusEffect: (effect: () => void) => require('react').useEffect(effect, [effect]),
   useRoute: () => ({ params: mockRouteParams }),
 }));
 
@@ -26,6 +27,7 @@ import { Alert, type AlertButton } from 'react-native';
 
 import { MemoryScreen } from '../../src/screens/MemoryScreen';
 import { closeMemoryDb } from '../../src/services/memory/database';
+import * as memoryItemsStore from '../../src/services/memory/core/memoryItemsStore';
 import {
   addMemoryItem,
   getCurrentMemoryItem,
@@ -64,6 +66,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   jest.restoreAllMocks();
 });
 
@@ -95,23 +98,41 @@ describe('the memory screen', () => {
     ]);
   });
 
-  it('finds memories by search, starting from a query the screen was opened with', async () => {
+  it('finds memories by search, starting from a query the screen was opened with', () => {
+    jest.useFakeTimers();
     remember('Sara is the user’s sister and lives in Porto', 1_000);
     remember('أفضل وقت للاجتماعات هو الصباح الباكر', 2_000);
     mockRouteParams = { query: 'sister Sara' };
 
     render(<MemoryScreen />);
 
-    await waitFor(() => expect(screen.getByText('1 memory')).toBeTruthy());
+    expect(screen.getByText('1 memory')).toBeTruthy();
     expect(screen.getByText('Sara is the user’s sister and lives in Porto')).toBeTruthy();
 
     fireEvent.changeText(screen.getByTestId('memory-search'), 'أفضل وقت');
-    await waitFor(() =>
-      expect(screen.getByText('أفضل وقت للاجتماعات هو الصباح الباكر')).toBeTruthy(),
-    );
+    act(() => jest.runOnlyPendingTimers());
+    expect(screen.getByText('أفضل وقت للاجتماعات هو الصباح الباكر')).toBeTruthy();
 
     fireEvent.changeText(screen.getByTestId('memory-search'), 'kayak');
-    await waitFor(() => expect(screen.getByText('No memories match your search.')).toBeTruthy());
+    act(() => jest.runOnlyPendingTimers());
+    expect(screen.getByText('No memories match your search.')).toBeTruthy();
+  });
+
+  it('searches once typing pauses, not on every keystroke', () => {
+    jest.useFakeTimers();
+    remember('Sara is the user’s sister and lives in Porto', 1_000);
+    render(<MemoryScreen />);
+    act(() => jest.runOnlyPendingTimers());
+    const search = jest.spyOn(memoryItemsStore, 'searchMemoryItems');
+
+    for (const query of ['S', 'Sa', 'Sar', 'Sara']) {
+      fireEvent.changeText(screen.getByTestId('memory-search'), query);
+    }
+    expect(search).not.toHaveBeenCalled();
+
+    act(() => jest.runOnlyPendingTimers());
+    expect(search.mock.calls.map(([params]) => params.query)).toEqual(['Sara']);
+    expect(screen.getByText('1 memory')).toBeTruthy();
   });
 
   it('pins an item and forgets another after confirmation', async () => {

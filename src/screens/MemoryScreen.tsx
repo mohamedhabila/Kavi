@@ -5,7 +5,7 @@
 // in mind, forget an item, or clear everything.
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { Trash2 } from 'lucide-react-native';
@@ -79,11 +79,18 @@ export const MemoryScreen: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [reload]);
 
+  // Coming back to the screen reloads the current search. The focus effect reads it through a
+  // ref: a focus effect re-runs whenever its callback changes, which would search on every
+  // keystroke and defeat the debounce above.
+  const reloadRef = useRef(reload);
+  useEffect(() => {
+    reloadRef.current = reload;
+  }, [reload]);
   useFocusEffect(
     useCallback(() => {
-      reload();
+      reloadRef.current();
       return undefined;
-    }, [reload]),
+    }, []),
   );
 
   useEffect(() => subscribeToMemoryChanges(reload), [reload]);
