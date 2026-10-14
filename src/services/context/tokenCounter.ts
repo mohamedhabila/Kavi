@@ -259,9 +259,9 @@ export function getContextWindow(model: string, options?: GetContextWindowOption
     return 200000;
   }
 
-  // Haiku is the one current Anthropic family with a smaller window; check it first
-  // so the broader generation fallback below doesn't shadow it.
-  if (hostedFamily === 'anthropic' && /claude-haiku-[4-9](?:$|[^0-9])/.test(lower)) {
+  // Haiku 4 is the one Anthropic generation with a smaller window (Haiku 5.5 has 1M); check
+  // it first so the broader generation fallback below doesn't shadow it.
+  if (hostedFamily === 'anthropic' && /claude-haiku-4(?:$|[^0-9])/.test(lower)) {
     return 200000;
   }
 

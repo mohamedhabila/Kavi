@@ -294,6 +294,12 @@ describe('getContextWindow', () => {
     // Gemini 4 Argon carries no pro/flash/lite word; every Gemini shares the 1M window.
     expect(getContextWindow('gemini-4-argon')).toBe(1048576);
     expect(getContextWindow('google/gemini-3.8-flash')).toBe(1048576);
+    // GPT-6 advertises nothing through OpenAI's models API, so the table carries its 1.05M.
+    expect(getContextWindow('gpt-6-astra')).toBe(1050000);
+    expect(getContextWindow('openai/gpt-6.1-sol')).toBe(1050000);
+    // Only Haiku 4 has the 200k window; Haiku 5.5 has 1M like the rest of the lineup.
+    expect(getContextWindow('claude-haiku-4-5-20251001')).toBe(200000);
+    expect(getContextWindow('claude-haiku-5-5')).toBe(1000000);
   });
 
   it('supports hosted model namespaces in family fallbacks', () => {
@@ -326,8 +332,8 @@ describe('getContextWindow', () => {
     expect(getContextWindow('claude-zeta-7')).toBe(1000000);
   });
 
-  it('still gives an unrecognized Haiku-generation id the smaller Haiku window', () => {
-    expect(getContextWindow('claude-haiku-7')).toBe(200000);
+  it('gives an unrecognized later Haiku the 1M window the current lineup ships with', () => {
+    expect(getContextWindow('claude-haiku-7')).toBe(1000000);
   });
 
   it('prefers an explicit maxInputTokens override over every other source', () => {

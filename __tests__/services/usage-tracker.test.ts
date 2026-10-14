@@ -216,6 +216,26 @@ describe('Usage Tracker', () => {
       expect(estimateCost('claude-opus-4-8', 1_000_000, 1_000_000)).toBeCloseTo(5 + 25, 10);
     });
 
+    it('prices a 5.5 model from its own row, not the 5.0 row its id contains', () => {
+      // claude-opus-5-5 contains claude-opus-5 ($5/$25); Opus 5.5 is $4/$20.
+      expect(estimateCost('claude-opus-5-5', 1_000_000, 1_000_000)).toBeCloseTo(4 + 20, 10);
+      expect(estimateCost('claude-sonnet-5-5', 1_000_000, 1_000_000)).toBeCloseTo(2 + 10, 10);
+      expect(estimateCost('claude-haiku-5-5', 1_000_000, 1_000_000)).toBeCloseTo(0.1 + 0.5, 10);
+      // Opus and Sonnet 5.5 cache reads cost 5% of input, not 10%.
+      expect(
+        estimateCost('claude-opus-5-5', 1_000_000, 0, { cacheReadTokens: 1_000_000 }),
+      ).toBeCloseTo(0.2, 10);
+    });
+
+    it('prices GPT-6 and Gemini 4 / 3.8, with the long-context tier above 272K', () => {
+      expect(estimateCost('gpt-6-astra', 1_000_000, 1_000_000)).toBeCloseTo(20 + 75, 10);
+      expect(estimateCost('gpt-6-astra', 100_000, 1_000_000)).toBeCloseTo(1 + 50, 10);
+      expect(estimateCost('gpt-6.1-sol', 100_000, 0)).toBeCloseTo(0.2, 10);
+      expect(estimateCost('openai/gpt-6-luna', 100_000, 1_000_000)).toBeCloseTo(0.01 + 0.5, 10);
+      expect(estimateCost('gemini-4-argon', 1_000_000, 1_000_000)).toBeCloseTo(2 + 10, 10);
+      expect(estimateCost('gemini-3.8-flash', 1_000_000, 1_000_000)).toBeCloseTo(0.75 + 3.75, 10);
+    });
+
     it('discounts Fable 5.1 cache reads at its flat $0.25/1M rate, not the usual 0.1x input formula', () => {
       // Fable 5.1 input is $10/1M, so the generic 0.1x-input cache-read formula used by
       // every other Claude model would price a cache read at $1/1M — Fable 5.1 is the
