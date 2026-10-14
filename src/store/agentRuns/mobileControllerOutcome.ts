@@ -5,6 +5,8 @@ import type { Conversation } from '../../types/conversation';
 import type { Message, ToolCall } from '../../types/message';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import { appendToolEffectReceipt, decodeToolEffectReceipt } from '../../utils/toolEffectReceipt';
+import { getProtectedExecutionMessageIds } from '../chatExecutionMessageProtection';
+import { applyHistoryWindow } from '../conversationHistoryWindow';
 
 export type ApplyMobileControllerOutcomeResult =
   | Readonly<{ status: 'applied'; conversation: Conversation }>
@@ -170,7 +172,11 @@ export function applyMobileControllerOutcomeInConversation(
   };
   const nextConversation = {
     ...conversation,
-    messages,
+    messages: applyHistoryWindow(
+      conversation.id,
+      messages,
+      getProtectedExecutionMessageIds(conversation),
+    ),
     agentRuns,
     updatedAt: Math.max(conversation.updatedAt, input.settledAt),
   };

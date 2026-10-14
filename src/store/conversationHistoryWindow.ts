@@ -17,6 +17,7 @@
 import { estimateImageInputTokens } from '../services/context/contentTokens';
 import { estimateTokens, MESSAGE_FRAMING_TOKENS } from '../services/context/tokenCounter';
 import type { Message } from '../types/message';
+import { isTurnOpeningUserMessage } from '../utils/steeringMessages';
 import { archiveLeavingMessages } from './chatPersistence';
 
 export const CONVERSATION_HISTORY_TOKEN_LIMIT = 256_000;
@@ -48,11 +49,6 @@ export function estimateStoredMessageTokens(message: Message): number {
   return tokens;
 }
 
-/** A user message that starts a turn; a steering message belongs to the run it steered. */
-function opensTurn(message: Message): boolean {
-  return message.role === 'user' && message.steerOfRunId === undefined;
-}
-
 export type HistoryWindowSelection = Readonly<{ kept: Message[]; leaving: Message[] }>;
 
 /**
@@ -73,7 +69,8 @@ export function selectHistoryWindow(
   let cut = 0;
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
-    if (index > 0 && opensTurn(message)) {
+    // A steering message belongs to the run it steered, so it never starts a turn.
+    if (index > 0 && isTurnOpeningUserMessage(message)) {
       cut = index;
       if (remaining <= CONVERSATION_HISTORY_TOKEN_TARGET) break;
     }
