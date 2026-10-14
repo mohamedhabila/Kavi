@@ -117,18 +117,6 @@ export function rejectsForcedToolChoice(model: string | undefined): boolean {
   );
 }
 
-/** Claude 4.x Opus or Sonnet (any minor) — scopes the interleaved-thinking beta logic below. */
-export function isAnthropicClaude4Model(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  return !!generation && generation.major === 4 && isOpusOrSonnet(generation);
-}
-
-/** Claude 4.x Opus specifically (any minor). */
-export function isAnthropicClaude4OpusModel(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  return !!generation && generation.major === 4 && generation.family === 'opus';
-}
-
 export function supportsTemperature(model: string): boolean {
   return !/(?:^|\/)(?:o[134]|gpt-5(?:\.|$))/i.test(model);
 }

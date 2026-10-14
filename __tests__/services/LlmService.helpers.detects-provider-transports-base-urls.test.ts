@@ -10,8 +10,6 @@ import {
   getOpenAIReasoningTextParts,
 } from '../../src/services/llm/core/reasoningExtraction';
 import {
-  isAnthropicClaude4Model,
-  isAnthropicClaude4OpusModel,
   isGemini3Model,
   isGeminiProModel,
   isOpenAIReasoningModel,
@@ -127,10 +125,7 @@ describe('LlmService helper coverage', () => {
     expect(resolveProviderTransport(compatible)).toBe('compatible');
     expect(resolveProviderBaseUrl(compatible)).toContain('api.openai.com');
   });
-  it('derives Anthropic and Gemini model capabilities from canonical hosted-family metadata', () => {
-    expect(isAnthropicClaude4Model('anthropic/claude-sonnet-4-6')).toBe(true);
-    expect(isAnthropicClaude4OpusModel('anthropic/claude-opus-4-6')).toBe(true);
-
+  it('derives Gemini model capabilities from canonical hosted-family metadata', () => {
     expect(isGemini3Model('google/gemini-3.5-flash')).toBe(true);
     expect(isGemini3Model('models/gemini-3-flash-preview')).toBe(true);
     expect(isGemini3Model('google/gemini-2.5-pro')).toBe(false);

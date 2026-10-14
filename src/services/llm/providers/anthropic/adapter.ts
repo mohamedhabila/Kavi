@@ -5,6 +5,7 @@ import { isPlainRecord, tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
 import { ANTHROPIC_THINKING_BINDING_BETA } from './helpers';
 import { noteAnthropicInputTransformations } from './inputTransformations';
+import { needsAnthropicInterleavedThinkingBeta } from './requestOptions';
 import { createProviderRequestError } from '../../support/providerErrorClassification';
 import type {
   ChatCompletionMessage,
@@ -208,11 +209,6 @@ export async function sendAnthropicMessages(args: {
     choice: ToolChoiceMode | undefined,
     tools: ReadonlyArray<{ name: string }> | undefined,
   ) => { toolChoice: 'auto'; instruction: string } | undefined;
-  shouldIncludeAnthropicInterleavedThinkingBeta: (
-    model: string,
-    options: MessageRequestOptions,
-    thinking: unknown,
-  ) => boolean;
   buildAnthropicSystemPromptContent: (args: {
     systemContent?: string;
     sections?: MessageRequestOptions['systemPromptSections'];
@@ -424,11 +420,7 @@ export async function sendAnthropicMessages(args: {
     : { ...args.headers };
 
   const betas = [
-    ...(args.shouldIncludeAnthropicInterleavedThinkingBeta(
-      args.model,
-      args.options,
-      anthropicOptions.thinking,
-    )
+    ...(needsAnthropicInterleavedThinkingBeta(args.options, anthropicOptions.thinking)
       ? [args.anthropicInterleavedThinkingBeta]
       : []),
     ...(isPlainRecord(anthropicOptions.thinking?.block_binding)

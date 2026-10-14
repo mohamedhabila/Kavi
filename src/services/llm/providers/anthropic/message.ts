@@ -1,6 +1,5 @@
 import type { LlmProviderConfig } from '../../../../types/provider';
 import { rejectsForcedToolChoice } from '../../catalog/providerCapabilities';
-import { isPlainRecord } from '../../core/json';
 import { attachProviderResponse } from '../../core/providerResponse';
 import { buildAnthropicToolChoice, resolveForcedToolChoiceFallback } from '../../core/toolChoice';
 import type { LlmPerformFetch } from '../../core/fetchTransport';
@@ -28,11 +27,7 @@ import {
   simplifyAnthropicToolDescription,
   strictifySchema,
 } from './helpers';
-import {
-  buildAnthropicOutputConfig,
-  sanitizeAnthropicRequestOptions,
-  shouldIncludeAnthropicInterleavedThinkingBeta,
-} from './requestOptions';
+import { buildAnthropicOutputConfig, sanitizeAnthropicRequestOptions } from './requestOptions';
 
 export function sendAnthropicMessage(params: {
   provider: LlmProviderConfig;
@@ -72,13 +67,6 @@ export function sendAnthropicMessage(params: {
     buildAnthropicToolChoice,
     rejectsForcedToolChoice,
     resolveForcedToolChoiceFallback,
-    shouldIncludeAnthropicInterleavedThinkingBeta: (candidateModel, requestOptions, thinking) =>
-      shouldIncludeAnthropicInterleavedThinkingBeta({
-        model: candidateModel,
-        defaultModel: params.provider.model,
-        options: requestOptions,
-        thinking: isPlainRecord(thinking) ? thinking : undefined,
-      }),
     buildAnthropicSystemPromptContent,
     reorderAnthropicToolsForCaching,
     simplifyAnthropicToolDescription,

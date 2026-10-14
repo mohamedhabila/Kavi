@@ -4,8 +4,6 @@
 
 import {
   getAnthropicModelGeneration,
-  isAnthropicClaude4Model,
-  isAnthropicClaude4OpusModel,
   rejectsForcedToolChoice,
   rejectsSamplingParams,
 } from '../../../../src/services/llm/catalog/providerCapabilities';
@@ -101,18 +99,5 @@ describe('rejectsForcedToolChoice', () => {
     expect(rejectsForcedToolChoice('claude-opus-5')).toBe(false);
     expect(rejectsForcedToolChoice('claude-sonnet-4-6')).toBe(false);
     expect(rejectsForcedToolChoice('claude-haiku-4-5')).toBe(false);
-  });
-});
-
-describe('isAnthropicClaude4Model / isAnthropicClaude4OpusModel', () => {
-  it('scope to the 4.x Opus/Sonnet generation only', () => {
-    expect(isAnthropicClaude4Model('claude-opus-4-7')).toBe(true);
-    expect(isAnthropicClaude4Model('claude-sonnet-4-6')).toBe(true);
-    expect(isAnthropicClaude4Model('claude-opus-5')).toBe(false);
-    expect(isAnthropicClaude4Model('claude-haiku-4-5')).toBe(false);
-
-    expect(isAnthropicClaude4OpusModel('claude-opus-4-7')).toBe(true);
-    expect(isAnthropicClaude4OpusModel('claude-sonnet-4-6')).toBe(false);
-    expect(isAnthropicClaude4OpusModel('claude-opus-5')).toBe(false);
   });
 });

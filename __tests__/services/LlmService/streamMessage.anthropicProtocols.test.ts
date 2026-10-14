@@ -112,47 +112,50 @@ describe('LlmService', () => {
       );
     });
 
-    it('should include anthropic-beta header for manual Claude 4 tool-use thinking requests that still require it', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            content: [{ type: 'text', text: 'ok' }],
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 5, output_tokens: 2 },
+    it.each(['claude-sonnet-4-5', 'claude-opus-4-5'])(
+      '%s: manual thinking with tools asks for interleaved thinking',
+      async (model) => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              content: [{ type: 'text', text: 'ok' }],
+              stop_reason: 'end_turn',
+              usage: { input_tokens: 5, output_tokens: 2 },
+            }),
+        });
+
+        const service = new LlmService(
+          makeConfig({
+            id: 'anthropic',
+            name: 'Anthropic',
+            baseUrl: 'https://api.anthropic.com/v1',
+            apiKey: 'anthropic-key',
+            model,
           }),
-      });
+        );
 
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-sonnet-4-5',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello' }], {
-        thinking: { type: 'enabled', budget_tokens: 2048 },
-        tools: [
-          {
-            name: 'read_file',
-            description: 'Read a file.',
-            input_schema: {
-              type: 'object',
-              properties: { path: { type: 'string' } },
-              required: ['path'],
+        await service.sendMessage([{ role: 'user', content: 'Hello' }], {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          tools: [
+            {
+              name: 'read_file',
+              description: 'Read a file.',
+              input_schema: {
+                type: 'object',
+                properties: { path: { type: 'string' } },
+                required: ['path'],
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
 
-      expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
-        'anthropic-beta': 'interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01',
-        'anthropic-version': '2023-06-01',
-      });
-    });
+        expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
+          'anthropic-beta': 'interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01',
+          'anthropic-version': '2023-06-01',
+        });
+      },
+    );
 
     it('should merge consecutive user messages for Anthropic alternation requirement', async () => {
       mockFetch.mockResolvedValueOnce({

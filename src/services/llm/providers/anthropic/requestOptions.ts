@@ -6,11 +6,7 @@ import type {
   StructuredOutputOptions,
 } from '../../support/contracts';
 import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudget';
-import {
-  isAnthropicClaude4Model,
-  isAnthropicClaude4OpusModel,
-  rejectsSamplingParams,
-} from '../../catalog/providerCapabilities';
+import { rejectsSamplingParams } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { normalizeStructuredOutputOptions } from '../../core/structuredOutput';
 import { isForcedToolChoice } from '../../core/toolChoice';
@@ -218,25 +214,16 @@ function withDroppedStaleThinking(thinking: Record<string, unknown>): Record<str
     : thinking;
 }
 
-export function shouldIncludeAnthropicInterleavedThinkingBeta(args: {
-  model: string | undefined;
-  defaultModel?: string;
-  options: MessageRequestOptions;
-  thinking?: Record<string, unknown>;
-}): boolean {
-  if (!args.thinking || !args.options.tools?.length) {
-    return false;
-  }
-
-  const targetModel = args.model || args.defaultModel;
-  if (!isAnthropicClaude4Model(targetModel)) {
-    return false;
-  }
-
-  const thinkingType =
-    typeof args.thinking.type === 'string' ? args.thinking.type.toLowerCase() : '';
-
-  // Claude 4 Sonnet interleaves thinking with tool calls only under the beta, and only
-  // manual (enabled) thinking needs it; Claude 4 Opus interleaves without it.
-  return !isAnthropicClaude4OpusModel(targetModel) && thinkingType === 'enabled';
+/**
+ * Manual (enabled) thinking interleaves with tool calls only under the interleaved-thinking
+ * beta on the Claude 4 models that have it. The Claude API, Bedrock and Vertex accept the
+ * header on every model and ignore it where it does nothing, and adaptive thinking
+ * interleaves without it, so no model list decides.
+ * https://platform.claude.com/docs/en/build-with-claude/extended-thinking#interleaved-thinking-in-manual-mode
+ */
+export function needsAnthropicInterleavedThinkingBeta(
+  options: MessageRequestOptions,
+  thinking: Record<string, unknown> | undefined,
+): boolean {
+  return thinking?.type === 'enabled' && Boolean(options.tools?.length);
 }
