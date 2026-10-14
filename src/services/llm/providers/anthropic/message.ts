@@ -2,7 +2,6 @@ import type { LlmProviderConfig } from '../../../../types/provider';
 import { rejectsForcedToolChoice } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { attachProviderResponse } from '../../core/providerResponse';
-import { isStrictCompatibleSchema } from '../../core/schemaTransforms';
 import { buildAnthropicToolChoice, resolveForcedToolChoiceFallback } from '../../core/toolChoice';
 import type { LlmPerformFetch } from '../../core/fetchTransport';
 import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
@@ -23,9 +22,7 @@ import {
 import {
   ANTHROPIC_EPHEMERAL_CACHE_CONTROL,
   ANTHROPIC_INTERLEAVED_THINKING_BETA,
-  MAX_ANTHROPIC_STRICT_TOOLS,
   buildAnthropicSystemPromptContent,
-  isAnthropicStrictEligible,
   reorderAnthropicToolsForCaching,
   simplifyAnthropicSchema,
   simplifyAnthropicToolDescription,
@@ -86,10 +83,6 @@ export function sendAnthropicMessage(params: {
     reorderAnthropicToolsForCaching,
     simplifyAnthropicToolDescription,
     simplifyAnthropicSchema,
-    isAnthropicStrictEligible,
-    strictifySchema,
-    isStrictCompatibleSchema,
-    maxAnthropicStrictTools: MAX_ANTHROPIC_STRICT_TOOLS,
     anthropicEphemeralCacheControl: ANTHROPIC_EPHEMERAL_CACHE_CONTROL,
     anthropicInterleavedThinkingBeta: ANTHROPIC_INTERLEAVED_THINKING_BETA,
     performFetch: params.performFetch,

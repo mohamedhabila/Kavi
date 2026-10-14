@@ -7,7 +7,6 @@ import {
 import { buildPromptCachingToolOrder } from '../../core/toolCaching';
 import { truncateToUtf16BudgetGraphemeSafe } from '../../../../utils/graphemes';
 
-export const MAX_ANTHROPIC_STRICT_TOOLS = 4;
 export const ANTHROPIC_INTERLEAVED_THINKING_BETA = 'interleaved-thinking-2025-05-14';
 /**
  * Lets a request set thinking.block_binding. Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku
@@ -162,87 +161,4 @@ export function simplifyAnthropicSchema(
     result.enum = schema.enum;
   }
   return Object.keys(result).length > 0 ? result : { type: 'string' };
-}
-
-function collectAnthropicSchemaStats(
-  schema: Record<string, any>,
-  depth = 0,
-): {
-  propertyCount: number;
-  nestedStructureCount: number;
-  maxDepth: number;
-  enumValueCount: number;
-} {
-  if (!schema || typeof schema !== 'object') {
-    return {
-      propertyCount: 0,
-      nestedStructureCount: 0,
-      maxDepth: depth,
-      enumValueCount: 0,
-    };
-  }
-
-  const rawType = Array.isArray(schema.type)
-    ? schema.type.find((entry: unknown) => typeof entry === 'string' && entry !== 'null')
-    : schema.type;
-  const normalizedType = typeof rawType === 'string' ? rawType : undefined;
-  const enumValueCount = Array.isArray(schema.enum) ? schema.enum.length : 0;
-
-  if (normalizedType === 'object' || schema.properties) {
-    let propertyCount = 0;
-    let nestedStructureCount = 0;
-    let maxDepth = depth;
-
-    for (const value of Object.values((schema.properties || {}) as Record<string, any>)) {
-      propertyCount += 1;
-      const child = collectAnthropicSchemaStats(value as Record<string, any>, depth + 1);
-      propertyCount += child.propertyCount;
-      nestedStructureCount += child.nestedStructureCount;
-      maxDepth = Math.max(maxDepth, child.maxDepth);
-      if (
-        value &&
-        typeof value === 'object' &&
-        ((value as Record<string, any>).properties || (value as Record<string, any>).items)
-      ) {
-        nestedStructureCount += 1;
-      }
-      nestedStructureCount += Array.isArray((value as Record<string, any>)?.enum)
-        ? ((value as Record<string, any>).enum as unknown[]).length
-        : 0;
-    }
-
-    return {
-      propertyCount,
-      nestedStructureCount,
-      maxDepth,
-      enumValueCount,
-    };
-  }
-
-  if (normalizedType === 'array' || schema.items) {
-    const child = collectAnthropicSchemaStats(schema.items as Record<string, any>, depth + 1);
-    return {
-      propertyCount: child.propertyCount,
-      nestedStructureCount: child.nestedStructureCount + 1,
-      maxDepth: Math.max(depth, child.maxDepth),
-      enumValueCount: enumValueCount + child.enumValueCount,
-    };
-  }
-
-  return {
-    propertyCount: 0,
-    nestedStructureCount: 0,
-    maxDepth: depth,
-    enumValueCount,
-  };
-}
-
-export function isAnthropicStrictEligible(schema: Record<string, any>): boolean {
-  const stats = collectAnthropicSchemaStats(schema);
-  return (
-    stats.propertyCount <= 3 &&
-    stats.nestedStructureCount === 0 &&
-    stats.maxDepth <= 1 &&
-    stats.enumValueCount <= 6
-  );
 }

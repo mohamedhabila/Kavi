@@ -33,15 +33,6 @@ const provider = finalizeProviderConfig({
   enabled: true,
 });
 
-const anthropicProvider = finalizeProviderConfig({
-  id: 'anthropic',
-  name: 'Anthropic',
-  baseUrl: 'https://api.anthropic.com/v1',
-  apiKey: 'test-key',
-  model: 'claude-sonnet-4-6',
-  enabled: true,
-});
-
 const geminiProvider = finalizeProviderConfig({
   id: 'gemini',
   name: 'Gemini',
@@ -62,27 +53,6 @@ const localProvider: LlmProviderConfig = {
   enabled: true,
   local: { runtime: 'litert-lm' },
 };
-
-const tools = [
-  {
-    name: 'read_record',
-    description: 'Read a structured record.',
-    input_schema: {
-      type: 'object',
-      properties: { id: { type: 'string' } },
-      required: ['id'],
-    },
-  },
-];
-
-function anthropicSchemaRejection(): Response {
-  return {
-    ok: false,
-    status: 400,
-    statusText: 'Bad Request',
-    text: () => Promise.resolve('tool schema is too complex'),
-  } as Response;
-}
 
 describe('LLM provider dispatch guard', () => {
   beforeEach(() => {
@@ -131,51 +101,6 @@ describe('LLM provider dispatch guard', () => {
     await expect(stream.next()).rejects.toThrow('request generation expired');
     expect(requestDispatchGuard).toHaveBeenCalledTimes(1);
     expect(performFetch).not.toHaveBeenCalled();
-  });
-
-  it('reauthorizes a non-streaming adapter retry before its second fetch', async () => {
-    let authorized = true;
-    const requestDispatchGuard = jest.fn(() => {
-      if (!authorized) throw new Error('request generation expired');
-    });
-    const performFetch = jest.fn(async () => {
-      authorized = false;
-      return anthropicSchemaRejection();
-    });
-
-    await expect(
-      sendLlmMessage({
-        provider: anthropicProvider,
-        messages: [{ role: 'user', content: 'Read the record.' }],
-        options: { requestDispatchGuard, tools },
-        performFetch,
-      }),
-    ).rejects.toThrow('request generation expired');
-
-    expect(requestDispatchGuard).toHaveBeenCalledTimes(2);
-    expect(performFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('reauthorizes a streaming adapter retry before its second fetch', async () => {
-    let authorized = true;
-    const requestDispatchGuard = jest.fn(() => {
-      if (!authorized) throw new Error('request generation expired');
-    });
-    const performFetch = jest.fn(async () => {
-      authorized = false;
-      return anthropicSchemaRejection();
-    });
-    const stream = streamLlmMessage({
-      provider: anthropicProvider,
-      messages: [{ role: 'user', content: 'Read the record.' }],
-      options: { requestDispatchGuard, tools },
-      performFetch,
-    });
-
-    await expect(stream.next()).rejects.toThrow('request generation expired');
-
-    expect(requestDispatchGuard).toHaveBeenCalledTimes(2);
-    expect(performFetch).toHaveBeenCalledTimes(1);
   });
 
   it('reauthorizes Gemini structured-output fallback without parsing error prose', async () => {

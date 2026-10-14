@@ -2,7 +2,9 @@ import { LlmService, makeConfig, mockFetch } from '../../helpers/llmServiceHarne
 
 // A 400 on a request with tools read the body once (to look for an oversized schema) and
 // then again for the error: the second read failed, so the error said only "Bad Request"
-// and a live failure on Claude Sonnet 5.5 could not be diagnosed.
+// and a live failure on Claude Sonnet 5.5 could not be diagnosed. A "schema too complex"
+// refusal was retried without strict tools; tools are no longer strict, so every refusal
+// is one request whose reason reaches the error.
 
 const READ_FILE = {
   name: 'read_file',
@@ -25,10 +27,11 @@ function refusal(message: string) {
   };
 }
 
-it("keeps the API's reason when Claude refuses a request with tools", async () => {
-  mockFetch.mockResolvedValueOnce(
-    refusal('messages.3: tool_use ids were found without tool_result'),
-  );
+it.each([
+  'messages.3: tool_use ids were found without tool_result',
+  'Schema is too complex for compilation.',
+])("keeps the API's reason when Claude refuses a request with tools: %s", async (reason) => {
+  mockFetch.mockResolvedValueOnce(refusal(reason));
   const service = new LlmService(
     makeConfig({
       id: 'anthropic',
@@ -41,5 +44,7 @@ it("keeps the API's reason when Claude refuses a request with tools", async () =
 
   await expect(
     service.sendMessage([{ role: 'user', content: 'Read it.' }], { tools: [READ_FILE] }),
-  ).rejects.toThrow('tool_use ids were found without tool_result');
+  ).rejects.toThrow(reason);
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockFetch.mock.calls[0][1].body).tools[0]).not.toHaveProperty('strict');
 });

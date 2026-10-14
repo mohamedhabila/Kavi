@@ -11,7 +11,7 @@ import {
 
 describe('LlmService', () => {
   describe('sendMessage Anthropic schema and request shaping', () => {
-    it('caps Anthropic strict tools before the first request', async () => {
+    it('sends Anthropic tools without strict, in one request', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -51,9 +51,8 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.tools).toHaveLength(8);
-      expect(body.tools.filter((tool: any) => tool.strict === true)).toHaveLength(4);
-      expect(body.tools.slice(0, 4).every((tool: any) => tool.strict === true)).toBe(true);
-      expect(body.tools.slice(4).every((tool: any) => tool.strict === undefined)).toBe(true);
+      // Strict grammars have request-wide limits; Claude follows plain schemas.
+      expect(body.tools.every((tool: any) => !('strict' in tool))).toBe(true);
       // Anthropic tool descriptions are no longer truncated to first sentence —
       // full descriptions are preserved per Anthropic best practices.
       expect(body.tools[0].description).toBe(
@@ -65,7 +64,7 @@ describe('LlmService', () => {
       );
     });
 
-    it('does not mark complex Anthropic schemas strict even when the tool requests it', async () => {
+    it('keeps a nested Anthropic schema as it is when the tool asks for strict', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -112,7 +111,7 @@ describe('LlmService', () => {
       });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.tools[0].strict).toBeUndefined();
+      expect('strict' in body.tools[0]).toBe(false);
       expect(body.tools[0].description).toBe('Complex tool. More detail that should be trimmed.');
       expect(body.tools[0].input_schema).toEqual({
         type: 'object',

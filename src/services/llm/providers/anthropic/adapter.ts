@@ -227,10 +227,6 @@ export async function sendAnthropicMessages(args: {
     schema: Record<string, any>,
     options: { strict: boolean },
   ) => Record<string, any>;
-  isAnthropicStrictEligible: (schema: Record<string, any>) => boolean;
-  strictifySchema: (schema: Record<string, any>) => Record<string, any>;
-  isStrictCompatibleSchema: (schema: Record<string, any>) => boolean;
-  maxAnthropicStrictTools: number;
   anthropicEphemeralCacheControl: { type: 'ephemeral' };
   anthropicInterleavedThinkingBeta: string;
   performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
@@ -377,27 +373,20 @@ export async function sendAnthropicMessages(args: {
       : { orderedTools: args.options.tools, lastStablePrefixIndex: -1 };
     toolCacheBreakpointCount =
       args.options.enablePromptCaching && anthropicToolPlan.lastStablePrefixIndex >= 0 ? 1 : 0;
-    let strictBudget = args.maxAnthropicStrictTools;
+    // Tools go without `strict`: its grammar has request-wide limits (optional and union
+    // parameters summed over every strict tool), and Claude follows plain schemas; an
+    // invalid call is caught by the tool's own argument validation.
     body.tools = anthropicToolPlan.orderedTools.map((tool, index) => {
-      const normalizedSchema = normalizeToolInputSchema(tool.input_schema);
-      const useStrict =
-        tool.strict !== false &&
-        args.isStrictCompatibleSchema(normalizedSchema) &&
-        strictBudget > 0 &&
-        args.isAnthropicStrictEligible(normalizedSchema);
-      if (useStrict) strictBudget--;
       const base: Record<string, any> = {
         name: tool.name,
         description: args.simplifyAnthropicToolDescription(tool.description),
-        input_schema: args.simplifyAnthropicSchema(
-          useStrict ? args.strictifySchema(normalizedSchema) : normalizedSchema,
-          { strict: useStrict },
-        ),
+        input_schema: args.simplifyAnthropicSchema(normalizeToolInputSchema(tool.input_schema), {
+          strict: false,
+        }),
       };
       if (args.options.enablePromptCaching && index === anthropicToolPlan.lastStablePrefixIndex) {
         base.cache_control = args.anthropicEphemeralCacheControl;
       }
-      if (useStrict) base.strict = true;
       return base;
     });
     const toolChoice = args.buildAnthropicToolChoice(
@@ -448,7 +437,7 @@ export async function sendAnthropicMessages(args: {
   ];
   if (betas.length > 0) requestHeaders['anthropic-beta'] = betas.join(',');
 
-  let response = await args.performFetch(
+  const response = await args.performFetch(
     `${args.baseUrl}/messages`,
     {
       method: 'POST',
@@ -459,42 +448,11 @@ export async function sendAnthropicMessages(args: {
     args.options.stream ?? false,
   );
 
-  if (!response.ok && response.status === 400 && body.tools?.length) {
-    // A response body can be read once: the refusal is kept, so the error carries the
-    // API's reason rather than only "Bad Request".
-    let errorText = await response.text().catch(() => response.statusText);
-    if (/schema.*too.*complex/i.test(errorText)) {
-      body.tools = body.tools.map((tool: Record<string, any>) => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.input_schema,
-      }));
-      response = await args.performFetch(
-        `${args.baseUrl}/messages`,
-        {
-          method: 'POST',
-          headers: requestHeaders,
-          body: JSON.stringify(body),
-          signal: args.options.signal,
-        },
-        args.options.stream ?? false,
-      );
-      if (!response.ok) errorText = await response.text().catch(() => response.statusText);
-    }
-
-    if (!response.ok) {
-      throw createProviderRequestError({
-        providerFamily: 'anthropic',
-        status: response.status,
-        bodyText: errorText,
-      });
-    }
-  } else if (!response.ok) {
-    const errorText = await response.text().catch(() => response.statusText);
+  if (!response.ok) {
     throw createProviderRequestError({
       providerFamily: 'anthropic',
       status: response.status,
-      bodyText: errorText,
+      bodyText: await response.text().catch(() => response.statusText),
     });
   }
 
