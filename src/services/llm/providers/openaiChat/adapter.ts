@@ -139,9 +139,10 @@ export async function sendOpenAICompatibleChat(args: {
   ) {
     body.provider = { require_parameters: true };
   }
+  // `low` is the least effort every OpenAI reasoning model accepts (see openaiResponses).
   const reasoningEffort =
     args.options.reasoning_effort ??
-    (structuredOutput && !isOpenRouterProvider ? 'none' : undefined);
+    (structuredOutput && !isOpenRouterProvider ? 'low' : undefined);
   applyCompatibleReasoningControl({
     body,
     effort: reasoningEffort,

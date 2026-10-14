@@ -41,7 +41,7 @@ import type {
   ExecuteAgentControlGraphModelTurnParams,
   PendingAgentToolCall,
 } from './modelTurnExecutionTypes';
-import { getDeclaredReasoningCapability } from '../../services/llm/support/reasoningEffortResolution';
+import { getModelReasoningCapability } from '../../services/llm/support/reasoningEffortResolution';
 
 export type ExecuteAgentControlGraphModelTurnAttemptResult =
   | {
@@ -129,7 +129,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
   const budgetResult = preparedRequestBudget.budgetResult;
   const requestedThinkingParams = getThinkingParams(params.thinkingLevel, params.requestModel, {
     maxTokens: params.requestMaxTokens,
-    reasoningCapability: getDeclaredReasoningCapability(params.activeProvider, params.requestModel),
+    reasoningCapability: getModelReasoningCapability(params.activeProvider, params.requestModel),
   });
   const anthropicToolLoopInProgress = anthropicTarget && toolLoopInProgress;
   const anthropicReplayableThinking =

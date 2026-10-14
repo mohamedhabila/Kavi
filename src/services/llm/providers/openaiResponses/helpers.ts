@@ -133,7 +133,9 @@ export function buildOpenAIResponsesBody(args: {
   }
 
   const structuredOutput = normalizeStructuredOutputOptions(args.options.structuredOutput);
-  const reasoningEffort = args.options.reasoning_effort ?? (structuredOutput ? 'none' : undefined);
+  // `low` is the least effort every OpenAI reasoning model accepts: GPT-6 Astra and 6.1 Sol
+  // reject `none`, and every GPT-6 model rejects `minimal`.
+  const reasoningEffort = args.options.reasoning_effort ?? (structuredOutput ? 'low' : undefined);
   if (reasoningEffort && supportsOpenAIReasoningModel(args.model)) {
     body.reasoning = { effort: reasoningEffort, summary: 'auto' };
   }

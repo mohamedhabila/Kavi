@@ -116,7 +116,7 @@ describe('LlmService', () => {
       });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.reasoning).toEqual({ effort: 'none', summary: 'auto' });
+      expect(body.reasoning).toEqual({ effort: 'low', summary: 'auto' });
       expect(body.text).toEqual(
         expect.objectContaining({
           format: expect.objectContaining({

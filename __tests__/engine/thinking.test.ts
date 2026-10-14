@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { getThinkingParams, ThinkingLevel } from '../../src/engine/thinking';
+import { inferOpenAIReasoningCapability } from '../../src/services/llm/catalog/providerCapabilities';
 
 describe('getThinkingParams', () => {
   it('returns empty object for "off"', () => {
@@ -103,27 +104,36 @@ describe('getThinkingParams', () => {
     });
   });
 
-  describe('OpenAI reasoning models', () => {
-    it.each(['o1-preview', 'o3-mini', 'o4-mini', 'gpt-5.4'])(
-      'detects %s as reasoning model',
+  describe('OpenAI reasoning models (efforts read from the generation)', () => {
+    const openAI = (level: ThinkingLevel, model: string) =>
+      getThinkingParams(level, model, {
+        reasoningCapability: inferOpenAIReasoningCapability(model),
+      });
+
+    it.each(['o1-preview', 'o3-mini', 'o4-mini', 'gpt-5.4', 'openai/o3-mini', 'gpt-6-astra'])(
+      'asks %s for the effort its level names',
       (model) => {
-        const result = getThinkingParams('high', model);
-        expect(result).toHaveProperty('reasoning_effort', 'high');
+        expect(openAI('low', model)).toEqual({ reasoning_effort: 'low' });
+        expect(openAI('high', model)).toEqual({ reasoning_effort: 'high' });
       },
     );
 
-    it('maps low to low effort', () => {
-      expect(getThinkingParams('low', 'o1-preview')).toEqual({ reasoning_effort: 'low' });
+    it('reaches xhigh on GPT-6; earlier reasoning models stop at high', () => {
+      expect(openAI('xhigh', 'gpt-6.1-sol')).toEqual({ reasoning_effort: 'xhigh' });
+      expect(openAI('xhigh', 'gpt-5.5')).toEqual({ reasoning_effort: 'high' });
+      expect(openAI('xhigh', 'o4-mini')).toEqual({ reasoning_effort: 'high' });
     });
 
-    it('maps medium to medium effort', () => {
-      expect(getThinkingParams('medium', 'o3-mini')).toEqual({ reasoning_effort: 'medium' });
+    it('asks for the least effort the model accepts when thinking is off or minimal', () => {
+      // GPT-6 Astra and 6.1 Sol reject `none`; every GPT-6 model rejects `minimal`.
+      expect(openAI('off', 'gpt-6-astra')).toEqual({ reasoning_effort: 'low' });
+      expect(openAI('minimal', 'gpt-6-luna')).toEqual({ reasoning_effort: 'low' });
     });
 
-    it('supports hosted OpenAI model namespaces', () => {
-      expect(getThinkingParams('high', 'openai/o3-mini')).toEqual({
-        reasoning_effort: 'high',
-      });
+    it('treats GPT before 5, image models and open-weight ids as non-reasoning', () => {
+      expect(inferOpenAIReasoningCapability('gpt-4.1')).toBeUndefined();
+      expect(inferOpenAIReasoningCapability('gpt-image-2')).toBeUndefined();
+      expect(inferOpenAIReasoningCapability('openai/gpt-oss-120b')).toBeUndefined();
     });
   });
 

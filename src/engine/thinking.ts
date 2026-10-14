@@ -2,7 +2,6 @@
 // Kavi — Thinking Level Control
 // ---------------------------------------------------------------------------
 
-import { isOpenAIReasoningModel } from '../services/llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
 import type { ModelReasoningCapability } from '../types/tool';
 import { resolveThinkingLevelReasoningEffort } from '../services/llm/support/reasoningEffortResolution';
@@ -160,7 +159,8 @@ export function getThinkingParams(
   const lower = normalizeModel(model);
   const hostedFamily = resolveModelHostedFamily(model);
 
-  // A model whose provider declares its reasoning controls is driven by those declarations.
+  // A model whose reasoning controls are known (declared by its provider, or for OpenAI read
+  // from its generation: getModelReasoningCapability) is driven by them.
   // The level maps to the nearest effort the model accepts, so `off` turns reasoning off
   // where the model allows it and asks for its least deliberation where it does not —
   // instead of leaving the model at its own default, which is often its highest.
@@ -196,21 +196,6 @@ export function getThinkingParams(
 
   if (level === 'off') {
     return {};
-  }
-
-  // OpenAI models: use reasoning_effort
-  if (isOpenAIReasoningModel(model)) {
-    const effortMap: Record<ThinkingLevel, string> = {
-      off: 'low',
-      minimal: 'low',
-      low: 'low',
-      medium: 'medium',
-      high: 'high',
-      xhigh: 'high',
-    };
-    return {
-      reasoning_effort: effortMap[level],
-    };
   }
 
   // Other models: use temperature as a proxy

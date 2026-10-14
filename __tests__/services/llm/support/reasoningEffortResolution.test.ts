@@ -62,15 +62,28 @@ describe('resolveHelperReasoningEffort', () => {
     ).toBeUndefined();
   });
 
-  it('keeps the off switch for a direct provider family', () => {
+  it.each(['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.5', 'o4-mini'])(
+    'asks the OpenAI reasoning model %s for the least effort it accepts, which is not none',
+    (model) => {
+      // GPT-6 Astra and 6.1 Sol answer `none` with a 400 (probed 2026-10-14).
+      expect(
+        resolveHelperReasoningEffort(
+          { name: 'OpenAI', providerFamily: 'openai', baseUrl: 'https://api.openai.com/v1' },
+          model,
+        ),
+      ).toBe('low');
+    },
+  );
+
+  it('keeps the off switch for a direct provider family whose models declare nothing', () => {
     expect(
       resolveHelperReasoningEffort(
         {
-          name: 'OpenAI',
-          providerFamily: 'openai',
-          baseUrl: 'https://api.openai.com/v1',
+          name: 'Gemini',
+          providerFamily: 'gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
         },
-        'gpt-5.5',
+        'gemini-3.8-flash',
       ),
     ).toBe('none');
   });

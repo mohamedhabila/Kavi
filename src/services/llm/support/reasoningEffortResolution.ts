@@ -12,6 +12,7 @@
 
 import type { LlmProviderConfig, ThinkingLevelPreference } from '../../../types/provider';
 import type { ModelReasoningCapability } from '../../../types/tool';
+import { inferOpenAIReasoningCapability } from '../catalog/providerCapabilities';
 import { resolveProviderFamily } from '../catalog/providerFamilies';
 import type { ReasoningEffort } from './contracts';
 
@@ -61,11 +62,15 @@ function requestableEfforts(capability: ModelReasoningCapability): ReasoningEffo
   ) as ReasoningEffort[];
 }
 
-export function getDeclaredReasoningCapability(
+/**
+ * The reasoning controls a model accepts: what its provider declares, else, for OpenAI's
+ * reasoning models, whose models API declares nothing, what their generation accepts.
+ */
+export function getModelReasoningCapability(
   provider: Pick<LlmProviderConfig, 'modelCapabilities'>,
   model: string,
 ): ModelReasoningCapability | undefined {
-  return provider.modelCapabilities?.[model]?.reasoning;
+  return provider.modelCapabilities?.[model]?.reasoning ?? inferOpenAIReasoningCapability(model);
 }
 
 /**
@@ -94,7 +99,7 @@ export function resolveThinkingLevelReasoningEffort(
  * Reasoning control for a short helper request that needs little deliberation —
  * memory extraction, memory reranking, admission and finalization checks.
  *
- * - The model declares its efforts: the least deliberate one it accepts.
+ * - The model's efforts are known: the least deliberate one it accepts.
  * - An OpenRouter model that declares nothing: no control. OpenRouter rejects `none`
  *   for models that cannot turn reasoning off, and omitting the control is accepted by
  *   every model it serves.
@@ -104,7 +109,7 @@ export function resolveHelperReasoningEffort(
   provider: Pick<LlmProviderConfig, 'modelCapabilities' | 'name' | 'baseUrl' | 'providerFamily'>,
   model: string,
 ): ReasoningEffort | undefined {
-  const capability = getDeclaredReasoningCapability(provider, model);
+  const capability = getModelReasoningCapability(provider, model);
   if (capability) {
     return resolveDeclaredReasoningEffort(capability, 'none');
   }

@@ -1,4 +1,5 @@
 import type { LlmProviderConfig } from '../../../types/provider';
+import type { ModelReasoningCapability } from '../../../types/tool';
 import { resolveProviderRouting, resolveProviderTransport, type ProviderTransport } from './providerProtocols';
 import { normalizeHostedModelId, resolveModelHostedFamily } from './providerFamilies';
 
@@ -9,8 +10,36 @@ const GEMINI_STRUCTURED_OUTPUT_WITH_TOOLS_PATTERNS = [
   /^google\/gemini-3\.5-/i,
 ] as const;
 
+/** The major version in a `gpt-<major>` id (gpt-6-astra is 6, gpt-5.5 is 5), if it has one. */
+function openAIGptMajor(model: string): number | undefined {
+  const match = /^gpt-(\d+)(?:[.-]|$)/i.exec(normalizeHostedModelId(model));
+  return match ? Number(match[1]) : undefined;
+}
+
+/** OpenAI's reasoning models: the o-series and every GPT from 5 on. */
 export function isOpenAIReasoningModel(model: string): boolean {
-  return /^(?:o1|o3|o4|gpt-5)/i.test(normalizeHostedModelId(model));
+  return (
+    /^o[134](?:[.-]|$)/i.test(normalizeHostedModelId(model)) || (openAIGptMajor(model) ?? 0) >= 5
+  );
+}
+
+/**
+ * The reasoning efforts an OpenAI reasoning model accepts. OpenAI's models API declares
+ * nothing, so this reads the generation, as the live API answered on 2026-10-14: GPT-6
+ * accepts low through max (every GPT-6 model rejects minimal, and Astra and 6.1 Sol reject
+ * none), and the earlier reasoning models all accept low, medium and high.
+ */
+export function inferOpenAIReasoningCapability(
+  model: string,
+): ModelReasoningCapability | undefined {
+  if (!isOpenAIReasoningModel(model)) return undefined;
+  return {
+    mandatory: true,
+    supportedEfforts:
+      (openAIGptMajor(model) ?? 0) >= 6
+        ? ['low', 'medium', 'high', 'xhigh', 'max']
+        : ['low', 'medium', 'high'],
+  };
 }
 
 export function isGemini3Model(model: string | undefined): boolean {
@@ -117,8 +146,9 @@ export function rejectsForcedToolChoice(model: string | undefined): boolean {
   );
 }
 
+/** Every OpenAI reasoning model rejects sampling parameters alongside a reasoning effort. */
 export function supportsTemperature(model: string): boolean {
-  return !/(?:^|\/)(?:o[134]|gpt-5(?:\.|$))/i.test(model);
+  return !isOpenAIReasoningModel(model);
 }
 
 export function shouldSurfaceReasoning(_model: string): boolean {

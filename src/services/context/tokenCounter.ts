@@ -183,6 +183,7 @@ export function estimateMessageTokens(
 
 // Model context window sizes (in tokens)
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  'gpt-6': 1050000,
   'gpt-5.5': 1000000,
   'gpt-5.4': 1000000,
   'gpt-5.4-mini': 400000,
