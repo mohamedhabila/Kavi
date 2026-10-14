@@ -24,7 +24,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 import { buildAssistantMessageMetadata } from '../../utils/assistantMessageMetadata';
-import { buildFailoverChain, createFailoverState, type FailoverState } from '../failover';
+import { createRunFailoverState, type FailoverState } from '../failover';
 import type { IterationProgressSignature, ToolCallRecord } from '../loopDetection';
 import { hydrateProviderApiKey } from '../orchestratorProviderRuntime';
 import type { TrackedAsyncOperation } from '../pendingAsyncOperations';
@@ -322,19 +322,13 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     emitPendingAsyncOperationsChange();
   }
   const lastPendingAsyncSignature = buildPendingAsyncOperationSignature(trackedAsyncOperations);
-  let failoverState: FailoverState | null = null;
-  if (params.enableFailover && params.allProviders && params.allProviders.length > 0) {
-    const chain = buildFailoverChain(params.allProviders, {
-      providerId: activeProvider.id,
-      model: activeModel,
-    });
-    if (chain.length > 1) {
-      failoverState = createFailoverState(chain, {
-        providerId: activeProvider.id,
-        model: activeModel,
-      });
-    }
-  }
+  const failoverState: FailoverState | null =
+    params.enableFailover && params.allProviders && params.allProviders.length > 0
+      ? createRunFailoverState(params.allProviders, {
+          providerId: activeProvider.id,
+          model: activeModel,
+        })
+      : null;
 
   return {
     activeModel,

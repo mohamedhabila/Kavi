@@ -4,6 +4,8 @@
 
 import {
   createFailoverState,
+  createRunFailoverState,
+  getFailureBackoffMs,
   buildFailoverChain,
   getNextAvailableModel,
   recordFailure,
@@ -217,5 +219,33 @@ describe('recordSuccess', () => {
     expect(state.failures.has('a:m')).toBe(true);
     recordSuccess(state, 'a', 'm');
     expect(state.failures.has('a:m')).toBe(false);
+  });
+});
+
+// A run on the only provider a user has got no failover state (the chain needed two
+// entries), so its one same-model retry after a dropped connection never ran: the run failed
+// and a tool-less recovery answered instead (live: "TypeError: terminated", GLM ledger task).
+describe('createRunFailoverState', () => {
+  it('gives a run on a single provider its failover state', () => {
+    const state = createRunFailoverState([makeProvider()], { providerId: 'p1', model: 'gpt-5.4' });
+
+    expect(state?.chain).toEqual([{ providerId: 'p1', model: 'gpt-5.4', priority: 0 }]);
+  });
+
+  it('has no state when no enabled provider serves the model', () => {
+    expect(
+      createRunFailoverState([makeProvider({ enabled: false })], {
+        providerId: 'p1',
+        model: 'gpt-5.4',
+      }),
+    ).toBeNull();
+  });
+
+  it('backs off one second after a first failure, doubling after each further one', () => {
+    const state = createRunFailoverState([makeProvider()], { providerId: 'p1', model: 'gpt-5.4' })!;
+    recordFailure(state, 'p1', 'gpt-5.4');
+    expect(getFailureBackoffMs(state, 'p1', 'gpt-5.4')).toBe(1000);
+    recordFailure(state, 'p1', 'gpt-5.4');
+    expect(getFailureBackoffMs(state, 'p1', 'gpt-5.4')).toBe(2000);
   });
 });

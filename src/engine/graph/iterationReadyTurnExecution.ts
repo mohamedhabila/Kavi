@@ -4,7 +4,15 @@ import { bindProviderToModel } from '../../services/llm/support/providerSupport'
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
 import { buildCompactionOpenThreads } from './compactionContext';
-import { getFailureCount, getNextAvailableModel, recordFailure, recordSuccess } from '../failover';
+import {
+  getFailureBackoffMs,
+  getFailureCount,
+  getNextAvailableModel,
+  recordFailure,
+  recordSuccess,
+} from '../failover';
+import { waitForAppStateAwareDelay } from '../../utils/appStateAwareDelay';
+import { waitForPromiseOrAbort } from './modelTurnActivityGuard';
 import { hydrateProviderApiKey, shouldFailoverOnError } from '../orchestratorProviderRuntime';
 import { isAbortErrorLike } from '../../services/agents/agentRunCancellation';
 import { executePreparedAgentControlGraphPendingToolTurn } from './iterationPendingToolExecution';
@@ -206,7 +214,21 @@ export async function executePreparedAgentControlGraphTurn(params: {
           entry.model !== params.modelTurnPreparation.requestModel,
       );
       if (!hasDistinctAlternative && currentFailureCount === 1) {
-        await iterationParams.yieldToUiFrame();
+        // A dropped connection or an overloaded upstream usually clears within its backoff;
+        // the failed attempt's partial output is discarded before the turn runs again.
+        const backoff = waitForAppStateAwareDelay(
+          getFailureBackoffMs(
+            iterationParams.failoverState,
+            runtime.activeProvider.id,
+            params.modelTurnPreparation.requestModel,
+          ),
+        );
+        if (iterationParams.signal?.signal) {
+          await waitForPromiseOrAbort(backoff, iterationParams.signal.signal);
+        } else {
+          await backoff;
+        }
+        iterationParams.callbacks.onAssistantStreamReset?.();
         return buildResult(runtime, 'continued');
       }
     }

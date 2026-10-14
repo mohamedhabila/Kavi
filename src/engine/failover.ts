@@ -143,6 +143,28 @@ export function getFailureCount(state: FailoverState, providerId: string, model:
   return state.failures.get(`${providerId}:${model}`)?.count ?? 0;
 }
 
+/** How long to wait before calling a model again after its latest failure. */
+export function getFailureBackoffMs(
+  state: FailoverState,
+  providerId: string,
+  model: string,
+): number {
+  return state.failures.get(`${providerId}:${model}`)?.backoffMs ?? 0;
+}
+
+/**
+ * The failover state a run starts with: every enabled provider that serves the active model,
+ * the active one included. A single provider still gets one, so a run on the only key a user
+ * has gets its one same-model retry after a transient failure instead of failing outright.
+ */
+export function createRunFailoverState(
+  providers: LlmProviderConfig[],
+  activeSelection: ActiveFailoverSelection,
+): FailoverState | null {
+  const chain = buildFailoverChain(providers, activeSelection);
+  return chain.length > 0 ? createFailoverState(chain, activeSelection) : null;
+}
+
 export function recordSuccess(state: FailoverState, providerId: string, model: string): void {
   const key = `${providerId}:${model}`;
   state.failures.delete(key);

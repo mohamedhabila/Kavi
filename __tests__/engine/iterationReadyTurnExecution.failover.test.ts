@@ -280,12 +280,24 @@ describe('prepared graph turn directive consumption', () => {
       { providerId: primaryProvider.id, model: primaryProvider.model },
     );
 
-    const result = await executePreparedAgentControlGraphTurn(fixture.params);
+    jest.useFakeTimers();
+    try {
+      let settled = false;
+      const pending = executePreparedAgentControlGraphTurn(fixture.params).finally(() => {
+        settled = true;
+      });
+      // The retry waits out the first failure's backoff before the turn runs again.
+      await jest.advanceTimersByTimeAsync(500);
+      expect(settled).toBe(false);
+      await jest.advanceTimersByTimeAsync(500);
+      const result = await pending;
 
-    expect(result.status).toBe('continued');
-    expect(result.runtime.activeProvider.id).toBe(primaryProvider.id);
-    expect(fixture.params.iterationParams.yieldToUiFrame).toHaveBeenCalledTimes(1);
-    expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+      expect(result.status).toBe('continued');
+      expect(result.runtime.activeProvider.id).toBe(primaryProvider.id);
+      expect(fixture.consumeOneShotTurnDirectives).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('surfaces a second consecutive transient failure from the only provider', async () => {
