@@ -60,6 +60,10 @@ describe('the live E2E notification boundary', () => {
       content: { title: 'Done', body: 'Task finished' },
       trigger: null,
     });
+    await Notifications.scheduleNotificationAsync({
+      content: { title: 'Done', body: 'On a channel' },
+      trigger: { channelId: 'kavi-default' },
+    });
 
     expect(notificationState()).toMatchObject({ scheduled: false, cancelled: false });
   });

@@ -201,6 +201,8 @@ export async function sendLocalNotification(args: {
       sound: true,
       data: args.data,
     },
+    // A channel-only trigger presents at once on Kavi's channel (Android; iOS treats it as
+    // immediate). A null trigger has no channel, so Android showed it on Expo's fallback one.
     trigger:
       seconds > 0
         ? {
@@ -208,7 +210,7 @@ export async function sendLocalNotification(args: {
             seconds,
             channelId: DEFAULT_CHANNEL_ID,
           }
-        : null,
+        : { channelId: DEFAULT_CHANNEL_ID },
   });
 
   return { id, scheduled: seconds > 0 };

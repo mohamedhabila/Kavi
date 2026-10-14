@@ -22,11 +22,13 @@ const GRANTED_PERMISSION = Object.freeze({
 });
 
 /**
- * Seconds until a trigger fires, or null when the request is shown immediately. A
- * calendar-style repeating trigger (daily, weekly) has no single delay and counts as 0.
+ * Seconds until a trigger fires, or null when the request is shown immediately (no trigger,
+ * or only a channel). A calendar-style repeating trigger (daily, weekly) has no single delay
+ * and counts as 0.
  */
 function delaySecondsOf(trigger: unknown, nowMs: number): number | null {
   if (!trigger || typeof trigger !== 'object') return null;
+  if (Object.keys(trigger).every((key) => key === 'channelId')) return null;
   const { seconds, date } = trigger as { seconds?: unknown; date?: unknown };
   if (typeof seconds === 'number') return Math.max(0, Math.floor(seconds));
   if (typeof date === 'number' || date instanceof Date) {

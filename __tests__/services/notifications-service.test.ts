@@ -37,13 +37,15 @@ describe('notifications service', () => {
     expect(Notifications.setNotificationChannelAsync).not.toHaveBeenCalled();
   });
 
+  // An immediate notification used to carry a null trigger, which has no channel: Android
+  // showed it on Expo's fallback channel instead of Kavi's.
   it('sends an immediate local notification', async () => {
     const result = await sendLocalNotification({ title: 'Hello', body: 'World' });
 
     expect(result).toEqual({ id: 'notification-id', scheduled: false });
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
       content: expect.objectContaining({ title: 'Hello', body: 'World', sound: true }),
-      trigger: null,
+      trigger: { channelId: 'kavi-default' },
     });
   });
 
@@ -57,7 +59,7 @@ describe('notifications service', () => {
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
       identifier: 'scheduler-terminal-attempt-1',
       content: expect.objectContaining({ title: 'Completed', body: 'Done' }),
-      trigger: null,
+      trigger: { channelId: 'kavi-default' },
     });
   });
 
@@ -72,7 +74,7 @@ describe('notifications service', () => {
       content: expect.objectContaining({
         data: { screen: 'Chat', conversationId: 'conv-1', source: 'scheduled_task' },
       }),
-      trigger: null,
+      trigger: { channelId: 'kavi-default' },
     });
   });
 
@@ -87,7 +89,7 @@ describe('notifications service', () => {
       content: expect.objectContaining({
         data: { screen: 'Scheduler', jobId: 'job-1', source: 'scheduled_task_wake' },
       }),
-      trigger: null,
+      trigger: { channelId: 'kavi-default' },
     });
   });
 
