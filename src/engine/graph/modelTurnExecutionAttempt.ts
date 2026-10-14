@@ -91,6 +91,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     iteration: params.iteration,
     memorySectionText: params.memorySectionText,
     ...(params.refreshMemorySection ? { refreshMemorySection: params.refreshMemorySection } : {}),
+    ...(params.workflowTaskAnchor ? { workflowTaskAnchor: params.workflowTaskAnchor } : {}),
     onCompaction: params.onCompaction,
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,

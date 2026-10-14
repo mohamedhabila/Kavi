@@ -182,6 +182,17 @@ function boundAnchorForPrompt(anchor: WorkflowTaskAnchor): WorkflowTaskAnchor & 
   return { ...anchor, content: `${head}\n…\n${tail}`, contentTruncated: true };
 }
 
+/**
+ * Whether the transcript still carries the anchored request verbatim. The anchor is shown only
+ * when it does not: while it does, a copy only adds tokens.
+ */
+export function transcriptCarriesWorkflowTaskAnchor(
+  messages: ReadonlyArray<Pick<Message, 'id' | 'role' | 'content' | 'attachments'>>,
+  anchor: WorkflowTaskAnchor,
+): boolean {
+  return messages.some((message) => messageMatchesWorkflowTaskAnchor(message, anchor));
+}
+
 export function renderWorkflowTaskAnchorPromptSection(anchor: WorkflowTaskAnchor): string {
   return `${WORKFLOW_TASK_ANCHOR_PREFIX}${serializeWorkflowTaskAnchor(boundAnchorForPrompt(anchor))}${WORKFLOW_TASK_ANCHOR_SUFFIX}`;
 }

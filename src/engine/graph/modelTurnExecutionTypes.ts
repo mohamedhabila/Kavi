@@ -12,6 +12,7 @@ import type { PreparedAgentTurn } from './agentTurnPreparation';
 import type { AgentTurnCompactionEngine } from './agentTurnRequestBudget';
 import type { AgentControlGraphForcedTextReason } from './forcedTextTurn';
 import type { OrchestratorCompactionEvent } from '../orchestratorCompaction';
+import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { OrchestratorCallbacks } from '../orchestrator/types';
 import type { CompactionContext } from '../../services/context/types';
 import type { ThinkingLevel } from '../thinking';
@@ -49,6 +50,8 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   memorySectionText?: string;
   /** See `PrepareAgentTurnRequestBudgetParams.refreshMemorySection`. */
   refreshMemorySection?: (workingMessages: ReadonlyArray<Message>) => string | null | undefined;
+  /** See `PrepareAgentTurnRequestBudgetParams.workflowTaskAnchor`. */
+  workflowTaskAnchor?: WorkflowTaskAnchor;
   llm: {
     sendMessage: (
       messages: Array<{ role: string; content: any }>,

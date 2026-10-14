@@ -125,6 +125,7 @@ export async function executePreparedAgentControlGraphTurn(params: {
         runtime.memory = iterationParams.refreshSessionMemory(workingMessages);
         return runtime.memory.status === 'read' ? (runtime.memory.section?.text ?? null) : null;
       },
+      workflowTaskAnchor: iterationParams.promptContextSupport.workflowTaskAnchor,
       llm: runtime.llm,
       onCompaction: iterationParams.onCompaction,
       preparedTurn,

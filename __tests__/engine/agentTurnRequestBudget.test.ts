@@ -1,4 +1,5 @@
 import { prepareAgentTurnRequestBudget } from '../../src/engine/graph/agentTurnRequestBudget';
+import { createWorkflowTaskAnchor } from '../../src/engine/graph/workflowTaskAnchor';
 import { estimateTokens } from '../../src/services/context/tokenCounter';
 import type { Message } from '../../src/types/message';
 
@@ -214,5 +215,65 @@ describe('prepareAgentTurnRequestBudget', () => {
     });
 
     expect(result.budgetResult.systemPrompt).toContain('CURRENT_READ');
+  });
+
+  // The anchor is left out of the prompt while the transcript carries the request. Compaction
+  // can drop the request from the very messages this request sends, so the budget adds it then.
+  it("adds the anchor when compaction drops the run's request from this request", async () => {
+    const messages = Array.from({ length: 100 }, (_, index) => makeMessage(index));
+    const anchor = createWorkflowTaskAnchor(messages[0]!);
+    const compact = jest.fn().mockResolvedValue({
+      ok: true,
+      compacted: true,
+      tier: 'selective',
+      result: {
+        summary: 'Earlier turns, summarized.',
+        firstKeptEntryId: 'msg-98',
+        tokensBefore: 1,
+      },
+    });
+
+    const result = await prepareAgentTurnRequestBudget({
+      compactionEngine: { compact },
+      conversationId: 'conv-anchor-after-compaction',
+      enrichedSystemPrompt: 'Stable assistant instructions.',
+      enrichedSystemPromptSections: [
+        { text: 'Stable assistant instructions.', cacheable: true, purpose: 'base_prompt' },
+      ],
+      requestMaxTokens: 1024,
+      requestModel: 'phi4',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workflowTaskAnchor: anchor,
+      workingMessages: messages,
+    });
+
+    expect(result.workingMessages.some((message) => message.id === 'msg-0')).toBe(false);
+    expect(result.budgetResult.systemPrompt).toContain('## Workflow Task Anchor');
+    expect(
+      result.enrichedSystemPromptSections?.some(
+        (section) => section.purpose === 'workflow_task_anchor',
+      ),
+    ).toBe(true);
+  });
+
+  it("leaves the anchor out while the request still carries the run's request", async () => {
+    const request: Message = { id: 'user-1', role: 'user', content: 'Hi.', timestamp: 1 };
+    const result = await prepareAgentTurnRequestBudget({
+      compactionEngine: null,
+      conversationId: 'conv-anchor-carried',
+      enrichedSystemPrompt: 'Stable assistant instructions.',
+      enrichedSystemPromptSections: [
+        { text: 'Stable assistant instructions.', cacheable: true, purpose: 'base_prompt' },
+      ],
+      requestMaxTokens: 1024,
+      requestModel: 'gpt-5.4-mini',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workflowTaskAnchor: createWorkflowTaskAnchor(request),
+      workingMessages: [request],
+    });
+
+    expect(result.budgetResult.systemPrompt).not.toContain('## Workflow Task Anchor');
   });
 });

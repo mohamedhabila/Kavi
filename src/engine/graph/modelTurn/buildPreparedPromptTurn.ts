@@ -5,7 +5,7 @@ import type { PromptContextSupport } from '../prepareAgentControlGraphModelTurnT
 import type { ToolDefinition } from '../../../types/tool';
 import type { Message } from '../../../types/message';
 import { isLongTermMemoryEnabled } from '../../../services/memory/policy';
-import { messageMatchesWorkflowTaskAnchor } from '../workflowTaskAnchor';
+import { transcriptCarriesWorkflowTaskAnchor } from '../workflowTaskAnchor';
 import { buildMemoryPolicyPromptSection } from '../../prompts/memoryPolicyPrompt';
 import { renderPlanPromptSection } from '../../plan/agentPlan';
 import { filterToolsForMemoryPolicy } from '../../tools/memoryPolicyToolAuthority';
@@ -41,15 +41,14 @@ export function buildPreparedModelTurnPrompt(params: {
     groundedToolNames.has(name),
   );
   // The anchor keeps the exact request in view once compaction has dropped it from the
-  // transcript. While the transcript still carries it, a copy only adds tokens, and adding it
-  // from the second iteration on changed the prompt's uncached tail mid-turn, so every tool
-  // loop re-processed the turn at full price.
+  // transcript (the request budget adds it when compaction drops it from this very request).
+  // While the transcript still carries it, a copy only adds tokens, and adding it from the
+  // second iteration on changed the prompt's uncached tail mid-turn, so every tool loop
+  // re-processed the turn at full price.
   const workflowTaskAnchor = params.promptContextSupport.workflowTaskAnchor;
   const transcriptCarriesAnchor =
     workflowTaskAnchor !== undefined &&
-    params.workingMessages.some((message) =>
-      messageMatchesWorkflowTaskAnchor(message, workflowTaskAnchor),
-    );
+    transcriptCarriesWorkflowTaskAnchor(params.workingMessages, workflowTaskAnchor);
   const prepare = (options: {
     groundedTools: ReadonlyArray<ToolDefinition>;
     longTermMemoryEnabled: boolean;

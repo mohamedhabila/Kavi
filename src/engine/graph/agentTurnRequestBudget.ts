@@ -27,9 +27,15 @@ import { repairModelVisibleToolResultTranscript } from '../orchestratorToolTrans
 import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessages';
 import {
   joinSystemPromptSections,
+  orderSystemPromptSectionsForCaching,
   replaceMemoryPromptSection,
   type SystemPromptSection,
 } from '../prompts/orchestratorPromptSections';
+import {
+  renderWorkflowTaskAnchorPromptSection,
+  transcriptCarriesWorkflowTaskAnchor,
+  type WorkflowTaskAnchor,
+} from './workflowTaskAnchor';
 
 type BudgetCompactionEngine = CompactionEngine | null;
 export type AgentTurnCompactionEngine = BudgetCompactionEngine;
@@ -50,6 +56,8 @@ export interface PrepareAgentTurnRequestBudgetParams {
    * (compaction replaced rounds it left out); `null` for none, `undefined` while it fits.
    */
   refreshMemorySection?: (workingMessages: ReadonlyArray<Message>) => string | null | undefined;
+  /** The run's request, shown as the anchor once compaction drops it from these messages. */
+  workflowTaskAnchor?: WorkflowTaskAnchor;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   /** True when the turn runs on an on-device runtime, which needs a phone-sized window. */
   onDeviceProvider?: boolean;
@@ -262,7 +270,7 @@ export async function prepareAgentTurnRequestBudget(
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
   const toolsForIteration = [...(params.toolsForIteration ?? [])];
   const planPromptSection = extractPlanPromptSection(params.enrichedSystemPromptSections);
-  const workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
+  let workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
     params.enrichedSystemPromptSections,
   );
   let compactionApplied = false;
@@ -335,6 +343,33 @@ export async function prepareAgentTurnRequestBudget(
     );
     enrichedSystemPrompt = joinSystemPromptSections(enrichedSystemPromptSections);
     memorySectionText = refreshedMemorySection ?? undefined;
+    budgetPreview = await previewRequestBudget({
+      activeProvider: params.activeProvider,
+      enrichedSystemPrompt,
+      candidateMessages: modelVisibleMessages,
+      onDeviceProvider: params.onDeviceProvider === true,
+      requestFamily: params.requestFamily,
+      requestMaxTokens: params.requestMaxTokens,
+      requestModel: params.requestModel,
+      toolsForIteration,
+    });
+  }
+
+  if (
+    compactionApplied &&
+    params.workflowTaskAnchor &&
+    enrichedSystemPromptSections &&
+    !workflowTaskAnchorPromptSection &&
+    !transcriptCarriesWorkflowTaskAnchor(workingMessages, params.workflowTaskAnchor)
+  ) {
+    workflowTaskAnchorPromptSection = renderWorkflowTaskAnchorPromptSection(
+      params.workflowTaskAnchor,
+    );
+    enrichedSystemPromptSections = orderSystemPromptSectionsForCaching([
+      ...enrichedSystemPromptSections,
+      { text: workflowTaskAnchorPromptSection, purpose: 'workflow_task_anchor' },
+    ]);
+    enrichedSystemPrompt = joinSystemPromptSections(enrichedSystemPromptSections);
     budgetPreview = await previewRequestBudget({
       activeProvider: params.activeProvider,
       enrichedSystemPrompt,
