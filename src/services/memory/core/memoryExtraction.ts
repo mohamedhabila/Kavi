@@ -214,7 +214,9 @@ export async function extractConversationMemory(params: {
     operations: reply.operations,
     conversationId: params.conversationId,
     sourceMessageId: window.lastUserMessageId,
-    now,
+    // Extraction can run long after the rounds (deferred while the model is busy, retried,
+    // caught up after the app was killed); a memory is dated by when it was said.
+    saidAt: window.throughAt,
     commit: (transactionDb) =>
       recordExtractedThrough(transactionDb, params.conversationId, window.throughAt, now),
   });

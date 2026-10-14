@@ -204,7 +204,8 @@ export function applyMemoryOperations(params: {
   operations: ReadonlyArray<MemoryOperation>;
   conversationId: string;
   sourceMessageId: string | null;
-  now: number;
+  /** When the conversation the operations come from took place: the memories' date. */
+  saidAt: number;
   commit: (db: SQLite.SQLiteDatabase) => void;
 }): { added: number; updated: number; deleted: number } {
   const db = readyDb();
@@ -216,7 +217,7 @@ export function applyMemoryOperations(params: {
           text: operation.text,
           conversationId: params.conversationId,
           sourceMessageId: params.sourceMessageId,
-          now: params.now,
+          now: params.saidAt,
         });
         if (result.status === 'created') applied.added += 1;
         continue;
@@ -230,7 +231,7 @@ export function applyMemoryOperations(params: {
           sensitive: target.sensitive,
           sourceMessageId: params.sourceMessageId,
           replaces: target.id,
-          now: params.now,
+          now: params.saidAt,
         });
         if (result.status === 'created') applied.updated += 1;
         continue;

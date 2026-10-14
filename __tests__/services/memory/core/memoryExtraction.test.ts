@@ -256,6 +256,19 @@ describe('extraction run', () => {
     });
   });
 
+  // Extraction can run long after the rounds; dating a memory by the run told the model a
+  // fact from last week was said today.
+  it('dates a memory by when it was said, not when extraction ran', async () => {
+    await run(async () =>
+      reply([{ op: 'add', id: null, text: 'Sara (the user’s sister) lives in Porto' }]),
+    );
+
+    const [item] = searchMemoryItems({ query: 'Sara Porto', limit: 1, includeSensitive: true });
+    // The window's rounds closed at 5; the run happened at 1_000.
+    expect(item).toMatchObject({ createdAt: 5, updatedAt: 5 });
+    expect(readCaptureCursor('conv-1')?.extractedThroughAt).toBe(5);
+  });
+
   it('names the focus the conversation moved to', async () => {
     await expect(
       run(
