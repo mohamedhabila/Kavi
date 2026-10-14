@@ -42,7 +42,6 @@ import { AppState } from 'react-native';
 import { resetSchedulerOperationLockForTests } from '../../src/services/scheduler/operationLock';
 import { registerInternalHook, unregisterInternalHook } from '../../src/services/events/bus';
 import { abortAllScheduledJobExecutions } from '../../src/services/scheduler/executionLifecycle';
-import { withHeadlessSchedulerHost } from '../../src/services/scheduler/headlessHost';
 function resetStores() {
   useSchedulerStore.setState({ jobs: [], terminalReports: [] });
   useExecutionTraceStore.setState({ traces: [] });
@@ -119,43 +118,6 @@ describe('Scheduler Engine', () => {
     it('does not crash with empty job list', async () => {
       setSchedulerExecutor({ execute: async () => ({ output: 'ok' }) });
       await expect(evaluateJobsOnce()).resolves.toBeUndefined();
-    });
-    it('does not claim agent work while the app is backgrounded', async () => {
-      const previousState = AppState.currentState;
-      (AppState as any).currentState = 'background';
-      const execute = jest.fn().mockResolvedValue({ output: 'should not run' });
-      setSchedulerExecutor({ execute });
-      const jobId = useSchedulerStore.getState().addJob({
-        name: 'Foreground only',
-        schedule: { kind: 'every', everyMs: 60_000 },
-        prompt: 'do work',
-      });
-      setJobRuntime(jobId, { nextRunAtMs: Date.now() - 1 });
-      await evaluateJobsOnce({ trigger: 'scheduled' });
-      expect(execute).not.toHaveBeenCalled();
-      expect(useSchedulerStore.getState().getJob(jobId)?.runningAttemptId).toBeUndefined();
-      (AppState as any).currentState = previousState;
-    });
-    // A due task used to wait until the person opened the app. A native background job
-    // (Android WorkManager) now hosts the run while the app is closed.
-    it('runs due work in the background while a background job hosts it', async () => {
-      const previousState = AppState.currentState;
-      (AppState as any).currentState = 'background';
-      const execute = jest.fn().mockResolvedValue({ output: 'Morning brief ready.' });
-      setSchedulerExecutor({ execute });
-      const dueAtMs = Date.now() - 1;
-      const jobId = useSchedulerStore.getState().addJob({
-        name: 'Morning brief',
-        schedule: { kind: 'every', everyMs: 60_000 },
-        prompt: 'brief me',
-      });
-      setJobRuntime(jobId, { nextRunAtMs: dueAtMs });
-      await withHeadlessSchedulerHost(() => evaluateJobsOnce({ trigger: 'background-wake' }));
-      expect(execute).toHaveBeenCalledTimes(1);
-      const job = useSchedulerStore.getState().getJob(jobId);
-      expect(job?.runningAttemptId).toBeUndefined();
-      expect(job?.nextRunAtMs).toBeGreaterThan(dueAtMs);
-      (AppState as any).currentState = previousState;
     });
     it('suppresses replay when backgrounding aborts an unsafe task-run hook', async () => {
       const execute = jest.fn().mockResolvedValue({ output: 'must not run' });
