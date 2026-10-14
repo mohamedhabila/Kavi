@@ -269,6 +269,9 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     continueTask: '继续',
     continueTaskMessage: '请从你停下的地方继续这个任务。',
     attachmentWorkspaceImportFailed: '无法将附件添加到工作区。请重试。',
+    sharedItemsUnreadable: plural({
+      other: 'Kavi 无法打开 {count} 个共享项目。请从来源应用重新共享。',
+    }),
     steeringQueueFull: '等待助手读取的消息过多。请在助手读取后重试。',
     steeringQueuedTitle: '等待助手读取',
     steeringEditQueued: '编辑待发送的消息',

@@ -283,6 +283,11 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
     continueTaskMessage: 'Por favor, continue a tarefa de onde você parou.',
     attachmentWorkspaceImportFailed:
       'Não foi possível adicionar os arquivos anexados ao espaço de trabalho. Tente novamente.',
+    sharedItemsUnreadable: plural({
+      one: 'O Kavi não conseguiu abrir um item compartilhado. Compartilhe de novo pelo app de origem.',
+      many: 'O Kavi não conseguiu abrir {count} itens compartilhados. Compartilhe de novo pelo app de origem.',
+      other: 'O Kavi não conseguiu abrir {count} itens compartilhados. Compartilhe de novo pelo app de origem.',
+    }),
     steeringQueueFull:
       'Há mensagens demais aguardando o assistente. Tente novamente depois que ele as ler.',
     steeringQueuedTitle: 'Aguardando o assistente',

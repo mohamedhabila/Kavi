@@ -280,6 +280,10 @@ export const de: TranslationMap = mergeTranslations(en, {
     continueTaskMessage: 'Bitte machen Sie mit der Aufgabe dort weiter, wo Sie aufgehört haben.',
     attachmentWorkspaceImportFailed:
       'Die angehängten Dateien konnten nicht zum Workspace hinzugefügt werden. Bitte erneut versuchen.',
+    sharedItemsUnreadable: plural({
+      one: 'Kavi konnte ein geteiltes Element nicht öffnen. Teile es erneut aus der App, aus der es stammt.',
+      other: 'Kavi konnte {count} geteilte Elemente nicht öffnen. Teile sie erneut aus der App, aus der sie stammen.',
+    }),
     steeringQueueFull:
       'Zu viele Nachrichten warten auf den Assistenten. Versuche es erneut, sobald er sie gelesen hat.',
     steeringQueuedTitle: 'Wartet auf den Assistenten',

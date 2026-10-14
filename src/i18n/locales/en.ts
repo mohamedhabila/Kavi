@@ -279,6 +279,10 @@ export const en: TranslationMap = {
     continueTask: 'Continue',
     continueTaskMessage: 'Please continue with the task from where you stopped.',
     attachmentWorkspaceImportFailed: 'Unable to add attached files to the workspace. Try again.',
+    sharedItemsUnreadable: plural({
+      one: "Kavi couldn't open a shared item. Share it again from the app it came from.",
+      other: "Kavi couldn't open {count} shared items. Share them again from the app they came from.",
+    }),
     steeringQueueFull:
       'Too many messages are waiting for the assistant. Try again after it reads them.',
     steeringQueuedTitle: 'Waiting for the assistant',

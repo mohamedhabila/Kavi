@@ -259,6 +259,11 @@ export const mockIsAvailableAsync = jest.fn().mockResolvedValue(true);
 jest.mock('expo-sharing', () => ({
   shareAsync: (...args: any[]) => mockShareAsync(...args),
   isAvailableAsync: (...args: any[]) => mockIsAvailableAsync(...args),
+  useIncomingShare: () => ({
+    resolvedSharedPayloads: [],
+    clearSharedPayloads: () => undefined,
+    refreshSharePayloads: () => undefined,
+  }),
 }));
 
 export const mockFileWrite = jest.fn();

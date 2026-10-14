@@ -83,7 +83,16 @@
           }
         }
       ],
-      "expo-sharing",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": ["*/*"],
+            "multipleShareMimeTypes": ["*/*"]
+          }
+        }
+      ],
       [
         "expo-calendar",
         {

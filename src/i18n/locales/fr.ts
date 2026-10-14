@@ -292,6 +292,11 @@ export const fr: TranslationMap = mergeTranslations(en, {
     continueTaskMessage: 'Veuillez reprendre la tâche là où vous vous êtes arrêté.',
     attachmentWorkspaceImportFailed:
       'Impossible d’ajouter les fichiers joints à l’espace de travail. Réessayez.',
+    sharedItemsUnreadable: plural({
+      one: "Kavi n'a pas pu ouvrir un élément partagé. Partagez-le à nouveau depuis l'app d'origine.",
+      many: "Kavi n'a pas pu ouvrir {count} éléments partagés. Partagez-les à nouveau depuis l'app d'origine.",
+      other: "Kavi n'a pas pu ouvrir {count} éléments partagés. Partagez-les à nouveau depuis l'app d'origine.",
+    }),
     steeringQueueFull:
       'Trop de messages attendent l’assistant. Réessayez une fois qu’il les aura lus.',
     steeringQueuedTitle: 'En attente de l’assistant',

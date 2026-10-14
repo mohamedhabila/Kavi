@@ -47,6 +47,7 @@ import { useChatScreenUiCallbacks } from './chatScreen/useChatScreenUiCallbacks'
 import { useChatComposerState } from './useChatComposerState';
 import { useChatScrollController } from './useChatScrollController';
 import { useForegroundRequest } from './useForegroundRequest';
+import { useIncomingShareIntoComposer } from './useIncomingShareIntoComposer';
 import { useLocalModelRuntimeState } from './useLocalModelRuntimeState';
 import { useStreamingDrafts } from './useStreamingDrafts';
 import { useSubAgentRunBridge } from './useSubAgentRunBridge';
@@ -313,6 +314,12 @@ export const ChatScreen: React.FC = () => {
     onApplyText: handleComposerTextChange,
     onConsumed: handlePreparedDraftConsumed,
     preparedDraft: route.params?.preparedDraft,
+  });
+  useIncomingShareIntoComposer({
+    composerAttachments,
+    composerText,
+    onChangeAttachments: handleComposerAttachmentsChange,
+    onChangeText: handleComposerTextChange,
   });
 
   // Clear error when switching conversations
