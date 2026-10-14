@@ -47,7 +47,7 @@ export const E2E_PROMPT_CACHE_ELIGIBLE_INPUT_TOKENS = 4_096;
 
 export const E2E_PROMPT_CACHE_MIN_ELIGIBLE_READ_RATE = 0.25;
 
-export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-13.long-tasks-v6';
+export const E2E_SCENARIO_MANIFEST_VERSION = '2026-10-15.long-tasks-v7';
 
 export const E2E_NATIVE_TOOL_FIXTURE_VERSION = 'native-tools-2026-07-10';
 
@@ -115,17 +115,20 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'direct-beam-long-dialogue-multi-probe': 520_000,
   'direct-longmemeval-v2-experience-runbook': 360_000,
   'direct-mobileworld-long-horizon-personalization': 420_000,
-  // Long tasks: 1.5x the most a passing GLM 5.3 Flash run spent (N=3+), rounded up to 5k,
-  // so a miss is a regression rather than OpenRouter routing noise (~20% between upstreams).
-  'long-task-expense-report': 60_000,
-  'long-task-trip-organizer': 105_000,
-  'long-task-research-brief': 35_000,
-  'long-task-resume-interrupted': 70_000,
-  'long-task-plan-revision': 60_000,
-  'long-task-feedback-triage': 45_000,
-  'long-task-recover-wrong-folder': 60_000,
-  'long-task-exact-ledger': 45_000, // sized on a run that computed with code, the better path
-  'long-task-chained-investigation': 40_000,
+  // Long tasks: twice the most either GLM 5.3 Flash or Claude Sonnet 5.5 spent at 161bf838,
+  // rounded up to 5k, and never below the earlier budget. A budget catches a run that loops
+  // or rereads; it must not fail a stronger model for checking its work once more, or a
+  // tokenizer that counts the same prompt as more tokens (Sonnet failed research-brief at
+  // 41k against 35k while passing every other check).
+  'long-task-expense-report': 100_000, // GLM 39.5k, Sonnet 48.0k
+  'long-task-trip-organizer': 105_000, // GLM 27.5k, Sonnet 37.0k (earlier runs spent more)
+  'long-task-research-brief': 85_000, // GLM 28.3k, Sonnet 41.4k
+  'long-task-resume-interrupted': 70_000, // GLM 30.1k, Sonnet 34.5k
+  'long-task-plan-revision': 90_000, // GLM 38.8k, Sonnet 43.5k
+  'long-task-feedback-triage': 85_000, // GLM 35.6k, Sonnet 41.9k
+  'long-task-recover-wrong-folder': 115_000, // GLM 35.9k, Sonnet 55.3k
+  'long-task-exact-ledger': 60_000, // GLM 15.0k, Sonnet 20.0k
+  'long-task-chained-investigation': 90_000, // GLM 44.0k, Sonnet 32.9k
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
