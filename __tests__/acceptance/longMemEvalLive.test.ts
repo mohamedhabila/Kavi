@@ -4,7 +4,8 @@
 // Gated: RUN_LONGMEMEVAL=1, LONGMEMEVAL_DATA=<path to a LongMemEval JSON file> and the
 // selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context | window |
 // extract, default memory), LONGMEMEVAL_WINDOW_TOKENS (the window arm's raw-history budget, default
-// 32000), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_JUDGE_MODEL (default
+// 32000), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_SHARD (i/n: every n-th selected
+// question from the i-th, so n processes split one run), LONGMEMEVAL_JUDGE_MODEL (default
 // LongMemEval's reference judge), LONGMEMEVAL_OUT (results JSONL path). Run with TZ=UTC:
 // LongMemEval's dates carry no zone and are read as UTC.
 // ---------------------------------------------------------------------------
@@ -88,11 +89,26 @@ function selectedWindowTokens(): number {
   return tokens;
 }
 
+function selectedShard(): { index: number; count: number } {
+  const shard = process.env.LONGMEMEVAL_SHARD?.trim();
+  if (!shard) return { index: 0, count: 1 };
+  const match = /^(\d+)\/(\d+)$/.exec(shard);
+  const index = Number(match?.[1]);
+  const count = Number(match?.[2]);
+  if (!match || count < 1 || index >= count) {
+    throw new Error('LONGMEMEVAL_SHARD must be i/n with 0 <= i < n.');
+  }
+  return { index, count };
+}
+
 function selectedInstances(): LongMemEvalInstance[] {
   const perType = Number(process.env.LONGMEMEVAL_PER_TYPE?.trim() || '10');
   const parsed: unknown = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
   if (!Array.isArray(parsed)) throw new Error('LONGMEMEVAL_DATA must hold a JSON array.');
-  return selectLongMemEvalSubset(parsed.map(parseLongMemEvalInstance), perType);
+  const shard = selectedShard();
+  return selectLongMemEvalSubset(parsed.map(parseLongMemEvalInstance), perType).filter(
+    (_instance, position) => position % shard.count === shard.index,
+  );
 }
 
 async function judgeAnswer(
