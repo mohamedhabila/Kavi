@@ -1,7 +1,7 @@
 import type { LlmProviderConfig } from '../../../types/provider';
 import { resolveProviderFamily } from '../catalog/providerFamilies';
 
-export const PRIMARY_OPENAI_IMAGE_MODEL = 'gpt-image-2';
+export const PRIMARY_OPENAI_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
 export const PRIMARY_GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image';
 
 const IMAGE_MODEL_ALIASES: Record<string, string> = {

@@ -124,12 +124,13 @@ const MODALITY_COST_TABLE: Array<{ match: string; rates: ModalityCostRates }> = 
     },
   },
   {
+    // gpt-image-2 and gpt-image-2.5 (sunburst, flare) share these rates.
     match: 'gpt-image-2',
     rates: {
       inputText: 5,
       outputText: 10,
       inputImage: 8,
-      outputImage: 32,
+      outputImage: 30,
       cacheReadText: 1.25,
       cacheReadImage: 2,
     },

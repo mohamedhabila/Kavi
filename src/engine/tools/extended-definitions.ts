@@ -188,7 +188,7 @@ export const IMAGE_GEN_TOOL: ToolDefinition = {
       prompt: { type: 'string', description: 'Image description/prompt' },
       model: {
         type: 'string',
-        description: 'Optional image model override, e.g. gpt-image-2 or gemini-3.1-flash-image',
+        description: 'Optional image model override, e.g. gpt-image-2.5-sunburst or gemini-3.1-flash-image',
       },
       size: {
         type: 'string',
@@ -249,7 +249,7 @@ export const IMAGE_EDIT_TOOL: ToolDefinition = {
       },
       model: {
         type: 'string',
-        description: 'Optional image model override, e.g. gpt-image-2 or gemini-3.1-flash-image',
+        description: 'Optional image model override, e.g. gpt-image-2.5-sunburst or gemini-3.1-flash-image',
       },
       size: {
         type: 'string',

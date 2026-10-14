@@ -318,7 +318,7 @@ describe('Usage Tracker', () => {
         },
       });
 
-      expect(cost).toBeCloseTo((120 * 5 + 200 * 8 + 960 * 32) / 1_000_000, 10);
+      expect(cost).toBeCloseTo((120 * 5 + 200 * 8 + 960 * 30) / 1_000_000, 10);
     });
 
     it('uses Gemini image pricing and bills thinking tokens at the text-output rate', () => {
