@@ -683,6 +683,10 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     notificationsVoice: {
       voiceHint: '開始語音對話並檢查麥克風或語音設定。',
       automationHint: '管理提醒、自動化及其通知狀態。',
+      assistantTitle: '手機助理',
+      assistantHeldHint: '長按主畫面鍵或電源鍵時，Kavi 會以語音模式開啟。',
+      assistantNotHeldHint: '將 Kavi 設為數位助理，即可長按主畫面鍵或電源鍵開啟它。',
+      assistantSettingsUnavailable: '這支手機沒有可開啟的助理設定。',
     },
     showAdvancedOptions: '顯示進階選項',
     hideAdvancedOptions: '隱藏進階選項',

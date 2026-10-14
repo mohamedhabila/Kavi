@@ -709,6 +709,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
     notificationsVoice: {
       voiceHint: '音声会話を開始し、マイクや音声設定を確認します。',
       automationHint: 'リマインダー、自動化、通知の準備状況を管理します。',
+      assistantTitle: 'スマートフォンのアシスタント',
+      assistantHeldHint: 'ホームボタンまたは電源ボタンを長押しすると、Kavi が音声モードで開きます。',
+      assistantNotHeldHint: 'Kavi をデジタルアシスタントに設定すると、ホームボタンまたは電源ボタンの長押しで開けます。',
+      assistantSettingsUnavailable: 'このスマートフォンには開けるアシスタント設定がありません。',
     },
     showAdvancedOptions: '詳細オプションを表示',
     hideAdvancedOptions: '詳細オプションを非表示',

@@ -728,6 +728,10 @@ export const en: TranslationMap = {
     notificationsVoice: {
       voiceHint: 'Start a spoken conversation and review microphone or speech setup.',
       automationHint: 'Manage reminders, automations, and their notification readiness.',
+      assistantTitle: 'Phone assistant',
+      assistantHeldHint: 'Kavi opens in voice when you long-press the home or power button.',
+      assistantNotHeldHint: 'Set Kavi as your digital assistant to open it with a long press of the home or power button.',
+      assistantSettingsUnavailable: 'This phone has no assistant settings to open.',
     },
     showAdvancedOptions: 'Show advanced options',
     hideAdvancedOptions: 'Hide advanced options',

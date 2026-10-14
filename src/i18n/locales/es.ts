@@ -754,6 +754,10 @@ export const es: TranslationMap = mergeTranslations(en, {
     notificationsVoice: {
       voiceHint: 'Inicia una conversación hablada y revisa el micrófono o la configuración de voz.',
       automationHint: 'Administra recordatorios, automatizaciones y sus notificaciones.',
+      assistantTitle: 'Asistente del teléfono',
+      assistantHeldHint: 'Kavi se abre en modo voz cuando mantienes pulsado el botón de inicio o de encendido.',
+      assistantNotHeldHint: 'Configura Kavi como tu asistente digital para abrirlo manteniendo pulsado el botón de inicio o de encendido.',
+      assistantSettingsUnavailable: 'Este teléfono no tiene ajustes de asistente que abrir.',
     },
     showAdvancedOptions: 'Mostrar opciones avanzadas',
     hideAdvancedOptions: 'Ocultar opciones avanzadas',

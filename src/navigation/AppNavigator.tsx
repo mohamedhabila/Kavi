@@ -2,7 +2,7 @@
 // Kavi — App Navigator
 // ---------------------------------------------------------------------------
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
@@ -54,6 +54,7 @@ import {
   getSchedulerNotificationTarget,
   type SchedulerNotificationTarget,
 } from './notificationNavigation';
+import { useAssistLaunchRequests } from './useAssistLaunchRequests';
 
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
@@ -69,6 +70,24 @@ export const AppNavigator: React.FC = () => {
   const [pendingChatOpen, setPendingChatOpen] = useState(false);
   const [pendingSchedulerRoute, setPendingSchedulerRoute] =
     useState<SchedulerNotificationTarget | null>(null);
+  const [pendingVoiceStartId, setPendingVoiceStartId] = useState<number | null>(null);
+
+  // Opened as the phone's assistant (long-press home or power): go straight to voice.
+  useAssistLaunchRequests(useCallback(() => setPendingVoiceStartId(Date.now()), []));
+
+  useEffect(() => {
+    if (
+      !navReady ||
+      showOnboarding !== false ||
+      pendingVoiceStartId === null ||
+      !navigationRef.isReady()
+    ) {
+      return;
+    }
+
+    navigationRef.navigate('Voice', { autoStartRequestId: pendingVoiceStartId });
+    setPendingVoiceStartId(null);
+  }, [navReady, pendingVoiceStartId, showOnboarding]);
 
   useEffect(() => {
     if (chatHydrated) {

@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import {
   AlertCircle,
   Keyboard,
@@ -112,6 +112,9 @@ function getFailureMessageKey(kind: VoiceOperationFailureKind): string {
 
 export const VoiceScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const autoStartRequestId: unknown = route.params?.autoStartRequestId;
+  const consumedAutoStartRequestIdRef = useRef<unknown>(undefined);
   const isScreenFocused = useIsFocused();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
@@ -280,6 +283,21 @@ export const VoiceScreen: React.FC = () => {
       }
     }
   }, [manager]);
+
+  // Opened as the phone's assistant: start listening at once, once per request. Declared
+  // after the focus effect above, which marks the screen focused before this runs.
+  useFocusEffect(
+    useCallback(() => {
+      if (
+        autoStartRequestId === undefined ||
+        consumedAutoStartRequestIdRef.current === autoStartRequestId
+      ) {
+        return;
+      }
+      consumedAutoStartRequestIdRef.current = autoStartRequestId;
+      void handleStart();
+    }, [autoStartRequestId, handleStart]),
+  );
 
   const handlePrimaryAction = useCallback(() => {
     if (isPreparing) {

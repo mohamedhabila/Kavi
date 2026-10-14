@@ -14,8 +14,10 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const mockNavigate = jest.fn();
 const mockHandleBack = jest.fn();
+let mockRouteParams: Record<string, unknown> | undefined;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  useRoute: () => ({ params: mockRouteParams }),
   useIsFocused: () => true,
   useFocusEffect: (callback: () => void | (() => void)) => {
     const ReactModule = require('react');
@@ -134,6 +136,7 @@ function emitManagerError(error: Error): void {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRouteParams = undefined;
   mockManagerState = 'idle';
   mockStart.mockImplementation(async () => {
     mockManagerState = 'listening';
@@ -161,6 +164,29 @@ afterEach(() => {
 });
 
 describe('VoiceScreen', () => {
+  // Opened as the phone's assistant (long-press home or power), voice used to wait for a tap.
+  it('starts listening at once when opened as the phone assistant, once per request', async () => {
+    mockRouteParams = { autoStartRequestId: 1 };
+    const view = render(<VoiceScreen />);
+
+    await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1));
+    view.rerender(<VoiceScreen />);
+    await act(async () => undefined);
+    expect(mockStart).toHaveBeenCalledTimes(1);
+
+    mockRouteParams = { autoStartRequestId: 2 };
+    mockManagerState = 'idle';
+    view.rerender(<VoiceScreen />);
+    await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(2));
+  });
+
+  it('waits for a tap when opened from the app', async () => {
+    render(<VoiceScreen />);
+    await act(async () => undefined);
+
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
   it('presents an assistant-first title, privacy contract, and active chat destination', () => {
     const { getByText } = render(<VoiceScreen />);
 

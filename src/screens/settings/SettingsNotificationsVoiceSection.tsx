@@ -4,6 +4,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 
 import type { AppPalette } from '../../theme/useAppTheme';
 import { ForwardChevronIcon } from '../../components/navigation/DirectionalIcons';
+import { SettingsAssistantRoleRow } from './SettingsAssistantRoleRow';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
@@ -44,6 +45,8 @@ export const SettingsNotificationsVoiceSection: React.FC<
       </View>
       <ForwardChevronIcon size={18} color={colors.textTertiary} />
     </TouchableOpacity>
+
+    <SettingsAssistantRoleRow colors={colors} styles={styles} t={t} />
 
     <TouchableOpacity
       accessibilityHint={t('settings.notificationsVoice.automationHint')}

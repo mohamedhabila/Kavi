@@ -1,5 +1,7 @@
 package com.kavi.mobile
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 
@@ -11,13 +13,34 @@ import com.kavi.mobile.longhorizon.AndroidLongHorizonExecutionRuntime
 
 import expo.modules.ReactActivityDelegateWrapper
 
+private const val ASSIST_LAUNCH_URL = "kavi://assist"
+
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
+    routeAssistIntent(intent)
     super.onCreate(null)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    routeAssistIntent(intent)
+    super.onNewIntent(intent)
+  }
+
+  /**
+   * The system opens the default digital assistant (long-press home or power, a headset's voice
+   * button) with ACTION_ASSIST or ACTION_VOICE_COMMAND, which carry no URI. React Native's Linking
+   * only reports VIEW intents, so the assist request becomes the `kavi://assist` link the app
+   * routes to voice.
+   */
+  private fun routeAssistIntent(intent: Intent?) {
+    if (intent?.action == Intent.ACTION_ASSIST || intent?.action == Intent.ACTION_VOICE_COMMAND) {
+      intent.action = Intent.ACTION_VIEW
+      intent.data = Uri.parse(ASSIST_LAUNCH_URL)
+    }
   }
 
   override fun onResume() {

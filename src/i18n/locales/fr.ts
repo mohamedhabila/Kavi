@@ -758,6 +758,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
       voiceHint:
         'Démarrez une conversation vocale et vérifiez le microphone ou la configuration vocale.',
       automationHint: 'Gérez les rappels, automatisations et leurs notifications.',
+      assistantTitle: 'Assistant du téléphone',
+      assistantHeldHint: "Kavi s'ouvre en mode vocal quand vous appuyez longuement sur le bouton d'accueil ou marche/arrêt.",
+      assistantNotHeldHint: "Définissez Kavi comme assistant numérique pour l'ouvrir d'un appui long sur le bouton d'accueil ou marche/arrêt.",
+      assistantSettingsUnavailable: "Ce téléphone n'a pas de réglages d'assistant à ouvrir.",
     },
     showAdvancedOptions: 'Afficher les options avancées',
     hideAdvancedOptions: 'Masquer les options avancées',

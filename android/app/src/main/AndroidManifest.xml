@@ -65,6 +65,14 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="kavi"/>
       </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.ASSIST"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VOICE_COMMAND"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
       <intent-filter android:autoVerify="false" expo-sharing-intent-filters="true">
         <action android:name="android.intent.action.SEND"/>
         <data android:mimeType="*/*"/>

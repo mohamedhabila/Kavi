@@ -778,6 +778,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
     notificationsVoice: {
       voiceHint: 'ابدأ محادثة صوتية وراجع إعداد الميكروفون أو الكلام.',
       automationHint: 'أدِر التذكيرات والمهام الآلية وجاهزية إشعاراتها.',
+      assistantTitle: 'مساعد الهاتف',
+      assistantHeldHint: 'يفتح Kavi في وضع الصوت عند الضغط مطولًا على زر الشاشة الرئيسية أو زر التشغيل.',
+      assistantNotHeldHint: 'عيّن Kavi مساعدًا رقميًا لفتحه بضغطة مطولة على زر الشاشة الرئيسية أو زر التشغيل.',
+      assistantSettingsUnavailable: 'لا توجد في هذا الهاتف إعدادات مساعد يمكن فتحها.',
     },
     showAdvancedOptions: 'إظهار الخيارات المتقدمة',
     hideAdvancedOptions: 'إخفاء الخيارات المتقدمة',

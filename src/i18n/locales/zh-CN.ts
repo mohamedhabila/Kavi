@@ -684,6 +684,10 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     notificationsVoice: {
       voiceHint: '开始语音对话并检查麦克风或语音设置。',
       automationHint: '管理提醒、自动化及其通知状态。',
+      assistantTitle: '手机助理',
+      assistantHeldHint: '长按主屏幕键或电源键时，Kavi 会以语音模式打开。',
+      assistantNotHeldHint: '将 Kavi 设为数字助理，即可长按主屏幕键或电源键打开它。',
+      assistantSettingsUnavailable: '这部手机没有可打开的助理设置。',
     },
     showAdvancedOptions: '显示高级选项',
     hideAdvancedOptions: '隐藏高级选项',
