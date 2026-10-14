@@ -318,7 +318,7 @@ describe('SettingsScreen providers', () => {
       'https://example.com/v1',
     );
     fireEvent.changeText(getByPlaceholderText('sk-…'), 'sk-new-provider');
-    fireEvent.changeText(getByPlaceholderText('gpt-5.5'), 'example-model');
+    fireEvent.changeText(getByPlaceholderText('gpt-6-astra'), 'example-model');
     fireEvent.press(getByText('Save'));
     await waitFor(() => {
       expect(settingsMocks.addProvider).toHaveBeenCalledWith(
@@ -340,7 +340,7 @@ describe('SettingsScreen providers', () => {
     await waitFor(() => {
       expect(getByDisplayValue('Gemini')).toBeTruthy();
       expect(getByDisplayValue('https://aiplatform.googleapis.com/v1')).toBeTruthy();
-      expect(getByDisplayValue('gemini-3.1-pro-preview')).toBeTruthy();
+      expect(getByDisplayValue('gemini-4-argon')).toBeTruthy();
     });
 
     fireEvent.changeText(getByPlaceholderText('sk-…'), 'gemini-key');
@@ -351,7 +351,7 @@ describe('SettingsScreen providers', () => {
         expect.objectContaining({
           name: 'Gemini',
           baseUrl: 'https://aiplatform.googleapis.com/v1',
-          model: 'gemini-3.1-pro-preview',
+          model: 'gemini-4-argon',
         }),
       );
     });

@@ -63,7 +63,7 @@ describe('API Constants', () => {
       const gemini = KNOWN_PROVIDERS.find((p) => p.name === 'Gemini');
       expect(gemini).toBeDefined();
       expect(gemini!.baseUrl).toBe(DEFAULT_GEMINI_BASE_URL);
-      expect(gemini!.defaultModel).toBe('gemini-3.1-pro-preview');
+      expect(gemini!.defaultModel).toBe('gemini-4-argon');
     });
 
     it('should include Ollama', () => {
@@ -154,7 +154,7 @@ describe('API Constants', () => {
           id: 'gemini-preset',
           name: 'Gemini',
           baseUrl: DEFAULT_GEMINI_BASE_URL,
-          model: 'gemini-3.1-pro-preview',
+          model: 'gemini-4-argon',
         }),
       );
     });

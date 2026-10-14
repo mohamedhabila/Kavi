@@ -4,7 +4,7 @@ import { resolveProviderFamily } from '../../services/llm/catalog/providerFamili
 import { type ToolProviderContextInput, resolveToolProviderContext } from './toolProviderContext';
 
 const OPENAI_PRESET_DEFAULT_MODEL =
-  KNOWN_PROVIDERS.find((preset) => preset.name === 'OpenAI')?.defaultModel || 'gpt-5.4-mini';
+  KNOWN_PROVIDERS.find((preset) => preset.name === 'OpenAI')?.defaultModel || 'gpt-6-luna';
 
 export type OpenAISearchTransport = {
   /** The resolved provider, with `apiKey` and `model` already filled in for this search. */

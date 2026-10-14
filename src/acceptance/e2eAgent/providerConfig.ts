@@ -14,7 +14,7 @@ import { mergeDiscoveredModelCatalog } from '../../services/llm/catalog/provider
 import { performLlmFetch } from '../../services/llm/core/fetchTransport';
 import { fetchLlmProviderModels } from '../../services/llm/modelService';
 
-export const DEFAULT_E2E_GEMINI_MODEL = 'gemini-3.5-flash';
+export const DEFAULT_E2E_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_E2E_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 export const DEFAULT_E2E_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 export type E2EProviderKey = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'compatible';

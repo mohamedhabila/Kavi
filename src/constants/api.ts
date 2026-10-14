@@ -359,69 +359,50 @@ export function getKnownProviderFallbackModels(provider: LlmProviderConfig): str
   return preset?.availableModels || provider.availableModels || [];
 }
 
+// Each vendor's current lineup, led by the model the vendor recommends starting with (OpenAI:
+// GPT-6 Astra; Anthropic: Claude Opus 5.5; Google: Gemini 4 Argon, its only Gemini 4), then the
+// previous generation as a fallback. Model discovery replaces these with what the account can
+// reach.
+export const OPENAI_PRESET_MODELS = ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.5'];
+export const ANTHROPIC_PRESET_MODELS = [
+  'claude-opus-5-5',
+  'claude-fable-5-1',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
+  'claude-opus-5',
+  'claude-sonnet-5',
+];
+export const GEMINI_PRESET_MODELS = [
+  'gemini-4-argon',
+  'gemini-3.8-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash-lite',
+];
+
 export const KNOWN_PROVIDERS = [
   {
     name: 'OpenAI',
     kind: 'remote',
     baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-5.4',
-    availableModels: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5-mini', 'o4-mini', 'o3'],
-    modelCapabilities: buildModelCapabilities([
-      'gpt-5.5',
-      'gpt-5.4',
-      'gpt-5.4-mini',
-      'gpt-5-mini',
-      'o4-mini',
-      'o3',
-    ]),
+    defaultModel: OPENAI_PRESET_MODELS[0],
+    availableModels: [...OPENAI_PRESET_MODELS],
+    modelCapabilities: buildModelCapabilities(OPENAI_PRESET_MODELS),
   },
   {
     name: 'Anthropic',
     kind: 'remote',
     baseUrl: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-opus-5',
-    availableModels: [
-      'claude-opus-5',
-      'claude-fable-5-1',
-      'claude-sonnet-5',
-      'claude-opus-4-8',
-      'claude-opus-4-7',
-      'claude-sonnet-4-6',
-      'claude-haiku-4-5',
-    ],
-    modelCapabilities: buildModelCapabilities([
-      'claude-opus-5',
-      'claude-fable-5-1',
-      'claude-sonnet-5',
-      'claude-opus-4-8',
-      'claude-opus-4-7',
-      'claude-sonnet-4-6',
-      'claude-haiku-4-5',
-    ]),
+    defaultModel: ANTHROPIC_PRESET_MODELS[0],
+    availableModels: [...ANTHROPIC_PRESET_MODELS],
+    modelCapabilities: buildModelCapabilities(ANTHROPIC_PRESET_MODELS),
   },
   {
     name: 'Gemini',
     kind: 'remote',
     baseUrl: DEFAULT_GEMINI_BASE_URL,
-    defaultModel: 'gemini-3.1-pro-preview',
-    availableModels: [
-      'gemini-3.5-flash',
-      'gemini-3.1-pro-preview',
-      'gemini-3.1-flash-lite',
-      'gemini-3-flash-preview',
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-    ],
-    modelCapabilities: buildModelCapabilities([
-      'gemini-3.5-flash',
-      'gemini-3.1-pro-preview',
-      'gemini-3.1-flash-lite',
-      'gemini-3-flash-preview',
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-    ]),
+    defaultModel: GEMINI_PRESET_MODELS[0],
+    availableModels: [...GEMINI_PRESET_MODELS],
+    modelCapabilities: buildModelCapabilities(GEMINI_PRESET_MODELS),
   },
   {
     name: 'OpenRouter',

@@ -2,6 +2,7 @@
 // Tests — Anthropic live model discovery (GET /v1/models, paginated)
 // ---------------------------------------------------------------------------
 
+import { ANTHROPIC_PRESET_MODELS } from '../../../../src/constants/api';
 import { fetchProviderModels } from '../../../../src/services/llm/catalog/modelDiscovery';
 import { clearProviderContextWindowsForTests } from '../../../../src/services/context/providerContextWindows';
 
@@ -192,18 +193,9 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       performFetch: boundKey(performFetch),
     });
 
-    expect(result.models).toEqual(
-      expect.arrayContaining([
-        'claude-opus-5',
-        'claude-fable-5-1',
-        'claude-sonnet-5',
-        'claude-opus-4-8',
-        'claude-opus-4-7',
-        'claude-sonnet-4-6',
-        'claude-haiku-4-5',
-      ]),
-    );
-    expect(result.models).toHaveLength(7);
+    // The static catalog is the Anthropic preset's lineup, current generation first.
+    expect(result.models).toEqual(ANTHROPIC_PRESET_MODELS);
+    expect(result.models[0]).toBe('claude-opus-5-5');
     for (const model of result.models) {
       expect(result.capabilities[model]).toEqual({ vision: true, tools: true, fileInput: true });
     }
@@ -221,8 +213,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       performFetch: boundKey(performFetch),
     });
 
-    expect(result.models).toContain('claude-opus-5');
-    expect(result.models).toHaveLength(7);
+    expect(result.models).toEqual(ANTHROPIC_PRESET_MODELS);
   });
 
   it('falls back to the static catalog when the response has no models at all', async () => {
@@ -237,8 +228,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       performFetch: boundKey(performFetch),
     });
 
-    expect(result.models).toHaveLength(7);
-    expect(result.models).toContain('claude-haiku-4-5');
+    expect(result.models).toEqual(ANTHROPIC_PRESET_MODELS);
   });
 
   it('ignores malformed entries (missing id) without throwing', async () => {

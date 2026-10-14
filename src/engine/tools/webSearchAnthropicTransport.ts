@@ -4,7 +4,7 @@ import { getAnthropicModelGeneration } from '../../services/llm/catalog/provider
 import { type ToolProviderContextInput, resolveToolProviderContext } from './toolProviderContext';
 
 const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
-export const DEFAULT_ANTHROPIC_SEARCH_MODEL = 'claude-haiku-4-5';
+export const DEFAULT_ANTHROPIC_SEARCH_MODEL = 'claude-haiku-5-5';
 
 const ANTHROPIC_WEB_SEARCH_MAX_USES = 3;
 /** Adds dynamic filtering; available from Claude 4.6 onward. */

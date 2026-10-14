@@ -6,7 +6,7 @@ import {
 } from '../../constants/api';
 import { type ToolProviderContextInput, resolveToolProviderContext } from './toolProviderContext';
 
-const DEFAULT_GEMINI_SEARCH_MODEL = 'gemini-3.5-flash';
+const DEFAULT_GEMINI_SEARCH_MODEL = 'gemini-3.8-flash';
 
 export type GeminiSearchTransport = {
   apiKey: string;

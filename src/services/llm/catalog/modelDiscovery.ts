@@ -1,6 +1,6 @@
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { ModelCapabilities, ModelReasoningCapability } from '../../../types/tool';
-import { inferModelCapabilities } from '../../../constants/api';
+import { ANTHROPIC_PRESET_MODELS, inferModelCapabilities } from '../../../constants/api';
 import { createLogger } from '../../../utils/logger';
 import { getSelectableLocalLlmModels } from '../../localLlm/modelArtifacts';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
@@ -18,17 +18,6 @@ import {
 } from '../../context/providerContextWindows';
 
 const logger = createLogger('llm.modelDiscovery');
-
-/** Static fallback used only when live Anthropic discovery fails outright. */
-const ANTHROPIC_FALLBACK_MODELS = [
-  'claude-opus-5',
-  'claude-fable-5-1',
-  'claude-sonnet-5',
-  'claude-opus-4-8',
-  'claude-opus-4-7',
-  'claude-sonnet-4-6',
-  'claude-haiku-4-5',
-];
 
 /** Anthropic Models API pages are capped well below this; guards against a runaway loop. */
 const MAX_ANTHROPIC_MODEL_PAGES = 20;
@@ -187,13 +176,13 @@ function anthropicFallbackModels(
   contextWindows: Record<string, number>,
 ): ModelsWithCapabilities {
   const mergedCapabilities = { ...capabilities };
-  for (const model of ANTHROPIC_FALLBACK_MODELS) {
+  for (const model of ANTHROPIC_PRESET_MODELS) {
     if (!mergedCapabilities[model]) {
       mergedCapabilities[model] = { vision: true, tools: true, fileInput: true };
     }
   }
   return {
-    models: [...ANTHROPIC_FALLBACK_MODELS],
+    models: [...ANTHROPIC_PRESET_MODELS],
     capabilities: mergedCapabilities,
     contextWindows,
   };

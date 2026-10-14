@@ -62,7 +62,7 @@ describe('e2e provider matrix helpers', () => {
       }),
     ).toMatchObject({
       configured: true,
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.8-flash',
       baseUrl: 'https://aiplatform.googleapis.com/v1',
     });
 
