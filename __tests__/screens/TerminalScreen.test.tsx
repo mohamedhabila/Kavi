@@ -551,8 +551,12 @@ describe('TerminalScreen', () => {
     fireEvent.press(getByTestId('terminal-mode-ssh'));
     fireEvent.press(getByText('Build Box (developer@ssh.example.com:22)'));
 
+    // The shell exists once its open resolves and the screen reports the connection; input
+    // sent before that has no shell to reach. Waiting only for the open call raced it.
     await waitFor(() => {
-      expect(mockOpenSshShell).toHaveBeenCalled();
+      expect(mockTerminalRef.writeln).toHaveBeenCalledWith(
+        expect.stringContaining('Connected to Build Box'),
+      );
     });
 
     await act(async () => {
