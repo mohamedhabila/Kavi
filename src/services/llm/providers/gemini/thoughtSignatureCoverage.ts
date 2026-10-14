@@ -1,4 +1,4 @@
-import { isGemini3Model } from '../../catalog/providerCapabilities';
+import { isGemini3OrLaterModel } from '../../catalog/providerCapabilities';
 import type { MessageProviderReplay } from '../../../../types/message';
 import {
   extractGeminiThoughtSignature,
@@ -58,7 +58,7 @@ export function hasGeminiToolTurnThoughtSignatureCoverage(params: {
   pendingToolCalls: ReadonlyArray<PendingToolCallLike>;
   providerReplay?: MessageProviderReplay;
 }): boolean {
-  if (!isGemini3Model(params.model) || params.pendingToolCalls.length === 0) {
+  if (!isGemini3OrLaterModel(params.model) || params.pendingToolCalls.length === 0) {
     return true;
   }
 

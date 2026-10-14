@@ -279,11 +279,9 @@ export function getContextWindow(model: string, options?: GetContextWindowOption
     return 1000000;
   }
 
-  if (
-    hostedFamily === 'gemini' &&
-    (lower.includes('pro') || lower.includes('flash') || lower.includes('lite'))
-  ) {
-    return 1000000;
+  // Every current Gemini model shares one 1,048,576-token window (gemini-4-argon included).
+  if (hostedFamily === 'gemini') {
+    return 1048576;
   }
 
   // Default

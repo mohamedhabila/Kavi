@@ -1,4 +1,5 @@
 import type { LlmProviderFamily } from '../../../types/provider';
+import { isGemini3OrLaterModel } from '../catalog/providerCapabilities';
 
 type StructuredOutputDeliberationControls = {
   reasoning_effort: 'none';
@@ -10,22 +11,18 @@ interface StructuredOutputDeliberationParams {
   providerFamily?: LlmProviderFamily;
 }
 
-function isGemini3Model(lowerModel: string): boolean {
-  return /gemini[- ]?3(?:[.-]|$)/i.test(lowerModel);
-}
-
 export function resolveProviderStructuredOutputDeliberationControls(
   params: StructuredOutputDeliberationParams,
 ): StructuredOutputDeliberationControls {
   const lowerModel = params.model.trim().toLowerCase();
 
   if (params.providerFamily === 'gemini') {
-    if (isGemini3Model(lowerModel)) {
+    // LOW is the least level every Gemini 3+ model accepts (3.8 Flash and 4 reject MINIMAL).
+    if (isGemini3OrLaterModel(params.model)) {
       return {
         reasoning_effort: 'none',
         thinking: {
-          thinkingLevel:
-            lowerModel.includes('pro') && !lowerModel.includes('flash') ? 'LOW' : 'MINIMAL',
+          thinkingLevel: 'LOW',
           includeThoughts: false,
         },
       };

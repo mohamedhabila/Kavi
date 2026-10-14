@@ -95,58 +95,61 @@ describe('Bug 1: Gemini thought_signature handling', () => {
     expect(modelParts[0].thoughtSignature).toBe('real-sig-A');
   });
 
-  it('uses the official imported-call signature for complete Gemini 3 replay when raw metadata lacks one', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          candidates: [{ content: { parts: [{ text: 'ok' }] } }],
-        }),
-    });
+  it.each(['gemini-3.1-pro-preview', 'gemini-3.8-flash', 'gemini-4-argon'])(
+    '%s: uses the official imported-call signature for replay when raw metadata lacks one',
+    async (model) => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+          }),
+      });
 
-    const service = new LlmService(makeGeminiConfig());
+      const service = new LlmService(makeGeminiConfig({ model }));
 
-    await service.sendMessage([
-      { role: 'user', content: 'Read file a.txt' },
-      {
-        role: 'assistant',
-        content: '',
-        tool_calls: [
-          {
+      await service.sendMessage([
+        { role: 'user', content: 'Read file a.txt' },
+        {
+          role: 'assistant',
+          content: '',
+          tool_calls: [
+            {
+              id: 'tc1',
+              type: 'function',
+              function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
+              // NO extra_content — signature genuinely missing
+            },
+          ],
+        } as any,
+        { role: 'tool', content: 'file content', tool_call_id: 'tc1', name: 'read_file' } as any,
+      ]);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const allParts = body.contents.flatMap((content: any) => content.parts);
+      const functionCallPart = allParts.find((part: any) => part.functionCall);
+      const functionResponsePart = allParts.find((part: any) => part.functionResponse);
+      expect(functionCallPart).toEqual(
+        expect.objectContaining({
+          functionCall: expect.objectContaining({
             id: 'tc1',
-            type: 'function',
-            function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
-            // NO extra_content — signature genuinely missing
-          },
-        ],
-      } as any,
-      { role: 'tool', content: 'file content', tool_call_id: 'tc1', name: 'read_file' } as any,
-    ]);
-
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    const allParts = body.contents.flatMap((content: any) => content.parts);
-    const functionCallPart = allParts.find((part: any) => part.functionCall);
-    const functionResponsePart = allParts.find((part: any) => part.functionResponse);
-    expect(functionCallPart).toEqual(
-      expect.objectContaining({
-        functionCall: expect.objectContaining({
-          id: 'tc1',
-          name: 'read_file',
-          args: { path: 'a.txt' },
+            name: 'read_file',
+            args: { path: 'a.txt' },
+          }),
+          thoughtSignature: GEMINI_IMPORTED_FUNCTION_CALL_THOUGHT_SIGNATURE,
         }),
-        thoughtSignature: GEMINI_IMPORTED_FUNCTION_CALL_THOUGHT_SIGNATURE,
-      }),
-    );
-    expect(functionResponsePart).toEqual(
-      expect.objectContaining({
-        functionResponse: expect.objectContaining({
-          id: 'tc1',
-          name: 'read_file',
-          response: { result: 'file content' },
+      );
+      expect(functionResponsePart).toEqual(
+        expect.objectContaining({
+          functionResponse: expect.objectContaining({
+            id: 'tc1',
+            name: 'read_file',
+            response: { result: 'file content' },
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it('replays raw Gemini thoughtSignature metadata when providerReplay is absent', async () => {
     mockFetch.mockResolvedValueOnce({

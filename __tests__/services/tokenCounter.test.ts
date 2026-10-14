@@ -291,6 +291,9 @@ describe('getContextWindow', () => {
     expect(getContextWindow('gpt-5.5')).toBe(1000000);
     expect(getContextWindow('claude-sonnet-4-6-latest')).toBe(1000000);
     expect(getContextWindow('gemini-3.5-flash')).toBe(1000000);
+    // Gemini 4 Argon carries no pro/flash/lite word; every Gemini shares the 1M window.
+    expect(getContextWindow('gemini-4-argon')).toBe(1048576);
+    expect(getContextWindow('google/gemini-3.8-flash')).toBe(1048576);
   });
 
   it('supports hosted model namespaces in family fallbacks', () => {

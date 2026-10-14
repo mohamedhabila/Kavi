@@ -2,6 +2,7 @@
 // Kavi — Thinking Level Control
 // ---------------------------------------------------------------------------
 
+import { isGemini3OrLaterModel } from '../services/llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
 import type { ModelReasoningCapability } from '../types/tool';
 import { resolveThinkingLevelReasoningEffort } from '../services/llm/support/reasoningEffortResolution';
@@ -18,7 +19,7 @@ export interface ThinkingParamsOptions {
   reasoningCapability?: ModelReasoningCapability;
 }
 
-type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+type GeminiThinkingLevel = 'low' | 'medium' | 'high';
 
 const ANTHROPIC_THINKING_BUDGETS: Record<Exclude<ThinkingLevel, 'off'>, number> = {
   minimal: 1024,
@@ -38,10 +39,6 @@ const ANTHROPIC_THINKING_ORDER: Array<Exclude<ThinkingLevel, 'off'>> = [
 
 function normalizeModel(model: string): string {
   return model.toLowerCase();
-}
-
-function isGemini3Model(model: string): boolean {
-  return /(?:^|\/)gemini[- ]?3(?:[.-]|$)/i.test(model);
 }
 
 function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number): number | null {
@@ -73,14 +70,14 @@ function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number
   return resolvedBudget;
 }
 
-function resolveGeminiThinkingLevel(level: ThinkingLevel, model: string): GeminiThinkingLevel {
-  const lower = normalizeModel(model);
-  const supportsMinimal = !lower.includes('pro');
-
+/**
+ * LOW is the least level every Gemini 3+ model accepts: Gemini 3.8 Flash and 4 Argon reject
+ * MINIMAL, and Gemini 4 cannot turn thinking off.
+ */
+function resolveGeminiThinkingLevel(level: ThinkingLevel): GeminiThinkingLevel {
   switch (level) {
     case 'off':
     case 'minimal':
-      return supportsMinimal ? 'minimal' : 'low';
     case 'low':
       return 'low';
     case 'medium':
@@ -173,10 +170,10 @@ export function getThinkingParams(
   }
 
   if (hostedFamily === 'gemini') {
-    if (isGemini3Model(model)) {
+    if (isGemini3OrLaterModel(model)) {
       return {
         thinking: {
-          thinkingLevel: resolveGeminiThinkingLevel(level, lower),
+          thinkingLevel: resolveGeminiThinkingLevel(level),
         },
       };
     }

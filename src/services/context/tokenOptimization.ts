@@ -8,10 +8,7 @@ import type { LlmProviderConfig } from '../../types/provider';
 import type { ToolDefinition } from '../../types/tool';
 import type { UsagePromptCacheMode, UsagePromptCacheTelemetry } from '../../types/usage';
 import type { ThinkingLevel } from '../../engine/thinking';
-import {
-  isGemini3Model as isGemini3HostedModel,
-  isOpenAIReasoningModel,
-} from '../llm/catalog/providerCapabilities';
+import { isGemini3OrLaterModel, isOpenAIReasoningModel } from '../llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../llm/catalog/providerFamilies';
 import { buildPromptCachingToolOrder, buildToolDeclarationDigest } from '../llm/core/toolCaching';
 export {
@@ -34,10 +31,6 @@ const GEMINI_THINKING_OVERHEAD: Record<string, number> = {
 
 function isGeminiModel(model: string): boolean {
   return resolveModelHostedFamily(model) === 'gemini';
-}
-
-function isGemini3Model(model: string): boolean {
-  return isGemini3HostedModel(model);
 }
 
 export interface IterationPlanningArgs {
@@ -159,7 +152,7 @@ export function planIterationModel(args: IterationPlanningArgs): IterationPlanni
   // Gemini 3 thinking models consume thinking tokens from the max_tokens
   // budget — add overhead so the actual content is not cut off.
   if (isGeminiModel(primaryModel)) {
-    const effectiveThinking = isGemini3Model(primaryModel) ? thinkingLevel : 'off';
+    const effectiveThinking = isGemini3OrLaterModel(primaryModel) ? thinkingLevel : 'off';
     const overhead = GEMINI_THINKING_OVERHEAD[effectiveThinking] ?? 0;
     if (overhead > 0) {
       plannedMaxTokens = Math.max(plannedMaxTokens + overhead, 8192);

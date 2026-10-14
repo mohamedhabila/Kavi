@@ -3,10 +3,8 @@ import {
   selectByteEquivalentSystemPromptSections,
   splitCacheableSystemPromptSections,
 } from '../../services/llm/core/systemPromptSections';
-import {
-  resolveModelHostedFamily,
-  resolveProviderFamily,
-} from '../../services/llm/catalog/providerFamilies';
+import { isGemini3OrLaterModel } from '../../services/llm/catalog/providerCapabilities';
+import { resolveProviderFamily } from '../../services/llm/catalog/providerFamilies';
 import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { resolveProviderTransport } from '../../services/llm/catalog/providerProtocols';
 import type { ToolChoiceMode } from '../../services/llm/support/contracts';
@@ -67,9 +65,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
   },
 ): Promise<ExecuteAgentControlGraphModelTurnAttemptResult> {
   const anthropicTarget = isDirectAnthropicProvider(params.activeProvider);
-  const isGemini3 =
-    resolveModelHostedFamily(params.requestModel) === 'gemini' &&
-    /gemini[- ]?3/i.test(params.requestModel);
+  const isGemini3 = isGemini3OrLaterModel(params.requestModel);
   const geminiNativeTransport = resolveProviderTransport(params.activeProvider) === 'gemini';
   // The active provider's own configured family (falling back to host/model-name detection)
   // beats a model-name-only guess, since a provider can front a model under a different name
@@ -174,11 +170,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
   const thinkingParams = shouldDisableAnthropicThinking ? {} : requestedThinkingParams;
   const anthropicThinkingEnabled =
     anthropicTarget && Object.prototype.hasOwnProperty.call(thinkingParams, 'thinking');
-  const effectiveTemperature = anthropicThinkingEnabled
-    ? undefined
-    : isGemini3
-      ? 1.0
-      : params.temperature;
+  const effectiveTemperature = anthropicThinkingEnabled ? undefined : params.temperature;
   const streamOptions: Record<string, any> = {
     model: params.requestModel,
     conversationId: params.conversationId,

@@ -1,5 +1,5 @@
 import type { MessageProviderReplay } from '../../../types/message';
-import { isGemini3Model } from '../catalog/providerCapabilities';
+import { isGemini3OrLaterModel } from '../catalog/providerCapabilities';
 import { isPlainRecord } from '../core/json';
 import { hasGeminiToolTurnThoughtSignatureCoverage } from '../providers/gemini/thoughtSignatureCoverage';
 
@@ -155,7 +155,7 @@ function resolveReplayCoverageRoute(params: {
     return replayShape;
   }
 
-  if (isGemini3Model(params.model)) {
+  if (isGemini3OrLaterModel(params.model)) {
     return 'gemini';
   }
 

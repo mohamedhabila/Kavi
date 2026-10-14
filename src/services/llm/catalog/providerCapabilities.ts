@@ -3,13 +3,6 @@ import type { ModelReasoningCapability } from '../../../types/tool';
 import { resolveProviderRouting, resolveProviderTransport, type ProviderTransport } from './providerProtocols';
 import { normalizeHostedModelId, resolveModelHostedFamily } from './providerFamilies';
 
-const GEMINI_STRUCTURED_OUTPUT_WITH_TOOLS_PATTERNS = [
-  /^gemini-3(?:\.1|-)/i,
-  /^gemini-3\.5-/i,
-  /^google\/gemini-3(?:\.1|-)/i,
-  /^google\/gemini-3\.5-/i,
-] as const;
-
 /** The major version in a `gpt-<major>` id (gpt-6-astra is 6, gpt-5.5 is 5), if it has one. */
 function openAIGptMajor(model: string): number | undefined {
   const match = /^gpt-(\d+)(?:[.-]|$)/i.exec(normalizeHostedModelId(model));
@@ -42,11 +35,15 @@ export function inferOpenAIReasoningCapability(
   };
 }
 
-export function isGemini3Model(model: string | undefined): boolean {
-  return (
-    resolveModelHostedFamily(model) === 'gemini' &&
-    /^gemini-3(?:[.-]|$)/i.test(normalizeHostedModelId(model))
-  );
+/**
+ * Gemini 3 and later (3, 3.x, 4, ...): thinking levels instead of budgets, thought signatures
+ * that function calling requires back, structured output alongside tools, and sampling left
+ * at its default. Read from the generation, so Gemini 3.8 and 4 are covered the day they ship.
+ */
+export function isGemini3OrLaterModel(model: string | undefined): boolean {
+  if (resolveModelHostedFamily(model) !== 'gemini') return false;
+  const match = /^gemini-(\d+)(?:[.-]|$)/i.exec(normalizeHostedModelId(model));
+  return match ? Number(match[1]) >= 3 : false;
 }
 
 export function isGeminiProModel(model: string | undefined): boolean {
@@ -146,9 +143,13 @@ export function rejectsForcedToolChoice(model: string | undefined): boolean {
   );
 }
 
-/** Every OpenAI reasoning model rejects sampling parameters alongside a reasoning effort. */
+/**
+ * Whether a request may set a temperature. Every OpenAI reasoning model rejects sampling
+ * parameters alongside a reasoning effort; Gemini 3 is meant to run at its default and
+ * Gemini 4 ignores them.
+ */
 export function supportsTemperature(model: string): boolean {
-  return !isOpenAIReasoningModel(model);
+  return !isOpenAIReasoningModel(model) && !isGemini3OrLaterModel(model);
 }
 
 export function shouldSurfaceReasoning(_model: string): boolean {
@@ -163,7 +164,7 @@ export function supportsGeminiStructuredOutputWithTools(
     return false;
   }
 
-  return GEMINI_STRUCTURED_OUTPUT_WITH_TOOLS_PATTERNS.some((pattern) => pattern.test(model));
+  return isGemini3OrLaterModel(model);
 }
 
 /**

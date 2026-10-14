@@ -189,7 +189,7 @@ describe('LlmService', () => {
           responseMimeType: 'application/json',
           responseSchema: expect.any(Object),
           thinkingConfig: {
-            thinkingLevel: 'MINIMAL',
+            thinkingLevel: 'LOW',
             includeThoughts: false,
           },
         }),

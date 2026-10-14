@@ -10,9 +10,10 @@ import {
   getOpenAIReasoningTextParts,
 } from '../../src/services/llm/core/reasoningExtraction';
 import {
-  isGemini3Model,
+  isGemini3OrLaterModel,
   isGeminiProModel,
   isOpenAIReasoningModel,
+  supportsGeminiStructuredOutputWithTools,
   supportsTemperature,
 } from '../../src/services/llm/catalog/providerCapabilities';
 import { isGeminiModelName } from '../../src/services/llm/catalog/providerFamilies';
@@ -126,9 +127,20 @@ describe('LlmService helper coverage', () => {
     expect(resolveProviderBaseUrl(compatible)).toContain('api.openai.com');
   });
   it('derives Gemini model capabilities from canonical hosted-family metadata', () => {
-    expect(isGemini3Model('google/gemini-3.5-flash')).toBe(true);
-    expect(isGemini3Model('models/gemini-3-flash-preview')).toBe(true);
-    expect(isGemini3Model('google/gemini-2.5-pro')).toBe(false);
+    expect(isGemini3OrLaterModel('google/gemini-3.5-flash')).toBe(true);
+    expect(isGemini3OrLaterModel('models/gemini-3-flash-preview')).toBe(true);
+    expect(isGemini3OrLaterModel('gemini-3.8-flash')).toBe(true);
+    expect(isGemini3OrLaterModel('gemini-4-argon')).toBe(true);
+    expect(isGemini3OrLaterModel('google/gemini-4-argon')).toBe(true);
+    expect(isGemini3OrLaterModel('google/gemini-2.5-pro')).toBe(false);
+    expect(isGemini3OrLaterModel('gemma-4-E4B-it')).toBe(false);
+
+    // Gemini 3.8 and 4 take structured output alongside tools and run at default sampling.
+    expect(supportsGeminiStructuredOutputWithTools('gemini-3.8-flash')).toBe(true);
+    expect(supportsGeminiStructuredOutputWithTools('google/gemini-4-argon')).toBe(true);
+    expect(supportsGeminiStructuredOutputWithTools('gemini-2.5-flash')).toBe(false);
+    expect(supportsTemperature('gemini-4-argon')).toBe(false);
+    expect(supportsTemperature('gemini-2.5-flash')).toBe(true);
     expect(isGeminiProModel('google/gemini-2.5-pro')).toBe(true);
     expect(isGeminiProModel('google/gemini-3-flash-preview')).toBe(false);
     expect(isOpenAIReasoningModel('openrouter/openai/o3-mini')).toBe(true);

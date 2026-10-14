@@ -1,4 +1,4 @@
-import { isGemini3Model } from '../../catalog/providerCapabilities';
+import { isGemini3OrLaterModel } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { extractGeminiThoughtSignature } from '../../core/reasoningExtraction';
 import { readTrimmedString } from '../../core/toolCallNormalization';
@@ -99,7 +99,7 @@ function ensureGeminiFunctionCallSignatures(
   model: string,
   callParts: ReadonlyArray<Record<string, any>>,
 ): Record<string, any>[] {
-  if (!isGemini3Model(model) || callParts.length === 0) {
+  if (!isGemini3OrLaterModel(model) || callParts.length === 0) {
     return [...callParts];
   }
 

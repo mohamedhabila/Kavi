@@ -159,10 +159,14 @@ describe('getThinkingParams', () => {
       });
     });
 
-    it('maps Gemini 3 flash to minimal/high native thinking levels', () => {
-      expect(getThinkingParams('off', 'gemini-3-flash-preview')).toEqual({
-        thinking: { thinkingLevel: 'minimal' },
-      });
+    it('maps Gemini 3+ to low/high native thinking levels, never minimal', () => {
+      // Gemini 3.8 Flash and 4 Argon reject minimal, and Gemini 4 cannot turn thinking off.
+      for (const model of ['gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-4-argon']) {
+        expect(getThinkingParams('off', model)).toEqual({ thinking: { thinkingLevel: 'low' } });
+        expect(getThinkingParams('minimal', model)).toEqual({
+          thinking: { thinkingLevel: 'low' },
+        });
+      }
       expect(getThinkingParams('high', 'gemini-3-flash-preview')).toEqual({
         thinking: { thinkingLevel: 'high' },
       });

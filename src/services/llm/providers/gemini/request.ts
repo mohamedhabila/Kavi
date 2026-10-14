@@ -1,6 +1,6 @@
 import { normalizeToolInputSchema } from '../../../../utils/toolSchema';
 import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudget';
-import { isGemini3Model, isGeminiProModel } from '../../catalog/providerCapabilities';
+import { isGemini3OrLaterModel, isGeminiProModel } from '../../catalog/providerCapabilities';
 import { resolveProviderStructuredOutputDeliberationControls } from '../../support/providerStructuredOutputDeliberation';
 import type {
   ChatCompletionMessage,
@@ -59,13 +59,14 @@ function getLegacyGeminiThinkingConfig(
   model: string,
   effort: ReasoningEffort,
 ): Record<string, unknown> {
-  const isGemini3 = isGemini3Model(model);
   const isGeminiPro = isGeminiProModel(model);
 
-  if (isGemini3) {
+  // LOW is the least level every Gemini 3+ model accepts: Gemini 3.8 Flash and 4 Argon
+  // reject MINIMAL, and Gemini 4 cannot turn thinking off.
+  if (isGemini3OrLaterModel(model)) {
     const levelMap: Record<ReasoningEffort, string> = {
-      none: isGeminiPro ? 'LOW' : 'MINIMAL',
-      minimal: isGeminiPro ? 'LOW' : 'MINIMAL',
+      none: 'LOW',
+      minimal: 'LOW',
       low: 'LOW',
       medium: 'MEDIUM',
       high: 'HIGH',
