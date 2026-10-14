@@ -8,7 +8,7 @@ import type {
   AgentRunStatus,
   AgentRunSummary,
 } from '../../types/agentRun';
-import type { Message } from '../../types/message';
+import type { Message, ToolCallFailureKind } from '../../types/message';
 import type { UsagePromptCacheTelemetry, UsageTokenBuckets } from '../../types/usage';
 import type {
   ForegroundScenarioCompletionSnapshot,
@@ -29,6 +29,8 @@ export type E2EToolCallRecord = {
   id: string;
   name: string;
   arguments: string;
+  /** Why the call failed, as the runtime recorded it (e.g. `invalid_arguments`). */
+  failureKind?: ToolCallFailureKind;
 };
 
 export type E2EToolResultRecord = {

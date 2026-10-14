@@ -21,6 +21,7 @@ describe('scenarioResultMapper tool outcomes', () => {
             name: 'opaque_failed',
             arguments: '{}',
             status: 'failed',
+            failureKind: 'invalid_arguments',
           },
         ],
       },
@@ -87,6 +88,16 @@ describe('scenarioResultMapper tool outcomes', () => {
     expect(result.toolResults).toEqual([
       expect.objectContaining({ toolCallId: 'call-completed', isError: false }),
       expect.objectContaining({ toolCallId: 'call-failed', isError: true }),
+    ]);
+    // The recorded failure kind reaches the evidence, so invalid arguments can be counted.
+    expect(result.toolCalls).toEqual([
+      { id: 'call-completed', name: 'opaque_completed', arguments: '{}' },
+      {
+        id: 'call-failed',
+        name: 'opaque_failed',
+        arguments: '{}',
+        failureKind: 'invalid_arguments',
+      },
     ]);
   });
 

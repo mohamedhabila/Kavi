@@ -35,6 +35,7 @@ function collectToolCalls(
         id: toolCall.id,
         name: resolveRegisteredToolName(toolCall.name),
         arguments: toolCall.arguments,
+        ...(toolCall.failureKind ? { failureKind: toolCall.failureKind } : {}),
       });
     }
   }
