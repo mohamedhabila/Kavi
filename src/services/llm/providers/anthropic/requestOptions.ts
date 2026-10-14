@@ -166,9 +166,14 @@ export function sanitizeAnthropicRequestOptions(args: {
 
   const toolLoopInProgress = isAnthropicToolLoopInProgress(args.messages);
 
+  // A tool loop runs in one thinking mode. Manual thinking additionally needs the loop's latest
+  // assistant turn to open with a thinking block; adaptive thinking does not, and dropping it
+  // mid-loop would also drop its stale-block binding (Claude 5.x still thinks by default).
   if (
     isForcedToolChoice(args.options.toolChoice) ||
-    (toolLoopInProgress && !canContinueAnthropicThinking(args.messages))
+    (toolLoopInProgress &&
+      visibleThinking.type !== 'adaptive' &&
+      !canContinueAnthropicThinking(args.messages))
   ) {
     return {
       temperature: normalizedTemperature,

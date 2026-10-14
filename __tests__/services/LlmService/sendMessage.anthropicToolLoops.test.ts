@@ -6,7 +6,11 @@ import { LlmService, makeConfig, mockFetch } from '../../helpers/llmServiceHarne
 
 describe('LlmService', () => {
   describe('sendMessage Anthropic tool loops', () => {
-    it('disables Anthropic thinking while continuing a tool loop without replayable thinking blocks', async () => {
+    // A tool loop runs in one thinking mode; only manual thinking needs the loop's latest turn to
+    // open with a thinking block. Dropping adaptive thinking mid-loop also dropped its stale-block
+    // binding, and Claude 5.x thinks by default, so a later request failed live: "Invalid
+    // `signature` in `thinking` block. The block is bound to a different conversation."
+    it('keeps adaptive thinking on through a tool loop whose latest step did not think', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -61,8 +65,69 @@ describe('LlmService', () => {
       );
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.thinking).toBeUndefined();
-      expect(body.output_config).toBeUndefined();
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
+      expect(body.output_config).toEqual({ effort: 'medium' });
+    });
+
+    it('drops manual thinking mid-loop when the latest step did not open with thinking', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 5, output_tokens: 2 },
+          }),
+      });
+
+      const service = new LlmService(
+        makeConfig({
+          id: 'anthropic',
+          name: 'Anthropic',
+          baseUrl: 'https://api.anthropic.com/v1',
+          apiKey: 'anthropic-key',
+          model: 'claude-haiku-4-5',
+        }),
+      );
+
+      await service.sendMessage(
+        [
+          { role: 'user', content: 'Run the tool.' },
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'toolu_1',
+                type: 'function',
+                function: { name: 'read_file', arguments: '{"path":"notes.txt"}' },
+              },
+            ],
+          } as any,
+          { role: 'tool', tool_call_id: 'toolu_1', content: 'file contents' } as any,
+        ],
+        {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          maxTokens: 8000,
+          tools: [
+            {
+              name: 'read_file',
+              description: 'Read a file.',
+              input_schema: {
+                type: 'object',
+                properties: { path: { type: 'string' } },
+                required: ['path'],
+              },
+            },
+          ],
+        },
+      );
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body).thinking).toBeUndefined();
     });
 
     it('drops partial Anthropic signed replay blocks when they do not cover every tool call', async () => {
@@ -162,8 +227,13 @@ describe('LlmService', () => {
           { type: 'tool_use', id: 'toolu_2', name: 'list_dir', input: { path: '.' } },
         ],
       });
-      expect(body.thinking).toBeUndefined();
-      expect(body.output_config).toBeUndefined();
+      // Adaptive thinking stays on; its binding lets the API drop any block it can't bind.
+      expect(body.thinking).toEqual(
+        expect.objectContaining({
+          type: 'adaptive',
+          block_binding: { prefix_mismatch_behavior: 'drop_block' },
+        }),
+      );
     });
 
     it('keeps Anthropic thinking enabled while continuing a tool loop with replayable thinking blocks', async () => {

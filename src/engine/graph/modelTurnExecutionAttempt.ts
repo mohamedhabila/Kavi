@@ -128,8 +128,14 @@ export async function executeAgentControlGraphModelTurnAttempt(
     reasoningCapability: getModelReasoningCapability(params.activeProvider, params.requestModel),
   });
   const anthropicToolLoopInProgress = anthropicTarget && toolLoopInProgress;
+  // A tool loop runs in one thinking mode. Only manual (enabled) thinking needs the loop's latest
+  // assistant turn to open with a thinking block; adaptive thinking has no such rule, so it stays
+  // on (with its stale-block binding) whatever the last step did.
+  const requestedThinkingType = (requestedThinkingParams.thinking as { type?: unknown } | undefined)
+    ?.type;
   const anthropicReplayableThinking =
-    anthropicToolLoopInProgress && canContinueAnthropicThinking(workingMessages);
+    anthropicToolLoopInProgress &&
+    (requestedThinkingType === 'adaptive' || canContinueAnthropicThinking(workingMessages));
   const anthropicThinkingRequested =
     anthropicTarget && Object.prototype.hasOwnProperty.call(requestedThinkingParams, 'thinking');
   const forceToolChoiceCandidate =
