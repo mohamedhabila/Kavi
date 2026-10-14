@@ -28,7 +28,8 @@ export type SchedulerTrigger =
   | 'manual'
   | 'missed-recovery'
   | 'foreground-reconcile'
-  | 'notification-tap';
+  | 'notification-tap'
+  | 'background-wake';
 
 export type SchedulerTerminalReport = {
   id: string;

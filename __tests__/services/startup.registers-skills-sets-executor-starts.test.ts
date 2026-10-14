@@ -369,6 +369,24 @@ describe('initializeServices', () => {
     expect(mockStopScheduler).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mockCatchUpMemoryCapture).toHaveBeenCalledTimes(1));
   });
+  // The app going to the background used to stop every scheduled run. A run that a native
+  // background job hosts keeps going: the job keeps the runtime alive for it.
+  it('keeps a hosted scheduled run going when the app goes to the background', async () => {
+    const { handleAppBackground } = require('../../src/services/startup');
+    const {
+      getScheduledExecutionLifecycleEpoch,
+      registerScheduledJobExecution,
+    } = require('../../src/services/scheduler/executionLifecycle');
+    const { withHeadlessSchedulerHost } = require('../../src/services/scheduler/headlessHost');
+    const run = registerScheduledJobExecution('job-1', getScheduledExecutionLifecycleEpoch());
+
+    await withHeadlessSchedulerHost(async () => handleAppBackground());
+    expect(run.controller.signal.aborted).toBe(false);
+
+    handleAppBackground();
+    expect(run.controller.signal.aborted).toBe(true);
+    run.unregister();
+  });
   it('initializes durable recovery ownership synchronously on startup', () => {
     const { initializeServices } = require('../../src/services/startup');
     initializeServices();

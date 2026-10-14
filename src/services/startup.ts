@@ -57,6 +57,7 @@ import {
   setSchedulerExecutionReadinessBarrier,
 } from './scheduler/runtimeReadiness';
 import { abortAllScheduledJobExecutions } from './scheduler/executionLifecycle';
+import { isHeadlessSchedulerHostActive } from './scheduler/headlessHost';
 import { abortAllHookExecutions, registerHookExecution } from './hooks/executionLifecycle';
 import { generateId } from '../utils/id';
 import { initializeAndroidLongHorizonCancellationHandler } from './androidLongHorizonExecution';
@@ -326,6 +327,7 @@ export function handleAppForeground(): void {
 /** Lifecycle hook called when the app moves to background. */
 export function handleAppBackground(): void {
   stopScheduler();
-  abortAllScheduledJobExecutions();
+  // A native background job keeps the runtime alive for the scheduled work it hosts.
+  if (!isHeadlessSchedulerHostActive()) abortAllScheduledJobExecutions();
   abortAllHookExecutions();
 }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 internal const val ANDROID_DURABLE_HEADLESS_TASK_KEY = "KaviDurableRecovery"
 internal const val ANDROID_DURABLE_HEADLESS_PAYLOAD_SCHEMA = 1
+internal const val KAVI_SCHEDULED_JOBS_HEADLESS_TASK_KEY = "KaviScheduledJobRun"
 
 /** Starts the existing ReactHost directly; WorkManager already owns wake and process lifetime. */
 internal class AndroidReactHeadlessRecoveryDispatcher(
@@ -37,6 +38,17 @@ internal class AndroidReactHeadlessRecoveryDispatcher(
   ): AndroidDurableHeadlessDispatchResult = dispatchTask(
     candidateTaskConfig(payload),
     CANDIDATE_HEADLESS_TASK_TIMEOUT_MILLIS + TASK_FINISH_GRACE_MILLIS,
+  )
+
+  /** Runs the due scheduled tasks (the KaviScheduledJobRun JS task) without UI. */
+  suspend fun dispatchScheduledJobs(): AndroidDurableHeadlessDispatchResult = dispatchTask(
+    HeadlessJsTaskConfig(
+      KAVI_SCHEDULED_JOBS_HEADLESS_TASK_KEY,
+      Arguments.createMap().apply { putInt("schema", ANDROID_DURABLE_HEADLESS_PAYLOAD_SCHEMA) },
+      HEADLESS_TASK_TIMEOUT_MILLIS,
+      true,
+    ),
+    HEADLESS_TASK_TIMEOUT_MILLIS + TASK_FINISH_GRACE_MILLIS,
   )
 
   private suspend fun dispatchTask(

@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
 // Kavi — Background Scheduler Maintenance
 // ---------------------------------------------------------------------------
-// Expo background windows reconcile durable state and wake notifications only.
-// Arbitrary agent and tool execution remains owned by the foreground runtime.
+// Expo background windows reconcile durable state and wake notifications only. Due
+// scheduled tasks run in the foreground, or on Android in a background run hosted by a
+// WorkManager job (headlessRun.ts).
 
 const BACKGROUND_TASK_NAME = 'KAVI_CRON_BACKGROUND_FETCH';
 

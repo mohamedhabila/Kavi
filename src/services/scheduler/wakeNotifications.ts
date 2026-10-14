@@ -2,7 +2,8 @@
 // Kavi — Scheduler Wake Notifications
 // ---------------------------------------------------------------------------
 // Schedules local notifications that let users wake the app for due tasks
-// when the OS does not grant a background execution window.
+// when the OS does not grant a background execution window, and the background run
+// that executes them where the OS does (Android).
 
 import {
   cancelLocalNotification,
@@ -15,6 +16,11 @@ import type { CronJob } from '../cron/types';
 import { createLogger } from '../../utils/logger';
 import { flushSchedulerStorePersistenceNow } from './persistence';
 import { useSchedulerStore } from './store';
+import {
+  BACKGROUND_RUN_WAKE_NOTIFICATION_GRACE_MS,
+  scheduleNextBackgroundScheduledRun,
+  supportsBackgroundScheduledRuns,
+} from './backgroundRuns';
 
 const logger = createLogger('scheduler.wakeNotifications');
 
@@ -285,7 +291,10 @@ async function syncWakeNotifications(
       continue;
     }
 
-    const delaySeconds = Math.max(MIN_WAKE_DELAY_SECONDS, Math.ceil((runAtMs - nowMs) / 1000));
+    const notifyAtMs = supportsBackgroundScheduledRuns()
+      ? runAtMs + BACKGROUND_RUN_WAKE_NOTIFICATION_GRACE_MS
+      : runAtMs;
+    const delaySeconds = Math.max(MIN_WAKE_DELAY_SECONDS, Math.ceil((notifyAtMs - nowMs) / 1000));
     try {
       const requestedNotificationId =
         expectedWakeId ?? (await buildSchedulerWakeNotificationId(job, runAtMs, wakeTitle));
@@ -384,7 +393,28 @@ async function syncWakeNotifications(
       console.warn('[scheduler] Failed to schedule wake notification:', error);
     }
   }
+  try {
+    await scheduleNextBackgroundScheduledRun(resolveEarliestWakeRunAtMs(), nowMs);
+  } catch (error) {
+    const warning = `Failed to schedule the background run for due tasks: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    warnings.push(warning);
+    console.warn('[scheduler] Failed to schedule the background run:', error);
+  }
   return { warnings };
+}
+
+function resolveEarliestWakeRunAtMs(): number | undefined {
+  let earliest: number | undefined;
+  for (const job of useSchedulerStore.getState().jobs) {
+    if (!job.enabled || job.wakePolicy === 'active_only') continue;
+    const runAtMs = resolveWakeRunAtMs(job);
+    if (runAtMs !== undefined && (earliest === undefined || runAtMs < earliest)) {
+      earliest = runAtMs;
+    }
+  }
+  return earliest;
 }
 
 export function syncSchedulerWakeNotifications(

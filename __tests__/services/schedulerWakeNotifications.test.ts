@@ -3,6 +3,7 @@ import {
   listScheduledLocalNotifications,
   sendLocalNotification,
 } from '../../src/services/notifications/service';
+import { NativeModules, Platform } from 'react-native';
 import { NotificationPermissionDeniedError } from '../../src/services/notifications/errors';
 import { useSchedulerStore } from '../../src/services/scheduler/store';
 import {
@@ -457,5 +458,83 @@ describe('scheduler wake notifications', () => {
       lastWakeError: expect.stringContaining('temporarily suppressed'),
     });
     warnSpy.mockRestore();
+  });
+
+  // Due tasks used to run only once the person tapped the wake notification. On Android a
+  // background run now executes them; the notification stays as a later fallback.
+  describe('with background runs (Android)', () => {
+    const scheduleRun = jest.fn().mockResolvedValue(undefined);
+    const cancelRun = jest.fn().mockResolvedValue(undefined);
+    const originalOS = Platform.OS;
+
+    beforeEach(() => {
+      scheduleRun.mockClear();
+      cancelRun.mockClear();
+      Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+      NativeModules.KaviScheduledJobs = { scheduleRun, cancelRun };
+    });
+
+    afterEach(() => {
+      Object.defineProperty(Platform, 'OS', { configurable: true, get: () => originalOS });
+      delete NativeModules.KaviScheduledJobs;
+    });
+
+    function addJobDueAt(name: string, runAtMs: number): string {
+      const jobId = useSchedulerStore.getState().addJob({
+        name,
+        schedule: { kind: 'every', everyMs: 3_600_000 },
+        prompt: name,
+      });
+      setJobRuntime(jobId, { nextRunAtMs: runAtMs });
+      return jobId;
+    }
+
+    it('schedules the run for the earliest due task, with the notification after a grace', async () => {
+      const now = 1_700_002_000_000;
+      addJobDueAt('Later', now + 7_200_000);
+      addJobDueAt('Morning brief', now + 60_000);
+
+      await syncSchedulerWakeNotifications({ nowMs: now, force: true });
+
+      expect(scheduleRun).toHaveBeenCalledWith(now + 60_000);
+      expect(mockSendLocalNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Morning brief', delaySeconds: 60 + 600 }),
+      );
+    });
+
+    it('spaces out the run for a task still due after a run, instead of waking at once', async () => {
+      const now = 1_700_002_100_000;
+      addJobDueAt('Could not start', now - 1_000);
+
+      await syncSchedulerWakeNotifications({ nowMs: now, force: true });
+
+      expect(scheduleRun).toHaveBeenCalledWith(now + 300_000);
+    });
+
+    it('clears the run when no task is scheduled', async () => {
+      const now = 1_700_002_200_000;
+      const jobId = addJobDueAt('Paused', now + 60_000);
+      setJobRuntime(jobId, { enabled: false });
+
+      await syncSchedulerWakeNotifications({ nowMs: now, force: true });
+
+      expect(cancelRun).toHaveBeenCalledTimes(1);
+      expect(scheduleRun).not.toHaveBeenCalled();
+    });
+
+    it('keeps the notification when the run cannot be scheduled', async () => {
+      const now = 1_700_002_300_000;
+      addJobDueAt('Morning brief', now + 60_000);
+      scheduleRun.mockRejectedValueOnce(new Error('WorkManager unavailable'));
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      const result = await syncSchedulerWakeNotifications({ nowMs: now, force: true });
+
+      expect(mockSendLocalNotification).toHaveBeenCalledTimes(1);
+      expect(result.warnings).toEqual([
+        expect.stringContaining('Failed to schedule the background run'),
+      ]);
+      warnSpy.mockRestore();
+    });
   });
 });

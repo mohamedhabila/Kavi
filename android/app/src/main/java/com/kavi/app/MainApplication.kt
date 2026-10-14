@@ -26,6 +26,7 @@ class MainApplication : Application(), ReactApplication {
           add(KaviLocalLlmPackage())
           add(KaviDurableExecutionPackage())
           add(KaviLongHorizonExecutionPackage())
+          add(KaviScheduledJobsPackage())
           add(KaviHeadlessJsTaskSupportPackage())
         }
     )

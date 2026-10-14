@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // Evaluates scheduled jobs with persisted next-run, retry, and attempt state.
 
-import { AppState } from 'react-native';
 import { useSchedulerStore } from './store';
+import { isSchedulerHostActive } from './headlessHost';
 import { syncSchedulerWakeNotifications } from './wakeNotifications';
 import type { CronJob, SchedulerTrigger } from '../cron/types';
 import { emitSchedulerEvent } from '../events/bus';
@@ -277,10 +277,7 @@ async function executeJobExclusive(
       return { status: 'failed', error };
     }
 
-    if (
-      AppState.currentState !== 'active' ||
-      !isScheduledExecutionLifecycleEpochCurrent(lifecycleEpoch)
-    ) {
+    if (!isSchedulerHostActive() || !isScheduledExecutionLifecycleEpochCurrent(lifecycleEpoch)) {
       throw new SchedulerAppBackgroundAbortError(new ScheduledAppBackgroundAbortReason());
     }
     const result = await jobExecutor.execute(claimedJob, { lifecycleEpoch });
@@ -501,7 +498,7 @@ async function executeJob(
   try {
     const execution = await tryWithSchedulerExecutionSlot(async () => {
       await waitForPersistedAgentRecoveryReadiness();
-      if (AppState.currentState !== 'active') {
+      if (!isSchedulerHostActive()) {
         return { status: 'skipped', reason: 'inactive' } as const;
       }
       const effectiveNowMs = Math.max(nowMs, Date.now());

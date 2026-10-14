@@ -7,8 +7,10 @@ import App from './App';
 import { registerAndroidDurableCandidateHeadlessTask } from './src/services/executionJournal/androidDurableCandidateHeadlessTask';
 import { registerAndroidDurableRecoveryHeadlessTask } from './src/services/executionJournal/androidRecoveryHeadlessTask';
 import { registerAndroidLongHorizonKeepAliveTask } from './src/services/androidLongHorizonExecution';
+import { registerScheduledJobsHeadlessTask } from './src/services/scheduler/headlessRun';
 
 registerAndroidDurableRecoveryHeadlessTask();
 registerAndroidDurableCandidateHeadlessTask();
 registerAndroidLongHorizonKeepAliveTask();
+registerScheduledJobsHeadlessTask();
 registerRootComponent(App);
