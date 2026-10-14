@@ -196,6 +196,8 @@ export interface ExecuteAgentControlGraphIterationParams {
   }) => void;
   personaThinkingLevel?: ThinkingLevel;
   promptContextSupport: SessionPromptContextSupport;
+  /** Reads memory again for the run's current messages. */
+  refreshSessionMemory: (workingMessages: ReadonlyArray<Message>) => SessionMemoryRead;
   reportUsage: (usage: TokenUsage) => void;
   requestFrame: RequestFrame;
   runtime: AgentControlGraphIterationRuntimeState;

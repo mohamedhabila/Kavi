@@ -146,4 +146,73 @@ describe('prepareAgentTurnRequestBudget', () => {
       expect(request.compactionContext?.onDeviceProvider).toBe(true);
     }
   });
+
+  // A run read memory before its request was budgeted, leaving out the rounds it carried.
+  // When the budget then compacted, the request went out with that read: the rounds the
+  // summary replaced were in neither the messages nor the memory section.
+  it('sends the memory section read for what the request carries after compaction', async () => {
+    const messages = Array.from({ length: 100 }, (_, index) => makeMessage(index));
+    const compact = jest.fn().mockResolvedValue({
+      ok: true,
+      compacted: true,
+      tier: 'selective',
+      result: {
+        summary: 'Earlier turns, summarized.',
+        firstKeptEntryId: 'msg-98',
+        tokensBefore: 1,
+      },
+    });
+    const staleMemory = '## Memory\nSTALE_READ';
+    const refreshMemorySection = jest.fn((carried: ReadonlyArray<Message>) =>
+      carried.some((message) => message.id === 'msg-0') ? undefined : '## Memory\nFRESH_READ',
+    );
+
+    const result = await prepareAgentTurnRequestBudget({
+      compactionEngine: { compact },
+      conversationId: 'conv-memory-after-compaction',
+      enrichedSystemPrompt: `Stable assistant instructions.\n\n${staleMemory}`,
+      enrichedSystemPromptSections: [
+        { text: 'Stable assistant instructions.', cacheable: true, purpose: 'base_prompt' },
+        { text: staleMemory, purpose: 'memory' },
+      ],
+      memorySectionText: staleMemory,
+      refreshMemorySection,
+      requestMaxTokens: 1024,
+      requestModel: 'phi4',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workingMessages: messages,
+    });
+
+    expect(compact).toHaveBeenCalled();
+    expect(refreshMemorySection).toHaveBeenLastCalledWith(result.workingMessages);
+    expect(result.budgetResult.systemPrompt).toContain('FRESH_READ');
+    expect(result.budgetResult.systemPrompt).not.toContain('STALE_READ');
+    expect(result.enrichedSystemPromptSections?.map((section) => section.text)).toEqual([
+      'Stable assistant instructions.',
+      '## Memory\nFRESH_READ',
+    ]);
+  });
+
+  it('keeps the memory section while the read still fits the request', async () => {
+    const memory = '## Memory\nCURRENT_READ';
+    const result = await prepareAgentTurnRequestBudget({
+      compactionEngine: null,
+      conversationId: 'conv-memory-current',
+      enrichedSystemPrompt: `Stable assistant instructions.\n\n${memory}`,
+      enrichedSystemPromptSections: [
+        { text: 'Stable assistant instructions.', cacheable: true, purpose: 'base_prompt' },
+        { text: memory, purpose: 'memory' },
+      ],
+      memorySectionText: memory,
+      refreshMemorySection: () => undefined,
+      requestMaxTokens: 1024,
+      requestModel: 'gpt-5.4-mini',
+      toolsForIteration: [],
+      warn: jest.fn(),
+      workingMessages: [{ id: 'user-1', role: 'user', content: 'Hi.', timestamp: 1 }],
+    });
+
+    expect(result.budgetResult.systemPrompt).toContain('CURRENT_READ');
+  });
 });

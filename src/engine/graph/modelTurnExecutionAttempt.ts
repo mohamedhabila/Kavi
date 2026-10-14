@@ -94,6 +94,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
     enrichedSystemPromptSections: params.preparedTurn.enrichedSystemPromptSections,
     iteration: params.iteration,
     memorySectionText: params.memorySectionText,
+    ...(params.refreshMemorySection ? { refreshMemorySection: params.refreshMemorySection } : {}),
     onCompaction: params.onCompaction,
     pinnedToolNames: params.preparedTurn.pinnedToolNames,
     sessionPinnedCount: params.toolSurfacePinTelemetry?.sessionPinnedCount ?? 0,
@@ -152,7 +153,7 @@ export async function executeAgentControlGraphModelTurnAttempt(
   ];
   const approvedSystemPromptSections = selectByteEquivalentSystemPromptSections(
     requestMessages,
-    params.preparedTurn.enrichedSystemPromptSections,
+    preparedRequestBudget.enrichedSystemPromptSections,
   );
   const stableSystemPrompt = splitCacheableSystemPromptSections(
     approvedSystemPromptSections,

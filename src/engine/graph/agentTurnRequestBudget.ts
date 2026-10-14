@@ -26,7 +26,11 @@ import {
 import { repairModelVisibleToolResultTranscript } from '../orchestratorToolTranscript';
 import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessages';
 import { stampPromptCachePlacement } from './promptCacheToolPlacement';
-import type { SystemPromptSection } from '../prompts/orchestratorPromptSections';
+import {
+  joinSystemPromptSections,
+  replaceMemoryPromptSection,
+  type SystemPromptSection,
+} from '../prompts/orchestratorPromptSections';
 
 type BudgetCompactionEngine = CompactionEngine | null;
 export type AgentTurnCompactionEngine = BudgetCompactionEngine;
@@ -42,6 +46,11 @@ export interface PrepareAgentTurnRequestBudgetParams {
   enrichedSystemPromptSections?: ReadonlyArray<SystemPromptSection>;
   iteration?: number;
   memorySectionText?: string;
+  /**
+   * The memory section for these messages when the run's memory read no longer fits them
+   * (compaction replaced rounds it left out); `null` for none, `undefined` while it fits.
+   */
+  refreshMemorySection?: (workingMessages: ReadonlyArray<Message>) => string | null | undefined;
   onCompaction?: (event: OrchestratorCompactionEvent) => void;
   /** True when the turn runs on an on-device runtime, which needs a phone-sized window. */
   onDeviceProvider?: boolean;
@@ -62,6 +71,8 @@ export interface PrepareAgentTurnRequestBudgetParams {
 
 export interface PreparedAgentTurnRequestBudget {
   budgetResult: ReturnType<typeof enforceContextBudget>;
+  /** The system prompt sections the request was budgeted with. */
+  enrichedSystemPromptSections?: SystemPromptSection[];
   contextWindow: number;
   toolSurfaceTokenAudit?: ToolSurfaceTokenAudit;
   usageTokenBuckets: UsageTokenBuckets;
@@ -256,11 +267,16 @@ export async function prepareAgentTurnRequestBudget(
     params.enrichedSystemPromptSections,
   );
   let compactionApplied = false;
+  let enrichedSystemPrompt = params.enrichedSystemPrompt;
+  let enrichedSystemPromptSections = params.enrichedSystemPromptSections && [
+    ...params.enrichedSystemPromptSections,
+  ];
+  let memorySectionText = params.memorySectionText;
 
   let modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
   let budgetPreview = await previewRequestBudget({
     activeProvider: params.activeProvider,
-    enrichedSystemPrompt: params.enrichedSystemPrompt,
+    enrichedSystemPrompt,
     candidateMessages: modelVisibleMessages,
     onDeviceProvider: params.onDeviceProvider === true,
     requestFamily: params.requestFamily,
@@ -299,7 +315,7 @@ export async function prepareAgentTurnRequestBudget(
       modelVisibleMessages = sanitizeModelVisibleWorkingMessages(workingMessages);
       budgetPreview = await previewRequestBudget({
         activeProvider: params.activeProvider,
-        enrichedSystemPrompt: params.enrichedSystemPrompt,
+        enrichedSystemPrompt,
         candidateMessages: modelVisibleMessages,
         onDeviceProvider: params.onDeviceProvider === true,
         requestFamily: params.requestFamily,
@@ -308,6 +324,28 @@ export async function prepareAgentTurnRequestBudget(
         toolsForIteration,
       });
     }
+  }
+
+  // A memory read leaves out the rounds the run carries. Rounds compaction just replaced are
+  // in neither, so the request about to go out reads memory again for what it carries.
+  const refreshedMemorySection = params.refreshMemorySection?.(workingMessages);
+  if (refreshedMemorySection !== undefined && enrichedSystemPromptSections) {
+    enrichedSystemPromptSections = replaceMemoryPromptSection(
+      enrichedSystemPromptSections,
+      refreshedMemorySection,
+    );
+    enrichedSystemPrompt = joinSystemPromptSections(enrichedSystemPromptSections);
+    memorySectionText = refreshedMemorySection ?? undefined;
+    budgetPreview = await previewRequestBudget({
+      activeProvider: params.activeProvider,
+      enrichedSystemPrompt,
+      candidateMessages: modelVisibleMessages,
+      onDeviceProvider: params.onDeviceProvider === true,
+      requestFamily: params.requestFamily,
+      requestMaxTokens: params.requestMaxTokens,
+      requestModel: params.requestModel,
+      toolsForIteration,
+    });
   }
 
   if (budgetPreview.pressure.requiresMessageWindowing) {
@@ -319,7 +357,7 @@ export async function prepareAgentTurnRequestBudget(
     );
     const placeholderCompactionPreview = await previewRequestBudget({
       activeProvider: params.activeProvider,
-      enrichedSystemPrompt: params.enrichedSystemPrompt,
+      enrichedSystemPrompt,
       candidateMessages: placeholderCompactedModelVisibleMessages,
       onDeviceProvider: params.onDeviceProvider === true,
       requestFamily: params.requestFamily,
@@ -345,7 +383,7 @@ export async function prepareAgentTurnRequestBudget(
   const candidateTools = compressToolDefinitions(toolsForIteration, compactionOptions);
   const budgetResult = enforceContextBudget(
     params.requestModel,
-    params.enrichedSystemPrompt,
+    enrichedSystemPrompt,
     toolsForIteration,
     budgetPreview.nonSystemApiMessages,
     params.requestMaxTokens,
@@ -368,7 +406,7 @@ export async function prepareAgentTurnRequestBudget(
       : undefined;
 
   const planTokens = estimateTokens(planPromptSection ?? '', params.requestFamily);
-  const memoryTokens = estimateTokens(params.memorySectionText ?? '', params.requestFamily);
+  const memoryTokens = estimateTokens(memorySectionText ?? '', params.requestFamily);
   const usageTokenBuckets = buildUsageTokenBuckets({
     budgetResult,
     family: params.requestFamily,
@@ -394,6 +432,7 @@ export async function prepareAgentTurnRequestBudget(
   return {
     budgetResult,
     contextWindow,
+    enrichedSystemPromptSections,
     toolSurfaceTokenAudit,
     usageTokenBuckets,
     workingMessages,

@@ -6,11 +6,7 @@ import type {
   AgentControlGraphIterationRuntimeState,
   ExecuteAgentControlGraphIterationParams,
 } from './iterationExecutionTypes';
-import type { Message } from '../../types/message';
-import {
-  isSessionMemoryReadCurrent,
-  type SessionMemoryRead,
-} from '../../services/memory/memoryAccessGateway';
+import { isSessionMemoryReadCurrent } from '../../services/memory/memoryAccessGateway';
 import { resolveNextLongHorizonIterationLimit } from './longHorizonIterationBudget';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from './graphObservability';
 import { buildRunStoppedMessage } from './runStoppedMessage';
@@ -22,8 +18,6 @@ export interface ExecuteAgentControlGraphSessionParams extends Omit<
 > {
   allowLongHorizonIterationExtensions?: boolean;
   initialRuntime: AgentControlGraphIterationRuntimeState;
-  /** Reads memory again for the run's current messages. */
-  refreshSessionMemory: (workingMessages: ReadonlyArray<Message>) => SessionMemoryRead;
 }
 
 export async function executeAgentControlGraphSession(

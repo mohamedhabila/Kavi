@@ -1,4 +1,5 @@
 import { LlmService } from '../../services/llm/LlmService';
+import { isSessionMemoryReadCurrent } from '../../services/memory/memoryAccessGateway';
 import { bindProviderToModel } from '../../services/llm/support/providerSupport';
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
@@ -111,6 +112,11 @@ export async function executePreparedAgentControlGraphTurn(params: {
       isForegroundRun: iterationParams.isForegroundRun,
       iteration: iterationParams.iteration,
       memorySectionText: memorySection?.text,
+      refreshMemorySection: (workingMessages) => {
+        if (isSessionMemoryReadCurrent(runtime.memory, workingMessages)) return undefined;
+        runtime.memory = iterationParams.refreshSessionMemory(workingMessages);
+        return runtime.memory.status === 'read' ? (runtime.memory.section?.text ?? null) : null;
+      },
       llm: runtime.llm,
       onCompaction: iterationParams.onCompaction,
       preparedTurn,

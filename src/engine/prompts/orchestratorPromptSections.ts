@@ -253,6 +253,32 @@ export function orderSystemPromptSectionsForCaching(
   return [...cacheableSections, ...dynamicSections];
 }
 
+/**
+ * The sections with the memory section's text replaced, or dropped for `null`; a new one
+ * goes right after the memory policy. Returned in caching order.
+ */
+export function replaceMemoryPromptSection(
+  sections: ReadonlyArray<SystemPromptSection>,
+  text: string | null,
+): SystemPromptSection[] {
+  const next: SystemPromptSection[] = [];
+  let placed = false;
+  const place = () => {
+    if (!placed) appendSystemPromptSection(next, text, { purpose: 'memory' });
+    placed = true;
+  };
+  for (const section of sections) {
+    if (section.purpose === 'memory') {
+      place();
+      continue;
+    }
+    next.push(section);
+    if (section.purpose === 'memory_policy') place();
+  }
+  place();
+  return orderSystemPromptSectionsForCaching(next);
+}
+
 export function joinSystemPromptSections(sections: SystemPromptSection[]): string {
   return sections.map((section) => section.text).join('\n\n');
 }

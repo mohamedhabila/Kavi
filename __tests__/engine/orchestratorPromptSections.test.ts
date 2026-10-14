@@ -6,7 +6,9 @@ import {
   getUserMessagePromptContent,
   joinSystemPromptSections,
   MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
+  replaceMemoryPromptSection,
   stripRuntimeContextFromUserContent,
+  type SystemPromptSection,
 } from '../../src/engine/prompts/orchestratorPromptSections';
 import { splitCacheableSystemPromptSections } from '../../src/services/llm/core/systemPromptSections';
 
@@ -225,5 +227,38 @@ describe('orchestratorPromptSections', () => {
     expect(note).toMatch(/device_timezone: \S+/);
     expect(note).toMatch(/device_locale: [a-z]{2}(-[A-Za-z]+)*/);
     expect(note).toMatch(/measurement_system: (metric|us_customary)/);
+  });
+});
+
+describe('replaceMemoryPromptSection', () => {
+  const base: SystemPromptSection = { text: 'Base.', cacheable: true, purpose: 'base_prompt' };
+  const policy: SystemPromptSection = { text: 'Memory policy.', purpose: 'memory_policy' };
+  const plan: SystemPromptSection = { text: 'Plan.', purpose: 'plan' };
+
+  it('replaces the memory section where it was', () => {
+    const sections = [base, policy, { text: 'Old memory.', purpose: 'memory' as const }, plan];
+
+    expect(replaceMemoryPromptSection(sections, 'New memory.').map((s) => s.text)).toEqual([
+      'Base.',
+      'Memory policy.',
+      'New memory.',
+      'Plan.',
+    ]);
+  });
+
+  it('drops it for no memory, and adds one after the memory policy', () => {
+    const withMemory = [base, policy, { text: 'Old memory.', purpose: 'memory' as const }, plan];
+
+    expect(replaceMemoryPromptSection(withMemory, null).map((s) => s.text)).toEqual([
+      'Base.',
+      'Memory policy.',
+      'Plan.',
+    ]);
+    expect(replaceMemoryPromptSection([base, policy, plan], 'New memory.')).toEqual([
+      base,
+      policy,
+      { text: 'New memory.', purpose: 'memory' },
+      plan,
+    ]);
   });
 });

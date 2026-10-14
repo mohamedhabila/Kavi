@@ -47,6 +47,8 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   iteration: number;
   /** The memory section in this turn's prompt, for the request budget audit. */
   memorySectionText?: string;
+  /** See `PrepareAgentTurnRequestBudgetParams.refreshMemorySection`. */
+  refreshMemorySection?: (workingMessages: ReadonlyArray<Message>) => string | null | undefined;
   llm: {
     sendMessage: (
       messages: Array<{ role: string; content: any }>,
