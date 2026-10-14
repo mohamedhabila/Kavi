@@ -10,10 +10,6 @@ import {
   isAnthropicClaude4Model,
   isAnthropicClaude4OpusModel,
   rejectsSamplingParams,
-  rejectsThinkingParam,
-  requiresAdaptiveThinkingOnly,
-  supportedEffortLevels,
-  supportsAdaptiveThinking,
 } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { normalizeStructuredOutputOptions } from '../../core/structuredOutput';
@@ -39,26 +35,18 @@ export function buildAnthropicStructuredOutputFormat(
   };
 }
 
+/** The caller's output_config; its effort is one the model declares (thinking.ts). */
 export function normalizeAnthropicOutputConfig(
   outputConfig: unknown,
-  model?: string,
 ): AnthropicOutputConfig | undefined {
   if (!isPlainRecord(outputConfig)) {
     return undefined;
   }
 
   const normalized: AnthropicOutputConfig = { ...outputConfig };
-  const effort = typeof normalized.effort === 'string' ? normalized.effort.toLowerCase() : '';
-
-  if (effort) {
-    const allowedEfforts = supportedEffortLevels(model);
-    if (allowedEfforts.includes(effort as AnthropicEffort)) {
-      normalized.effort = effort as AnthropicEffort;
-    } else {
-      delete normalized.effort;
-    }
+  if (typeof normalized.effort === 'string') {
+    normalized.effort = normalized.effort.toLowerCase() as AnthropicEffort;
   }
-
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
@@ -71,9 +59,8 @@ export function buildAnthropicOutputConfig(
     ) => Record<string, any>;
     strictifySchema: (schema: Record<string, any>) => Record<string, any>;
   },
-  model?: string,
 ): AnthropicOutputConfig | undefined {
-  const explicitOutputConfig = normalizeAnthropicOutputConfig(options.output_config, model);
+  const explicitOutputConfig = normalizeAnthropicOutputConfig(options.output_config);
   const structuredOutput = normalizeStructuredOutputOptions(options.structuredOutput);
 
   if (!explicitOutputConfig && !structuredOutput) {
@@ -109,24 +96,6 @@ function normalizeAnthropicTemperature(
   return temperature;
 }
 
-/**
- * Reshapes a caller-supplied `thinking` block to match what `model` actually accepts:
- *  - Fable: no `thinking` param at all — handled by the caller before this runs.
- *  - Opus/Sonnet 4.7+ (adaptive-only): `type:'enabled'` (the legacy budget_tokens shape)
- *    is rewritten to `{type:'adaptive'}`, since `budget_tokens` 400s on these models.
- *  - Everything else (4.6 and older): passed through unchanged.
- */
-function adjustAnthropicThinkingForModel(
-  model: string | undefined,
-  thinking: Record<string, unknown>,
-): Record<string, unknown> {
-  const type = typeof thinking.type === 'string' ? thinking.type.toLowerCase() : '';
-  if (type === 'enabled' && requiresAdaptiveThinkingOnly(model)) {
-    return { type: 'adaptive' };
-  }
-  return thinking;
-}
-
 function ensureAnthropicThinkingDisplay(
   thinking: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -146,10 +115,12 @@ function clampAnthropicThinkingConfig(
   maxTokens: number,
 ): Record<string, unknown> | undefined {
   const type = typeof thinking.type === 'string' ? thinking.type : '';
-  if (!type || type === 'disabled') {
+  if (!type) {
     return undefined;
   }
 
+  // `disabled` is the model's declared off switch (thinking.ts): sent as is, because a
+  // model that thinks by default keeps thinking when the parameter is omitted.
   if (type !== 'enabled') {
     return thinking;
   }
@@ -195,33 +166,13 @@ export function sanitizeAnthropicRequestOptions(args: {
     ? { format: requestedOutputConfig.format }
     : undefined;
 
-  // Fable's thinking is always on server-side and takes no `thinking` param at all —
-  // sending one (in any shape) 400s, so it never reaches the clamp/adaptive logic below.
-  if (rejectsThinkingParam(args.model)) {
+  const requestedThinking = isPlainRecord(args.options.thinking)
+    ? { ...args.options.thinking }
+    : undefined;
+  if (!requestedThinking) {
     return {
       temperature: normalizedTemperature,
       ...(requestedOutputConfig ? { outputConfig: requestedOutputConfig } : {}),
-    };
-  }
-
-  const requestedThinking = isPlainRecord(args.options.thinking)
-    ? adjustAnthropicThinkingForModel(args.model, { ...args.options.thinking })
-    : undefined;
-  if (!requestedThinking) {
-    // Adaptive-only models (Opus/Sonnet 4.7+) don't take an explicit `thinking` param
-    // for their default mode either — "omitting = no thinking" (or, for Opus 5,
-    // "adaptive by default") — but `output_config.effort` is still a valid, orthogonal
-    // lever in that state, so it shouldn't be dropped just because `thinking` is absent.
-    const effortAppliesWithoutThinking = supportedEffortLevels(args.model).length > 0;
-    return {
-      temperature: normalizedTemperature,
-      ...(effortAppliesWithoutThinking
-        ? requestedOutputConfig
-          ? { outputConfig: requestedOutputConfig }
-          : {}
-        : formatOnlyOutputConfig
-          ? { outputConfig: formatOnlyOutputConfig }
-          : {}),
     };
   }
 
@@ -252,7 +203,7 @@ export function sanitizeAnthropicRequestOptions(args: {
   return {
     thinking: withDroppedStaleThinking(visibleThinking),
     ...(requestedOutputConfig ? { outputConfig: requestedOutputConfig } : {}),
-    temperature: undefined,
+    temperature: visibleThinking.type === 'disabled' ? normalizedTemperature : undefined,
   };
 }
 
@@ -285,13 +236,7 @@ export function shouldIncludeAnthropicInterleavedThinkingBeta(args: {
   const thinkingType =
     typeof args.thinking.type === 'string' ? args.thinking.type.toLowerCase() : '';
 
-  if (isAnthropicClaude4OpusModel(targetModel)) {
-    return false;
-  }
-
-  if (supportsAdaptiveThinking(targetModel)) {
-    return thinkingType === 'enabled';
-  }
-
-  return true;
+  // Claude 4 Sonnet interleaves thinking with tool calls only under the beta, and only
+  // manual (enabled) thinking needs it; Claude 4 Opus interleaves without it.
+  return !isAnthropicClaude4OpusModel(targetModel) && thinkingType === 'enabled';
 }

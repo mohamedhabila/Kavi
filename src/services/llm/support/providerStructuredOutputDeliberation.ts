@@ -19,15 +19,6 @@ export function resolveProviderStructuredOutputDeliberationControls(
 ): StructuredOutputDeliberationControls {
   const lowerModel = params.model.trim().toLowerCase();
 
-  if (params.providerFamily === 'anthropic') {
-    return {
-      reasoning_effort: 'none',
-      thinking: {
-        type: 'disabled',
-      },
-    };
-  }
-
   if (params.providerFamily === 'gemini') {
     if (isGemini3Model(lowerModel)) {
       return {

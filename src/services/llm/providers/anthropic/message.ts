@@ -57,15 +57,11 @@ export function sendAnthropicMessage(params: {
         model: candidateModel,
         messages: requestMessages,
         options: requestOptions,
-        buildAnthropicOutputConfig: (resolvedOptions, resolvedModel) =>
-          buildAnthropicOutputConfig(
-            resolvedOptions,
-            {
-              simplifyAnthropicSchema,
-              strictifySchema,
-            },
-            resolvedModel,
-          ),
+        buildAnthropicOutputConfig: (resolvedOptions) =>
+          buildAnthropicOutputConfig(resolvedOptions, {
+            simplifyAnthropicSchema,
+            strictifySchema,
+          }),
       }),
     normalizeAnthropicAssistantBlocks,
     mergeAnthropicContent,

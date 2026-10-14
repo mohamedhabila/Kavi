@@ -1,18 +1,14 @@
 import { resolveProviderStructuredOutputDeliberationControls } from '../../src/services/llm/support/providerStructuredOutputDeliberation';
 
 describe('providerStructuredOutputDeliberation', () => {
-  it('disables thinking for Anthropic-family structured output even when the model name is opaque', () => {
+  // Only the Gemini adapter asks for these controls; Claude's come from its declarations.
+  it('asks other families for no deliberation only', () => {
     expect(
       resolveProviderStructuredOutputDeliberationControls({
         model: 'internal-proxy-model',
         providerFamily: 'anthropic',
       }),
-    ).toEqual({
-      reasoning_effort: 'none',
-      thinking: {
-        type: 'disabled',
-      },
-    });
+    ).toEqual({ reasoning_effort: 'none' });
   });
 
   it('uses Gemini 3 thinking levels from provider-family-aware structured output controls', () => {

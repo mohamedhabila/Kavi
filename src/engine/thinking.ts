@@ -2,14 +2,7 @@
 // Kavi — Thinking Level Control
 // ---------------------------------------------------------------------------
 
-import type { AnthropicEffortLevel } from '../services/llm/catalog/providerCapabilities';
-import {
-  isOpenAIReasoningModel,
-  keepsThinkingOnWhenOmitted,
-  rejectsThinkingParam,
-  supportedEffortLevels,
-  supportsAdaptiveThinking,
-} from '../services/llm/catalog/providerCapabilities';
+import { isOpenAIReasoningModel } from '../services/llm/catalog/providerCapabilities';
 import { resolveModelHostedFamily } from '../services/llm/catalog/providerFamilies';
 import type { ModelReasoningCapability } from '../types/tool';
 import { resolveThinkingLevelReasoningEffort } from '../services/llm/support/reasoningEffortResolution';
@@ -27,9 +20,6 @@ export interface ThinkingParamsOptions {
 }
 
 type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
-
-/** Anthropic's `output_config.effort` tiers, in ascending order of intensity. */
-const ANTHROPIC_EFFORT_ORDER: AnthropicEffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 const ANTHROPIC_THINKING_BUDGETS: Record<Exclude<ThinkingLevel, 'off'>, number> = {
   minimal: 1024,
@@ -84,63 +74,6 @@ function resolveAnthropicThinkingBudget(level: ThinkingLevel, maxTokens?: number
   return resolvedBudget;
 }
 
-/**
- * Maps a UI thinking-level chip to the `output_config.effort` tier to send for `model`,
- * degrading to the nearest tier the model actually supports rather than dropping or
- * rejecting an unsupported request. `undefined` means the model doesn't take an effort
- * value at all (`supportedEffortLevels` returned an empty set — e.g. a pre-4.6 model).
- *
- * The 'xhigh' chip — the strongest level the UI offers — always requests the model's
- * actual ceiling tier (the last entry of `supportedEffortLevels`), which is 'max' for
- * every current Anthropic generation. That preserves "top chip = strongest available
- * effort" regardless of whether a given model's range stops at 'max' (4.6) or has the
- * newer 'xhigh' tier in between 'high' and 'max' (4.7+, including every 5.x, and Fable) —
- * there is no separate UI chip for that in-between tier.
- */
-function resolveAnthropicEffortForLevel(
-  level: Exclude<ThinkingLevel, 'off'>,
-  model: string,
-): AnthropicEffortLevel | undefined {
-  const supported = supportedEffortLevels(model);
-  if (supported.length === 0) {
-    return undefined;
-  }
-
-  const requestedTier: AnthropicEffortLevel =
-    level === 'minimal' || level === 'low'
-      ? 'low'
-      : level === 'medium'
-        ? 'medium'
-        : level === 'high'
-          ? 'high'
-          : 'xhigh';
-
-  if (supported.includes(requestedTier)) {
-    return requestedTier;
-  }
-
-  // The 'xhigh' chip means "the strongest reasoning this model offers". A generation that
-  // predates the 'xhigh' tier (4.6) still exposes 'max', so honor the intent there rather
-  // than degrading to 'high'. 'max' is never chosen when the model supports 'xhigh'
-  // itself, so a user's selection does not silently escalate to the costliest tier.
-  if (requestedTier === 'xhigh' && supported.includes('max')) {
-    return 'max';
-  }
-
-  // Degrade to the nearest supported tier at or below the requested one.
-  const requestedRank = ANTHROPIC_EFFORT_ORDER.indexOf(requestedTier);
-  for (let rank = requestedRank - 1; rank >= 0; rank -= 1) {
-    const candidate = ANTHROPIC_EFFORT_ORDER[rank];
-    if (supported.includes(candidate)) {
-      return candidate;
-    }
-  }
-
-  // Nothing at or below the requested rank is supported — use the model's lowest tier
-  // rather than sending nothing.
-  return supported[0];
-}
-
 function resolveGeminiThinkingLevel(level: ThinkingLevel, model: string): GeminiThinkingLevel {
   const lower = normalizeModel(model);
   const supportsMinimal = !lower.includes('pro');
@@ -188,6 +121,35 @@ function resolveGeminiThinkingBudget(level: ThinkingLevel, model: string): numbe
 }
 
 /**
+ * Claude's thinking for a level, from the modes and efforts the model's models API declares:
+ * adaptive thinking at the nearest declared effort, manual thinking with a budget where that
+ * is the only mode, and thinking off where the model can turn it off. A model that always
+ * thinks runs at its least effort when the level is off.
+ */
+function declaredClaudeThinking(
+  capability: ModelReasoningCapability,
+  level: ThinkingLevel,
+  maxTokens: number | undefined,
+): Record<string, unknown> {
+  const modes = capability.thinkingModes ?? [];
+  if (level === 'off' && !capability.mandatory) {
+    return modes.includes('disabled') ? { thinking: { type: 'disabled' } } : {};
+  }
+  if (modes.includes('adaptive')) {
+    const effort =
+      capability.supportedEfforts.length > 0
+        ? resolveThinkingLevelReasoningEffort({ ...capability, mandatory: true }, level)
+        : undefined;
+    return { thinking: { type: 'adaptive' }, ...(effort ? { output_config: { effort } } : {}) };
+  }
+  if (modes.includes('enabled')) {
+    const budget = resolveAnthropicThinkingBudget(level === 'off' ? 'minimal' : level, maxTokens);
+    return budget ? { thinking: { type: 'enabled', budget_tokens: budget } } : {};
+  }
+  return {};
+}
+
+/**
  * Map thinking level to provider-specific parameters
  */
 export function getThinkingParams(
@@ -198,10 +160,13 @@ export function getThinkingParams(
   const lower = normalizeModel(model);
   const hostedFamily = resolveModelHostedFamily(model);
 
-  // A model whose provider declares its reasoning efforts (OpenRouter) is driven by those
-  // declarations. The level maps to the nearest effort the model accepts, so `off` turns
-  // reasoning off where the model allows it and asks for its least deliberation where it
-  // does not — instead of leaving the model at its own default, which is often its highest.
+  // A model whose provider declares its reasoning controls is driven by those declarations.
+  // The level maps to the nearest effort the model accepts, so `off` turns reasoning off
+  // where the model allows it and asks for its least deliberation where it does not —
+  // instead of leaving the model at its own default, which is often its highest.
+  if (options.reasoningCapability?.thinkingModes) {
+    return declaredClaudeThinking(options.reasoningCapability, level, options.maxTokens);
+  }
   if (options.reasoningCapability) {
     const effort = resolveThinkingLevelReasoningEffort(options.reasoningCapability, level);
     return effort ? { reasoning_effort: effort } : {};
@@ -223,61 +188,14 @@ export function getThinkingParams(
     };
   }
 
-  // Opus/Sonnet 5.x+ never fully turn thinking off by omission — the model runs
-  // adaptive thinking at its own default effort regardless. Send explicit adaptive +
-  // low effort instead of `{type:'disabled'}`, which 400s on claude-opus-5-5 at every
-  // effort level and has documented failure modes (leaked tags, tool calls in text) on
-  // claude-opus-5.
-  if (
-    (level === 'off' || level === 'minimal') &&
-    hostedFamily === 'anthropic' &&
-    keepsThinkingOnWhenOmitted(model)
-  ) {
-    return {
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
-    };
+  // A Claude model whose thinking modes are not known yet (its catalog not discovered) is
+  // asked for nothing: every Claude model accepts a request without thinking parameters.
+  if (hostedFamily === 'anthropic') {
+    return {};
   }
 
   if (level === 'off') {
     return {};
-  }
-
-  // Fable: thinking is always on server-side and takes no `thinking` param at all —
-  // only `output_config.effort` is a valid lever.
-  // Opus/Sonnet 4.6+ (including every 5.x): adaptive thinking + effort.
-  // Everything older: manual budget_tokens mode (no effort concept).
-  if (hostedFamily === 'anthropic') {
-    if (level === 'minimal') {
-      return {};
-    }
-
-    if (rejectsThinkingParam(model)) {
-      const effort = resolveAnthropicEffortForLevel(level, model);
-      return effort ? { output_config: { effort } } : {};
-    }
-
-    if (supportsAdaptiveThinking(model)) {
-      const effort = resolveAnthropicEffortForLevel(level, model);
-      return {
-        thinking: {
-          type: 'adaptive',
-        },
-        ...(effort ? { output_config: { effort } } : {}),
-      };
-    }
-
-    const budget = resolveAnthropicThinkingBudget(level, options.maxTokens);
-    if (!budget) {
-      return {};
-    }
-
-    return {
-      thinking: {
-        type: 'enabled',
-        budget_tokens: budget,
-      },
-    };
   }
 
   // OpenAI models: use reasoning_effort

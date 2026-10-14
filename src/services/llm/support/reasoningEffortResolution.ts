@@ -26,6 +26,7 @@ const REQUESTABLE_EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>([
   'medium',
   'high',
   'xhigh',
+  'max',
 ]);
 
 const THINKING_LEVEL_EFFORT: Record<ThinkingLevelPreference, ReasoningEffort> = {

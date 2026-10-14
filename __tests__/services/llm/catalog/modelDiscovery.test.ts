@@ -43,7 +43,7 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
     clearProviderContextWindowsForTests();
   });
 
-  it('fetches a single page and maps max_input_tokens and capabilities', async () => {
+  it('fetches a single page and maps max_input_tokens and the declared capabilities', async () => {
     const performFetch = jest.fn().mockResolvedValueOnce(
       jsonResponse({
         data: [
@@ -53,7 +53,26 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
             created_at: '2026-01-01T00:00:00Z',
             max_input_tokens: 1000000,
             max_tokens: 128000,
-            capabilities: ['vision', 'tool_use'],
+            capabilities: {
+              image_input: { supported: true },
+              pdf_input: { supported: false },
+              thinking: {
+                supported: true,
+                types: {
+                  enabled: { supported: false },
+                  adaptive: { supported: true },
+                  disabled: { supported: true },
+                },
+              },
+              effort: {
+                supported: true,
+                low: { supported: true },
+                medium: { supported: true },
+                high: { supported: true },
+                xhigh: { supported: true },
+                max: { supported: true },
+              },
+            },
           },
           {
             id: 'claude-haiku-4-5',
@@ -61,7 +80,19 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
             created_at: '2025-01-01T00:00:00Z',
             max_input_tokens: 200000,
             max_tokens: 64000,
-            capabilities: { vision: true, tool_use: false, file_input: true },
+            capabilities: {
+              image_input: { supported: true },
+              pdf_input: { supported: true },
+              thinking: {
+                supported: true,
+                types: {
+                  enabled: { supported: true },
+                  adaptive: { supported: false },
+                  disabled: { supported: true },
+                },
+              },
+              effort: { supported: false, low: { supported: false } },
+            },
           },
         ],
         has_more: false,
@@ -82,11 +113,17 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       vision: true,
       tools: true,
       fileInput: false,
+      reasoning: {
+        mandatory: false,
+        supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        thinkingModes: ['adaptive', 'disabled'],
+      },
     });
     expect(result.capabilities['claude-haiku-4-5']).toEqual({
       vision: true,
-      tools: false,
+      tools: true,
       fileInput: true,
+      reasoning: { mandatory: false, supportedEfforts: [], thinkingModes: ['enabled', 'disabled'] },
     });
     expect(result.contextWindows['claude-opus-5']).toBe(1000000);
     expect(result.contextWindows['claude-haiku-4-5']).toBe(200000);

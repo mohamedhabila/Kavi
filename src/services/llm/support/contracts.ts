@@ -33,7 +33,7 @@ export interface PromptCachingOptions {
   promptCacheRetention?: 'in_memory' | 'in-memory' | '24h';
 }
 
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type AnthropicOutputConfig = {

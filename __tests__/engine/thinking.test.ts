@@ -19,191 +19,87 @@ describe('getThinkingParams', () => {
     });
   });
 
-  describe('Anthropic adaptive thinking models (Claude 4.6)', () => {
-    it('keeps minimal Anthropic adaptive turns on the provider default path', () => {
-      expect(getThinkingParams('minimal', 'claude-sonnet-4-6')).toEqual({});
-    });
-
-    it.each<[ThinkingLevel, string]>([
-      ['low', 'low'],
-      ['medium', 'medium'],
-      ['high', 'high'],
-    ])('level %s → adaptive effort %s', (level, effort) => {
-      const result = getThinkingParams(level, 'claude-sonnet-4-6');
-      expect(result).toEqual({
-        thinking: { type: 'adaptive' },
-        output_config: { effort },
+  // Claude's thinking follows what Anthropic's models API declares for each model (live
+  // declarations, 2026-10-15), not rules read from the model id.
+  describe('Claude models, from their declared thinking modes and efforts', () => {
+    const FULL = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const declared = {
+      // Sonnet 5.5, Opus 5.5, Fable 5.1: always thinks.
+      adaptiveOnly: { mandatory: true, supportedEfforts: FULL, thinkingModes: ['adaptive'] },
+      // Haiku 5.5, Sonnet 5: thinks by default, can be turned off.
+      adaptiveOrOff: {
+        mandatory: false,
+        supportedEfforts: FULL,
+        thinkingModes: ['adaptive', 'disabled'],
+      },
+      // Opus 4.6, Sonnet 4.6: no xhigh tier.
+      withManual: {
+        mandatory: false,
+        supportedEfforts: ['low', 'medium', 'high', 'max'],
+        thinkingModes: ['enabled', 'adaptive', 'disabled'],
+      },
+      // Haiku 4.5: manual thinking only, no effort control.
+      manualOnly: {
+        mandatory: false,
+        supportedEfforts: [],
+        thinkingModes: ['enabled', 'disabled'],
+      },
+    };
+    const params = (
+      level: ThinkingLevel,
+      capability: (typeof declared)[keyof typeof declared],
+      maxTokens?: number,
+    ) =>
+      getThinkingParams(level, 'claude-model', {
+        reasoningCapability: capability,
+        ...(maxTokens ? { maxTokens } : {}),
       });
-    });
 
-    it('maps xhigh to max for Claude Opus 4.6', () => {
-      expect(getThinkingParams('xhigh', 'claude-opus-4-6')).toEqual({
+    it('asks for adaptive thinking at the nearest declared effort', () => {
+      expect(params('low', declared.adaptiveOnly)).toEqual({
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'max' },
-      });
-    });
-
-    it('maps xhigh to max for Claude Sonnet 4.6 (same effort range as Opus 4.6)', () => {
-      // Authoritative table groups Opus 4.6 and Sonnet 4.6 together: both support
-      // effort low|medium|high|max (no xhigh) — Sonnet is not a smaller range here.
-      expect(getThinkingParams('xhigh', 'claude-sonnet-4-6')).toEqual({
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'max' },
-      });
-    });
-
-    it('ignores maxTokens because adaptive thinking uses max_tokens as a hard cap', () => {
-      expect(getThinkingParams('high', 'claude-sonnet-4-6', { maxTokens: 900 })).toEqual({
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
-      });
-    });
-  });
-
-  describe('Anthropic Fable models (no thinking param, effort only)', () => {
-    it('sends no thinking param at all, only output_config.effort', () => {
-      expect(getThinkingParams('low', 'claude-fable-5-1')).toEqual({
         output_config: { effort: 'low' },
       });
-      expect(getThinkingParams('medium', 'claude-fable-5')).toEqual({
-        output_config: { effort: 'medium' },
+      expect(params('minimal', declared.adaptiveOnly)).toMatchObject({
+        output_config: { effort: 'low' },
       });
-    });
-
-    it('keeps minimal Fable turns on the provider default path', () => {
-      expect(getThinkingParams('minimal', 'claude-fable-5-1')).toEqual({});
-    });
-
-    it('maps xhigh to the xhigh effort tier for both Fable 5 and 5.1, never escalating to max', () => {
-      expect(getThinkingParams('xhigh', 'claude-fable-5-1')).toEqual({
-        output_config: { effort: 'xhigh' },
-      });
-      expect(getThinkingParams('xhigh', 'claude-fable-5')).toEqual({
-        output_config: { effort: 'xhigh' },
-      });
-    });
-
-    it('ignores maxTokens (Fable never builds a budget_tokens shape)', () => {
-      expect(getThinkingParams('high', 'claude-fable-5-1', { maxTokens: 900 })).toEqual({
+      expect(params('high', declared.adaptiveOrOff)).toMatchObject({
         output_config: { effort: 'high' },
       });
-    });
-  });
-
-  describe('Anthropic Opus/Sonnet 5.x and Opus 4.7/4.8 (adaptive-only, full effort range)', () => {
-    it.each(['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5'])(
-      'level low/medium/high map straight through to effort for %s',
-      (model) => {
-        expect(getThinkingParams('low', model)).toEqual({
-          thinking: { type: 'adaptive' },
-          output_config: { effort: 'low' },
-        });
-        expect(getThinkingParams('medium', model)).toEqual({
-          thinking: { type: 'adaptive' },
-          output_config: { effort: 'medium' },
-        });
-        expect(getThinkingParams('high', model)).toEqual({
-          thinking: { type: 'adaptive' },
-          output_config: { effort: 'high' },
-        });
-      },
-    );
-
-    it.each(['claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-5'])(
-      'xhigh maps to the xhigh effort tier for %s, never escalating to max',
-      (model) => {
-        expect(getThinkingParams('xhigh', model)).toEqual({
-          thinking: { type: 'adaptive' },
-          output_config: { effort: 'xhigh' },
-        });
-      },
-    );
-
-    it.each<ThinkingLevel>(['off', 'minimal'])(
-      'level %s maps to adaptive thinking at low effort for claude-opus-5, claude-sonnet-5, and claude-opus-5-5 (omission still runs default-effort thinking on these models)',
-      (level) => {
-        for (const model of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-5-5']) {
-          expect(getThinkingParams(level, model)).toEqual({
-            thinking: { type: 'adaptive' },
-            output_config: { effort: 'low' },
-          });
-        }
-      },
-    );
-
-    it.each<ThinkingLevel>(['off', 'minimal'])(
-      'level %s stays on the provider default path ({}) for claude-opus-4-8 and claude-opus-4-7 (omission means no thinking there)',
-      (level) => {
-        for (const model of ['claude-opus-4-8', 'claude-opus-4-7']) {
-          expect(getThinkingParams(level, model)).toEqual({});
-        }
-      },
-    );
-
-    it('ignores maxTokens because adaptive thinking uses max_tokens as a hard cap', () => {
-      expect(getThinkingParams('high', 'claude-opus-5', { maxTokens: 900 })).toEqual({
+      expect(params('xhigh', declared.adaptiveOnly)).toMatchObject({
+        output_config: { effort: 'xhigh' },
+      });
+      // No xhigh tier: the strongest chip asks for the model's ceiling.
+      expect(params('xhigh', declared.withManual)).toEqual({
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
+        output_config: { effort: 'max' },
       });
     });
-  });
 
-  describe('degrading an unsupported effort level to the nearest one the model supports', () => {
-    it('degrades a level requesting an effort tier the model does not have, instead of dropping or rejecting it', () => {
-      // claude-haiku-4-5 supports no effort tiers at all (pre-4.6, legacy budget_tokens
-      // path) — the level must still resolve to a valid, non-empty request rather than
-      // silently vanishing or sending an unsupported effort value.
-      const result = getThinkingParams('xhigh', 'claude-haiku-4-5');
-      expect(result.output_config).toBeUndefined();
-      expect(result.thinking).toEqual({ type: 'enabled', budget_tokens: 65536 });
+    it('turns thinking off where the model can, and runs a model that cannot at its least', () => {
+      expect(params('off', declared.adaptiveOrOff)).toEqual({ thinking: { type: 'disabled' } });
+      expect(params('off', declared.manualOnly)).toEqual({ thinking: { type: 'disabled' } });
+      expect(params('off', declared.adaptiveOnly)).toEqual({
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'low' },
+      });
     });
 
-    it('never sends a bare, unmapped ThinkingLevel string as an effort value', () => {
-      for (const model of ['claude-sonnet-4-6', 'claude-opus-5', 'claude-fable-5-1']) {
-        const result: any = getThinkingParams('xhigh', model);
-        const effort = result.output_config?.effort;
-        if (effort !== undefined) {
-          expect(['low', 'medium', 'high', 'xhigh', 'max']).toContain(effort);
-        }
+    it('asks a manual-only model for a thinking budget that fits max_tokens', () => {
+      expect(params('medium', declared.manualOnly)).toEqual({
+        thinking: { type: 'enabled', budget_tokens: 8192 },
+      });
+      expect(params('high', declared.manualOnly, 10_000)).toEqual({
+        thinking: { type: 'enabled', budget_tokens: 8192 },
+      });
+      expect(params('high', declared.manualOnly, 900)).toEqual({});
+    });
+
+    it('asks a Claude model nothing until its thinking modes are known', () => {
+      for (const model of ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1']) {
+        expect(getThinkingParams('high', model)).toEqual({});
+        expect(getThinkingParams('off', model)).toEqual({});
       }
-    });
-  });
-
-  describe('Older Anthropic models (manual thinking)', () => {
-    it.each<[ThinkingLevel, number]>([
-      ['low', 2048],
-      ['medium', 8192],
-      ['high', 32768],
-    ])('level %s → budget_tokens %d', (level, budget) => {
-      const result = getThinkingParams(level, 'claude-sonnet-4-5');
-      expect(result).toEqual({
-        thinking: { type: 'enabled', budget_tokens: budget },
-      });
-    });
-
-    it('matches case-insensitively', () => {
-      const result = getThinkingParams('high', 'Claude-Sonnet-4');
-      expect(result.thinking).toBeDefined();
-    });
-
-    it('supports hosted Anthropic model namespaces', () => {
-      expect(getThinkingParams('high', 'anthropic/claude-sonnet-4-5')).toEqual({
-        thinking: { type: 'enabled', budget_tokens: 32768 },
-      });
-    });
-
-    it('downgrades the thinking budget to fit max_tokens', () => {
-      expect(getThinkingParams('high', 'claude-sonnet-4-5', { maxTokens: 3072 })).toEqual({
-        thinking: { type: 'enabled', budget_tokens: 2048 },
-      });
-      expect(getThinkingParams('medium', 'claude-sonnet-4-5', { maxTokens: 1500 })).toEqual({
-        thinking: { type: 'enabled', budget_tokens: 1024 },
-      });
-    });
-
-    it('disables Anthropic thinking when max_tokens is too small for the minimum budget', () => {
-      expect(getThinkingParams('minimal', 'claude-sonnet-4-5', { maxTokens: 1024 })).toEqual({});
-      expect(getThinkingParams('high', 'claude-sonnet-4-5', { maxTokens: 900 })).toEqual({});
     });
   });
 

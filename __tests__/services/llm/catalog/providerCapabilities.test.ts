@@ -6,13 +6,8 @@ import {
   getAnthropicModelGeneration,
   isAnthropicClaude4Model,
   isAnthropicClaude4OpusModel,
-  keepsThinkingOnWhenOmitted,
   rejectsForcedToolChoice,
   rejectsSamplingParams,
-  rejectsThinkingParam,
-  requiresAdaptiveThinkingOnly,
-  supportedEffortLevels,
-  supportsAdaptiveThinking,
 } from '../../../../src/services/llm/catalog/providerCapabilities';
 
 describe('getAnthropicModelGeneration', () => {
@@ -73,57 +68,13 @@ describe('getAnthropicModelGeneration', () => {
   });
 });
 
-describe('rejectsThinkingParam (Fable)', () => {
-  it('is true for every Fable minor', () => {
-    expect(rejectsThinkingParam('claude-fable-5')).toBe(true);
-    expect(rejectsThinkingParam('claude-fable-5-1')).toBe(true);
-  });
-
-  it('is false for non-Fable families, including 5.x', () => {
-    expect(rejectsThinkingParam('claude-opus-5')).toBe(false);
-    expect(rejectsThinkingParam('claude-sonnet-5')).toBe(false);
-    expect(rejectsThinkingParam('claude-haiku-4-5')).toBe(false);
-  });
-});
-
-describe('supportsAdaptiveThinking', () => {
-  it('is true from Opus/Sonnet 4.6 onward', () => {
-    expect(supportsAdaptiveThinking('claude-opus-4-6')).toBe(true);
-    expect(supportsAdaptiveThinking('claude-sonnet-4-6')).toBe(true);
-    expect(supportsAdaptiveThinking('claude-opus-4-7')).toBe(true);
-    expect(supportsAdaptiveThinking('claude-opus-4-8')).toBe(true);
-    expect(supportsAdaptiveThinking('claude-opus-5')).toBe(true);
-    expect(supportsAdaptiveThinking('claude-sonnet-5')).toBe(true);
-  });
-
-  it('is false before 4.6, for Haiku, and for Fable', () => {
-    expect(supportsAdaptiveThinking('claude-opus-4-5')).toBe(false);
-    expect(supportsAdaptiveThinking('claude-haiku-4-5')).toBe(false);
-    expect(supportsAdaptiveThinking('claude-fable-5-1')).toBe(false);
-  });
-});
-
-describe('requiresAdaptiveThinkingOnly', () => {
-  it('is true from Opus/Sonnet 4.7 onward, including every 5.x', () => {
-    expect(requiresAdaptiveThinkingOnly('claude-opus-4-7')).toBe(true);
-    expect(requiresAdaptiveThinkingOnly('claude-opus-4-8')).toBe(true);
-    expect(requiresAdaptiveThinkingOnly('claude-sonnet-5')).toBe(true);
-    expect(requiresAdaptiveThinkingOnly('claude-opus-5')).toBe(true);
-  });
-
-  it('is false for 4.6 (budget_tokens still accepted there, deprecated) and older', () => {
-    expect(requiresAdaptiveThinkingOnly('claude-opus-4-6')).toBe(false);
-    expect(requiresAdaptiveThinkingOnly('claude-sonnet-4-6')).toBe(false);
-  });
-
-  it('is false for Haiku and Fable (handled by their own rules)', () => {
-    expect(requiresAdaptiveThinkingOnly('claude-haiku-4-5')).toBe(false);
-    expect(requiresAdaptiveThinkingOnly('claude-fable-5-1')).toBe(false);
-  });
-});
-
 describe('rejectsSamplingParams', () => {
-  it('is true for Fable and every Opus/Sonnet 4.7+', () => {
+  // Haiku 5.5 rejected temperature ("deprecated for this model") while the rule covered only
+  // Fable and Opus/Sonnet 4.7+, so a memory extraction call at temperature 0 failed on it.
+  it('is true for every Claude 5.x model and Opus/Sonnet 4.7+', () => {
+    expect(rejectsSamplingParams('claude-haiku-5-5')).toBe(true);
+    expect(rejectsSamplingParams('claude-sonnet-5-5')).toBe(true);
+    expect(rejectsSamplingParams('claude-opus-5-5')).toBe(true);
     expect(rejectsSamplingParams('claude-fable-5')).toBe(true);
     expect(rejectsSamplingParams('claude-fable-5-1')).toBe(true);
     expect(rejectsSamplingParams('claude-opus-5')).toBe(true);
@@ -150,53 +101,6 @@ describe('rejectsForcedToolChoice', () => {
     expect(rejectsForcedToolChoice('claude-opus-5')).toBe(false);
     expect(rejectsForcedToolChoice('claude-sonnet-4-6')).toBe(false);
     expect(rejectsForcedToolChoice('claude-haiku-4-5')).toBe(false);
-  });
-});
-
-describe('supportedEffortLevels', () => {
-  it('supports the full range up to xhigh for Fable and every Opus/Sonnet 4.7+', () => {
-    const full = ['low', 'medium', 'high', 'xhigh', 'max'];
-    expect(supportedEffortLevels('claude-fable-5')).toEqual(full);
-    expect(supportedEffortLevels('claude-fable-5-1')).toEqual(full);
-    expect(supportedEffortLevels('claude-opus-5')).toEqual(full);
-    expect(supportedEffortLevels('claude-opus-4-8')).toEqual(full);
-    expect(supportedEffortLevels('claude-opus-4-7')).toEqual(full);
-    expect(supportedEffortLevels('claude-sonnet-5')).toEqual(full);
-  });
-
-  it('excludes xhigh for Opus/Sonnet 4.6', () => {
-    expect(supportedEffortLevels('claude-opus-4-6')).toEqual(['low', 'medium', 'high', 'max']);
-    expect(supportedEffortLevels('claude-sonnet-4-6')).toEqual(['low', 'medium', 'high', 'max']);
-  });
-
-  it('is empty for Haiku and other pre-4.6 legacy models', () => {
-    expect(supportedEffortLevels('claude-haiku-4-5')).toEqual([]);
-  });
-
-  it('is empty for a non-Anthropic model', () => {
-    expect(supportedEffortLevels('gpt-5.4')).toEqual([]);
-  });
-
-  it('is permissive (full range) when no model is supplied at all', () => {
-    expect(supportedEffortLevels(undefined)).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
-  });
-});
-
-describe('keepsThinkingOnWhenOmitted', () => {
-  it('is true for Opus/Sonnet 5.x and newer, including a hosted namespace variant', () => {
-    expect(keepsThinkingOnWhenOmitted('claude-opus-5')).toBe(true);
-    expect(keepsThinkingOnWhenOmitted('claude-sonnet-5')).toBe(true);
-    expect(keepsThinkingOnWhenOmitted('claude-opus-5-5')).toBe(true);
-    expect(keepsThinkingOnWhenOmitted('anthropic/claude-opus-5-latest')).toBe(true);
-  });
-
-  it('is false for Opus/Sonnet 4.8/4.7, Sonnet 4.6, non-Anthropic models, and undefined', () => {
-    expect(keepsThinkingOnWhenOmitted('claude-opus-4-8')).toBe(false);
-    expect(keepsThinkingOnWhenOmitted('claude-opus-4-7')).toBe(false);
-    expect(keepsThinkingOnWhenOmitted('claude-sonnet-4-6')).toBe(false);
-    expect(keepsThinkingOnWhenOmitted('claude-fable-5-1')).toBe(false);
-    expect(keepsThinkingOnWhenOmitted('gpt-5.4')).toBe(false);
-    expect(keepsThinkingOnWhenOmitted(undefined)).toBe(false);
   });
 });
 

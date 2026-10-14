@@ -10,6 +10,7 @@ import {
   ANTHROPIC_WORKSPACE_HEADER,
   resolveAnthropicWorkspaceId,
 } from '../providers/anthropic/workspace';
+import { resolveAnthropicModelCapabilities } from '../providers/anthropic/modelDeclarations';
 
 import {
   readAdvertisedContextWindow,
@@ -57,45 +58,6 @@ function declaredReasoningCapability(value: unknown): ModelReasoningCapability |
   const supportedEfforts = declaredStringArray(candidate.supported_efforts);
   if (typeof candidate.mandatory !== 'boolean' || !supportedEfforts?.length) return undefined;
   return { mandatory: candidate.mandatory, supportedEfforts };
-}
-
-function resolveAnthropicModelCapabilities(entry: unknown, model: string): ModelCapabilities {
-  const inferred = inferModelCapabilities(model);
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return inferred;
-  const candidate = entry as Record<string, unknown>;
-
-  // Anthropic's `capabilities` field may arrive as an array of capability strings
-  // (e.g. ["vision", "tool_use"]) or as an object of boolean flags — accept both.
-  const capabilities = candidate.capabilities;
-  const capabilityList = declaredStringArray(capabilities);
-  if (capabilityList) {
-    return {
-      vision: capabilityList.some((cap) => cap.includes('vision') || cap.includes('image')),
-      tools: capabilityList.some((cap) => cap.includes('tool')),
-      fileInput: capabilityList.some((cap) => cap.includes('file') || cap.includes('document')),
-    };
-  }
-
-  if (capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities)) {
-    const flags = capabilities as Record<string, unknown>;
-    return {
-      vision: typeof flags.vision === 'boolean' ? flags.vision : inferred.vision,
-      tools:
-        typeof flags.tool_use === 'boolean'
-          ? flags.tool_use
-          : typeof flags.tools === 'boolean'
-            ? flags.tools
-            : inferred.tools,
-      fileInput:
-        typeof flags.file_input === 'boolean'
-          ? flags.file_input
-          : typeof flags.fileInput === 'boolean'
-            ? flags.fileInput
-            : inferred.fileInput,
-    };
-  }
-
-  return inferred;
 }
 
 async function fetchAnthropicModelPage(args: {

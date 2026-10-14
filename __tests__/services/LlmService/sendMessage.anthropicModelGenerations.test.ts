@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
-// Tests — LLM Service: sendMessage Anthropic request shape per model generation
+// Tests — LLM Service: sendMessage Anthropic request shape per model
 // ---------------------------------------------------------------------------
 //
-// Covers the Claude 5.x / 4.x model-layer refresh: thinking shape, sampling
-// param stripping, effort validation, and forced tool_choice conversion, per
-// Anthropic's documented request-shape rules for each model family/generation.
+// Thinking and effort arrive already shaped from what the model's models API declares
+// (engine/thinking.ts) and go out as they are. The request layer keeps only the rules no
+// declaration carries: sampling params a model rejects, and the forced tool_choice that
+// Fable 5.1 rejects.
 
 import { LlmService, makeConfig, mockFetch } from '../../helpers/llmServiceHarness';
 
@@ -34,22 +35,30 @@ const READ_FILE_TOOL = {
   },
 };
 
-describe('LlmService', () => {
-  describe('sendMessage Anthropic model-generation request shapes', () => {
-    it('Fable 5.1: strips thinking and temperature, converts forced tool_choice to auto with a system instruction', async () => {
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-fable-5-1',
-        }),
-      );
+function claude(model: string): LlmService {
+  return new LlmService(
+    makeConfig({
+      id: 'anthropic',
+      name: 'Anthropic',
+      baseUrl: 'https://api.anthropic.com/v1',
+      apiKey: 'anthropic-key',
+      model,
+    }),
+  );
+}
 
-      await service.sendMessage([{ role: 'user', content: 'Use the tool.' }], {
-        thinking: { type: 'enabled', budget_tokens: 5000 },
+const ADAPTIVE = {
+  type: 'adaptive',
+  display: 'summarized',
+  block_binding: { prefix_mismatch_behavior: 'drop_block' },
+};
+
+describe('LlmService', () => {
+  describe('sendMessage Anthropic request shapes per model', () => {
+    it('Fable 5.1: keeps its declared thinking, drops temperature, and turns a forced tool_choice into an instruction', async () => {
+      mockOkResponse();
+      await claude('claude-fable-5-1').sendMessage([{ role: 'user', content: 'Use the tool.' }], {
+        thinking: { type: 'adaptive' },
         temperature: 0.7,
         maxTokens: 8000,
         output_config: { effort: 'xhigh' },
@@ -58,223 +67,82 @@ describe('LlmService', () => {
       });
 
       const body = requestBody();
+      // A forced tool_choice and thinking cannot go together; the forced choice wins.
       expect(body.thinking).toBeUndefined();
       expect(body.temperature).toBeUndefined();
-      expect(body.output_config).toEqual({ effort: 'xhigh' });
       expect(body.tool_choice).toEqual({ type: 'auto' });
-      expect(typeof body.system).toBe('string');
       expect(body.system).toContain('read_file');
     });
 
-    it('Fable 5 (not 5.1): strips thinking/temperature but leaves a forced tool_choice untouched', async () => {
+    it('Fable 5.1: sends its declared adaptive thinking on an ordinary turn', async () => {
       mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-fable-5',
-        }),
-      );
+      await claude('claude-fable-5-1').sendMessage([{ role: 'user', content: 'Plan it.' }], {
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high' },
+      });
 
-      await service.sendMessage([{ role: 'user', content: 'Use the tool.' }], {
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-        temperature: 0.7,
-        maxTokens: 8000,
+      expect(requestBody().thinking).toEqual(ADAPTIVE);
+      expect(requestBody().output_config).toEqual({ effort: 'high' });
+    });
+
+    it('Fable 5 (not 5.1) leaves a forced tool_choice as it is', async () => {
+      mockOkResponse();
+      await claude('claude-fable-5').sendMessage([{ role: 'user', content: 'Use the tool.' }], {
         tools: [READ_FILE_TOOL],
         toolChoice: 'required',
       });
 
-      const body = requestBody();
-      expect(body.thinking).toBeUndefined();
-      expect(body.temperature).toBeUndefined();
-      // Fable 5 (unlike 5.1) does not reject a forced tool_choice.
-      expect(body.tool_choice).toEqual({ type: 'any' });
+      expect(requestBody().tool_choice).toEqual({ type: 'any' });
     });
 
-    it('Opus 5: rewrites legacy enabled+budget_tokens thinking to adaptive and strips sampling params', async () => {
+    it.each(['claude-haiku-5-5', 'claude-opus-5', 'claude-sonnet-5-5', 'claude-opus-4-8'])(
+      '%s: drops temperature even without thinking',
+      async (model) => {
+        mockOkResponse();
+        await claude(model).sendMessage([{ role: 'user', content: 'Hi' }], {
+          temperature: 0,
+          output_config: { effort: 'low' },
+        });
+
+        expect(requestBody().temperature).toBeUndefined();
+        expect(requestBody().output_config).toEqual({ effort: 'low' });
+      },
+    );
+
+    it.each(['claude-sonnet-4-6', 'claude-haiku-4-5'])(
+      '%s: keeps temperature without thinking',
+      async (model) => {
+        mockOkResponse();
+        await claude(model).sendMessage([{ role: 'user', content: 'Hi' }], { temperature: 0.3 });
+
+        expect(requestBody().temperature).toBe(0.3);
+      },
+    );
+
+    it('Haiku 4.5: sends its declared manual thinking and drops temperature while it thinks', async () => {
       mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-opus-5',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-        temperature: 0.7,
-        maxTokens: 8000,
-        output_config: { effort: 'xhigh' },
-      });
-
-      const body = requestBody();
-      expect(body.thinking).toEqual({
-        type: 'adaptive',
-        display: 'summarized',
-        block_binding: { prefix_mismatch_behavior: 'drop_block' },
-      });
-      expect(body.temperature).toBeUndefined();
-      expect(body.output_config).toEqual({ effort: 'xhigh' });
-    });
-
-    it('Opus 4.8: same adaptive-only shape as Opus 5', async () => {
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-opus-4-8',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-        temperature: 0.9,
-        maxTokens: 8000,
-      });
-
-      const body = requestBody();
-      expect(body.thinking).toEqual({
-        type: 'adaptive',
-        display: 'summarized',
-        block_binding: { prefix_mismatch_behavior: 'drop_block' },
-      });
-      expect(body.temperature).toBeUndefined();
-    });
-
-    it('Opus 5: rejects sampling params even with no explicit thinking param, and effort still applies', async () => {
-      // "adaptive thinking by default when thinking omitted" — the model still needs no
-      // sampling params, and output_config.effort is still a valid independent lever.
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-opus-5',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        temperature: 0.7,
-        maxTokens: 8000,
-        output_config: { effort: 'high' },
-      });
-
-      const body = requestBody();
-      expect(body.thinking).toBeUndefined();
-      expect(body.temperature).toBeUndefined();
-      expect(body.output_config).toEqual({ effort: 'high' });
-    });
-
-    it('Sonnet 4.6: keeps the legacy enabled+budget_tokens shape and rejects xhigh effort', async () => {
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-sonnet-4-6',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-        maxTokens: 8000,
-        output_config: { effort: 'xhigh' },
-      });
-
-      const body = requestBody();
-      expect(body.thinking).toEqual({
-        type: 'enabled',
-        budget_tokens: 5000,
-        display: 'summarized',
-        block_binding: { prefix_mismatch_behavior: 'drop_block' },
-      });
-      // xhigh isn't in 4.6's supported range, so the whole output_config drops (no format either).
-      expect(body.output_config).toBeUndefined();
-    });
-
-    it('Sonnet 4.6: without an explicit thinking param, sampling is not stripped (unlike Opus 5+)', async () => {
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-sonnet-4-6',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        temperature: 0.6,
-        maxTokens: 8000,
-        output_config: { effort: 'high' },
-      });
-
-      const body = requestBody();
-      // 4.6 still allows sampling params — no clamp-to-1 (the old behavior), no stripping.
-      expect(body.temperature).toBe(0.6);
-      expect(body.output_config).toEqual({ effort: 'high' });
-    });
-
-    it('Haiku 4.5: keeps the legacy thinking shape and drops unsupported effort entirely', async () => {
-      mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-haiku-4-5',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
+      await claude('claude-haiku-4-5').sendMessage([{ role: 'user', content: 'Plan it.' }], {
         thinking: { type: 'enabled', budget_tokens: 3000 },
+        temperature: 0.3,
         maxTokens: 8000,
-        output_config: { effort: 'low' },
       });
 
-      const body = requestBody();
-      expect(body.thinking).toEqual({
+      expect(requestBody().thinking).toEqual({
         type: 'enabled',
         budget_tokens: 3000,
         display: 'summarized',
         block_binding: { prefix_mismatch_behavior: 'drop_block' },
       });
-      expect(body.output_config).toBeUndefined();
+      expect(requestBody().temperature).toBeUndefined();
     });
 
-    it('Haiku 4.5: without an explicit thinking param, sampling is not stripped', async () => {
+    it('sends a declared off switch as it is, so a model that thinks by default stops', async () => {
       mockOkResponse();
-      const service = new LlmService(
-        makeConfig({
-          id: 'anthropic',
-          name: 'Anthropic',
-          baseUrl: 'https://api.anthropic.com/v1',
-          apiKey: 'anthropic-key',
-          model: 'claude-haiku-4-5',
-        }),
-      );
-
-      await service.sendMessage([{ role: 'user', content: 'Hello.' }], {
-        temperature: 0.5,
-        maxTokens: 8000,
+      await claude('claude-haiku-5-5').sendMessage([{ role: 'user', content: 'Hi' }], {
+        thinking: { type: 'disabled' },
       });
 
-      const body = requestBody();
-      expect(body.temperature).toBe(0.5);
+      expect(requestBody().thinking).toEqual({ type: 'disabled' });
     });
   });
 });

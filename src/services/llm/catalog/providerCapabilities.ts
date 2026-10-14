@@ -86,58 +86,18 @@ function isOpusOrSonnet(generation: AnthropicModelGeneration): boolean {
   return generation.family === 'opus' || generation.family === 'sonnet';
 }
 
-/** Fable always keeps thinking on server-side and rejects any `thinking` param in the request. */
-export function rejectsThinkingParam(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  return generation?.family === 'fable';
-}
-
 /**
- * True once `{type:'adaptive'}` is a valid thinking mode for this model — from Opus/Sonnet
- * 4.6 onward. Fable never takes a thinking param at all (see {@link rejectsThinkingParam}),
- * and anything older than 4.6 only understands the legacy `enabled` + `budget_tokens` shape.
- */
-export function supportsAdaptiveThinking(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  if (!generation || !isOpusOrSonnet(generation)) {
-    return false;
-  }
-  return isAtLeast(generation, 4, 6);
-}
-
-/**
- * True once `{type:'adaptive'}` is the *only* on-mode — `budget_tokens` returns 400.
- * Opus/Sonnet 4.7 and newer (including every 5.x). 4.6 still accepts (deprecated)
- * `budget_tokens`, so it is deliberately excluded.
- */
-export function requiresAdaptiveThinkingOnly(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  if (!generation || !isOpusOrSonnet(generation)) {
-    return false;
-  }
-  return isAtLeast(generation, 4, 7);
-}
-
-/**
- * True when omitting the `thinking` param still runs adaptive thinking at the model's
- * default effort — Opus/Sonnet 5.x and newer. Opus/Sonnet 4.7 and 4.8 are the opposite:
- * they run with no thinking at all when the param is absent.
- */
-export function keepsThinkingOnWhenOmitted(model: string | undefined): boolean {
-  const generation = getAnthropicModelGeneration(model);
-  if (!generation || !isOpusOrSonnet(generation)) {
-    return false;
-  }
-  return generation.major >= 5;
-}
-
-/**
- * True when the model 400s on any sampling param (`temperature`, `top_p`, `top_k`) —
- * Fable (always-on thinking leaves no room for sampling) and every Opus/Sonnet 4.7+.
- * 4.6 and older still allow sampling normally.
+ * True when the model 400s on any sampling param (`temperature`, `top_p`, `top_k`):
+ * "`temperature` is deprecated for this model". Every Claude 5.x model (Sonnet, Opus,
+ * Haiku, Fable) and Opus/Sonnet 4.7 and 4.8; 4.6 and older accept sampling. Anthropic's
+ * models API declares nothing about sampling, so this one rule reads the id (checked live
+ * on 2026-10-15 against sonnet-5, sonnet-5-5, opus-5-5, haiku-5-5, fable-5-1, sonnet-4-6
+ * and haiku-4-5).
  */
 export function rejectsSamplingParams(model: string | undefined): boolean {
-  return rejectsThinkingParam(model) || requiresAdaptiveThinkingOnly(model);
+  const generation = getAnthropicModelGeneration(model);
+  if (!generation) return false;
+  return generation.major >= 5 || (isOpusOrSonnet(generation) && isAtLeast(generation, 4, 7));
 }
 
 /**
@@ -155,44 +115,6 @@ export function rejectsForcedToolChoice(model: string | undefined): boolean {
     generation.major === 5 &&
     generation.minor === 1
   );
-}
-
-export type AnthropicEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-
-const ALL_EFFORT_LEVELS: AnthropicEffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
-const PRE_XHIGH_EFFORT_LEVELS: AnthropicEffortLevel[] = ['low', 'medium', 'high', 'max'];
-
-/**
- * The `output_config.effort` values a model accepts, in the order Anthropic documents
- * them. Fable and every Opus/Sonnet 4.7+ (including 5.x) support the full range up to
- * `xhigh`; 4.6 supports the pre-`xhigh` range; anything older doesn't support effort at
- * all. A model that can't be parsed as an Anthropic generation (unrecognized id, or no
- * model supplied) gets the full range rather than an empty one, so callers that don't
- * thread a model through don't have valid effort values silently stripped.
- */
-export function supportedEffortLevels(model: string | undefined): AnthropicEffortLevel[] {
-  const generation = getAnthropicModelGeneration(model);
-  if (!generation) {
-    return model === undefined ? ALL_EFFORT_LEVELS : [];
-  }
-
-  if (generation.family === 'fable') {
-    return ALL_EFFORT_LEVELS;
-  }
-
-  if (!isOpusOrSonnet(generation)) {
-    return [];
-  }
-
-  if (isAtLeast(generation, 4, 7)) {
-    return ALL_EFFORT_LEVELS;
-  }
-
-  if (isAtLeast(generation, 4, 6)) {
-    return PRE_XHIGH_EFFORT_LEVELS;
-  }
-
-  return [];
 }
 
 /** Claude 4.x Opus or Sonnet (any minor) — scopes the interleaved-thinking beta logic below. */

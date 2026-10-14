@@ -15,7 +15,6 @@ import {
   isGemini3Model,
   isGeminiProModel,
   isOpenAIReasoningModel,
-  supportsAdaptiveThinking as supportsAnthropicAdaptiveThinking,
   supportsTemperature,
 } from '../../src/services/llm/catalog/providerCapabilities';
 import { isGeminiModelName } from '../../src/services/llm/catalog/providerFamilies';
@@ -131,8 +130,6 @@ describe('LlmService helper coverage', () => {
   it('derives Anthropic and Gemini model capabilities from canonical hosted-family metadata', () => {
     expect(isAnthropicClaude4Model('anthropic/claude-sonnet-4-6')).toBe(true);
     expect(isAnthropicClaude4OpusModel('anthropic/claude-opus-4-6')).toBe(true);
-    expect(supportsAnthropicAdaptiveThinking('anthropic/claude-sonnet-4-6')).toBe(true);
-    expect(supportsAnthropicAdaptiveThinking('anthropic/claude-sonnet-4-5')).toBe(false);
 
     expect(isGemini3Model('google/gemini-3.5-flash')).toBe(true);
     expect(isGemini3Model('models/gemini-3-flash-preview')).toBe(true);

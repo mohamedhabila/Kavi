@@ -78,7 +78,7 @@ describe('resolveHelperReasoningEffort', () => {
   it('sends no control when the only declared effort is one requests cannot carry', () => {
     expect(
       resolveHelperReasoningEffort(
-        openRouterProvider({ mandatory: true, supportedEfforts: ['max'] }),
+        openRouterProvider({ mandatory: true, supportedEfforts: ['ultra'] }),
         'z-ai/glm-5.3-flash',
       ),
     ).toBeUndefined();
@@ -92,7 +92,12 @@ describe('resolveDeclaredReasoningEffort', () => {
   });
 
   it('falls back to the most deliberate accepted effort when nothing is that high', () => {
-    expect(resolveDeclaredReasoningEffort(GLM_FLASH, 'xhigh')).toBe('high');
+    expect(resolveDeclaredReasoningEffort(GEMINI_FLASH, 'xhigh')).toBe('high');
+  });
+
+  // OpenRouter declares max for GLM 5.3 Flash (its default effort) and accepts it.
+  it("asks for a model's declared ceiling when it has no xhigh tier", () => {
+    expect(resolveDeclaredReasoningEffort(GLM_FLASH, 'xhigh')).toBe('max');
   });
 
   it('returns the requested effort when the model accepts it', () => {

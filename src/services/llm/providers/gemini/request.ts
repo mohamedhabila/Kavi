@@ -70,6 +70,7 @@ function getLegacyGeminiThinkingConfig(
       medium: 'MEDIUM',
       high: 'HIGH',
       xhigh: 'HIGH',
+      max: 'HIGH',
     };
     return { thinkingLevel: levelMap[effort] };
   }
@@ -82,6 +83,7 @@ function getLegacyGeminiThinkingConfig(
       medium: 8192,
       high: 16384,
       xhigh: 32768,
+      max: 32768,
     };
     return { thinkingBudget: budgetMap[effort] };
   }
@@ -93,6 +95,7 @@ function getLegacyGeminiThinkingConfig(
     medium: 4096,
     high: 16384,
     xhigh: 24576,
+    max: 24576,
   };
   return { thinkingBudget: budgetMap[effort] };
 }

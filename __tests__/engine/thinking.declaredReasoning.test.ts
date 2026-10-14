@@ -47,7 +47,7 @@ describe('getThinkingParams with a declared reasoning capability', () => {
   it('sends no control when the model declares no effort a request can carry', () => {
     expect(
       getThinkingParams('high', 'vendor/model', {
-        reasoningCapability: { mandatory: true, supportedEfforts: ['max'] },
+        reasoningCapability: { mandatory: true, supportedEfforts: ['ultra'] },
       }),
     ).toEqual({});
   });

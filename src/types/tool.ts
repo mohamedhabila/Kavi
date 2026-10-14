@@ -19,6 +19,11 @@ export interface ModelReasoningCapability {
   mandatory: boolean;
   /** Effort levels the model accepts, exactly as the provider names them. */
   supportedEfforts: string[];
+  /**
+   * Thinking modes the model accepts, as Anthropic's models API names them (adaptive,
+   * enabled, disabled). Absent for providers that declare efforts only.
+   */
+  thinkingModes?: string[];
 }
 
 export interface ModelCapabilities {
