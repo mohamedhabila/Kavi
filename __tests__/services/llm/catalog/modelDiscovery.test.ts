@@ -109,7 +109,8 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
       performFetch: boundKey(performFetch),
     });
 
-    expect(result.models).toEqual(['claude-haiku-4-5', 'claude-opus-5']);
+    // Newest first, by the release date the models API gives.
+    expect(result.models).toEqual(['claude-opus-5', 'claude-haiku-4-5']);
     expect(result.capabilities['claude-opus-5']).toEqual({
       vision: true,
       tools: true,
@@ -249,5 +250,32 @@ describe('fetchProviderModels — Anthropic live discovery', () => {
     });
 
     expect(result.models).toEqual(['claude-opus-5']);
+  });
+});
+
+describe('fetchProviderModels — OpenAI-compatible discovery order', () => {
+  it('lists the newest model first by its created time, and undated ones in the provider order', async () => {
+    const performFetch = jest.fn().mockResolvedValueOnce(
+      jsonResponse({
+        data: [
+          { id: 'gpt-4.1', created: 1_744_000_000 },
+          { id: 'gpt-6-astra', created: 1_788_000_000 },
+          { id: 'custom-b' },
+          { id: 'gpt-5.5', created: 1_777_000_000 },
+          { id: 'custom-a' },
+        ],
+      }),
+    );
+
+    const result = await fetchProviderModels({
+      provider: { ...baseProvider(), id: 'openai', name: 'OpenAI', model: 'gpt-6-astra' },
+      baseUrl: 'https://api.openai.com/v1',
+      headers: {},
+      transport: 'openai',
+      createTimeoutSignal,
+      performFetch,
+    });
+
+    expect(result.models).toEqual(['gpt-6-astra', 'gpt-5.5', 'gpt-4.1', 'custom-b', 'custom-a']);
   });
 });

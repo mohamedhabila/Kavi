@@ -29,9 +29,8 @@ describe('LlmService', () => {
       const service = new LlmService(makeConfig());
       const result = await service.fetchModels();
 
-      expect(result.models).toContain('gpt-5-mini');
-      expect(result.models).toContain('gpt-5.4');
-      expect(result.models).toEqual([...result.models].sort());
+      // Undated entries keep the provider's order (dated ones go newest first).
+      expect(result.models).toEqual(['gpt-5.4', 'gpt-5-mini']);
     });
 
     it('should detect vision capabilities for gpt-5.4', async () => {

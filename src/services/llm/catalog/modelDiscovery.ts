@@ -27,7 +27,33 @@ type DiscoveredModel = Readonly<{
   model: string;
   capabilities: ModelCapabilities;
   contextWindow?: number;
+  createdAt?: number;
 }>;
+
+/**
+ * When a models API entry says the model was released, in epoch milliseconds: Anthropic's
+ * `created_at` (RFC 3339), OpenAI's and OpenRouter's `created` (Unix seconds).
+ */
+function advertisedCreationTime(entry: unknown): number | undefined {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
+  const record = entry as Record<string, unknown>;
+  if (typeof record.created === 'number' && Number.isFinite(record.created)) {
+    return record.created * 1000;
+  }
+  if (typeof record.created_at === 'string') {
+    const parsed = Date.parse(record.created_at);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Newest model first, so the current generation leads the picker and older ones follow.
+ * Entries the provider does not date keep the provider's own order, after the dated ones.
+ */
+function newestFirst<T extends { createdAt?: number }>(entries: T[]): T[] {
+  return [...entries].sort((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0));
+}
 
 function declaredStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
@@ -120,7 +146,7 @@ async function listAnthropicModels(args: {
 }): Promise<ModelsWithCapabilities> {
   const capabilities: Record<string, ModelCapabilities> = {};
   const contextWindows: Record<string, number> = {};
-  const models: string[] = [];
+  const models: Array<{ model: string; createdAt?: number }> = [];
 
   try {
     let afterId: string | undefined;
@@ -139,7 +165,7 @@ async function listAnthropicModels(args: {
         const id = typeof record.id === 'string' ? record.id.trim() : '';
         if (!id) continue;
 
-        models.push(id);
+        models.push({ model: id, createdAt: advertisedCreationTime(record) });
         capabilities[id] = resolveAnthropicModelCapabilities(record, id);
 
         const contextWindow = readAdvertisedContextWindow(record);
@@ -161,7 +187,7 @@ async function listAnthropicModels(args: {
     }
 
     return {
-      models: models.sort((left, right) => left.localeCompare(right)),
+      models: newestFirst(models).map((entry) => entry.model),
       capabilities,
       contextWindows,
     };
@@ -294,18 +320,19 @@ export async function fetchProviderModels(args: {
           if (advertisedContextWindow !== undefined) {
             recordProviderContextWindow(model, advertisedContextWindow);
           }
+          const createdAt = advertisedCreationTime(entry);
           return {
             model,
             capabilities: resolveDiscoveredModelCapabilities(entry, model),
             ...(advertisedContextWindow !== undefined
               ? { contextWindow: advertisedContextWindow }
               : {}),
+            ...(createdAt !== undefined ? { createdAt } : {}),
           };
         })
         .filter((entry: DiscoveredModel | undefined): entry is DiscoveredModel =>
           Boolean(entry?.model),
-        )
-        .sort((left, right) => left.model.localeCompare(right.model));
+        );
 
       for (const entry of discoveredModels) {
         capabilities[entry.model] = entry.capabilities;
@@ -315,7 +342,7 @@ export async function fetchProviderModels(args: {
       }
 
       return {
-        models: discoveredModels.map((entry) => entry.model),
+        models: newestFirst(discoveredModels).map((entry) => entry.model),
         capabilities,
         contextWindows,
       };
