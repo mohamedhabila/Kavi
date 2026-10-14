@@ -3,7 +3,6 @@ import { useChatStore } from '../../../store/useChatStore';
 import { buildAssistantMessageMetadata } from '../../../utils/assistantMessageMetadata';
 import type { AgentRun, AgentRunTerminalReason } from '../../../types/agentRun';
 import type { ConversationLogEntry } from '../../../types/conversation';
-import type { RecoverAgentRunFinalPreview } from './contracts';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -29,9 +28,9 @@ type FinalizeTrackedRun = (
 /**
  * Ends a foreground run whose model stream failed. A run still waiting on async operations
  * stays open in its work phase; any other run fails, keeping what it streamed and showing
- * the error, and the tools it finished stay shown as done.
+ * the error, and the tools it finished stay shown as done. Nothing writes an answer for it.
  */
-export async function handleForegroundInterruptedResponseRecovery(params: {
+export function handleForegroundInterruptedResponseRecovery(params: {
   appendConversationLog: AppendConversationLog;
   assertNotAborted: () => void;
   conversationId: string;
@@ -39,17 +38,15 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
   errorMessage: string;
   finalizeTrackedRun: FinalizeTrackedRun;
   outcome: AgentControlGraphInterruptedResponseOutcome;
-  recoverAgentRunFinalPreview: RecoverAgentRunFinalPreview;
   requestPersistenceCheckpoint: () => void;
   runId?: string | null;
   setAgentRunPhase: ChatStore['setAgentRunPhase'];
   setChatError: (message: string | null) => void;
-  signal: AbortSignal;
   updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
   updateMessage: ChatStore['updateMessage'];
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
   visibleContent: string;
-}): Promise<void> {
+}): void {
   const { outcome, runId } = params;
 
   if (runId && outcome.keepRunOpen === 'async-operations') {
@@ -86,19 +83,12 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
     return;
   }
 
-  const recoveredFinal = await params.recoverAgentRunFinalPreview(
-    outcome.status,
-    undefined,
-    undefined,
-    params.signal,
-  );
   params.assertNotAborted();
-  const latestSummary =
-    recoveredFinal.preview || params.visibleContent || `Error: ${params.errorMessage}`;
+  const visibleFailure = params.visibleContent || `Error: ${params.errorMessage}`;
 
   const terminalized = params.finalizeTrackedRun(
     outcome.status,
-    latestSummary,
+    visibleFailure,
     outcome.checkpointTitle,
     outcome.checkpointDetail,
   );
@@ -130,31 +120,21 @@ export async function handleForegroundInterruptedResponseRecovery(params: {
     return;
   }
 
-  if (!recoveredFinal.recovered) {
-    params.setChatError(params.errorMessage);
-  }
+  params.setChatError(params.errorMessage);
   params.appendConversationLog(params.conversationId, {
     kind: 'error',
-    level: recoveredFinal.recovered ? 'warning' : 'error',
-    title: recoveredFinal.recovered ? outcome.checkpointTitle : 'Response failed',
+    level: 'error',
+    title: 'Response failed',
     detail: outcome.checkpointDetail,
   });
-
-  if (!recoveredFinal.recovered) {
-    params.updateMessage(
-      params.conversationId,
-      params.currentAssistantMessageId,
-      params.visibleContent || `Error: ${params.errorMessage}`,
-    );
-    params.updateMessageAssistantMetadata(
-      params.conversationId,
-      params.currentAssistantMessageId,
-      buildAssistantMessageMetadata('final', {
-        completionStatus: 'incomplete',
-        finishReason: 'response_failed',
-      }),
-    );
-  }
-
+  params.updateMessage(params.conversationId, params.currentAssistantMessageId, visibleFailure);
+  params.updateMessageAssistantMetadata(
+    params.conversationId,
+    params.currentAssistantMessageId,
+    buildAssistantMessageMetadata('final', {
+      completionStatus: 'incomplete',
+      finishReason: 'response_failed',
+    }),
+  );
   params.requestPersistenceCheckpoint();
 }

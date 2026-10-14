@@ -155,7 +155,7 @@ describe('ChatScreen agent callbacks', () => {
           {
             kind: 'final',
             completionStatus: 'complete',
-            finishReason: 'task_complete',
+            finishReason: 'stop',
           },
         );
         callbacks.onAgentControlGraphStateChange(

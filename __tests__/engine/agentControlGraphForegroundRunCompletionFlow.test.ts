@@ -59,7 +59,7 @@ describe('foregroundRun completion flow', () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const reviewCompletion = jest.fn().mockResolvedValue({
+    const reviewCompletion = jest.fn().mockReturnValue({
       handled: false as const,
       completionStatus: 'completed' as const,
       latestSummary: 'Turn completed',
@@ -105,7 +105,7 @@ describe('foregroundRun completion flow', () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const reviewCompletion = jest.fn().mockResolvedValue({
+    const reviewCompletion = jest.fn().mockReturnValue({
       handled: false as const,
       completionStatus: 'completed' as const,
       latestSummary: 'Worker started',
@@ -198,7 +198,7 @@ describe('foregroundRun completion flow', () => {
 
   it('forces terminal review for a failed graph even while async work remains', async () => {
     const enterAsyncMonitoringPhase = jest.fn();
-    const reviewCompletion = jest.fn().mockResolvedValue({
+    const reviewCompletion = jest.fn().mockReturnValue({
       handled: true as const,
       terminalized: true,
     });
@@ -244,7 +244,7 @@ describe('foregroundRun completion flow', () => {
         currentAssistantMessageId: 'assistant-1',
         enterAsyncMonitoringPhase: jest.fn(),
         finalizeCompletion,
-        reviewCompletion: jest.fn().mockResolvedValue({
+        reviewCompletion: jest.fn().mockReturnValue({
           handled: true as const,
           terminalized,
         }),
@@ -261,7 +261,7 @@ describe('foregroundRun completion flow', () => {
     const appendConversationLog = jest.fn();
     const enterAsyncMonitoringPhase = jest.fn();
     const finalizeCompletion = jest.fn().mockReturnValue(true);
-    const reviewCompletion = jest.fn().mockResolvedValue({
+    const reviewCompletion = jest.fn().mockReturnValue({
       handled: false as const,
       completionStatus: 'completed' as const,
       latestSummary: 'Turn completed',
@@ -309,7 +309,7 @@ describe('foregroundRun completion flow', () => {
       currentAssistantMessageId: 'assistant-1',
       enterAsyncMonitoringPhase: jest.fn(),
       finalizeCompletion,
-      reviewCompletion: jest.fn().mockResolvedValue({
+      reviewCompletion: jest.fn().mockReturnValue({
         handled: false as const,
         completionStatus: 'completed' as const,
         latestSummary: 'Unsettled result',

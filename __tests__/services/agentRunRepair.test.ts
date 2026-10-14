@@ -1,76 +1,25 @@
-import { repairTerminalAgentRunsMissingFinalResponses } from '../../src/services/agents/agentRunRepair';
+import { reconcileCompletedAgentRunGraphs } from '../../src/services/agents/agentRunRepair';
+import { createInitialAgentControlGraphSnapshot } from '../../src/engine/graph/agentControlGraph';
+import { useChatStore } from '../../src/store/useChatStore';
+import type { AgentRun } from '../../src/types/agentRun';
+import type { Message } from '../../src/types/message';
 
-const mockGetProviderApiKey = jest.fn().mockResolvedValue(undefined);
-const mockUpdateMessage = jest.fn();
-const mockUpdateMessageAssistantMetadata = jest.fn();
-const mockUpdateMessageProviderReplay = jest.fn();
-const mockAddMessage = jest.fn();
-const mockAppendAgentRunCheckpoint = jest.fn();
-const mockUpdateAgentRunSummary = jest.fn();
-const mockAddConversationLog = jest.fn();
-const mockPublishConversationTurnMemory = jest.fn();
-
-let mockChatStoreState: any;
-
-function updateConversation(conversationId: string, updater: (conversation: any) => any) {
-  mockChatStoreState.conversations = mockChatStoreState.conversations.map((conversation: any) =>
-    conversation.id === conversationId ? updater(conversation) : conversation,
-  );
-}
-
-jest.mock('../../src/store/useChatStore', () => ({
-  useChatStore: {
-    getState: () => mockChatStoreState,
-  },
+jest.mock('../../src/store/chatStorePersistence', () => ({
+  ...jest.requireActual('../../src/store/chatStorePersistence'),
+  flushChatStorePersistenceNow: jest.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../src/store/useSettingsStore', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      activeProviderId: 'openai',
-      activeModel: 'gpt-5.4',
-      systemPrompt: 'You are helpful.',
-      providers: [
-        {
-          id: 'openai',
-          name: 'OpenAI',
-          baseUrl: 'https://api.openai.com/v1',
-          apiKey: '',
-          model: 'gpt-5.4',
-          enabled: true,
-        },
-      ],
-    }),
-  },
-}));
-
-jest.mock('../../src/services/storage/SecureStorage', () => ({
-  getProviderApiKey: (...args: any[]) => mockGetProviderApiKey(...args),
-}));
-
-jest.mock('../../src/services/memory/core/memoryCapture', () => ({
-  publishConversationTurnMemory: (...args: unknown[]) => mockPublishConversationTurnMemory(...args),
-}));
-jest.mock('../../src/services/agents/subAgent', () => ({
-  listActiveSubAgents: jest.fn(() => []),
-}));
-
-jest.mock('../../src/utils/id', () => ({
-  generateId: jest.fn(() => 'generated-id'),
-}));
-
-function createTerminalRun(overrides: Partial<any> = {}) {
+function run(id: string, status: AgentRun['status'], userMessageId: string): AgentRun {
   return {
-    id: 'run-1',
-    userMessageId: 'user-1',
-    goal: 'Complete the task.',
-    status: 'completed',
-    createdAt: 1,
-    updatedAt: 3,
+    id,
+    userMessageId,
+    goal: 'Answer',
+    status,
+    createdAt: 10,
+    updatedAt: 20,
     currentPhase: 'deliver',
     phases: [],
     checkpoints: [],
-    latestSummary: 'Recovering the final response from verified results.',
     summary: {
       assistantTurns: 1,
       startedTools: 0,
@@ -78,498 +27,65 @@ function createTerminalRun(overrides: Partial<any> = {}) {
       failedTools: 0,
       spawnedSubAgents: 0,
     },
-    ...overrides,
-  };
+    controlGraph: createInitialAgentControlGraphSnapshot({ status: 'awaiting_review' }),
+  } as AgentRun;
 }
 
-beforeEach(() => {
-  jest.clearAllMocks();
+function seed(messages: Message[], agentRuns: AgentRun[]): void {
+  useChatStore.setState({
+    conversations: [
+      { id: 'c1', title: 'Thread', messages, createdAt: 1, updatedAt: 20, agentRuns } as never,
+    ],
+    activeConversationId: 'c1',
+  });
+}
 
-  mockChatStoreState = {
-    conversations: [],
-    updateMessage: mockUpdateMessage.mockImplementation(
-      (conversationId: string, messageId: string, content: string) => {
-        updateConversation(conversationId, (conversation) => ({
-          ...conversation,
-          messages: conversation.messages.map((message: any) =>
-            message.id === messageId ? { ...message, content } : message,
-          ),
-        }));
-      },
-    ),
-    updateMessageAssistantMetadata: mockUpdateMessageAssistantMetadata.mockImplementation(
-      (conversationId: string, messageId: string, assistantMetadata: any) => {
-        updateConversation(conversationId, (conversation) => ({
-          ...conversation,
-          messages: conversation.messages.map((message: any) =>
-            message.id === messageId ? { ...message, assistantMetadata } : message,
-          ),
-        }));
-      },
-    ),
-    updateMessageProviderReplay: mockUpdateMessageProviderReplay,
-    addMessage: mockAddMessage.mockImplementation((conversationId: string, message: any) => {
-      updateConversation(conversationId, (conversation) => ({
-        ...conversation,
-        messages: [...conversation.messages, { ...message, timestamp: 5 }],
-      }));
-    }),
-    appendAgentRunCheckpoint: mockAppendAgentRunCheckpoint,
-    updateAgentRunSummary: mockUpdateAgentRunSummary,
-    addConversationLog: mockAddConversationLog,
-  };
-});
+function storedRun(id: string): AgentRun | undefined {
+  return useChatStore
+    .getState()
+    .conversations[0]?.agentRuns?.find((candidate) => candidate.id === id);
+}
 
-describe('repairTerminalAgentRunsMissingFinalResponses', () => {
-  it('repairs terminal runs from live worker snapshots even when the completion message was never persisted', async () => {
-    mockChatStoreState.conversations = [
-      {
-        id: 'conv-1',
-        title: 'Repo audit',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        createdAt: 1,
-        updatedAt: 4,
-        messages: [
-          {
-            id: 'user-1',
-            role: 'user',
-            content: 'Audit the repository.',
-            timestamp: 1,
-          },
-          {
-            id: 'assistant-partial',
-            role: 'assistant',
-            content: '',
-            timestamp: 2,
-            assistantMetadata: {
-              kind: 'final',
-              completionStatus: 'incomplete',
-              finishReason: 'response_failed',
-            },
-          },
-        ],
-        agentRuns: [
-          createTerminalRun({
-            summary: {
-              assistantTurns: 1,
-              startedTools: 1,
-              completedTools: 1,
-              failedTools: 0,
-              spawnedSubAgents: 1,
-            },
-          }),
-        ],
-      },
-    ];
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [
+describe('reconcileCompletedAgentRunGraphs', () => {
+  it('settles the graph of a completed run whose final answer was persisted', async () => {
+    seed(
+      [
+        { id: 'u1', role: 'user', content: 'Hi', timestamp: 10 },
         {
-          sessionId: 'sub-1',
-          parentConversationId: 'conv-1',
-          agentRunId: 'run-1',
-          depth: 1,
-          startedAt: 2,
-          updatedAt: 4,
-          status: 'completed',
-          sandboxPolicy: 'inherit',
-          output:
-            'Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
-          toolsUsed: ['sessions_spawn'],
-        },
-      ],
-    });
-
-    expect(repairedRunIds).toEqual(['run-1']);
-    expect(mockUpdateMessage).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      'Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
-    );
-    expect(mockChatStoreState.conversations[0].messages[1]).toEqual(
-      expect.objectContaining({
-        content:
-          'Repository audit complete after verifying the workflow repairs and passing the targeted tests.',
-        assistantMetadata: expect.objectContaining({
-          kind: 'final',
-          completionStatus: 'complete',
-        }),
-      }),
-    );
-    expect(mockUpdateMessageProviderReplay).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      undefined,
-    );
-    expect(mockAppendAgentRunCheckpoint).toHaveBeenCalledWith(
-      'conv-1',
-      expect.objectContaining({
-        title: 'Final response delivered',
-      }),
-      'run-1',
-    );
-  });
-
-  it('promotes an interrupted assistant draft to a final response when synthesis is unavailable', async () => {
-    mockChatStoreState.conversations = [
-      {
-        id: 'conv-1',
-        title: 'Cleanup',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        createdAt: 1,
-        updatedAt: 3,
-        messages: [
-          {
-            id: 'user-1',
-            role: 'user',
-            content: 'Summarize the cleanup.',
-            timestamp: 1,
-          },
-          {
-            id: 'assistant-partial',
-            role: 'assistant',
-            content: 'Interrupted draft answer',
-            timestamp: 2,
-            assistantMetadata: {
-              kind: 'final',
-              completionStatus: 'incomplete',
-              finishReason: 'response_failed',
-            },
-          },
-        ],
-        agentRuns: [createTerminalRun()],
-      },
-    ];
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [],
-    });
-
-    expect(repairedRunIds).toEqual(['run-1']);
-    expect(mockUpdateMessage).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      'The run completed, but no final response was generated.',
-    );
-    expect(mockUpdateMessageAssistantMetadata).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      expect.objectContaining({
-        kind: 'final',
-        completionStatus: 'complete',
-      }),
-    );
-    expect(mockChatStoreState.conversations[0].messages[1]).toEqual(
-      expect.objectContaining({
-        content: 'The run completed, but no final response was generated.',
-        assistantMetadata: expect.objectContaining({
-          kind: 'final',
-          completionStatus: 'complete',
-        }),
-      }),
-    );
-  });
-
-  it('uses a safe failure fallback instead of promoting an interrupted draft for failed runs', async () => {
-    mockChatStoreState.conversations = [
-      {
-        id: 'conv-1',
-        title: 'Cleanup',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        createdAt: 1,
-        updatedAt: 3,
-        messages: [
-          {
-            id: 'user-1',
-            role: 'user',
-            content: 'Summarize the cleanup.',
-            timestamp: 1,
-          },
-          {
-            id: 'assistant-partial',
-            role: 'assistant',
-            content: 'Interrupted draft answer',
-            timestamp: 2,
-            assistantMetadata: {
-              kind: 'final',
-              completionStatus: 'incomplete',
-              finishReason: 'response_failed',
-            },
-          },
-        ],
-        agentRuns: [createTerminalRun({ status: 'failed', currentPhase: 'work' })],
-      },
-    ];
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [],
-    });
-
-    expect(repairedRunIds).toEqual(['run-1']);
-    expect(mockUpdateMessage).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      'The run failed before it generated a final response.',
-    );
-    expect(mockUpdateMessageAssistantMetadata).toHaveBeenCalledWith(
-      'conv-1',
-      'assistant-partial',
-      expect.objectContaining({
-        kind: 'final',
-        completionStatus: 'complete',
-      }),
-    );
-    expect(mockGetProviderApiKey).not.toHaveBeenCalled();
-  });
-
-  it('does not repair an older terminal run while a newer run in the same conversation is still active', async () => {
-    mockChatStoreState.conversations = [
-      {
-        id: 'conv-1',
-        title: 'Research',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        createdAt: 1,
-        updatedAt: 6,
-        messages: [
-          {
-            id: 'user-1',
-            role: 'user',
-            content: 'Complete the first research task.',
-            timestamp: 1,
-          },
-          {
-            id: 'user-2',
-            role: 'user',
-            content: 'Continue with a second research task.',
-            timestamp: 5,
-          },
-          {
-            id: 'assistant-running',
-            role: 'assistant',
-            content: '',
-            timestamp: 6,
-            toolCalls: [
-              {
-                id: 'tool-running',
-                name: 'web_fetch',
-                arguments: '{"urls":["https://example.com"]}',
-                status: 'running',
-                createdAt: 6,
-                updatedAt: 6,
-              },
-            ],
-          },
-        ],
-        agentRuns: [
-          createTerminalRun({
-            id: 'run-terminal',
-            userMessageId: 'user-1',
-            createdAt: 1,
-            updatedAt: 4,
-          }),
-          {
-            ...createTerminalRun({
-              id: 'run-active',
-              userMessageId: 'user-2',
-              createdAt: 5,
-              updatedAt: 6,
-            }),
-            status: 'running',
-            currentPhase: 'work',
-          },
-        ],
-      },
-    ];
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [],
-    });
-
-    expect(repairedRunIds).toEqual([]);
-    expect(mockUpdateMessage).not.toHaveBeenCalled();
-    expect(mockAddMessage).not.toHaveBeenCalled();
-    expect(mockAppendAgentRunCheckpoint).not.toHaveBeenCalled();
-  });
-
-  it('does not append a cross-turn final for a compacted historical run after a newer terminal run', async () => {
-    mockChatStoreState.conversations = [
-      {
-        id: 'conv-compacted-history',
-        title: 'Compacted recovery history',
-        providerId: 'openai',
-        systemPrompt: 'You are helpful.',
-        createdAt: 1,
-        updatedAt: 30,
-        messages: [
-          {
-            id: 'compact-10',
-            role: 'system',
-            content: '[Conversation Summary] The earlier request was compacted.',
-            timestamp: 10,
-          },
-          {
-            id: 'user-newer',
-            role: 'user',
-            content: 'Complete the newer task.',
-            timestamp: 20,
-          },
-          {
-            id: 'final-newer',
-            role: 'assistant',
-            content: 'The newer run failed before completion.',
-            timestamp: 30,
-            assistantMetadata: {
-              kind: 'final',
-              completionStatus: 'complete',
-              finishReason: 'fallback_from_evidence',
-            },
-          },
-        ],
-        agentRuns: [
-          createTerminalRun({
-            id: 'run-compacted',
-            userMessageId: 'user-compacted-away',
-            createdAt: 1,
-            updatedAt: 15,
-          }),
-          createTerminalRun({
-            id: 'run-newer',
-            userMessageId: 'user-newer',
-            status: 'failed',
-            createdAt: 20,
-            updatedAt: 30,
-          }),
-        ],
-      },
-    ];
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [],
-      synthesisSweepBudgetMs: 0,
-    });
-
-    expect(repairedRunIds).toEqual([]);
-    expect(mockAddMessage).not.toHaveBeenCalled();
-    expect(mockPublishConversationTurnMemory).not.toHaveBeenCalled();
-    expect(mockChatStoreState.conversations[0].messages.at(-1)?.id).toBe('final-newer');
-  });
-
-  it('uses deterministic fallbacks for every remaining run after the shared synthesis budget expires', async () => {
-    mockChatStoreState.conversations = ['1', '2'].map((suffix) => ({
-      id: `conv-${suffix}`,
-      title: `Recovery ${suffix}`,
-      providerId: 'openai',
-      systemPrompt: 'You are helpful.',
-      createdAt: 1,
-      updatedAt: 3,
-      messages: [
-        {
-          id: `user-${suffix}`,
-          role: 'user',
-          content: `Complete recovery ${suffix}.`,
-          timestamp: 1,
-        },
-        {
-          id: `assistant-${suffix}`,
+          id: 'a1',
           role: 'assistant',
-          content: `Interrupted evidence ${suffix}`,
-          timestamp: 2,
-          assistantMetadata: {
-            kind: 'final',
-            completionStatus: 'incomplete',
-            finishReason: 'response_failed',
-          },
+          content: 'Hello.',
+          timestamp: 11,
+          assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
         },
       ],
-      agentRuns: [
-        createTerminalRun({
-          id: `run-${suffix}`,
-          userMessageId: `user-${suffix}`,
-        }),
-      ],
-    }));
-
-    const repairedRunIds = await repairTerminalAgentRunsMissingFinalResponses({
-      activeSubAgents: [],
-      synthesisSweepBudgetMs: 0,
-    });
-
-    expect(repairedRunIds).toEqual(['run-1', 'run-2']);
-    expect(mockGetProviderApiKey).not.toHaveBeenCalled();
-    expect(mockUpdateMessage).toHaveBeenNthCalledWith(
-      1,
-      'conv-1',
-      'assistant-1',
-      'The run completed, but no final response was generated.',
+      [run('r1', 'completed', 'u1')],
     );
-    expect(mockUpdateMessage).toHaveBeenNthCalledWith(
-      2,
-      'conv-2',
-      'assistant-2',
-      'The run completed, but no final response was generated.',
-    );
+
+    await expect(reconcileCompletedAgentRunGraphs()).resolves.toEqual(['r1']);
+    expect(storedRun('r1')?.controlGraph?.status).toBe('finalized');
   });
 
-  it('falls back after a positive shared deadline when provider hydration never resolves', async () => {
-    jest.useFakeTimers();
-    try {
-      mockGetProviderApiKey.mockImplementationOnce(() => new Promise(() => undefined));
-      mockChatStoreState.conversations = [
-        {
-          id: 'conv-stalled-provider',
-          title: 'Stalled provider recovery',
-          providerId: 'openai',
-          systemPrompt: 'You are helpful.',
-          createdAt: 1,
-          updatedAt: 3,
-          messages: [
-            {
-              id: 'user-stalled-provider',
-              role: 'user',
-              content: 'Complete the stalled recovery.',
-              timestamp: 1,
-            },
-            {
-              id: 'assistant-stalled-provider',
-              role: 'assistant',
-              content: 'Interrupted evidence',
-              timestamp: 2,
-              assistantMetadata: {
-                kind: 'final',
-                completionStatus: 'incomplete',
-                finishReason: 'response_failed',
-              },
-            },
-          ],
-          agentRuns: [
-            createTerminalRun({
-              id: 'run-stalled-provider',
-              userMessageId: 'user-stalled-provider',
-            }),
-          ],
+  // The startup sweep used to write a synthesized or fallback answer ("The run failed before
+  // it generated a final response.") into every terminal run without one.
+  it('leaves a run that ended without an answer as it ended', async () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: 'Hi', timestamp: 10 },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: 'Half an ans',
+        timestamp: 11,
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
         },
-      ];
+      },
+    ];
+    seed(messages, [run('r1', 'failed', 'u1')]);
 
-      const repair = repairTerminalAgentRunsMissingFinalResponses({
-        activeSubAgents: [],
-        synthesisSweepBudgetMs: 25,
-      });
-      expect(mockGetProviderApiKey).toHaveBeenCalledTimes(1);
-
-      await jest.advanceTimersByTimeAsync(25);
-
-      await expect(repair).resolves.toEqual(['run-stalled-provider']);
-      expect(mockUpdateMessage).toHaveBeenCalledWith(
-        'conv-stalled-provider',
-        'assistant-stalled-provider',
-        'The run completed, but no final response was generated.',
-      );
-    } finally {
-      jest.useRealTimers();
-    }
+    await expect(reconcileCompletedAgentRunGraphs()).resolves.toEqual([]);
+    expect(useChatStore.getState().conversations[0]?.messages).toEqual(messages);
   });
 });

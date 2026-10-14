@@ -250,7 +250,7 @@ describe('buildAssistantBubbleViewModel', () => {
           assistantMetadata: {
             kind: 'intermediate',
             completionStatus: 'incomplete',
-            finishReason: 'terminal_review_pending',
+            finishReason: 'length',
           },
         },
         {
@@ -306,7 +306,7 @@ describe('buildAssistantBubbleViewModel', () => {
           assistantMetadata: {
             kind: 'intermediate',
             completionStatus: 'incomplete',
-            finishReason: 'terminal_review_pending',
+            finishReason: 'length',
           },
         },
       ],

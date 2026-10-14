@@ -50,12 +50,6 @@ function configureReadyPreflight(
     provider,
     providerWithApiKey: provider,
     model: provider.model,
-    finalizationProviderContext: {
-      provider,
-      model: provider.model,
-      systemPromptText: conversation.systemPrompt,
-      conversationId: conversation.id,
-    },
   });
 }
 

@@ -20,13 +20,11 @@ export function createForegroundConversationRunRuntime(
     clearForegroundRequestIfCurrent,
     completeRunOnce,
     conversationId,
-    finalizationProviderContext,
     getCurrentConversation,
     guardRunCallback,
     model,
     options,
     provider,
-    wrapResumeAgentRun,
     shared,
   } = params;
   const appendConversationLog = (entry: ForegroundRunLogEntryInput) =>
@@ -63,14 +61,12 @@ export function createForegroundConversationRunRuntime(
     clearForegroundRequestIfCurrent,
     completeRunOnce,
     conversationId,
-    finalizationProviderContext,
     flushPendingSurfacedSubAgentOutputs,
     getCurrentAssistantMessageId,
     getCurrentConversation,
     mutableState,
     runId,
     runStartedAt,
-    wrapResumeAgentRun,
     shared,
     trackedRunStore,
   });

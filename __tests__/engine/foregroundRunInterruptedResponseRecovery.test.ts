@@ -10,14 +10,10 @@ const TURN_FAILED: AgentControlGraphInterruptedResponseOutcome = {
 function handle(params: {
   outcome?: AgentControlGraphInterruptedResponseOutcome;
   finalizeTrackedRun?: jest.Mock;
-  recovered?: { preview?: string; recovered: boolean; delivered: boolean };
 }) {
   const effects = {
     appendConversationLog: jest.fn(),
     finalizeTrackedRun: params.finalizeTrackedRun ?? jest.fn(() => true),
-    recoverAgentRunFinalPreview: jest.fn(
-      async () => params.recovered ?? { recovered: false, delivered: false },
-    ),
     requestPersistenceCheckpoint: jest.fn(),
     setAgentRunPhase: jest.fn(),
     setChatError: jest.fn(),
@@ -25,7 +21,7 @@ function handle(params: {
     updateMessage: jest.fn(),
     updateMessageAssistantMetadata: jest.fn(),
   };
-  const done = handleForegroundInterruptedResponseRecovery({
+  handleForegroundInterruptedResponseRecovery({
     ...effects,
     assertNotAborted: jest.fn(),
     conversationId: 'conversation-1',
@@ -33,16 +29,14 @@ function handle(params: {
     errorMessage: 'stream interrupted',
     outcome: params.outcome ?? TURN_FAILED,
     runId: 'run-1',
-    signal: new AbortController().signal,
     visibleContent: 'Partial answer',
   });
-  return { done, effects };
+  return effects;
 }
 
 describe('foreground interrupted response recovery', () => {
-  it('fails the run, keeps what streamed, and shows the error', async () => {
-    const { done, effects } = handle({});
-    await done;
+  it('fails the run, keeps what streamed, and shows the error', () => {
+    const effects = handle({});
 
     expect(effects.finalizeTrackedRun).toHaveBeenCalledWith(
       'failed',
@@ -64,8 +58,8 @@ describe('foreground interrupted response recovery', () => {
     expect(effects.requestPersistenceCheckpoint).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a run waiting on async operations open in its work phase', async () => {
-    const { done, effects } = handle({
+  it('keeps a run waiting on async operations open in its work phase', () => {
+    const effects = handle({
       outcome: {
         status: 'failed',
         keepRunOpen: 'async-operations',
@@ -73,7 +67,6 @@ describe('foreground interrupted response recovery', () => {
         checkpointDetail: 'Waiting for Deploy run to finish.',
       },
     });
-    await done;
 
     expect(effects.finalizeTrackedRun).not.toHaveBeenCalled();
     expect(effects.setAgentRunPhase).toHaveBeenCalledWith(
@@ -85,9 +78,8 @@ describe('foreground interrupted response recovery', () => {
     expect(effects.setChatError).not.toHaveBeenCalled();
   });
 
-  it('holds the run for review when the graph refuses to terminalize it', async () => {
-    const { done, effects } = handle({ finalizeTrackedRun: jest.fn(() => false) });
-    await done;
+  it('holds the run for review when the graph refuses to terminalize it', () => {
+    const effects = handle({ finalizeTrackedRun: jest.fn(() => false) });
 
     expect(effects.setAgentRunPhase).toHaveBeenCalledWith(
       'conversation-1',

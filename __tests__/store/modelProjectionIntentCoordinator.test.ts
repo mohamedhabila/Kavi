@@ -85,14 +85,6 @@ describe('model projection intent coordinator', () => {
   it.each([
     ['content without terminal metadata', undefined],
     [
-      'terminal review pending',
-      {
-        kind: 'final' as const,
-        completionStatus: 'incomplete' as const,
-        finishReason: 'terminal_review_pending',
-      },
-    ],
-    [
       'surfaced worker output pending',
       {
         kind: 'final' as const,

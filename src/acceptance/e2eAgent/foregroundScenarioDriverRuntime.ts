@@ -23,9 +23,7 @@ import {
   releaseModelProjection,
   waitForModelProjectionAvailability,
 } from '../../store/modelProjectionOwnership';
-import { resolveConversationProviderContext } from '../../services/llm/support/providerSupport';
 import { publishConversationTurnMemory } from '../../services/memory/core/memoryCapture';
-import { createAgentRunFinalResponse } from '../../screens/agentRunFinalResponse';
 import { truncateLogDetail } from '../../screens/chatFormatting';
 import {
   STREAM_STORE_CHECKPOINT_INTERVAL_MS,
@@ -223,47 +221,11 @@ export function createForegroundScenarioRuntime(
 ): ForegroundScenarioRuntime {
   const requests = createForegroundScenarioRequestRegistry();
   const streaming = createForegroundScenarioStreamingState();
-  const pendingFinalizations = new Map<string, Promise<string | undefined>>();
   const pendingTerminalReviews = new Map<string, Promise<void>>();
   const pendingAsyncResumes = new Map<string, Promise<void>>();
   let chatError: string | null = null;
   let activeTurnMaxTokens = input.maxTokens;
   let context: ExecuteForegroundConversationRunParams['context'];
-
-  const ensureAgentRunFinalResponse = createAgentRunFinalResponse({
-    appendAgentRunCheckpoint: (...args) =>
-      useChatStore.getState().appendAgentRunCheckpoint(...args),
-    appendConversationLog: (conversationId, entry) =>
-      useChatStore.getState().addConversationLog(conversationId, {
-        ...entry,
-        detail: truncateLogDetail(entry.detail),
-      }),
-    pendingAgentRunFinalizations: pendingFinalizations,
-    getResolveConversationFinalizationContext: () => async (conversation) => {
-      const settings = useSettingsStore.getState();
-      const providerContext = await resolveConversationProviderContext({
-        activeModel: settings.activeModel,
-        activeProviderId: settings.activeProviderId,
-        conversation,
-        providers: settings.providers,
-        systemPrompt: settings.systemPrompt,
-      });
-      if (!providerContext) return undefined;
-      return {
-        ...providerContext,
-        conversationId: conversation.id,
-        personaId: conversation.personaId,
-        internalUserMessageCount: 0,
-      };
-    },
-    setAgentRunPhase: (...args) => useChatStore.getState().setAgentRunPhase(...args),
-    updateAgentRunSummary: (...args) => useChatStore.getState().updateAgentRunSummary(...args),
-    updateMessage: (...args) => useChatStore.getState().updateMessage(...args),
-    updateMessageAssistantMetadata: (...args) =>
-      useChatStore.getState().updateMessageAssistantMetadata(...args),
-    updateMessageProviderReplay: (...args) =>
-      useChatStore.getState().updateMessageProviderReplay(...args),
-  });
 
   const resumeAgentRun: ResumeAgentRun = async (params) => {
     await executeForegroundConversationRun({
@@ -305,13 +267,11 @@ export function createForegroundScenarioRuntime(
         }),
       clearPendingRunState: (conversationId, runId) => {
         const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
-        pendingFinalizations.delete(runIdentityKey);
         pendingTerminalReviews.delete(runIdentityKey);
         pendingAsyncResumes.delete(runIdentityKey);
       },
       clearTrackedRunCancellation: clearAgentRunCancellation,
       createId: generateId,
-      ensureAgentRunFinalResponse,
       ensureConversation: (options = {}) => {
         const currentSettings = useSettingsStore.getState();
         const providerId = options.providerId ?? currentSettings.activeProviderId;
@@ -341,7 +301,6 @@ export function createForegroundScenarioRuntime(
     refs: {
       forceNextScrollRef: { current: false },
       pendingAgentRunAsyncResumesRef: { current: pendingAsyncResumes },
-      pendingAgentRunFinalizationsRef: { current: pendingFinalizations },
       pendingAgentRunTerminalReviewsRef: { current: pendingTerminalReviews },
       shouldAutoFollowRef: { current: true },
       streamingDraftsRef: { current: streaming.drafts },

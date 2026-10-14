@@ -116,7 +116,7 @@ it('keeps an active owner but releases a terminal owner left by a crash', async 
   ).toBeUndefined();
 });
 
-it.each(['terminal_review_pending', 'surfaced_worker_output_pending'])(
+it.each(['surfaced_worker_output_pending'])(
   'terminalizes a %s placeholder before releasing a reservation with no journal row',
   async (pendingFinishReason) => {
     const conversationId = addConversation('provider-1', 'Be helpful.');

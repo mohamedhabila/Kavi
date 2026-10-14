@@ -62,12 +62,6 @@ export function createReadyPreflightResult(params: {
     provider: params.provider,
     providerWithApiKey,
     model,
-    finalizationProviderContext: {
-      provider: providerWithApiKey,
-      model,
-      systemPromptText: params.conversation.systemPrompt,
-      conversationId: params.conversation.id,
-    },
   };
 }
 
@@ -187,28 +181,6 @@ export function createExecutionContext(params: {
         ),
       })),
   );
-  const ensureAgentRunFinalResponse = jest.fn(
-    async ({ conversationId, preferredAssistantMessageId }) => {
-      const conversation = conversationsById.get(conversationId);
-      if (!conversation) return undefined;
-      const target = preferredAssistantMessageId
-        ? conversation.messages.find(
-            (message) => message.id === preferredAssistantMessageId && message.role === 'assistant',
-          )
-        : [...conversation.messages]
-            .reverse()
-            .find((message) => message.role === 'assistant' && !message.subAgentEvent);
-      if (!target) return undefined;
-      const content = target.content.trim() || 'Recovered test final response.';
-      updateMessage(conversationId, target.id, content);
-      updateMessageAssistantMetadata(conversationId, target.id, {
-        kind: 'final',
-        completionStatus: 'complete',
-        finishReason: 'recovered_for_execution_test',
-      });
-      return content;
-    },
-  );
   const applyMobileControllerOutcome = jest.fn((conversationId, input) => {
     const conversation = conversationsById.get(conversationId);
     if (!conversation) {
@@ -314,7 +286,6 @@ export function createExecutionContext(params: {
       clearPendingRunState: noOp,
       clearTrackedRunCancellation: noOp,
       createId: () => `generated-${++idSequence}`,
-      ensureAgentRunFinalResponse,
       ensureConversation: params.ensureConversation,
       getConversation: (conversationId: string) => conversationsById.get(conversationId),
       getConversations: () => [...conversationsById.values()],
@@ -326,7 +297,6 @@ export function createExecutionContext(params: {
     refs: {
       forceNextScrollRef: { current: false },
       pendingAgentRunAsyncResumesRef: { current: new Map() },
-      pendingAgentRunFinalizationsRef: { current: new Map() },
       pendingAgentRunTerminalReviewsRef: { current: new Map() },
       shouldAutoFollowRef: { current: true },
       streamingDraftsRef: { current: {} },

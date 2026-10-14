@@ -15,7 +15,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
     const flushPendingSurfacedOutputs = jest.fn();
     const handleInterruptedError = jest.fn().mockResolvedValue(undefined);
     const handleSuccessfulCompletion = jest.fn();
-    const markCurrentAssistantPendingReview = jest.fn();
     const requestPersistenceCheckpoint = jest.fn();
 
     const controller = createForegroundRunTerminalLifecycleController({
@@ -31,7 +30,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs,
       getCurrentAssistantMessageId: () => 'assistant-1',
       getVisibleAssistantContent: () => 'Partial answer',
-      markCurrentAssistantPendingReview,
       handleInterruptedError,
       handleSuccessfulCompletion,
       isAbortErrorLike: () => false,
@@ -62,7 +60,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
   it('runs normal completion and clears the foreground request on done', async () => {
     const clearForegroundRequestIfCurrent = jest.fn();
     const commitAssistantBuffers = jest.fn();
-    const markCurrentAssistantPendingReview = jest.fn();
     const flushPendingSurfacedOutputs = jest.fn();
     const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
 
@@ -79,7 +76,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs,
       getCurrentAssistantMessageId: () => 'assistant-1',
       getVisibleAssistantContent: () => 'Final answer',
-      markCurrentAssistantPendingReview,
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion,
       isAbortErrorLike: () => false,
@@ -91,10 +87,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
     await expect(controller.awaitCompletion()).resolves.toBe('succeeded');
 
     expect(flushPendingSurfacedOutputs).toHaveBeenCalledTimes(1);
-    expect(markCurrentAssistantPendingReview).toHaveBeenCalledWith({
-      currentAssistantMessageId: 'assistant-1',
-      visibleContent: 'Final answer',
-    });
     expect(commitAssistantBuffers).toHaveBeenCalledTimes(1);
     expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: false });
     expect(clearForegroundRequestIfCurrent).toHaveBeenCalledTimes(1);
@@ -121,7 +113,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-duplicate-done',
       getVisibleAssistantContent: () => 'Final answer',
-      markCurrentAssistantPendingReview: jest.fn(),
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion,
       isAbortErrorLike: () => false,
@@ -145,7 +136,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
   });
 
   it('returns failed for a blocked graph after preserving its visible terminal response', async () => {
-    const markCurrentAssistantPendingReview = jest.fn();
     const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
     const controller = createForegroundRunTerminalLifecycleController({
       clearForegroundRequestIfCurrent: jest.fn(),
@@ -160,7 +150,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-blocked',
       getVisibleAssistantContent: () => 'I could not complete the required action.',
-      markCurrentAssistantPendingReview,
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion,
       isAbortErrorLike: () => false,
@@ -176,11 +165,9 @@ describe('foregroundRun terminal lifecycle controller', () => {
 
     await expect(controller.awaitCompletion()).resolves.toBe('failed');
     expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: true });
-    expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
   });
 
   it('returns cancelled for a settled user approval rejection and still runs terminal review', async () => {
-    const markCurrentAssistantPendingReview = jest.fn();
     const handleSuccessfulCompletion = jest.fn().mockResolvedValue(undefined);
     const controller = createForegroundRunTerminalLifecycleController({
       clearForegroundRequestIfCurrent: jest.fn(),
@@ -195,7 +182,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-approval-rejected',
       getVisibleAssistantContent: () => 'No effect was dispatched.',
-      markCurrentAssistantPendingReview,
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion,
       isAbortErrorLike: () => false,
@@ -211,7 +197,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
 
     await expect(controller.awaitCompletion()).resolves.toBe('cancelled');
     expect(handleSuccessfulCompletion).toHaveBeenCalledWith({ forceTerminalReview: true });
-    expect(markCurrentAssistantPendingReview).not.toHaveBeenCalled();
   });
 
   it('does not classify a late done callback as success after cancellation', async () => {
@@ -230,7 +215,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-cancelled',
       getVisibleAssistantContent: () => 'Partial answer',
-      markCurrentAssistantPendingReview: jest.fn(),
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion,
       isAbortErrorLike: () => true,
@@ -262,7 +246,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-2',
       getVisibleAssistantContent: () => 'Broken answer',
-      markCurrentAssistantPendingReview: jest.fn(),
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion: jest.fn(),
       isAbortErrorLike: () => false,
@@ -298,7 +281,6 @@ describe('foregroundRun terminal lifecycle controller', () => {
       flushPendingSurfacedOutputs: jest.fn(),
       getCurrentAssistantMessageId: () => 'assistant-3',
       getVisibleAssistantContent: () => '',
-      markCurrentAssistantPendingReview: jest.fn(),
       handleInterruptedError: jest.fn(),
       handleSuccessfulCompletion: jest.fn(),
       isAbortErrorLike: () => true,
@@ -338,7 +320,7 @@ describe('foregroundRun terminal lifecycle helpers', () => {
 
     expect(
       applyForegroundAssistantDraftIncomplete({
-        finishReason: 'terminal_review_pending',
+        finishReason: 'response_failed',
         messageId: 'assistant-4',
         updateMetadata,
         visibleContent: 'Partial answer',
@@ -347,7 +329,7 @@ describe('foregroundRun terminal lifecycle helpers', () => {
     expect(updateMetadata).toHaveBeenCalledWith(
       'assistant-4',
       expect.objectContaining({
-        finishReason: 'terminal_review_pending',
+        finishReason: 'response_failed',
       }),
     );
   });

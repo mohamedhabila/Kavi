@@ -5,7 +5,7 @@ import {
 import { flushChatStorePersistenceNow } from '../store/chatStorePersistence';
 import { useChatStore } from '../store/useChatStore';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { repairTerminalAgentRunsMissingFinalResponses } from './agents/agentRunRepair';
+import { reconcileCompletedAgentRunGraphs } from './agents/agentRunRepair';
 import { initSubAgentRegistry, listActiveSubAgents } from './agents/subAgent';
 import { recoverInterruptedForegroundModelExecutions } from './executionJournal/foregroundModelExecutionRecovery';
 import { maintainForegroundModelExecutionRetention } from './executionJournal/foregroundModelExecutionRetention';
@@ -155,9 +155,7 @@ async function recoverPersistedAgentStateForSource(
       hasReconciledStartupExecutionOwnership = true;
     }
     if (!hasRepairedStartupAgentRuns) {
-      await repairTerminalAgentRunsMissingFinalResponses({
-        activeSubAgents: listActiveSubAgents(),
-      });
+      await reconcileCompletedAgentRunGraphs();
       hasRepairedStartupAgentRuns = true;
     }
   }

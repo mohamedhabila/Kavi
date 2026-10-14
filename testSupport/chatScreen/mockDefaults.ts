@@ -43,20 +43,12 @@ import {
   mockUpdateToolCallStatus,
 } from './storeMocks';
 import {
-  mockBuildAgentRunCompletionFallbackOutput,
-  mockBuildAgentRunToolResultFallback,
-  mockBuildAgentRunVisibleDraftRecoveryText,
-  mockBuildMissingFinalResponseFallback,
-  mockCanRecoverAgentRunFinalResponse,
   mockCancelOwnedExternalRecoveries,
   mockCancelSubAgent,
-  mockCollectAgentRunFinalizationEvidence,
   mockEvaluateAgentRunWithPilot,
   mockExportConversationAsMarkdown,
   mockFileWrite,
   mockGetProviderApiKey,
-  mockHasCompletedExecutionRecoveryEvidence,
-  mockHasVerifiedFinalizationEvidence,
   holdMockOrchestratorUntilAbort,
   mockImportConversationWorkspaceAttachment,
   mockIsAvailableAsync,
@@ -65,7 +57,6 @@ import {
   mockShareAsync,
   mockShareConversationWorkspaceFile,
   mockShareTextExport,
-  mockSynthesizeAgentRunFinalAnswer,
 } from './serviceMocks';
 
 export function cleanupChatScreenTestEnvironment() {
@@ -110,16 +101,7 @@ export function resetChatScreenTestEnvironment() {
     mockCompleteAgentRun,
     mockRecordAgentRunEvidence,
     mockGetProviderApiKey,
-    mockCollectAgentRunFinalizationEvidence,
-    mockBuildAgentRunToolResultFallback,
-    mockBuildAgentRunCompletionFallbackOutput,
-    mockBuildAgentRunVisibleDraftRecoveryText,
-    mockBuildMissingFinalResponseFallback,
-    mockCanRecoverAgentRunFinalResponse,
     mockCancelOwnedExternalRecoveries,
-    mockHasCompletedExecutionRecoveryEvidence,
-    mockHasVerifiedFinalizationEvidence,
-    mockSynthesizeAgentRunFinalAnswer,
     mockEvaluateAgentRunWithPilot,
     mockCancelSubAgent,
     mockRunOrchestrator,
@@ -381,59 +363,6 @@ export function resetChatScreenTestEnvironment() {
       }));
     },
   );
-  mockCollectAgentRunFinalizationEvidence.mockImplementation(
-    (_messages: any[], _userMessageId: string, iterations: number) => ({
-      originalPrompt: 'Test task',
-      transcriptMessages: [],
-      lastNonEmptyAssistantContent: '',
-      lastSubstantiveResult: '',
-      resultPreviews: [{ sourceName: 'sessions_spawn', preview: 'Worker launched successfully.' }],
-      toolsUsed: ['sessions_spawn'],
-      iterations,
-    }),
-  );
-  mockHasVerifiedFinalizationEvidence.mockImplementation(
-    (evidence: any) =>
-      !!evidence?.lastSubstantiveResult ||
-      (evidence?.resultPreviews?.length ?? 0) > 0 ||
-      (evidence?.toolsUsed?.length ?? 0) > 0,
-  );
-  mockBuildAgentRunToolResultFallback.mockImplementation(
-    ({ status }: { status: string }) => `Fallback final response (${status})`,
-  );
-  mockBuildAgentRunCompletionFallbackOutput.mockImplementation((params: any) =>
-    mockBuildAgentRunToolResultFallback(params),
-  );
-  mockBuildAgentRunVisibleDraftRecoveryText.mockImplementation(
-    ({ visibleDraft, status, evidence }: any) => {
-      const fallback = mockBuildAgentRunToolResultFallback({ status, evidence });
-      if (
-        visibleDraft.includes('Note: the response stream failed before the answer could finish.')
-      ) {
-        return visibleDraft;
-      }
-      return fallback
-        ? `${visibleDraft}\n\nNote: the response stream failed before the answer could finish.\n${fallback}`
-        : `${visibleDraft}\n\nNote: the response stream failed before the answer could finish.`;
-    },
-  );
-  mockBuildMissingFinalResponseFallback.mockImplementation(
-    (status: string) => `Missing final response (${status})`,
-  );
-  mockCanRecoverAgentRunFinalResponse.mockImplementation(
-    ({ evidence, hasProviderContext }: any) =>
-      !!evidence?.lastSubstantiveResult ||
-      (evidence?.resultPreviews?.length ?? 0) > 0 ||
-      (evidence?.toolsUsed?.length ?? 0) > 0 ||
-      (hasProviderContext && !!evidence?.lastNonEmptyAssistantContent?.trim?.()),
-  );
-  mockHasCompletedExecutionRecoveryEvidence.mockImplementation(
-    ({ evidence, pendingAsyncOperationCount, liveSubAgentSnapshots }: any) =>
-      !evidence?.hasIncompleteToolCalls &&
-      (pendingAsyncOperationCount ?? 0) === 0 &&
-      !(liveSubAgentSnapshots ?? []).some((snapshot: any) => snapshot.status === 'running') &&
-      (!!evidence?.lastSubstantiveResult || (evidence?.resultPreviews?.length ?? 0) > 0),
-  );
   mockSetAgentRunPhase.mockImplementation(
     (conversationId: string, phase: string, params?: any, runId?: string) => {
       updateMockAgentRun(conversationId, runId, (run: any) => ({
@@ -597,14 +526,6 @@ export function resetChatScreenTestEnvironment() {
       });
     },
   );
-  mockSynthesizeAgentRunFinalAnswer.mockResolvedValue({
-    output: 'Synthesized final response',
-    providerReplay: {
-      openaiResponseOutput: [
-        { id: 'final-output', type: 'message', role: 'assistant', content: [] },
-      ],
-    },
-  });
   mockEvaluateAgentRunWithPilot.mockImplementation(async (params: any) => ({
     action: 'finalize',
     outcome: params.candidateOutcome ?? {

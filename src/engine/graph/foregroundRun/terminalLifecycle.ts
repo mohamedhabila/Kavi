@@ -2,7 +2,7 @@ import { buildAssistantMessageMetadata } from '../../../utils/assistantMessageMe
 import type { AgentRunControlGraphState } from '../../../types/agentRun';
 import { resolveAgentControlGraphTerminalFailure } from '../terminalOutcome';
 
-type AssistantDraftFinishReason = 'response_failed' | 'terminal_review_pending';
+type AssistantDraftFinishReason = 'response_failed';
 export type ForegroundRunTerminalStatus = 'succeeded' | 'failed' | 'cancelled';
 
 export function buildForegroundAssistantIncompleteMetadata(
@@ -49,10 +49,6 @@ export function createForegroundRunTerminalLifecycleController(params: {
   flushPendingSurfacedOutputs: () => void;
   getCurrentAssistantMessageId: () => string;
   getVisibleAssistantContent: () => string;
-  markCurrentAssistantPendingReview: (context: {
-    currentAssistantMessageId: string;
-    visibleContent: string;
-  }) => void;
   handleInterruptedError: (context: {
     currentAssistantMessageId: string;
     error: Error;
@@ -134,16 +130,6 @@ export function createForegroundRunTerminalLifecycleController(params: {
     completionPromise = params.completeOnce(async () => {
       params.flushPendingSurfacedOutputs();
       params.ensureAssistantTurn();
-      if (
-        resolveCompletedStatus() === 'succeeded' &&
-        latestControlGraphState?.status !== 'waiting_async' &&
-        latestControlGraphState?.status !== 'awaiting_user'
-      ) {
-        params.markCurrentAssistantPendingReview({
-          currentAssistantMessageId: params.getCurrentAssistantMessageId(),
-          visibleContent: params.getVisibleAssistantContent(),
-        });
-      }
       params.commitAssistantBuffers();
       if (!params.isAborted()) {
         const completedStatus = resolveCompletedStatus();

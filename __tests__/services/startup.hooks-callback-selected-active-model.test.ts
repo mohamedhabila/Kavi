@@ -17,7 +17,7 @@ const mockSendLocalNotification = jest.fn().mockResolvedValue({ id: 'notif-1', s
 const mockConnectAll = jest.fn().mockResolvedValue(undefined);
 const mockInitSubAgentRegistry = jest.fn().mockResolvedValue(undefined);
 const mockListActiveSubAgents = jest.fn().mockReturnValue([]);
-const mockRepairTerminalAgentRunsMissingFinalResponses = jest.fn().mockResolvedValue([]);
+const mockReconcileCompletedAgentRunGraphs = jest.fn().mockResolvedValue([]);
 const mockRecoverInterruptedForegroundModelExecutions = jest.fn().mockResolvedValue([]);
 const mockMaintainForegroundModelExecutionRetention = jest.fn();
 const mockMaintainTerminalExecutionRetention = jest.fn();
@@ -126,8 +126,8 @@ jest.mock('../../src/services/agents/subAgent', () => ({
   listActiveSubAgents: (...args: any[]) => mockListActiveSubAgents(...args),
 }));
 jest.mock('../../src/services/agents/agentRunRepair', () => ({
-  repairTerminalAgentRunsMissingFinalResponses: (...args: any[]) =>
-    mockRepairTerminalAgentRunsMissingFinalResponses(...args),
+  reconcileCompletedAgentRunGraphs: (...args: any[]) =>
+    mockReconcileCompletedAgentRunGraphs(...args),
 }));
 jest.mock('../../src/store/useSettingsStore', () => ({
   useSettingsStore: {
@@ -181,7 +181,7 @@ beforeEach(() => {
   mockChatStoreState.conversations = [];
   mockChatStoreState.activeConversationId = 'active-conversation';
   mockListActiveSubAgents.mockReturnValue([]);
-  mockRepairTerminalAgentRunsMissingFinalResponses.mockResolvedValue([]);
+  mockReconcileCompletedAgentRunGraphs.mockResolvedValue([]);
   mockRecoverInterruptedForegroundModelExecutions.mockResolvedValue([]);
   mockEvaluateJobsOnce.mockResolvedValue(undefined);
   mockSyncSchedulerWakeNotifications.mockResolvedValue({ warnings: [] });

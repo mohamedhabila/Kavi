@@ -18,7 +18,7 @@ import {
   executeForegroundConversationSend,
   type ForegroundConversationSendContext,
 } from './sendExecution';
-import type { EnsureAgentRunFinalResponse, RunChatOptions } from './contracts';
+import type { RunChatOptions } from './contracts';
 import { appForegroundRequestRegistry } from './requestRegistry';
 import { appSteeringQueue } from './steeringQueue';
 import type {
@@ -40,12 +40,10 @@ type UseForegroundConversationActionsParams = {
   completeAgentRun: ChatStoreState['completeAgentRun'];
   rewindUserMessageForResend: ChatStoreState['rewindUserMessageForResend'];
   editingMessageId: string | null;
-  ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   forceNextScrollRef: MutableRefObject<boolean>;
   generateId: () => string;
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
-  pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   requestChatStorePersistenceCheckpoint: (delayMs?: number) => void;
   /** Put text back into the conversation's composer, ahead of any draft already there. */
@@ -80,12 +78,10 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     completeAgentRun,
     rewindUserMessageForResend,
     editingMessageId,
-    ensureAgentRunFinalResponse,
     ensureConversation,
     forceNextScrollRef,
     generateId,
     pendingAgentRunAsyncResumesRef,
-    pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
     requestChatStorePersistenceCheckpoint,
     returnTextToComposer,
@@ -111,15 +107,10 @@ export function useForegroundConversationActions(params: UseForegroundConversati
   const clearPendingRunState = useCallback(
     (conversationId: string, runId: string) => {
       const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
-      pendingAgentRunFinalizationsRef.current.delete(runIdentityKey);
       pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
       pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
     },
-    [
-      pendingAgentRunAsyncResumesRef,
-      pendingAgentRunFinalizationsRef,
-      pendingAgentRunTerminalReviewsRef,
-    ],
+    [pendingAgentRunAsyncResumesRef, pendingAgentRunTerminalReviewsRef],
   );
 
   const getConversation = useCallback(
@@ -252,7 +243,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
           },
           clearPendingRunState,
           completeAgentRun,
-          ensureAgentRunFinalResponse,
           getLatestConversation: (conversationId) => getConversation(conversationId),
           updateAgentRunControlGraph,
         },
@@ -268,7 +258,6 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     clearForegroundRequestForConversation,
     clearPendingRunState,
     completeAgentRun,
-    ensureAgentRunFinalResponse,
     getConversation,
     getLiveActiveConversationId,
     requestChatStorePersistenceCheckpoint,

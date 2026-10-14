@@ -17,7 +17,7 @@ type AppendConversationLog = (entry: {
   timestamp?: number;
 }) => void;
 
-export async function handleForegroundRunCompletionFlow(params: {
+export function handleForegroundRunCompletionFlow(params: {
   appendConversationLog: AppendConversationLog;
   currentAssistantMessage?: AssistantCloseoutCandidate;
   currentAssistantMessageId: string;
@@ -25,7 +25,7 @@ export async function handleForegroundRunCompletionFlow(params: {
   finalizeCompletion: (
     completion: Extract<ForegroundRunCompletionReviewResult, { handled: false }>,
   ) => boolean;
-  reviewCompletion: () => Promise<ForegroundRunCompletionReviewResult>;
+  reviewCompletion: () => ForegroundRunCompletionReviewResult;
   forceTerminalReview?: boolean;
   trackedRunState: ForegroundRunTrackingState;
   turnSummary: string;
@@ -59,9 +59,23 @@ export async function handleForegroundRunCompletionFlow(params: {
       params.appendConversationLog(openWorkCloseoutEffect.logEntry);
       return;
     }
+
+    // A turn that handed off with sessions_yield stays open for the work it is waiting on; an
+    // async resume or the terminal background review continues it.
+    if (params.trackedRunState.yielded) {
+      const detail = 'Waiting for the work this turn handed off.';
+      params.enterAsyncMonitoringPhase(detail, 'Waiting for handed-off work');
+      params.appendConversationLog({
+        kind: 'state',
+        level: 'info',
+        title: 'Waiting for handed-off work',
+        detail: `${params.turnSummary} · ${detail}`,
+      });
+      return;
+    }
   }
 
-  const completionReview = await params.reviewCompletion();
+  const completionReview = params.reviewCompletion();
   if (completionReview.handled) {
     return;
   }

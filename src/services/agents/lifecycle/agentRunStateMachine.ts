@@ -1,5 +1,4 @@
 import type { AgentRun, AgentRunStatus } from '../../../types/agentRun';
-import type { Conversation } from '../../../types/conversation';
 import type { Message } from '../../../types/message';
 import type { SubAgentCompletionState, SubAgentSnapshot } from '../../../types/subAgent';
 import { hasCompleteFinalAssistantMetadata } from '../../../utils/assistantMessageMetadata';
@@ -10,29 +9,6 @@ export type AgentRunMessageScope = {
   runStartedAt?: number;
 };
 
-export function hasNewerRunningAgentRun(
-  conversation: Pick<Conversation, 'agentRuns'>,
-  run: Pick<AgentRun, 'id' | 'createdAt'>,
-): boolean {
-  const runCreatedAt =
-    typeof run.createdAt === 'number' && Number.isFinite(run.createdAt)
-      ? run.createdAt
-      : Number.NEGATIVE_INFINITY;
-
-  return (conversation.agentRuns ?? []).some((candidate) => {
-    if (candidate.id === run.id || candidate.status !== 'running') {
-      return false;
-    }
-
-    const candidateCreatedAt =
-      typeof candidate.createdAt === 'number' && Number.isFinite(candidate.createdAt)
-        ? candidate.createdAt
-        : Number.POSITIVE_INFINITY;
-
-    return candidateCreatedAt >= runCreatedAt;
-  });
-}
-
 export function buildAgentRunMessageScope(
   run: Pick<AgentRun, 'userMessageId' | 'createdAt'>,
 ): AgentRunMessageScope {
@@ -40,27 +16,6 @@ export function buildAgentRunMessageScope(
     userMessageId: run.userMessageId,
     runStartedAt: run.createdAt,
   };
-}
-
-/**
- * A compacted historical run no longer has an exact transcript insertion point.
- * Timestamp fallback may resolve to a summary row before a newer run, so repairing
- * that historical run would attach its final response to the wrong user turn.
- */
-export function isHistoricalRunMissingExactRequestAnchor(
-  conversation: Pick<Conversation, 'agentRuns' | 'messages'>,
-  run: Pick<AgentRun, 'createdAt' | 'id' | 'userMessageId'>,
-): boolean {
-  if (conversation.messages.some((message) => message.id === run.userMessageId)) {
-    return false;
-  }
-
-  return (conversation.agentRuns ?? []).some(
-    (candidate) =>
-      candidate.id !== run.id &&
-      Number.isFinite(candidate.createdAt) &&
-      candidate.createdAt >= run.createdAt,
-  );
 }
 
 function resolveAgentRunMessageSliceStartIndex(
@@ -126,13 +81,6 @@ export function hasDeliveredFinalAssistantResponse(
   scope: string | AgentRunMessageScope,
 ): boolean {
   return getLatestAssistantProjectionFinalResponse(messages, scope) !== undefined;
-}
-
-export function getLatestFinalAssistantResponsePreview(
-  messages: Message[],
-  scope: string | AgentRunMessageScope,
-): string | undefined {
-  return getLatestAssistantProjectionFinalResponsePreview(messages, scope);
 }
 
 /**

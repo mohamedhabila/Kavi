@@ -170,7 +170,7 @@ describe('ChatScreen agent run resume', () => {
     expect(resumedGraphState.workflowRoute).toBeUndefined();
   });
 
-  it('does not synthesize background-worker monitoring when a detached worker launch succeeds before live snapshots become visible', async () => {
+  it('does not enter background-worker monitoring when a detached worker launch succeeds before live snapshots become visible', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -223,6 +223,11 @@ describe('ChatScreen agent run resume', () => {
         status: 'completed',
         result: JSON.stringify({ status: 'running', sessionId: 'sub-spawn-lag-1' }),
       });
+      callbacks.onAssistantMessage('The audit worker is running.', [], undefined, {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'stop',
+      });
       callbacks.onAgentControlGraphStateChange(
         createAgentRunControlGraphState({ status: 'awaiting_review' }),
       );
@@ -236,7 +241,7 @@ describe('ChatScreen agent run resume', () => {
       expect.objectContaining({
         status: 'completed',
         checkpointTitle: 'Final response delivered',
-        latestSummary: 'Synthesized final response',
+        latestSummary: 'The audit worker is running.',
       }),
       'run-1',
     );

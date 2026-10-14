@@ -26,22 +26,6 @@ export function normalizeFinalizationOutputText(
   return normalized;
 }
 
-export function truncateFinalizationText(
-  value: string | undefined,
-  maxLength: number,
-): string | undefined {
-  const normalized = normalizeFinalizationOutputText(value);
-  if (!normalized) {
-    return undefined;
-  }
-
-  if (!exceedsGraphemeLength(normalized, maxLength)) {
-    return normalized;
-  }
-
-  return `${truncateGraphemesTo(normalized, maxLength - 3).trimEnd()}...`;
-}
-
 export function normalizeFinalizationPreviewText(
   value: string | undefined,
   maxLength = FINALIZATION_RESULT_PREVIEW_CHARS,

@@ -124,17 +124,6 @@ describe('foreground run preflight', () => {
         apiKey: 'secret-key',
         model: 'gemini-3.5-flash',
       },
-      finalizationProviderContext: {
-        conversationId: 'conv1',
-        internalUserMessageCount: 1,
-        model: 'gemini-3.5-flash',
-        provider: {
-          ...provider,
-          apiKey: 'secret-key',
-          model: 'gemini-3.5-flash',
-        },
-        systemPromptText: 'System prompt',
-      },
     });
   });
 });

@@ -5,15 +5,13 @@
 // engine's own retry, the interrupted-run recovery read the finished tool work as a completed
 // run, and resumed it with tools disabled and "Deliver the user-facing final answer now." The
 // model, cut off mid-task, answered without the tools it still needed. These tests drive the
-// real outcome resolver, recovery handler, final-preview recovery and final-response writer
-// against the real chat store; only the provider (absent) and the run's finalize are stubbed.
-// The handler no longer takes a resume at all, so it cannot resume the run.
+// real outcome resolver and recovery handler against the real chat store; only the run's
+// finalize is stubbed. The handler takes no resume, so it cannot resume the run, and nothing
+// writes an answer for it.
 
 import { resolveForegroundInterruptedResponseOutcome } from '../../../src/engine/graph/foregroundRun/foregroundInterruptedResponse';
 import { handleForegroundInterruptedResponseRecovery } from '../../../src/engine/graph/foregroundRun/interruptedResponseRecovery';
-import { recoverForegroundAgentRunFinalPreview } from '../../../src/engine/graph/foregroundRun/finalPreviewRecovery';
 import { createInitialAgentControlGraphSnapshot } from '../../../src/engine/graph/agentControlGraph';
-import { createAgentRunFinalResponse } from '../../../src/screens/agentRunFinalResponse';
 import { useChatStore } from '../../../src/store/useChatStore';
 import type { Message } from '../../../src/types/message';
 
@@ -106,18 +104,6 @@ function seedRunInterruptedAfterToolWork(): void {
 
 async function interruptTheRun() {
   const store = useChatStore.getState();
-  const ensureAgentRunFinalResponse = createAgentRunFinalResponse({
-    appendAgentRunCheckpoint: store.appendAgentRunCheckpoint,
-    appendConversationLog: store.addConversationLog,
-    pendingAgentRunFinalizations: new Map(),
-    getResolveConversationFinalizationContext: () => undefined,
-    setAgentRunPhase: store.setAgentRunPhase,
-    updateAgentRunSummary: store.updateAgentRunSummary,
-    updateMessage: store.updateMessage,
-    updateMessageAssistantMetadata: store.updateMessageAssistantMetadata,
-    updateMessageProviderReplay: store.updateMessageProviderReplay,
-  });
-  const signal = new AbortController().signal;
   const error = new TypeError('terminated');
   const finalizeTrackedRun = jest.fn(() => true);
   const setChatError = jest.fn();
@@ -127,7 +113,7 @@ async function interruptTheRun() {
     error,
     runId: RUN_ID,
   });
-  await handleForegroundInterruptedResponseRecovery({
+  handleForegroundInterruptedResponseRecovery({
     appendConversationLog: store.addConversationLog,
     assertNotAborted: () => undefined,
     conversationId: CONVERSATION_ID,
@@ -135,22 +121,10 @@ async function interruptTheRun() {
     errorMessage: error.message,
     finalizeTrackedRun,
     outcome,
-    recoverAgentRunFinalPreview: (status, timestamp, preferredAssistantMessageId, recoverySignal) =>
-      recoverForegroundAgentRunFinalPreview({
-        conversationId: CONVERSATION_ID,
-        ensureAgentRunFinalResponse,
-        finalizationProviderContext: undefined as never,
-        preferredAssistantMessageId,
-        runId: RUN_ID,
-        signal: recoverySignal,
-        status,
-        timestamp,
-      }),
     requestPersistenceCheckpoint: jest.fn(),
     runId: RUN_ID,
     setAgentRunPhase: store.setAgentRunPhase,
     setChatError,
-    signal,
     updateAgentRunSummary: store.updateAgentRunSummary,
     updateMessage: store.updateMessage,
     updateMessageAssistantMetadata: store.updateMessageAssistantMetadata,
@@ -178,9 +152,26 @@ describe('a foreground run whose stream drops after its tools ran', () => {
     });
     expect(finalizeTrackedRun).toHaveBeenCalledWith(
       'failed',
-      expect.any(String),
+      PARTIAL_TEXT,
       'Turn failed',
       'terminated',
+    );
+  });
+
+  // The streamed draft used to be overwritten with a synthesized "The run failed before it
+  // generated a final response." marked complete, and the error hidden.
+  it('keeps what streamed and shows the error, writing no answer for the run', async () => {
+    const { setChatError, draft } = await interruptTheRun();
+
+    expect(setChatError).toHaveBeenCalledWith('terminated');
+    expect(draft).toEqual(
+      expect.objectContaining({
+        content: PARTIAL_TEXT,
+        assistantMetadata: expect.objectContaining({
+          completionStatus: 'incomplete',
+          finishReason: 'response_failed',
+        }),
+      }),
     );
   });
 });

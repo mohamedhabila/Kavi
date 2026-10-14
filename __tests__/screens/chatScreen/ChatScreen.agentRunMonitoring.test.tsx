@@ -53,6 +53,12 @@ describe('ChatScreen agent run monitoring', () => {
     const [, callbacks] = mockRunOrchestrator.mock.calls[0];
 
     await act(async () => {
+      callbacks.onAssistantMessage(
+        'The worker keeps going in the background; its output will appear here.',
+        [],
+        undefined,
+        { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
+      );
       callbacks.onAgentControlGraphStateChange(
         createAgentRunControlGraphState({ status: 'awaiting_review' }),
       );
@@ -136,6 +142,12 @@ describe('ChatScreen agent run monitoring', () => {
           currentActivity: 'Inspecting repository files',
         }),
       });
+      callbacks.onAssistantMessage(
+        'The delegated worker is still inspecting the repository.',
+        [],
+        undefined,
+        { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
+      );
       callbacks.onAgentControlGraphStateChange(
         createAgentRunControlGraphState({ status: 'awaiting_review' }),
       );

@@ -21,7 +21,6 @@ import {
   mockSetAgentRunPhase,
   mockCompleteAgentRun,
 } from '../../../testSupport/chatScreen/storeMocks';
-import { mockSynthesizeAgentRunFinalAnswer } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen sub-agent transcript', () => {
   beforeEach(resetChatScreenTestEnvironment);
@@ -99,13 +98,6 @@ describe('ChatScreen sub-agent transcript', () => {
   });
 
   it('finalizes an awaiting background run only once when terminal worker events race', async () => {
-    let resolveFinalization: ((value: { output: string; providerReplay: any }) => void) | undefined;
-    mockSynthesizeAgentRunFinalAnswer.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveFinalization = resolve;
-        }),
-    );
     mockCompleteAgentRun.mockImplementation(
       (conversationId: string, params: any, runId: string) => {
         mockChatScreenState.conversations = mockChatScreenState.conversations.map((conversation) =>
@@ -161,6 +153,17 @@ describe('ChatScreen sub-agent transcript', () => {
               },
             ],
           },
+          {
+            id: 'assistant-final-1',
+            role: 'assistant',
+            content: 'Two workers are auditing the repository; their findings will appear here.',
+            timestamp: 1_700_000_000_200,
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
+          },
         ],
         activeAgentRunId: 'run-1',
         agentRuns: [
@@ -215,21 +218,6 @@ describe('ChatScreen sub-agent transcript', () => {
     act(() => {
       mockChatScreenState.subAgentListener?.(mockChatScreenState.activeSubAgents[0], 'completed');
       mockChatScreenState.subAgentListener?.(mockChatScreenState.activeSubAgents[1], 'completed');
-    });
-
-    await waitFor(() => {
-      expect(mockSynthesizeAgentRunFinalAnswer).toHaveBeenCalledTimes(1);
-    });
-
-    act(() => {
-      resolveFinalization?.({
-        output: 'Synthesized final response',
-        providerReplay: {
-          openaiResponseOutput: [
-            { id: 'final-output', type: 'message', role: 'assistant', content: [] },
-          ],
-        },
-      });
     });
 
     await waitFor(() => {

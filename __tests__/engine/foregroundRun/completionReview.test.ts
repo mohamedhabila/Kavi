@@ -13,7 +13,7 @@ function buildMessage(overrides: Partial<Message>): Message {
   };
 }
 
-function buildRun(): AgentRun {
+function buildRun(controlGraph: Partial<NonNullable<AgentRun['controlGraph']>> = {}): AgentRun {
   return {
     id: 'run-1',
     userMessageId: 'msg-user',
@@ -41,94 +41,57 @@ function buildRun(): AgentRun {
       lastModelToolNames: [],
       audit: [],
       updatedAt: 50,
-    } as any,
+      ...controlGraph,
+    } as never,
   } as AgentRun;
 }
 
-describe('foregroundRun completion review', () => {
-  beforeEach(() => {
-    useChatStore.setState((state) => ({
-      ...state,
-      conversations: [],
-      activeConversationId: null,
-      isLoading: false,
-    }));
+function seed(run: AgentRun, assistant: Partial<Message>): void {
+  useChatStore.setState((state) => ({
+    ...state,
+    conversations: [
+      {
+        id: 'conversation-1',
+        title: 'Review',
+        messages: [
+          buildMessage({ id: 'msg-user', role: 'user', content: 'Do the task.', timestamp: 10 }),
+          buildMessage({ id: 'msg-assistant', timestamp: 50, ...assistant }),
+        ],
+        createdAt: 10,
+        updatedAt: 50,
+        logs: [],
+        agentRuns: [run],
+      } as never,
+    ],
+    activeConversationId: 'conversation-1',
+  }));
+}
+
+function review(finalizeTrackedRun = jest.fn().mockReturnValue(true)) {
+  const effects = {
+    appendConversationLog: jest.fn(),
+    finalizeTrackedRun,
+    setChatError: jest.fn(),
+    updateMessageAssistantMetadata: jest.fn(),
+  };
+  const result = reviewForegroundRunCompletion({
+    ...effects,
+    conversationId: 'conversation-1',
+    runId: 'run-1',
+    turnSummary: 'Turn summary',
   });
+  return { result, effects };
+}
 
-  it('finalizes directly from the visible final assistant answer', async () => {
-    const run = buildRun();
-    const finalAnswer =
-      '| Feature | OpenAI Responses API | Gemini generateContent API |\n| :--- | :--- | :--- |';
-    const messages: Message[] = [
-      buildMessage({
-        id: 'msg-user',
-        role: 'user',
-        content: 'Compare the official docs and return a short table.',
-        timestamp: 10,
-      }),
-      buildMessage({
-        id: 'msg-tool-search',
-        role: 'tool',
-        content: '{"provider":"gemini","searches":[]}',
-        timestamp: 20,
-        toolCallId: 'web_search',
-      }),
-      buildMessage({
-        id: 'msg-assistant-final',
-        role: 'assistant',
-        content: finalAnswer,
-        timestamp: 50,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      }),
-    ];
-
-    useChatStore.setState((state) => ({
-      ...state,
-      conversations: [
-        {
-          id: 'conversation-1',
-          title: 'Docs comparison',
-          messages,
-          providerId: 'provider-1',
-          createdAt: 10,
-          updatedAt: 50,
-          usage: {
-            entries: [],
-            totalInput: 0,
-            totalOutput: 0,
-            totalCacheRead: 0,
-            totalCacheWrite: 0,
-            totalTokens: 0,
-            totalCost: 0,
-            totalCalls: 0,
-          },
-          logs: [],
-          agentRuns: [run],
-        } as any,
-      ],
-      activeConversationId: 'conversation-1',
-    }));
-
-    const result = await reviewForegroundRunCompletion({
-      appendConversationLog: jest.fn(),
-      assertNotAborted: jest.fn(),
-      conversationId: 'conversation-1',
-      finalizeTrackedRun: jest.fn(),
-      flushChatState: jest.fn().mockResolvedValue(undefined),
-      recoverAgentRunFinalPreview: jest.fn(async () => ({ recovered: false })),
-      resumeAgentRun: null,
-      runId: 'run-1',
-      signal: new AbortController().signal,
-      turnSummary: finalAnswer,
-      updateAgentRunControlGraph: jest.fn(),
-      updateAgentRunSummary: jest.fn(),
-      updateMessageAssistantMetadata: jest.fn(),
-      setAgentRunPhase: jest.fn(),
+describe('foregroundRun completion review', () => {
+  it('completes with the final answer the agent loop delivered', () => {
+    const finalAnswer = '| Feature | Responses | generateContent |';
+    seed(buildRun(), {
+      content: finalAnswer,
+      assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
     });
+
+    const { result, effects } = review();
 
     expect(result).toEqual(
       expect.objectContaining({
@@ -138,77 +101,54 @@ describe('foregroundRun completion review', () => {
         checkpointTitle: 'Final response delivered',
       }),
     );
+    expect(effects.setChatError).not.toHaveBeenCalled();
   });
 
-  it('finalizes a delivered approval rejection as cancellation without response recovery', async () => {
-    const run = buildRun();
-    run.controlGraph = {
-      ...run.controlGraph!,
-      status: 'cancelled',
-      terminalReason: 'user_approval_denied',
-    };
-    const cancellationNotice =
-      'Okay — I did not perform that action because you rejected the approval request. No effect was dispatched.';
-    useChatStore.setState((state) => ({
-      ...state,
-      conversations: [
-        {
-          id: 'conversation-1',
-          title: 'Rejected SMS',
-          messages: [
-            buildMessage({
-              id: 'msg-user',
-              role: 'user',
-              content: 'Send the message.',
-              timestamp: 10,
-            }),
-            buildMessage({
-              id: 'msg-assistant-final',
-              content: cancellationNotice,
-              timestamp: 50,
-              assistantMetadata: {
-                kind: 'final',
-                completionStatus: 'complete',
-                finishReason: 'user_approval_denied',
-              },
-            }),
-          ],
-          createdAt: 10,
-          updatedAt: 50,
-          logs: [],
-          agentRuns: [run],
-        } as never,
-      ],
-      activeConversationId: 'conversation-1',
-    }));
+  it('ends a delivered approval rejection as a cancellation', () => {
+    const notice = 'I did not send it because you rejected the approval request.';
+    seed(buildRun({ status: 'cancelled', terminalReason: 'user_approval_denied' }), {
+      content: notice,
+      assistantMetadata: {
+        kind: 'final',
+        completionStatus: 'complete',
+        finishReason: 'user_approval_denied',
+      },
+    });
     const finalizeTrackedRun = jest.fn().mockReturnValue(true);
-    const recoverAgentRunFinalPreview = jest.fn(async () => ({ recovered: false }));
 
-    await expect(
-      reviewForegroundRunCompletion({
-        appendConversationLog: jest.fn(),
-        assertNotAborted: jest.fn(),
-        conversationId: 'conversation-1',
-        finalizeTrackedRun,
-        flushChatState: jest.fn().mockResolvedValue(undefined),
-        recoverAgentRunFinalPreview,
-        resumeAgentRun: null,
-        runId: 'run-1',
-        signal: new AbortController().signal,
-        turnSummary: cancellationNotice,
-        updateAgentRunControlGraph: jest.fn(),
-        updateAgentRunSummary: jest.fn(),
-        updateMessageAssistantMetadata: jest.fn(),
-        setAgentRunPhase: jest.fn(),
-      }),
-    ).resolves.toEqual({ handled: true, terminalized: true });
+    const { result } = review(finalizeTrackedRun);
+
+    expect(result).toEqual({ handled: true, terminalized: true });
     expect(finalizeTrackedRun).toHaveBeenCalledWith(
       'cancelled',
-      cancellationNotice,
+      notice,
       'Run cancelled',
-      cancellationNotice,
+      notice,
       'user_cancelled',
     );
-    expect(recoverAgentRunFinalPreview).not.toHaveBeenCalled();
+  });
+
+  // A run that ended without an answer used to be resumed with its tools disabled and told to
+  // "deliver the user-facing final answer now", or given an answer synthesized from its tool
+  // results. It now fails with what it streamed and the error in view.
+  it('fails a run that ended without an answer, keeping what it streamed', () => {
+    seed(buildRun(), { content: 'Half of the table' });
+
+    const { result, effects } = review();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        handled: false,
+        completionStatus: 'failed',
+        latestSummary: 'Half of the table',
+        checkpointTitle: 'Run ended without an answer',
+      }),
+    );
+    expect(effects.updateMessageAssistantMetadata).toHaveBeenCalledWith(
+      'conversation-1',
+      'msg-assistant',
+      expect.objectContaining({ completionStatus: 'incomplete', finishReason: 'response_failed' }),
+    );
+    expect(effects.setChatError).toHaveBeenCalledWith('The run ended without a final answer.');
   });
 });

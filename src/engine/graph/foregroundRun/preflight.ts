@@ -7,7 +7,7 @@ import {
   resolveEnabledProvider,
   resolveProviderApiKey,
 } from '../../../services/llm/support/providerSupport';
-import type { ResolvedFinalizationProviderContext, RunChatOptions } from './contracts';
+import type { RunChatOptions } from './contracts';
 
 export type ForegroundRunPreflightResult =
   | { kind: 'missing_provider' }
@@ -18,7 +18,6 @@ export type ForegroundRunPreflightResult =
       provider: LlmProviderConfig;
       providerWithApiKey: LlmProviderConfig;
       model: string;
-      finalizationProviderContext: ResolvedFinalizationProviderContext;
     };
 
 export async function resolveForegroundRunPreflight(params: {
@@ -66,12 +65,5 @@ export async function resolveForegroundRunPreflight(params: {
     provider: resolvedProvider,
     providerWithApiKey,
     model,
-    finalizationProviderContext: {
-      provider: providerWithApiKey,
-      model,
-      systemPromptText: params.conversation?.systemPrompt || params.systemPrompt,
-      conversationId: params.conversationId,
-      internalUserMessageCount: params.options?.additionalUserPrompt?.trim() ? 1 : 0,
-    },
   };
 }

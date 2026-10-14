@@ -19,12 +19,7 @@ import {
   mockStartAgentRun,
   mockCompleteAgentRun,
 } from '../../../testSupport/chatScreen/storeMocks';
-import {
-  mockCollectAgentRunFinalizationEvidence,
-  mockBuildAgentRunToolResultFallback,
-  mockHasCompletedExecutionRecoveryEvidence,
-  mockRunOrchestrator,
-} from '../../../testSupport/chatScreen/serviceMocks';
+import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen run finalization guards', () => {
   beforeEach(resetInFlightChatScreenTestEnvironment);
@@ -52,7 +47,7 @@ describe('ChatScreen run finalization guards', () => {
       callbacks.onAssistantMessage('The task completed successfully.', [], undefined, {
         kind: 'final',
         completionStatus: 'complete',
-        finishReason: 'task_complete',
+        finishReason: 'stop',
       });
       callbacks.onAgentControlGraphStateChange(
         createAgentRunControlGraphState({ status: 'awaiting_review' }),
@@ -97,19 +92,6 @@ describe('ChatScreen run finalization guards', () => {
       return 'run-1';
     });
 
-    mockHasCompletedExecutionRecoveryEvidence.mockReturnValueOnce(false);
-    mockCollectAgentRunFinalizationEvidence.mockImplementation(() => ({
-      originalPrompt: 'Error duplicate callback test',
-      transcriptMessages: [],
-      lastNonEmptyAssistantContent: '',
-      lastSubstantiveResult: '',
-      resultPreviews: [],
-      toolsUsed: [],
-      iterations: 0,
-      hasIncompleteToolCalls: false,
-    }));
-    mockBuildAgentRunToolResultFallback.mockReturnValueOnce(undefined);
-
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onError(new Error('Streaming interruption'));
       callbacks.onError(new Error('Streaming interruption'));
@@ -132,7 +114,7 @@ describe('ChatScreen run finalization guards', () => {
     );
   });
 
-  it('does not promote the streamed draft when the API fails mid-stream', async () => {
+  it('keeps the streamed draft, marked failed, when the API fails mid-stream', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -147,19 +129,6 @@ describe('ChatScreen run finalization guards', () => {
       }));
       return 'run-1';
     });
-    mockCollectAgentRunFinalizationEvidence.mockImplementation(() => ({
-      originalPrompt: 'Investigate the stream failure',
-      transcriptMessages: [],
-      lastNonEmptyAssistantContent: 'Interrupted draft answer',
-      lastSubstantiveResult: '',
-      resultPreviews: [],
-      toolsUsed: [],
-      iterations: 0,
-      hasIncompleteToolCalls: false,
-    }));
-    mockBuildAgentRunToolResultFallback.mockImplementation(({ evidence }: any) =>
-      (evidence?.resultPreviews?.length ?? 0) > 0 ? 'Fallback final response (failed)' : undefined,
-    );
 
     const { getByPlaceholderText, getByTestId } = render(<ChatScreen />);
     fireEvent.changeText(getByPlaceholderText('Message...'), 'Investigate the stream failure');
@@ -185,18 +154,18 @@ describe('ChatScreen run finalization guards', () => {
 
       expect(latestAssistantMessage).toEqual(
         expect.objectContaining({
-          content: 'Missing final response (failed)',
+          content: 'Interrupted draft answer',
           assistantMetadata: expect.objectContaining({
             kind: 'final',
-            completionStatus: 'complete',
-            finishReason: 'fallback_from_evidence',
+            completionStatus: 'incomplete',
+            finishReason: 'response_failed',
           }),
         }),
       );
     });
   });
 
-  it('does not promote the streamed draft when the transport throws after tokens', async () => {
+  it('keeps the streamed draft, marked failed, when the transport throws after tokens', async () => {
     mockStartAgentRun.mockImplementationOnce((conversationId: string, params: any) => {
       updateMockConversation(conversationId, (conversation) => ({
         ...conversation,
@@ -211,19 +180,6 @@ describe('ChatScreen run finalization guards', () => {
       }));
       return 'run-1';
     });
-    mockCollectAgentRunFinalizationEvidence.mockImplementation(() => ({
-      originalPrompt: 'Investigate the stream failure',
-      transcriptMessages: [],
-      lastNonEmptyAssistantContent: 'Interrupted draft answer',
-      lastSubstantiveResult: '',
-      resultPreviews: [],
-      toolsUsed: [],
-      iterations: 0,
-      hasIncompleteToolCalls: false,
-    }));
-    mockBuildAgentRunToolResultFallback.mockImplementation(({ evidence }: any) =>
-      (evidence?.resultPreviews?.length ?? 0) > 0 ? 'Fallback final response (failed)' : undefined,
-    );
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onToken('Interrupted draft answer');
       throw new Error('Transport failed after streaming');
@@ -240,11 +196,11 @@ describe('ChatScreen run finalization guards', () => {
 
       expect(latestAssistantMessage).toEqual(
         expect.objectContaining({
-          content: 'Missing final response (failed)',
+          content: 'Interrupted draft answer',
           assistantMetadata: expect.objectContaining({
             kind: 'final',
-            completionStatus: 'complete',
-            finishReason: 'fallback_from_evidence',
+            completionStatus: 'incomplete',
+            finishReason: 'response_failed',
           }),
         }),
       );

@@ -189,32 +189,6 @@ jest.mock('../../src/services/storage/SecureStorage', () => ({
   getProviderApiKey: (...args: any[]) => mockGetProviderApiKey(...args),
 }));
 
-export const mockCollectAgentRunFinalizationEvidence = jest.fn();
-export const mockBuildAgentRunToolResultFallback = jest.fn();
-export const mockBuildAgentRunCompletionFallbackOutput = jest.fn();
-export const mockBuildAgentRunVisibleDraftRecoveryText = jest.fn();
-export const mockBuildMissingFinalResponseFallback = jest.fn();
-export const mockCanRecoverAgentRunFinalResponse = jest.fn();
-export const mockHasCompletedExecutionRecoveryEvidence = jest.fn();
-export const mockHasVerifiedFinalizationEvidence = jest.fn();
-export const mockSynthesizeAgentRunFinalAnswer = jest.fn();
-jest.mock('../../src/services/agents/lifecycle/finalizePhase', () => ({
-  collectAgentRunFinalizationEvidence: (...args: any[]) =>
-    mockCollectAgentRunFinalizationEvidence(...args),
-  buildAgentRunToolResultFallback: (...args: any[]) => mockBuildAgentRunToolResultFallback(...args),
-  buildAgentRunCompletionFallbackOutput: (...args: any[]) =>
-    mockBuildAgentRunCompletionFallbackOutput(...args),
-  buildAgentRunVisibleDraftRecoveryText: (...args: any[]) =>
-    mockBuildAgentRunVisibleDraftRecoveryText(...args),
-  buildMissingFinalResponseFallback: (...args: any[]) =>
-    mockBuildMissingFinalResponseFallback(...args),
-  canRecoverAgentRunFinalResponse: (...args: any[]) => mockCanRecoverAgentRunFinalResponse(...args),
-  hasCompletedExecutionRecoveryEvidence: (...args: any[]) =>
-    mockHasCompletedExecutionRecoveryEvidence(...args),
-  hasVerifiedFinalizationEvidence: (...args: any[]) => mockHasVerifiedFinalizationEvidence(...args),
-  synthesizeAgentRunFinalAnswer: (...args: any[]) => mockSynthesizeAgentRunFinalAnswer(...args),
-}));
-
 export const mockEvaluateAgentRunWithPilot = jest.fn();
 
 export const mockCancelSubAgent = jest.fn();

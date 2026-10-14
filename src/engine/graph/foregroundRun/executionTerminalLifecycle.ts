@@ -1,4 +1,3 @@
-import type { AgentRun } from '../../../types/agentRun';
 import {
   isAbortErrorLike,
   throwIfAbortSignalTriggered,
@@ -10,7 +9,6 @@ import type {
   ForegroundRunLogEntryInput,
 } from './executionTypes';
 import type { ForegroundRunMutableState } from './executionRuntimeState';
-import { recoverForegroundAgentRunFinalPreview } from './finalPreviewRecovery';
 import { resolveForegroundInterruptedResponseOutcome } from './foregroundInterruptedResponse';
 import { handleForegroundInterruptedResponseRecovery } from './interruptedResponseRecovery';
 import {
@@ -31,9 +29,7 @@ type RuntimeTerminalLifecycleParams = Pick<
   | 'clearForegroundRequestIfCurrent'
   | 'completeRunOnce'
   | 'conversationId'
-  | 'finalizationProviderContext'
   | 'getCurrentConversation'
-  | 'wrapResumeAgentRun'
   | 'shared'
 > & {
   abort: AbortController;
@@ -55,34 +51,15 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     clearForegroundRequestIfCurrent,
     completeRunOnce,
     conversationId,
-    finalizationProviderContext,
     flushPendingSurfacedSubAgentOutputs,
     getCurrentAssistantMessageId,
     getCurrentConversation,
     mutableState,
     runId,
     runStartedAt,
-    wrapResumeAgentRun,
     shared,
     trackedRunStore,
   } = params;
-
-  const recoverAgentRunFinalPreview = (
-    status: Exclude<AgentRun['status'], 'running'>,
-    timestamp?: number,
-    preferredAssistantMessageId?: string,
-    signal?: AbortSignal,
-  ) =>
-    recoverForegroundAgentRunFinalPreview({
-      conversationId,
-      ensureAgentRunFinalResponse: shared.helpers.ensureAgentRunFinalResponse,
-      finalizationProviderContext,
-      preferredAssistantMessageId,
-      runId,
-      signal,
-      status,
-      timestamp,
-    });
 
   return createForegroundRunTerminalLifecycleController({
     clearForegroundRequestIfCurrent,
@@ -123,19 +100,6 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
     flushPendingSurfacedOutputs: flushPendingSurfacedSubAgentOutputs,
     getCurrentAssistantMessageId,
     getVisibleAssistantContent: () => assistantStream.getVisibleAssistantContent(),
-    markCurrentAssistantPendingReview: ({ currentAssistantMessageId, visibleContent }) => {
-      if (!runId) {
-        return;
-      }
-      applyForegroundAssistantDraftIncomplete({
-        finishReason: 'terminal_review_pending',
-        messageId: currentAssistantMessageId,
-        updateMetadata: (messageId, metadata) => {
-          shared.store.updateMessageAssistantMetadata(conversationId, messageId, metadata);
-        },
-        visibleContent,
-      });
-    },
     handleInterruptedError: async ({ currentAssistantMessageId, error, visibleContent }) => {
       throwIfAbortSignalTriggered(abort.signal);
       applyForegroundAssistantDraftIncomplete({
@@ -146,7 +110,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         },
         visibleContent,
       });
-      await handleForegroundInterruptedResponseRecovery({
+      handleForegroundInterruptedResponseRecovery({
         appendConversationLog: shared.helpers.appendConversationLog,
         assertNotAborted: () => throwIfAbortSignalTriggered(abort.signal),
         conversationId,
@@ -154,12 +118,10 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         errorMessage: error.message,
         finalizeTrackedRun: trackedRunStore.finalizeRun,
         outcome: resolveForegroundInterruptedResponseOutcome({ conversationId, error, runId }),
-        recoverAgentRunFinalPreview,
         requestPersistenceCheckpoint: shared.helpers.requestPersistenceCheckpoint,
         runId,
         setAgentRunPhase: shared.store.setAgentRunPhase,
         setChatError: shared.helpers.setChatError,
-        signal: abort.signal,
         updateAgentRunSummary: shared.store.updateAgentRunSummary,
         updateMessage: shared.store.updateMessage,
         updateMessageAssistantMetadata: shared.store.updateMessageAssistantMetadata,
@@ -181,7 +143,7 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         recordedSpawnedSubAgents: mutableState.spawnedSubAgentCount,
         runId,
       });
-      await handleForegroundRunCompletionFlow({
+      handleForegroundRunCompletionFlow({
         appendConversationLog,
         currentAssistantMessage: getCurrentConversation()?.messages.find(
           (candidate) => candidate.id === getCurrentAssistantMessageId(),
@@ -201,19 +163,12 @@ export function createForegroundRunTerminalLifecycle(params: RuntimeTerminalLife
         reviewCompletion: () =>
           reviewForegroundRunCompletion({
             appendConversationLog: shared.helpers.appendConversationLog,
-            assertNotAborted: () => throwIfAbortSignalTriggered(abort.signal),
             conversationId,
             finalizeTrackedRun: trackedRunStore.finalizeRun,
-            flushChatState: shared.durability.flushChatState,
-            recoverAgentRunFinalPreview,
-            resumeAgentRun: wrapResumeAgentRun(shared.helpers.getResumeAgentRun(), 'succeeded'),
             runId,
-            signal: abort.signal,
+            setChatError: shared.helpers.setChatError,
             turnSummary,
-            updateAgentRunControlGraph: shared.store.updateAgentRunControlGraph,
-            updateAgentRunSummary: shared.store.updateAgentRunSummary,
             updateMessageAssistantMetadata: shared.store.updateMessageAssistantMetadata,
-            setAgentRunPhase: shared.store.setAgentRunPhase,
           }),
         trackedRunState,
         turnSummary,

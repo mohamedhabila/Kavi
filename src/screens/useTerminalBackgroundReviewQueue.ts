@@ -7,12 +7,7 @@ import {
 } from '../services/agents/agentRunCancellation';
 import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { useChatStore } from '../store/useChatStore';
-import type { Conversation } from '../types/conversation';
-import type {
-  EnsureAgentRunFinalResponse,
-  ResolvedFinalizationProviderContext,
-  ResumeAgentRun,
-} from '../engine/graph/foregroundRun/contracts';
+import type { ResumeAgentRun } from '../engine/graph/foregroundRun/contracts';
 import { getReviewableSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import type { QueueTerminalBackgroundReview } from './subAgentRunBridgeTypes';
 import { handleTerminalBackgroundReview } from './terminalBackgroundReviewHandler';
@@ -24,33 +19,18 @@ type ChatStore = ReturnType<typeof useChatStore.getState>;
 export function useTerminalBackgroundReviewQueue(params: {
   appendConversationLog: ChatStore['addConversationLog'];
   completeAgentRun: ChatStore['completeAgentRun'];
-  ensureAgentRunFinalResponseRef: MutableRefObject<EnsureAgentRunFinalResponse | null>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   recordConversationTurnMemory: RecordConversationTurnMemory;
-  resolveConversationFinalizationContextRef: MutableRefObject<
-    | ((conversation: Conversation) => Promise<ResolvedFinalizationProviderContext | undefined>)
-    | null
-  >;
   resumeAgentRunRef: MutableRefObject<ResumeAgentRun | null>;
-  setAgentRunPhase: ChatStore['setAgentRunPhase'];
-  updateAgentRunAsyncWork: ChatStore['updateAgentRunAsyncWork'];
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
-  updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
-  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): QueueTerminalBackgroundReview {
   const {
     appendConversationLog,
     completeAgentRun,
-    ensureAgentRunFinalResponseRef,
     pendingAgentRunTerminalReviewsRef,
     recordConversationTurnMemory,
-    resolveConversationFinalizationContextRef,
     resumeAgentRunRef,
-    setAgentRunPhase,
-    updateAgentRunAsyncWork,
     updateAgentRunControlGraph,
-    updateAgentRunSummary,
-    updateMessageAssistantMetadata,
   } = params;
 
   return useCallback(
@@ -66,15 +46,9 @@ export function useTerminalBackgroundReviewQueue(params: {
           appendConversationLog,
           candidate,
           completeAgentRun,
-          ensureAgentRunFinalResponseRef,
           recordConversationTurnMemory,
-          resolveConversationFinalizationContextRef,
           resumeAgentRunRef,
-          setAgentRunPhase,
-          updateAgentRunAsyncWork,
           updateAgentRunControlGraph,
-          updateAgentRunSummary,
-          updateMessageAssistantMetadata,
         }),
       );
       pendingAgentRunTerminalReviewsRef.current.set(runIdentityKey, reviewPromise);
@@ -89,16 +63,10 @@ export function useTerminalBackgroundReviewQueue(params: {
     [
       appendConversationLog,
       completeAgentRun,
-      ensureAgentRunFinalResponseRef,
       pendingAgentRunTerminalReviewsRef,
       recordConversationTurnMemory,
-      resolveConversationFinalizationContextRef,
       resumeAgentRunRef,
-      setAgentRunPhase,
-      updateAgentRunAsyncWork,
       updateAgentRunControlGraph,
-      updateAgentRunSummary,
-      updateMessageAssistantMetadata,
     ],
   );
 }
@@ -107,18 +75,9 @@ async function runTerminalBackgroundReview(params: {
   appendConversationLog: ChatStore['addConversationLog'];
   candidate: Parameters<QueueTerminalBackgroundReview>[0];
   completeAgentRun: ChatStore['completeAgentRun'];
-  ensureAgentRunFinalResponseRef: MutableRefObject<EnsureAgentRunFinalResponse | null>;
   recordConversationTurnMemory: RecordConversationTurnMemory;
-  resolveConversationFinalizationContextRef: MutableRefObject<
-    | ((conversation: Conversation) => Promise<ResolvedFinalizationProviderContext | undefined>)
-    | null
-  >;
   resumeAgentRunRef: MutableRefObject<ResumeAgentRun | null>;
-  setAgentRunPhase: ChatStore['setAgentRunPhase'];
-  updateAgentRunAsyncWork: ChatStore['updateAgentRunAsyncWork'];
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
-  updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
-  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): Promise<void> {
   const { candidate } = params;
   const operation = createAgentRunOperationController({
@@ -159,17 +118,12 @@ async function runTerminalBackgroundReview(params: {
       completeAgentRun: params.completeAgentRun,
       context: reviewCommand.context,
       conversationId: candidate.conversationId,
-      ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponseRef.current,
       flushChatState: flushChatStorePersistenceNow,
       recordConversationTurnMemory: params.recordConversationTurnMemory,
+      resumeAgentRun,
       reviewTimestamp,
       runId: candidate.runId,
-      setAgentRunPhase: params.setAgentRunPhase,
-      signal: operation.signal,
-      updateAgentRunAsyncWork: params.updateAgentRunAsyncWork,
       updateAgentRunControlGraph: params.updateAgentRunControlGraph,
-      updateAgentRunSummary: params.updateAgentRunSummary,
-      updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
     });
   } catch (error) {
     if (!isAbortErrorLike(error, operation.signal)) {

@@ -17,10 +17,7 @@ import {
   mockAddToolCall,
   mockUpdateToolCallStatus,
 } from '../../../testSupport/chatScreen/storeMocks';
-import {
-  mockCollectAgentRunFinalizationEvidence,
-  mockRunOrchestrator,
-} from '../../../testSupport/chatScreen/serviceMocks';
+import { mockRunOrchestrator } from '../../../testSupport/chatScreen/serviceMocks';
 
 describe('ChatScreen sub-agent worker loop', () => {
   beforeEach(resetInFlightChatScreenTestEnvironment);
@@ -302,17 +299,7 @@ describe('ChatScreen sub-agent worker loop', () => {
     scrollToEndSpy.mockRestore();
   });
 
-  it('delivers a failure response for an orchestrator error without verified evidence', async () => {
-    mockCollectAgentRunFinalizationEvidence.mockReturnValue({
-      originalPrompt: 'Error test',
-      transcriptMessages: [],
-      lastNonEmptyAssistantContent: '',
-      lastSubstantiveResult: '',
-      resultPreviews: [],
-      toolsUsed: [],
-      iterations: 0,
-      hasIncompleteToolCalls: false,
-    });
+  it('shows the error for an orchestrator error, writing no answer for the run', async () => {
     mockRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onError(new Error('Test error'));
       return { terminalDisposition: 'failed' };

@@ -39,18 +39,19 @@ function makeRun(overrides: Partial<AgentRun> = {}): AgentRun {
 }
 
 describe('displayProjection', () => {
-  it('suppresses pending-review assistant candidates from the visible transcript', () => {
+  // A run that ended without an answer keeps what it streamed in view, beside the error.
+  it("keeps a failed run's streamed text renderable", () => {
     expect(
       isRenderableDisplayMessage(
         makeMessage({
           assistantMetadata: {
             kind: 'final',
             completionStatus: 'incomplete',
-            finishReason: 'terminal_review_pending',
+            finishReason: 'response_failed',
           },
         }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('keeps complete final assistant messages renderable', () => {

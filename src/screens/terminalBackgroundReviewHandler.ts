@@ -2,86 +2,76 @@ import type { AgentControlGraphTerminalBackgroundReviewContext } from '../engine
 import {
   buildAgentRunMessageScope,
   getLatestAssistantProjectionFinalResponse,
-  getLatestAssistantProjectionFinalResponsePreview,
 } from '../services/agents/lifecycle/agentRunStateMachine';
 import { useChatStore } from '../store/useChatStore';
 import type { ConversationLogEntry } from '../types/conversation';
-import { findLatestPreferredAgentRunAssistantMessageId } from '../engine/graph/foregroundRun/assistantMessages';
-import { EnsureAgentRunFinalResponse } from '../engine/graph/foregroundRun/contracts';
+import type { ResumeAgentRun } from '../engine/graph/foregroundRun/contracts';
 import { completeTerminalBackgroundReviewRun } from './terminalBackgroundCompletion';
 import type { RecordConversationTurnMemory } from '../services/memory/core/memoryCapture';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
+/** Shown to the model when it resumes the run whose background workers all finished. */
+export const BACKGROUND_WORKERS_FINISHED_RESUME_PROMPT =
+  'Your background workers have finished; their results are in the conversation. Answer the request with them.';
+
+/**
+ * Settles a run once every background worker it started has finished. A run that already
+ * answered completes with that answer. A run that has not is resumed through the agent loop,
+ * with its tools, to answer from its workers' results: nothing writes an answer on its behalf.
+ */
 export async function handleTerminalBackgroundReview(params: {
   appendConversationLog: ChatStore['addConversationLog'];
   assertNotAborted: () => void;
   completeAgentRun: ChatStore['completeAgentRun'];
   conversationId: string;
   context: AgentControlGraphTerminalBackgroundReviewContext;
-  ensureAgentRunFinalResponse?: EnsureAgentRunFinalResponse | null;
   flushChatState: () => Promise<void>;
   recordConversationTurnMemory: RecordConversationTurnMemory;
+  resumeAgentRun?: ResumeAgentRun | null;
   reviewTimestamp: number;
   runId: string;
-  signal: AbortSignal;
-  setAgentRunPhase: ChatStore['setAgentRunPhase'];
-  updateAgentRunAsyncWork: ChatStore['updateAgentRunAsyncWork'];
   updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
-  updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
-  updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
 }): Promise<void> {
   const { conversation, targetRun, candidateSummary, candidateStatus } = params.context;
   const status = candidateStatus === 'completed' ? 'completed' : 'failed';
   const checkpointTitle =
     status === 'completed' ? 'Background workers finished' : 'Background worker review failed';
-  const runMessageScope = buildAgentRunMessageScope(targetRun);
-  let latestSummary = candidateSummary;
+  const finalResponse = getLatestAssistantProjectionFinalResponse(
+    conversation.messages,
+    buildAgentRunMessageScope(targetRun),
+  );
 
-  if (!getLatestAssistantProjectionFinalResponsePreview(conversation.messages, runMessageScope)) {
-    const preferredAssistantMessageId = findLatestPreferredAgentRunAssistantMessageId(
-      conversation.messages,
-      runMessageScope,
-    );
-    const finalResponsePreview = await params.ensureAgentRunFinalResponse?.({
+  if (!finalResponse) {
+    if (!params.resumeAgentRun) return;
+    params.appendConversationLog(params.conversationId, {
+      kind: 'state',
+      level: 'info',
+      title: 'Background workers finished',
+      detail: candidateSummary,
+      timestamp: params.reviewTimestamp,
+    });
+    await params.flushChatState();
+    params.assertNotAborted();
+    await params.resumeAgentRun({
       conversationId: params.conversationId,
       runId: params.runId,
-      status,
-      preferredAssistantMessageId,
-      timestamp: params.reviewTimestamp,
-      signal: params.signal,
+      additionalSystemPrompt: BACKGROUND_WORKERS_FINISHED_RESUME_PROMPT,
+      assistantDraftMode: 'new',
     });
-    params.assertNotAborted();
-    if (finalResponsePreview) {
-      latestSummary = finalResponsePreview;
-    }
+    return;
   }
-
-  const settledConversation = useChatStore
-    .getState()
-    .conversations.find((candidate) => candidate.id === params.conversationId);
-  const settledRun = settledConversation?.agentRuns?.find(
-    (candidate) => candidate.id === params.runId,
-  );
-  if (!settledConversation || !settledRun) return;
-  const settledRunMessageScope = buildAgentRunMessageScope(settledRun);
-  const settledFinalResponse = getLatestAssistantProjectionFinalResponse(
-    settledConversation.messages,
-    settledRunMessageScope,
-  );
-  if (!settledFinalResponse) return;
-  latestSummary = settledFinalResponse.content.trim();
 
   await params.flushChatState();
   params.assertNotAborted();
-  params.recordConversationTurnMemory(params.conversationId, settledFinalResponse.id);
+  params.recordConversationTurnMemory(params.conversationId, finalResponse.id);
 
   const completed = completeTerminalBackgroundReviewRun({
     appendConversationLog: params.appendConversationLog,
     completeAgentRun: params.completeAgentRun,
     completion: {
       status,
-      latestSummary,
+      latestSummary: finalResponse.content.trim(),
       checkpointTitle,
       checkpointDetail: candidateSummary,
       logLevel: (status === 'completed' ? 'info' : 'warning') as ConversationLogEntry['level'],

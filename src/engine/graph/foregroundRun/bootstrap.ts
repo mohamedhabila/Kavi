@@ -41,7 +41,6 @@ export type ForegroundRunBootstrapSelection = {
   assistantMessageId: string;
   existingRun?: AgentRun;
   latestUserMessage?: Message;
-  replaceResumedAssistantDraft: boolean;
   resumedAssistantDraft?: Message;
   shouldAbortPreviousForegroundRequest: boolean;
   shouldInsertPlaceholderAssistant: boolean;
@@ -100,8 +99,6 @@ export function buildForegroundRunBootstrapSelection(params: {
     assistantMessageId: resumedAssistantDraft?.id ?? params.createAssistantMessageId(),
     existingRun,
     latestUserMessage,
-    replaceResumedAssistantDraft:
-      params.assistantDraftMode === 'replace' && resumedAssistantDraft !== undefined,
     resumedAssistantDraft,
     shouldAbortPreviousForegroundRequest: !normalizedReuseAgentRunId,
     shouldInsertPlaceholderAssistant: !resumedAssistantDraft,

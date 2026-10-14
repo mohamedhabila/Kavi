@@ -1,23 +1,14 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useChatStore } from '../../../store/useChatStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
-import type { Conversation } from '../../../types/conversation';
-import {
-  resolveConversationProviderContext,
-  resolveConversationStartSelection,
-} from '../../../services/llm/support/providerSupport';
+import { resolveConversationStartSelection } from '../../../services/llm/support/providerSupport';
 import type {
   ForegroundConversationRunHelpers,
   EnsureConversationOptions,
 } from '../foregroundRun/executionTypes';
-import type { ResolvedFinalizationProviderContext } from '../foregroundRun/contracts';
 
 type ChatStoreState = ReturnType<typeof useChatStore.getState>;
 type SettingsStoreState = ReturnType<typeof useSettingsStore.getState>;
-
-type ResolveConversationFinalizationContext = (
-  conversation: Conversation,
-) => Promise<ResolvedFinalizationProviderContext | undefined>;
 
 type UseConversationGraphControllerParams = {
   activeConversationId: string | null;
@@ -38,12 +29,7 @@ export function useConversationGraphController(params: UseConversationGraphContr
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   handleModelSelect: (providerId: string, model: string) => void;
   handlePersonaSelect: (personaId: string) => void;
-  resolveConversationFinalizationContext: ResolveConversationFinalizationContext;
-  resolveConversationFinalizationContextRef: MutableRefObject<ResolveConversationFinalizationContext | null>;
 } {
-  const resolveConversationFinalizationContextRef =
-    useRef<ResolveConversationFinalizationContext | null>(null);
-
   const resolveConversationStartDefaults = useCallback(
     () =>
       resolveConversationStartSelection(
@@ -79,40 +65,6 @@ export function useConversationGraphController(params: UseConversationGraphContr
     ensureConversation({ reportMissingProvider: false });
   }, [ensureConversation, params.activeConversationId]);
 
-  const resolveConversationFinalizationContext = useCallback(
-    async (conversation: Conversation) => {
-      const providerContext = await resolveConversationProviderContext({
-        activeModel: params.activeModel,
-        activeProviderId: params.activeProviderId,
-        conversation,
-        providers: params.providers,
-        systemPrompt: params.systemPrompt,
-      });
-      if (!providerContext) {
-        return undefined;
-      }
-
-      return {
-        ...providerContext,
-        conversationId: conversation.id,
-        personaId: conversation.personaId,
-        internalUserMessageCount: 0,
-      };
-    },
-    [params],
-  );
-
-  useEffect(() => {
-    resolveConversationFinalizationContextRef.current = resolveConversationFinalizationContext;
-    return () => {
-      if (
-        resolveConversationFinalizationContextRef.current === resolveConversationFinalizationContext
-      ) {
-        resolveConversationFinalizationContextRef.current = null;
-      }
-    };
-  }, [resolveConversationFinalizationContext]);
-
   const handleModelSelect = useCallback(
     (providerId: string, model: string) => {
       params.setActiveProviderAndModel(providerId, model);
@@ -137,7 +89,5 @@ export function useConversationGraphController(params: UseConversationGraphContr
     ensureConversation,
     handleModelSelect,
     handlePersonaSelect,
-    resolveConversationFinalizationContext,
-    resolveConversationFinalizationContextRef,
   };
 }

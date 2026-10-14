@@ -95,7 +95,6 @@ describe('foregroundConversationCancellation', () => {
     const clearForegroundRequestForConversation = jest.fn();
     const clearPendingRunState = jest.fn();
     const completeAgentRun = jest.fn();
-    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue(undefined);
     const updateAgentRunControlGraph = jest.fn();
     const abortForegroundRequestForConversation = jest.fn();
     const conversation: Conversation = {
@@ -140,7 +139,6 @@ describe('foregroundConversationCancellation', () => {
         clearForegroundRequestForConversation,
         clearPendingRunState,
         completeAgentRun,
-        ensureAgentRunFinalResponse,
         getLatestConversation: () => conversation,
         updateAgentRunControlGraph,
       },
@@ -181,7 +179,6 @@ describe('foregroundConversationCancellation', () => {
         clearForegroundRequestForConversation,
         clearPendingRunState,
         completeAgentRun,
-        ensureAgentRunFinalResponse,
         getLatestConversation: () => conversation,
         updateAgentRunControlGraph,
       },
@@ -312,7 +309,6 @@ describe('foregroundConversationCancellation', () => {
     } as Conversation;
     let latestConversation = initialConversation;
     const appendConversationLog = jest.fn();
-    const ensureAgentRunFinalResponse = jest.fn();
 
     await stopForegroundConversationRuns({
       abortForegroundRequestForConversation: jest.fn(() => true),
@@ -320,7 +316,6 @@ describe('foregroundConversationCancellation', () => {
         appendConversationLog,
         clearPendingRunState: jest.fn(),
         completeAgentRun: jest.fn(),
-        ensureAgentRunFinalResponse,
         getLatestConversation: () => latestConversation,
         updateAgentRunControlGraph: jest.fn(),
       },
@@ -338,7 +333,6 @@ describe('foregroundConversationCancellation', () => {
       conversationId: initialConversation.id,
     });
 
-    expect(ensureAgentRunFinalResponse).not.toHaveBeenCalled();
     expect(appendConversationLog).not.toHaveBeenCalledWith(
       initialConversation.id,
       expect.objectContaining({ title: expect.stringContaining('stopped') }),

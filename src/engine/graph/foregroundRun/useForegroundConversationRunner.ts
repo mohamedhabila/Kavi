@@ -33,7 +33,6 @@ type UseForegroundConversationRunnerParams = {
   clearStreamingDraft: ForegroundConversationRunStreamingActions['clearStreamingDraft'];
   clearTrackedRunCancellation: ForegroundConversationRunHelpers['clearTrackedRunCancellation'];
   createId: ForegroundConversationRunHelpers['createId'];
-  ensureAgentRunFinalResponse: ForegroundConversationRunHelpers['ensureAgentRunFinalResponse'];
   ensureConversation: ForegroundConversationRunHelpers['ensureConversation'];
   getConversation: ForegroundConversationRunHelpers['getConversation'];
   getConversations: ForegroundConversationRunHelpers['getConversations'];
@@ -78,7 +77,6 @@ export function useForegroundConversationRunner(
         clearPendingRunState: params.clearPendingRunState,
         clearTrackedRunCancellation: params.clearTrackedRunCancellation,
         createId: params.createId,
-        ensureAgentRunFinalResponse: params.ensureAgentRunFinalResponse,
         ensureConversation: params.ensureConversation,
         getConversation: params.getConversation,
         getConversations: params.getConversations,
@@ -111,7 +109,6 @@ export function useForegroundConversationRunner(
       params.clearStreamingDraft,
       params.clearTrackedRunCancellation,
       params.createId,
-      params.ensureAgentRunFinalResponse,
       params.ensureConversation,
       params.getConversation,
       params.getConversations,

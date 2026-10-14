@@ -96,7 +96,6 @@ const CODE_INCOMPLETE_FINISH_REASONS = new Set([
   'post_surface_response_pending',
   'response_failed',
   'surfaced_worker_output_pending',
-  'terminal_review_pending',
   'tool_effect_not_claimed',
   'tool_effect_reconciliation_required',
 ]);
@@ -111,7 +110,6 @@ const SETTLED_INCOMPLETE_FINISH_REASONS = new Set([
 const UNSETTLED_FINAL_FINISH_REASONS = new Set([
   'post_surface_response_pending',
   'surfaced_worker_output_pending',
-  'terminal_review_pending',
   'yielded',
 ]);
 
@@ -296,13 +294,5 @@ export function hasSettledFinalAssistantMetadata(message: Message): boolean {
 export function isIncompleteAssistantMessage(message: Message): boolean {
   return (
     message.role === 'assistant' && message.assistantMetadata?.completionStatus === 'incomplete'
-  );
-}
-
-export function isPendingReviewAssistantMessage(message: Message): boolean {
-  return (
-    isIncompleteAssistantMessage(message) &&
-    message.assistantMetadata?.kind === 'final' &&
-    message.assistantMetadata.finishReason === 'terminal_review_pending'
   );
 }

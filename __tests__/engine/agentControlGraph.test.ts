@@ -579,7 +579,7 @@ describe('agent control graph', () => {
 
   it('prepares terminal invocation snapshots for running-run resumption', () => {
     const finalized = reduceAgentControlGraph(createInitialAgentControlGraphSnapshot(), [
-      { type: 'FINALIZED', reason: 'terminal_review_pending', timestamp: 4000 },
+      { type: 'FINALIZED', reason: 'stop', timestamp: 4000 },
     ]);
 
     expect(getAgentControlGraphModelTurnBlocker(finalized)).toContain('terminal');

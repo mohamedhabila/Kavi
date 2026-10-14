@@ -33,7 +33,6 @@ function isTrackedRunContinuing(run: AgentRun | undefined): boolean {
 }
 
 function resolveMissingReplyJournalStatus(params: {
-  allowIncompleteHandoff: boolean;
   conversation: Conversation | undefined;
   currentAssistantMessageId: string;
   journalStatus: ForegroundRunTerminalStatus;
@@ -48,9 +47,6 @@ function resolveMissingReplyJournalStatus(params: {
     return params.journalStatus;
   }
 
-  if (params.allowIncompleteHandoff && params.runId && params.trackedRun?.status === 'running') {
-    return params.journalStatus;
-  }
   if (params.runId && isTrackedRunContinuing(params.trackedRun)) {
     return params.journalStatus;
   }
@@ -76,7 +72,6 @@ function resolveMissingReplyJournalStatus(params: {
  * reply is never an older final standing in for a missing one.
  */
 export function resolveForegroundTerminalProjection(params: {
-  allowIncompleteHandoff: boolean;
   conversation: Conversation | undefined;
   currentAssistantMessageId: string;
   orchestratorTerminalDisposition: OrchestratorTerminalDisposition | undefined;
@@ -98,7 +93,6 @@ export function resolveForegroundTerminalProjection(params: {
   if (!reply) {
     return {
       journalStatus: resolveMissingReplyJournalStatus({
-        allowIncompleteHandoff: params.allowIncompleteHandoff,
         conversation: params.conversation,
         currentAssistantMessageId: params.currentAssistantMessageId,
         journalStatus,

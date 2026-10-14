@@ -4,13 +4,10 @@ import {
 } from '../../services/agents/lifecycle/agentRunStateMachine';
 import type { AgentRun } from '../../types/agentRun';
 import type { Message } from '../../types/message';
-import {
-  hasTypedCompleteFinalAssistantMetadata,
-  isPendingReviewAssistantMessage,
-} from '../../utils/assistantMessageMetadata';
+import { hasTypedCompleteFinalAssistantMetadata } from '../../utils/assistantMessageMetadata';
 
 export function isRenderableDisplayMessage(message: Message): boolean {
-  return message.role !== 'system' && !isPendingReviewAssistantMessage(message);
+  return message.role !== 'system';
 }
 
 export function isVisibleAssistantMessageForAgentRun(message: Message, run?: AgentRun): boolean {

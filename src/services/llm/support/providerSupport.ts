@@ -1,4 +1,3 @@
-import type { Conversation } from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
 import { isOnDeviceLlmProvider } from '../../localLlm/provider';
 import { getProviderApiKey } from '../../storage/SecureStorage';
@@ -264,46 +263,4 @@ export function resolveConversationModel(
       (provider.id === options.activeProviderId ? trimmedActiveModel : undefined),
     provider.model,
   );
-}
-
-export type ResolvedConversationProviderContext = {
-  provider: LlmProviderConfig;
-  model: string;
-  systemPromptText: string;
-};
-
-export async function resolveConversationProviderContext(params: {
-  activeModel?: string | null;
-  activeProviderId?: string | null;
-  conversation: Pick<Conversation, 'providerId' | 'modelOverride' | 'systemPrompt'>;
-  providers: readonly LlmProviderConfig[];
-  systemPrompt: string;
-}): Promise<ResolvedConversationProviderContext | undefined> {
-  const provider = resolveEnabledProvider(
-    params.providers,
-    params.conversation.providerId || params.activeProviderId,
-  );
-  if (!provider) {
-    return undefined;
-  }
-
-  const model = resolveConversationModel(provider, {
-    conversationModel: params.conversation.modelOverride,
-    activeProviderId: params.activeProviderId,
-    activeModel: params.activeModel,
-  });
-  if (!model) {
-    return undefined;
-  }
-
-  const hydratedProvider = await hydrateProviderForRequest(provider);
-  if (providerRequiresApiKey(hydratedProvider) && !hydratedProvider.apiKey) {
-    return undefined;
-  }
-
-  return {
-    provider: bindProviderToModel(hydratedProvider, model),
-    model,
-    systemPromptText: params.conversation.systemPrompt || params.systemPrompt,
-  };
 }

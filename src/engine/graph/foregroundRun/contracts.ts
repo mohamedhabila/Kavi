@@ -1,20 +1,10 @@
-import { AgentRun, AgentRunAsyncOperation } from '../../../types/agentRun';
-import { LlmProviderConfig } from '../../../types/provider';
+import { AgentRunAsyncOperation } from '../../../types/agentRun';
 import type { MobileControllerHostPort } from '../../mobileController/runtimeBinding';
 import type { MobileControllerOutcome } from '../../mobileController/contracts';
 import type { AgentRunMobileControllerHandoffRef } from '../../../types/agentRun';
 import type { TurnLatencyTimeline } from '../../turnLatencyTimeline';
 
-export type ResolvedFinalizationProviderContext = {
-  provider: LlmProviderConfig;
-  model: string;
-  systemPromptText: string;
-  conversationId: string;
-  personaId?: string;
-  internalUserMessageCount?: number;
-};
-
-export type AssistantDraftMode = 'continue' | 'new' | 'replace';
+export type AssistantDraftMode = 'continue' | 'new';
 
 export type MobileControllerOutcomeSubmission = Readonly<{
   handoff: AgentRunMobileControllerHandoffRef;
@@ -41,23 +31,6 @@ export type RunChatOptions = {
    */
   latencyTimeline?: TurnLatencyTimeline;
 };
-
-export type EnsureAgentRunFinalResponse = (params: {
-  conversationId: string;
-  runId: string;
-  status: Exclude<AgentRun['status'], 'running'>;
-  providerContext?: ResolvedFinalizationProviderContext;
-  timestamp?: number;
-  preferredAssistantMessageId?: string;
-  signal?: AbortSignal;
-}) => Promise<string | undefined>;
-
-export type RecoverAgentRunFinalPreview = (
-  status: Exclude<AgentRun['status'], 'running'>,
-  timestamp?: number,
-  preferredAssistantMessageId?: string,
-  signal?: AbortSignal,
-) => Promise<{ preview?: string; recovered: boolean; delivered: boolean }>;
 
 export type ResumeAgentRun = (params: {
   conversationId: string;

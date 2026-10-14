@@ -69,33 +69,29 @@ const conversation: Conversation = {
   agentRuns: [run],
 };
 
+const finalAnswer = {
+  id: 'final-1',
+  role: 'assistant' as const,
+  content: 'Final answer',
+  timestamp: 9,
+  assistantMetadata: {
+    kind: 'final' as const,
+    completionStatus: 'complete' as const,
+    finishReason: 'stop',
+  },
+};
+
 function invoke(
   recordConversationTurnMemory: jest.Mock,
   options?: {
-    candidateStatus?: 'completed' | 'failed';
-    ensureAgentRunFinalResponse?: jest.Mock;
     flushChatState?: jest.Mock;
-    targetRun?: AgentRun;
     resumeAgentRun?: jest.Mock;
+    withFinalAnswer?: boolean;
   },
 ): Promise<void> {
-  const controller = new AbortController();
-  const ensureAgentRunFinalResponse =
-    options?.ensureAgentRunFinalResponse ??
-    jest.fn().mockImplementation(async () => {
-      useChatStore.getState().addMessage(conversation.id, {
-        id: 'final-1',
-        role: 'assistant',
-        content: 'Final answer',
-        timestamp: 9,
-        assistantMetadata: {
-          kind: 'final',
-          completionStatus: 'complete',
-          finishReason: 'stop',
-        },
-      });
-      return 'Final answer';
-    });
+  if (options?.withFinalAnswer !== false) {
+    useChatStore.getState().addMessage(conversation.id, finalAnswer);
+  }
   const currentConversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === conversation.id)!;
@@ -106,22 +102,16 @@ function invoke(
     conversationId: conversation.id,
     context: {
       conversation: currentConversation,
-      targetRun: options?.targetRun ?? run,
+      targetRun: run,
       candidateSummary: 'Worker completed.',
-      candidateStatus: options?.candidateStatus ?? 'completed',
+      candidateStatus: 'completed',
     },
-    ensureAgentRunFinalResponse,
     flushChatState: options?.flushChatState ?? jest.fn().mockResolvedValue(undefined),
     recordConversationTurnMemory,
     resumeAgentRun: options?.resumeAgentRun,
     reviewTimestamp: 10,
     runId: run.id,
-    signal: controller.signal,
-    setAgentRunPhase: jest.fn(),
-    updateAgentRunAsyncWork: jest.fn(),
     updateAgentRunControlGraph: jest.fn(),
-    updateAgentRunSummary: jest.fn(),
-    updateMessageAssistantMetadata: jest.fn(),
   });
 }
 
@@ -164,27 +154,22 @@ describe('terminal background review turn capture', () => {
     expect(flushChatState).toHaveBeenCalledTimes(1);
   });
 
-  it('does not transition a completed review when final delivery was not persisted', async () => {
+  // A run whose workers finished without it having answered used to get an answer synthesized
+  // from their output by a separate model call. It is resumed through the agent loop instead.
+  it("resumes a run that has not answered, so it answers from its workers' results", async () => {
     const recordConversationTurnMemory = jest.fn();
-    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue('Unpersisted preview');
+    const resumeAgentRun = jest.fn().mockResolvedValue(undefined);
 
-    await invoke(recordConversationTurnMemory, { ensureAgentRunFinalResponse });
+    await invoke(recordConversationTurnMemory, { resumeAgentRun, withFinalAnswer: false });
 
-    expect(ensureAgentRunFinalResponse).toHaveBeenCalledTimes(1);
-    expect(completeTerminalBackgroundReviewRun).not.toHaveBeenCalled();
-    expect(recordConversationTurnMemory).not.toHaveBeenCalled();
-  });
-
-  it('does not transition a failed review when its final report was not persisted', async () => {
-    const recordConversationTurnMemory = jest.fn();
-    const ensureAgentRunFinalResponse = jest.fn().mockResolvedValue('Unpersisted failure');
-
-    await invoke(recordConversationTurnMemory, {
-      candidateStatus: 'failed',
-      ensureAgentRunFinalResponse,
-    });
-
-    expect(ensureAgentRunFinalResponse).toHaveBeenCalledTimes(1);
+    expect(resumeAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: conversation.id,
+        runId: run.id,
+        assistantDraftMode: 'new',
+      }),
+    );
+    expect(resumeAgentRun.mock.calls[0][0]).not.toHaveProperty('disableTools');
     expect(completeTerminalBackgroundReviewRun).not.toHaveBeenCalled();
     expect(recordConversationTurnMemory).not.toHaveBeenCalled();
   });

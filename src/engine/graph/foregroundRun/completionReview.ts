@@ -2,10 +2,13 @@ import { AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE } from '../finalDel
 import { useChatStore } from '../../../store/useChatStore';
 import { AgentRun, AgentRunTerminalReason } from '../../../types/agentRun';
 import { ConversationLogEntry } from '../../../types/conversation';
-import { RecoverAgentRunFinalPreview, ResumeAgentRun } from './contracts';
-import { handleForegroundRunReviewFinalDelivery } from './reviewFinalDelivery';
-import { buildForegroundRunReviewContext } from './reviewContext';
+import {
+  buildAgentRunMessageScope,
+  getLatestAssistantProjectionFinalResponse,
+} from '../../../services/agents/lifecycle/agentRunStateMachine';
 import { buildAgentControlGraphTerminalReviewCompletion } from './completionReviewTerminal';
+import { findLatestAgentRunAssistantMessageId } from './assistantMessages';
+import { buildForegroundAssistantIncompleteMetadata } from './terminalLifecycle';
 
 type ChatStore = ReturnType<typeof useChatStore.getState>;
 
@@ -42,22 +45,26 @@ export type ForegroundRunCompletionReviewResult =
       completionLogDetail: string;
     };
 
-export async function reviewForegroundRunCompletion(params: {
+const DIRECT_COMPLETION_DETAIL =
+  'The workflow produced a visible final answer and completed without a separate review pass.';
+const NO_ANSWER_TITLE = 'Run ended without an answer';
+const NO_ANSWER_DETAIL = 'The run ended without a final answer.';
+
+/**
+ * How a foreground run that finished without an error ends. Only the agent loop writes an
+ * answer: a run whose graph reached a failed or blocked state ends that way, a run with a
+ * final answer completes with it, and a run without one fails with what it streamed and the
+ * error in view. Nothing writes, synthesizes or re-requests an answer on its behalf.
+ */
+export function reviewForegroundRunCompletion(params: {
   appendConversationLog: AppendConversationLog;
-  assertNotAborted: () => void;
   conversationId: string;
   finalizeTrackedRun: FinalizeTrackedRun;
-  flushChatState: () => Promise<void>;
-  recoverAgentRunFinalPreview: RecoverAgentRunFinalPreview;
-  resumeAgentRun?: ResumeAgentRun | null;
   runId?: string;
-  signal: AbortSignal;
+  setChatError: (message: string | null) => void;
   turnSummary: string;
-  updateAgentRunControlGraph: ChatStore['updateAgentRunControlGraph'];
-  updateAgentRunSummary: ChatStore['updateAgentRunSummary'];
   updateMessageAssistantMetadata: ChatStore['updateMessageAssistantMetadata'];
-  setAgentRunPhase: ChatStore['setAgentRunPhase'];
-}): Promise<ForegroundRunCompletionReviewResult> {
+}): ForegroundRunCompletionReviewResult {
   const defaultCompletion = {
     handled: false as const,
     completionStatus: 'completed' as const,
@@ -73,25 +80,26 @@ export async function reviewForegroundRunCompletion(params: {
     return defaultCompletion;
   }
 
-  const latestConversation = useChatStore
+  const conversation = useChatStore
     .getState()
     .conversations.find((candidate) => candidate.id === params.conversationId);
-  const targetRun = latestConversation?.agentRuns?.find(
-    (candidate) => candidate.id === params.runId,
-  );
-
-  if (!latestConversation || !targetRun) {
+  const run = conversation?.agentRuns?.find((candidate) => candidate.id === params.runId);
+  if (!conversation || !run) {
     return defaultCompletion;
   }
 
-  let reviewContext = buildForegroundRunReviewContext({
-    reviewConversation: latestConversation,
-    reviewRun: targetRun,
-  });
+  const runMessageScope = buildAgentRunMessageScope(run);
+  const targetMessageId = findLatestAgentRunAssistantMessageId(
+    conversation.messages,
+    runMessageScope,
+  );
+  const targetMessage = targetMessageId
+    ? conversation.messages.find((message) => message.id === targetMessageId)
+    : undefined;
 
   const terminalCompletion = buildAgentControlGraphTerminalReviewCompletion(
-    reviewContext.reviewRun.controlGraph,
-    reviewContext.targetMessage,
+    run.controlGraph,
+    targetMessage,
   );
   if (terminalCompletion) {
     const terminalized = params.finalizeTrackedRun(
@@ -112,52 +120,42 @@ export async function reviewForegroundRunCompletion(params: {
     return { handled: true, terminalized };
   }
 
-  const finalDeliveryResult = await handleForegroundRunReviewFinalDelivery({
-    appendConversationLog: params.appendConversationLog,
-    assertNotAborted: params.assertNotAborted,
-    conversationId: params.conversationId,
-    finalizeTrackedRun: params.finalizeTrackedRun,
-    flushChatState: params.flushChatState,
-    getLatestConversation: () =>
-      useChatStore
-        .getState()
-        .conversations.find((candidate) => candidate.id === params.conversationId),
-    recoverAgentRunFinalPreview: params.recoverAgentRunFinalPreview,
-    resumeAgentRun: params.resumeAgentRun,
-    runId: params.runId,
-    signal: params.signal,
-    setAgentRunPhase: params.setAgentRunPhase,
-    updateAgentRunControlGraph: params.updateAgentRunControlGraph,
-    updateAgentRunSummary: params.updateAgentRunSummary,
-    updateMessageAssistantMetadata: params.updateMessageAssistantMetadata,
-    context: reviewContext,
-  });
-  if (finalDeliveryResult.handled) {
-    return finalDeliveryResult;
+  // The same final the run's completion boundary accepts (inspectPersistedAgentRunFinalDelivery).
+  const finalAnswer = getLatestAssistantProjectionFinalResponse(
+    conversation.messages,
+    runMessageScope,
+  )?.content.trim();
+  if (finalAnswer) {
+    return {
+      handled: false,
+      completionStatus: 'completed',
+      latestSummary: finalAnswer,
+      checkpointTitle: AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE,
+      checkpointDetail: DIRECT_COMPLETION_DETAIL,
+      completionLogLevel: 'success',
+      completionLogTitle: AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE,
+      completionLogDetail: DIRECT_COMPLETION_DETAIL,
+    };
   }
 
-  reviewContext = finalDeliveryResult;
-  return buildForegroundRunDirectCompletion(reviewContext) ?? defaultCompletion;
-}
-
-const DIRECT_COMPLETION_DETAIL =
-  'The workflow produced a visible final answer and completed without a separate review pass.';
-
-function buildForegroundRunDirectCompletion(
-  reviewContext: ReturnType<typeof buildForegroundRunReviewContext>,
-): ForegroundRunCompletionReviewResult | undefined {
-  if (reviewContext.finalReviewGate.type !== 'ready') {
-    return undefined;
+  // A draft is marked failed; a final the run wrote itself (a step-limit or loop stop) keeps
+  // its own disposition, so the person can still carry the task on from it.
+  if (targetMessage && targetMessage.assistantMetadata?.kind !== 'final') {
+    params.updateMessageAssistantMetadata(
+      params.conversationId,
+      targetMessage.id,
+      buildForegroundAssistantIncompleteMetadata('response_failed'),
+    );
   }
-
+  params.setChatError(NO_ANSWER_DETAIL);
   return {
     handled: false,
-    completionStatus: 'completed',
-    latestSummary: reviewContext.finalReviewGate.candidatePreview,
-    checkpointTitle: AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE,
-    checkpointDetail: DIRECT_COMPLETION_DETAIL,
-    completionLogLevel: 'success',
-    completionLogTitle: AGENT_CONTROL_GRAPH_FINAL_RESPONSE_CHECKPOINT_TITLE,
-    completionLogDetail: DIRECT_COMPLETION_DETAIL,
+    completionStatus: 'failed',
+    latestSummary: targetMessage?.content.trim() || NO_ANSWER_DETAIL,
+    checkpointTitle: NO_ANSWER_TITLE,
+    checkpointDetail: NO_ANSWER_DETAIL,
+    completionLogLevel: 'error',
+    completionLogTitle: NO_ANSWER_TITLE,
+    completionLogDetail: `${params.turnSummary} · ${NO_ANSWER_DETAIL}`,
   };
 }

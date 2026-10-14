@@ -13,7 +13,6 @@ type ChatStoreState = ReturnType<typeof useChatStore.getState>;
 type UseChatScreenRuntimeHelpersParams = {
   addConversationLog: ChatStoreState['addConversationLog'];
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
-  pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
 };
 
@@ -63,15 +62,10 @@ export function useChatScreenRuntimeHelpers(params: UseChatScreenRuntimeHelpersP
   const clearPendingRunState = useCallback(
     (conversationId: string, runId: string) => {
       const runIdentityKey = createAgentRunIdentityKey({ conversationId, runId });
-      params.pendingAgentRunFinalizationsRef.current.delete(runIdentityKey);
       params.pendingAgentRunTerminalReviewsRef.current.delete(runIdentityKey);
       params.pendingAgentRunAsyncResumesRef.current.delete(runIdentityKey);
     },
-    [
-      params.pendingAgentRunAsyncResumesRef,
-      params.pendingAgentRunFinalizationsRef,
-      params.pendingAgentRunTerminalReviewsRef,
-    ],
+    [params.pendingAgentRunAsyncResumesRef, params.pendingAgentRunTerminalReviewsRef],
   );
 
   return {

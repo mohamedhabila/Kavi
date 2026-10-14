@@ -1,7 +1,6 @@
 import {
   cancelAgentRunOperations,
   clearAgentRunCancellation,
-  isAbortErrorLike,
 } from '../../services/agents/agentRunCancellation';
 import {
   cancelRunningSubAgentsForRun,
@@ -9,7 +8,6 @@ import {
   getRunningConversationRunsForCancellation,
   getRunningLiveSubAgentsForRun,
 } from '../../services/agents/subAgentRunTracking';
-import { resolveConversationWorkspaceTarget } from '../../services/conversationWorkspace/ownership';
 import {
   cancelOwnedExternalRecoveries,
   type CancelOwnedExternalRecoveriesResult,
@@ -28,19 +26,10 @@ import {
 
 type AppendConversationLogEntry = Pick<ConversationLogEntry, 'detail' | 'kind' | 'level' | 'title'>;
 
-type EnsureAgentRunFinalResponse = (params: {
-  conversationId: string;
-  runId: string;
-  status: Exclude<AgentRun['status'], 'running'>;
-  memoryConversationId?: string;
-  timestamp?: number;
-}) => Promise<string | undefined>;
-
 type ForegroundConversationCancellationActions = ConversationRunCompletionActions & {
   appendConversationLog: (conversationId: string, entry: AppendConversationLogEntry) => void;
   clearForegroundRequestForConversation?: (conversationId: string) => boolean;
   clearPendingRunState: (conversationId: string, runId: string) => void;
-  ensureAgentRunFinalResponse?: EnsureAgentRunFinalResponse;
   getLatestConversation: (conversationId: string) => Conversation | undefined;
 };
 
@@ -207,31 +196,6 @@ export function stopForegroundConversationRuns(params: {
           .getLatestConversation(params.conversationId)
           ?.agentRuns?.find((candidate) => candidate.id === run.id);
         const cancellationSettled = terminalized || latestRun?.status === 'cancelled';
-        if (cancellationSettled) {
-          const workspaceTarget = resolveConversationWorkspaceTarget({
-            conversationId: params.conversationId,
-          });
-          void params.actions
-            .ensureAgentRunFinalResponse?.({
-              conversationId: params.conversationId,
-              runId: run.id,
-              status: 'cancelled',
-              memoryConversationId: workspaceTarget.workspaceConversationId,
-              timestamp: Date.now(),
-            })
-            .catch((error: unknown) => {
-              if (isAbortErrorLike(error)) {
-                return;
-              }
-              const detail = error instanceof Error ? error.message : String(error);
-              params.actions.appendConversationLog(params.conversationId, {
-                kind: 'error',
-                level: 'error',
-                title: 'Cancellation report failed',
-                detail,
-              });
-            });
-        }
         return {
           cancelledRunCount: counts.cancelledRunCount + (cancellationSettled ? 1 : 0),
           cancelledWorkerCount: counts.cancelledWorkerCount + runWorkers.length,

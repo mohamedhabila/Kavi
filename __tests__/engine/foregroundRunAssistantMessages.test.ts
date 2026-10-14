@@ -1,9 +1,7 @@
 import type { Message } from '../../src/types/message';
 import {
   findLatestAgentRunAssistantMessageId,
-  findAgentRunReplaceableAssistantMessageId,
   findLatestIncompleteAgentRunAssistantMessage,
-  findLatestPreferredAgentRunAssistantMessageId,
 } from '../../src/engine/graph/foregroundRun/assistantMessages';
 
 describe('foreground run assistant message lookup', () => {
@@ -54,7 +52,6 @@ describe('foreground run assistant message lookup', () => {
     };
 
     expect(findLatestAgentRunAssistantMessageId(messages, runScope)).toBeUndefined();
-    expect(findLatestPreferredAgentRunAssistantMessageId(messages, runScope)).toBeUndefined();
   });
 
   it('does not reuse an incomplete draft after a newer empty owning projection', () => {
@@ -73,7 +70,7 @@ describe('foreground run assistant message lookup', () => {
         assistantMetadata: {
           kind: 'final',
           completionStatus: 'incomplete',
-          finishReason: 'terminal_review_pending',
+          finishReason: 'response_failed',
         },
       },
       {
@@ -90,47 +87,5 @@ describe('foreground run assistant message lookup', () => {
     };
 
     expect(findLatestIncompleteAgentRunAssistantMessage(messages, runScope)).toBeUndefined();
-  });
-
-  it.each(['response_failed', 'content_filter'])(
-    'does not promote a latest incomplete %s draft to a final response',
-    (finishReason) => {
-      const messages: Message[] = [
-        { id: 'user-1', role: 'user', content: 'Finish this', timestamp: 1 },
-        {
-          id: 'partial',
-          role: 'assistant',
-          content: 'Truncated partial output',
-          timestamp: 2,
-          assistantMetadata: {
-            kind: 'final',
-            completionStatus: 'incomplete',
-            finishReason,
-          },
-        },
-      ];
-
-      expect(findLatestPreferredAgentRunAssistantMessageId(messages, 'user-1')).toBeUndefined();
-    },
-  );
-
-  it('does not overwrite a tool-call projection with synthesized final text', () => {
-    const messages: Message[] = [
-      { id: 'user-1', role: 'user', content: 'Finish this', timestamp: 1 },
-      {
-        id: 'tool-projection',
-        role: 'assistant',
-        content: '',
-        timestamp: 2,
-        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: '{}', status: 'completed' }],
-        assistantMetadata: {
-          kind: 'intermediate',
-          completionStatus: 'complete',
-          finishReason: 'tool_calls',
-        },
-      },
-    ];
-
-    expect(findAgentRunReplaceableAssistantMessageId(messages, 'user-1')).toBeUndefined();
   });
 });

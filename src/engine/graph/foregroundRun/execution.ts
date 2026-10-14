@@ -1,7 +1,6 @@
 import { runOrchestrator } from '../../orchestrator';
 import type { OrchestratorTerminalDisposition } from '../../orchestrator/types';
 import { resolveConversationWorkspaceTarget } from '../../../services/conversationWorkspace/ownership';
-import { isAbortErrorLike } from '../../../services/agents/agentRunCancellation';
 import { createAgentRunAbortError } from '../../../services/runtimeError';
 import { supersedeForegroundConversationRun } from '../foregroundConversationCancellation';
 import { startOrReuseForegroundTrackedRun } from './bootstrap';
@@ -184,7 +183,7 @@ async function executeReservedForegroundConversationRun(
     return;
   }
 
-  const { finalizationProviderContext, model, provider, providerWithApiKey } = preflight;
+  const { model, provider, providerWithApiKey } = preflight;
   let bootstrapResult: ForegroundRunRequestBootstrapResult;
   try {
     bootstrapResult = completeForegroundRunRequestBootstrap({
@@ -245,33 +244,18 @@ async function executeReservedForegroundConversationRun(
     await task();
   };
 
-  let closeModelGenerationForHandoff: (
-    status: 'succeeded' | 'failed',
-  ) => Promise<void> = async () => {
-    throw new Error('foreground_model_journal_handoff_not_ready');
-  };
-  let completedHandoffStatus: 'succeeded' | 'failed' | null = null;
-
   const runtime = createForegroundConversationRunRuntime({
     bootstrapResult,
     clearForegroundRequestIfCurrent,
     completeRunOnce,
     conversation: runConversation,
     conversationId,
-    finalizationProviderContext,
     getCurrentConversation: () => context.helpers.getConversation(conversationId),
     guardRunCallback,
     isCurrentRunInvocation,
     model,
     options,
     provider,
-    wrapResumeAgentRun: (resume, terminalStatus) =>
-      resume
-        ? async (resumeParams) => {
-            await closeModelGenerationForHandoff(terminalStatus);
-            await resume(resumeParams);
-          }
-        : null,
     shared: context,
   });
 
@@ -307,7 +291,6 @@ async function executeReservedForegroundConversationRun(
   const requestMessageId = resumePreparation.workflowScopeUserMessageId;
   const closeModelGenerationUnchecked = async (
     status: 'succeeded' | 'failed' | 'cancelled',
-    options?: { allowIncompleteHandoff?: boolean },
   ): Promise<void> => {
     if (!executionLease) {
       throw new Error('foreground_model_journal_generation_missing');
@@ -326,7 +309,6 @@ async function executeReservedForegroundConversationRun(
       };
       assertProjectionOwnership();
       const projection = resolveForegroundTerminalProjection({
-        allowIncompleteHandoff: options?.allowIncompleteHandoff === true,
         conversation: context.helpers.getConversation(conversationId),
         currentAssistantMessageId: projectionMessageId,
         orchestratorTerminalDisposition,
@@ -379,20 +361,15 @@ async function executeReservedForegroundConversationRun(
   };
   const closeModelGeneration = async (
     status: 'succeeded' | 'failed' | 'cancelled',
-    options?: { allowIncompleteHandoff?: boolean },
   ): Promise<void> => {
     try {
-      await closeModelGenerationUnchecked(status, options);
+      await closeModelGenerationUnchecked(status);
     } catch (error) {
       if (executionLease) {
         context.durability.relinquishModelExecutionProcessOwnership(executionLease.runId);
       }
       throw error;
     }
-  };
-  closeModelGenerationForHandoff = async (status) => {
-    await closeModelGeneration(status, { allowIncompleteHandoff: true });
-    completedHandoffStatus = status;
   };
 
   try {
@@ -551,16 +528,6 @@ async function executeReservedForegroundConversationRun(
       terminalStatus = await runtime.terminalLifecycle.awaitCompletion();
     } catch (error: unknown) {
       if (
-        completedHandoffStatus &&
-        journalTerminal &&
-        projectionReleased &&
-        isAbortErrorLike(error, abortController.signal)
-      ) {
-        // A controlled recovery closes and releases this generation before the
-        // nested resume replaces its foreground request. The resulting abort
-        // belongs to the completed handoff, not to response ownership loss.
-        terminalStatus = completedHandoffStatus;
-      } else if (
         projectionOwner &&
         !context.durability.ownsModelProjection(conversationId, projectionOwner)
       ) {

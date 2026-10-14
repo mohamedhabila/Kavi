@@ -51,16 +51,10 @@ describe('agent run registry cleanup', () => {
       useTerminalBackgroundReviewQueue({
         appendConversationLog: jest.fn(),
         completeAgentRun: jest.fn(),
-        ensureAgentRunFinalResponseRef: { current: null },
         pendingAgentRunTerminalReviewsRef: { current: pending },
         recordConversationTurnMemory: jest.fn(),
-        resolveConversationFinalizationContextRef: { current: null },
         resumeAgentRunRef: { current: null },
-        setAgentRunPhase: jest.fn(),
-        updateAgentRunAsyncWork: jest.fn(),
         updateAgentRunControlGraph: jest.fn(),
-        updateAgentRunSummary: jest.fn(),
-        updateMessageAssistantMetadata: jest.fn(),
       }),
     );
 

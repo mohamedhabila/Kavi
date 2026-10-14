@@ -252,6 +252,11 @@ describe('ChatScreen editing and drafts', () => {
             role: 'assistant',
             content: 'Waiting on the verifier.',
             timestamp: 2,
+            assistantMetadata: {
+              kind: 'final',
+              completionStatus: 'complete',
+              finishReason: 'stop',
+            },
           },
           {
             id: 'conv1-worker',

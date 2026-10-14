@@ -521,17 +521,11 @@ describe('foreground run target-conversation execution context', () => {
         registry.setStreamingMessageId({ conversationId, requestId, controller }, messageId),
     };
 
-    mockedResolveForegroundRunPreflight.mockImplementation(async ({ conversation }) => ({
+    mockedResolveForegroundRunPreflight.mockImplementation(async () => ({
       kind: 'ready',
       provider,
       providerWithApiKey: provider,
       model: provider.model,
-      finalizationProviderContext: {
-        provider,
-        model: provider.model,
-        systemPromptText: conversation?.systemPrompt ?? '',
-        conversationId: conversation?.id ?? '',
-      },
     }));
 
     const callbacksByConversation = new Map<string, Parameters<typeof runOrchestrator>[1]>();

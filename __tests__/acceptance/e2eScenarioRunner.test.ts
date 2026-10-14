@@ -290,7 +290,9 @@ describe('runE2EScenario product foreground integration', () => {
     expect(result.errors).toContain('provider unavailable');
   });
 
-  it('recovers a yielded final candidate before reporting execution complete', async () => {
+  // A yielded turn used to be resumed at once with its tools disabled until it produced another
+  // answer, defeating the handoff. Its handoff message now stands as the turn's answer.
+  it("keeps a yielded turn's handoff message as its answer, without a tool-less resume", async () => {
     mockedRunOrchestrator.mockImplementationOnce(async (_options, callbacks) => {
       callbacks.onAssistantMessage(
         'The action is still pending.',
@@ -311,23 +313,17 @@ describe('runE2EScenario product foreground integration', () => {
     const result = await runE2EScenario(scenario());
 
     expect(result.errors).toEqual([]);
-    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(2);
-    expect(result.completed).toBe(true);
-    expect(result.memoryItems.indexedTurnCount).toBe(1);
-    expect(result.turnTraces[0]?.finalAssistantCandidateCount).toBe(1);
+    expect(mockedRunOrchestrator).toHaveBeenCalledTimes(1);
     expect(result.turnTraces[0]).toMatchObject({
       finalAssistant: {
-        text: 'Completed response.',
+        text: 'The action is still pending.',
         completionStatus: 'complete',
+        finishReason: 'yielded',
       },
       completion: {
         assistantStatus: 'complete',
-        executionCompleted: true,
         finalResponseCompleted: true,
-        runStatus: 'completed',
-        runCompleted: true,
-        graphStatus: 'finalized',
-        graphTerminalReason: null,
+        graphStatus: 'yielded',
       },
     });
   });

@@ -15,6 +15,8 @@ export type ForegroundRunTrackingState = {
   };
   pendingAsyncOperations: AgentRunAsyncOperation[];
   awaitingUserInput: boolean;
+  /** The turn handed off with sessions_yield to wait for its async work. */
+  yielded: boolean;
   isRunning: boolean;
 };
 
@@ -33,6 +35,7 @@ export function buildForegroundRunTrackingState(params: {
       },
       pendingAsyncOperations: params.fallbackPendingAsyncOperations,
       awaitingUserInput: false,
+      yielded: false,
       isRunning: false,
     };
   }
@@ -46,6 +49,7 @@ export function buildForegroundRunTrackingState(params: {
       },
       pendingAsyncOperations: params.fallbackPendingAsyncOperations,
       awaitingUserInput: false,
+      yielded: false,
       isRunning: false,
     };
   }
@@ -66,6 +70,7 @@ export function buildForegroundRunTrackingState(params: {
       },
       pendingAsyncOperations,
       awaitingUserInput: false,
+      yielded: false,
       isRunning: false,
     };
   }
@@ -92,6 +97,7 @@ export function buildForegroundRunTrackingState(params: {
         ? pendingAsyncOperations
         : params.fallbackPendingAsyncOperations,
     awaitingUserInput: targetRun.controlGraph?.status === 'awaiting_user',
+    yielded: targetRun.controlGraph?.status === 'yielded',
     isRunning: targetRun.status === 'running',
   };
 }

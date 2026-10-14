@@ -2,7 +2,7 @@ import type { Message } from '../../src/types/message';
 import type { SubAgentSnapshot } from '../../src/types/subAgent';
 import {
   getLatestAssistantProjectionFinalResponse,
-  getLatestFinalAssistantResponsePreview,
+  getLatestAssistantProjectionFinalResponsePreview,
   hasDeliveredFinalAssistantResponse,
   summarizeBackgroundWorkerRunOutcome,
 } from '../../src/services/agents/lifecycle/agentRunStateMachine';
@@ -74,7 +74,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(true);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBe(
       'The task is complete and verified.',
     );
     expect(getLatestAssistantProjectionFinalResponse(messages, 'msg-user')).toBe(messages.at(-1));
@@ -127,7 +127,7 @@ describe('final assistant response helpers', () => {
     };
 
     expect(hasDeliveredFinalAssistantResponse(messages, runScope)).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, runScope)).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, runScope)).toBeUndefined();
   });
 
   it('does not treat intermediate action text as the delivered final response', () => {
@@ -163,7 +163,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
   it('rejects an older final after a newer owning tool projection', () => {
@@ -218,7 +218,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
   it('never treats worker event messages as the owning run final projection', () => {
@@ -243,7 +243,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
   it('does not let a later worker event supersede a settled owning projection', () => {
@@ -274,7 +274,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(true);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBe(
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBe(
       'The owning response is complete.',
     );
     expect(getLatestAssistantProjectionFinalResponse(messages, 'msg-user')?.id).toBe('msg-final');
@@ -321,7 +321,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
   it('ignores empty complete final metadata so review recovery can synthesize the missing answer', () => {
@@ -346,7 +346,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 
   it('ignores max-iterations placeholders when deciding whether a run delivered an answer', () => {
@@ -372,7 +372,7 @@ describe('final assistant response helpers', () => {
     ];
 
     expect(hasDeliveredFinalAssistantResponse(messages, 'msg-user')).toBe(false);
-    expect(getLatestFinalAssistantResponsePreview(messages, 'msg-user')).toBeUndefined();
+    expect(getLatestAssistantProjectionFinalResponsePreview(messages, 'msg-user')).toBeUndefined();
   });
 });
 

@@ -24,16 +24,11 @@ export function createForegroundAssistantStreamController(params: {
   currentAssistantMessageId: string;
   getStreamingDraft: (messageId: string) => StreamingDraftSnapshot | undefined;
   publishIntervalMs: number;
-  replaceResumedAssistantDraft?: boolean;
   resumedAssistantDraft?: ResumedAssistantDraft;
 }) {
   let currentAssistantMessageId = params.currentAssistantMessageId;
-  const resumedDraftContent = params.replaceResumedAssistantDraft
-    ? ''
-    : (params.resumedAssistantDraft?.content ?? '');
-  const resumedDraftReasoning = params.replaceResumedAssistantDraft
-    ? ''
-    : (params.resumedAssistantDraft?.reasoning ?? '');
+  const resumedDraftContent = params.resumedAssistantDraft?.content ?? '';
+  const resumedDraftReasoning = params.resumedAssistantDraft?.reasoning ?? '';
   let accumulatedContent = resumedDraftContent;
   let accumulatedReasoning = resumedDraftReasoning;
   let lastCommittedContent = resumedDraftContent;
@@ -220,20 +215,13 @@ export function createForegroundAssistantStreamController(params: {
         return content;
       }
 
-      const preserveExistingDraft =
-        params.resumedAssistantDraft.assistantMetadata?.finishReason === 'terminal_review_pending';
-      if (params.replaceResumedAssistantDraft) {
-        return normalizeAssistantTranscriptText(content);
-      }
       const currentVisibleContent = getVisibleAssistantContent();
       const baselineContent =
         currentVisibleContent ||
         normalizeAssistantTranscriptText(params.resumedAssistantDraft.content ?? '');
       const sanitizedIncomingContent = normalizeAssistantTranscriptText(content);
 
-      return mergeAssistantContinuationText(baselineContent, sanitizedIncomingContent, {
-        preserveExistingPrefix: preserveExistingDraft,
-      });
+      return mergeAssistantContinuationText(baselineContent, sanitizedIncomingContent);
     },
     resetCurrentTurn() {
       if (checkpointTimer) {
@@ -244,14 +232,12 @@ export function createForegroundAssistantStreamController(params: {
 
       const baselineContent =
         params.resumedAssistantDraft &&
-        currentAssistantMessageId === params.resumedAssistantDraft.id &&
-        !params.replaceResumedAssistantDraft
+        currentAssistantMessageId === params.resumedAssistantDraft.id
           ? (params.resumedAssistantDraft.content ?? '')
           : '';
       const baselineReasoning =
         params.resumedAssistantDraft &&
-        currentAssistantMessageId === params.resumedAssistantDraft.id &&
-        !params.replaceResumedAssistantDraft
+        currentAssistantMessageId === params.resumedAssistantDraft.id
           ? (params.resumedAssistantDraft.reasoning ?? '')
           : '';
       const baselineVisibleContent = baselineContent

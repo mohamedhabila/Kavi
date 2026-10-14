@@ -102,11 +102,7 @@ function shouldReplaceOverlappingStructuredAssistantContinuation(
   return existingCoverage >= 0.5 && incomingCoverage >= 0.25 && incomingSupersedesExisting;
 }
 
-export function mergeAssistantContinuationText(
-  existingText: string,
-  incomingText: string,
-  options?: { preserveExistingPrefix?: boolean },
-): string {
+export function mergeAssistantContinuationText(existingText: string, incomingText: string): string {
   if (!existingText) {
     return incomingText;
   }
@@ -133,7 +129,7 @@ export function mergeAssistantContinuationText(
 
   const normalizedExisting = existingText.trim();
   const normalizedIncoming = incomingText.trim();
-  if (!options?.preserveExistingPrefix && normalizedExisting && normalizedIncoming) {
+  if (normalizedExisting && normalizedIncoming) {
     const anchorLength = Math.min(96, Math.max(24, Math.floor(normalizedExisting.length / 3)));
     const existingAnchor = normalizedExisting.slice(0, anchorLength);
     if (normalizedIncoming.startsWith(existingAnchor)) {

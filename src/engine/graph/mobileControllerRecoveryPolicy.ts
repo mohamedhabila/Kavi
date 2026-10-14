@@ -13,7 +13,9 @@ import { MOBILE_UI_ACTION_TOOL_NAME } from '../mobileController/contracts';
 import type { MobileControllerExecutionBinding } from '../mobileController/runtimeBinding';
 import { qualifyMobileControllerAction } from '../mobileController/validation';
 import { resolveRegisteredToolName } from '../tools/toolNameNormalization';
-import { MAX_AGENT_RUN_AUTOMATIC_RECOVERY_ATTEMPTS } from './foregroundRun/automaticRecoveryBudget';
+
+/** Automatic recovery attempts a mobile-controller run gets before it reports the stall. */
+const MAX_AGENT_RUN_AUTOMATIC_RECOVERY_ATTEMPTS = 1;
 
 export const MOBILE_CONTROLLER_STALL_THRESHOLD = 3;
 const MOBILE_CONTROLLER_COORDINATE_REGION_COUNT = 20;

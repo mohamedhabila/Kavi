@@ -2,7 +2,6 @@ import {
   normalizeFinalizationOutputText,
   normalizeFinalizationPreviewText,
   summarizeFinalizationToolResultPreview,
-  truncateFinalizationText,
 } from '../../../src/services/agents/finalizationText';
 import {
   DEVANAGARI_COMBINING_TEXT,
@@ -22,16 +21,6 @@ describe('normalizeFinalizationOutputText', () => {
     for (const probe of PROBES) {
       const value = `${'a'.repeat(90)}${probe.repeat(15)}`;
       const result = normalizeFinalizationOutputText(value, 100);
-      expectGraphemeSafe(result ?? '');
-    }
-  });
-});
-
-describe('truncateFinalizationText', () => {
-  it('never splits a grapheme cluster at the ellipsis-suffixed cut', () => {
-    for (const probe of PROBES) {
-      const value = `${'a'.repeat(90)}${probe.repeat(15)}`;
-      const result = truncateFinalizationText(value, 100);
       expectGraphemeSafe(result ?? '');
     }
   });

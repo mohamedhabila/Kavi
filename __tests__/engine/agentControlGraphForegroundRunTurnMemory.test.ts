@@ -132,7 +132,7 @@ describe('foreground turn capture', () => {
     expect(context.durability.releaseModelProjection).toHaveBeenCalledTimes(1);
   });
 
-  it('journals a broken tracked final candidate as failed when final recovery fails', async () => {
+  it('journals a final candidate that delivered no answer as failed', async () => {
     const conversation = createConversation();
     const provider = createProvider('target-provider', 'target-model');
     const recordConversationTurnMemory = jest.fn();
@@ -142,7 +142,6 @@ describe('foreground turn capture', () => {
       ensureConversation: jest.fn(),
       recordConversationTurnMemory,
     });
-    context.helpers.ensureAgentRunFinalResponse = jest.fn().mockResolvedValue(undefined);
     mockedResolveForegroundRunPreflight.mockResolvedValue(
       createReadyPreflightResult({ conversation, provider }),
     );

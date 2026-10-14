@@ -4,12 +4,7 @@ import type { ChatState } from '../../../store/chatStoreTypes';
 import type { Conversation, ConversationLogEntry } from '../../../types/conversation';
 import type { LlmProviderConfig } from '../../../types/provider';
 import type { Message, ToolCall } from '../../../types/message';
-import type {
-  EnsureAgentRunFinalResponse,
-  ResolvedFinalizationProviderContext,
-  ResumeAgentRun,
-  RunChatOptions,
-} from './contracts';
+import type { ResumeAgentRun, RunChatOptions } from './contracts';
 import type { ForegroundRunRequestBootstrapResult } from './requestBootstrap';
 import type {
   ActivateForegroundModelExecutionInput,
@@ -109,7 +104,6 @@ export interface ForegroundConversationRunStreamingActions {
 export interface ForegroundConversationRunRefs {
   forceNextScrollRef: MutableRefObject<boolean>;
   pendingAgentRunAsyncResumesRef: MutableRefObject<Map<string, Promise<void>>>;
-  pendingAgentRunFinalizationsRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   shouldAutoFollowRef: MutableRefObject<boolean>;
   streamingDraftsRef: MutableRefObject<Record<string, ForegroundStreamingDraft | undefined>>;
@@ -120,7 +114,6 @@ export interface ForegroundConversationRunHelpers {
   clearPendingRunState: (conversationId: string, runId: string) => void;
   clearTrackedRunCancellation: (conversationId: string, runId: string) => void;
   createId: () => string;
-  ensureAgentRunFinalResponse: EnsureAgentRunFinalResponse;
   ensureConversation: (options?: EnsureConversationOptions) => string | null;
   getConversation: (conversationId: string) => Conversation | undefined;
   getConversations: () => Conversation[];
@@ -202,16 +195,11 @@ export interface ForegroundConversationRunRuntimeParams {
   completeRunOnce: (task: () => Promise<void> | void) => Promise<void>;
   conversation: Conversation | undefined;
   conversationId: string;
-  finalizationProviderContext: ResolvedFinalizationProviderContext;
   getCurrentConversation: () => Conversation | undefined;
   guardRunCallback: () => boolean;
   isCurrentRunInvocation: () => boolean;
   model: string;
   options?: RunChatOptions;
   provider: LlmProviderConfig;
-  wrapResumeAgentRun: (
-    resume: ResumeAgentRun | null,
-    terminalStatus: 'succeeded' | 'failed',
-  ) => ResumeAgentRun | null;
   shared: ExecuteForegroundConversationRunParams['context'];
 }

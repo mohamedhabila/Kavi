@@ -14,10 +14,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { SubAgentDetailModal } from '../components/agents/SubAgentDetailModal';
 import { ApprovalBanner } from '../components/approval/ApprovalBanner';
 import { ProactiveTaskSuggestionBanner } from '../components/chat/ProactiveTaskSuggestionBanner';
-import {
-  type AssistantDraftMode,
-  type EnsureAgentRunFinalResponse,
-} from '../engine/graph/foregroundRun/contracts';
+import { type AssistantDraftMode } from '../engine/graph/foregroundRun/contracts';
 import { useConversationGraphController } from '../engine/graph/conversation/useConversationGraphController';
 import { useForegroundConversationActions } from '../engine/graph/foregroundRun/useForegroundConversationActions';
 import { useForegroundRunRecoveryEffects } from '../engine/graph/foregroundRun/useForegroundRunRecoveryEffects';
@@ -49,7 +46,6 @@ import { useChatScreenRuntimeHelpers } from './chatScreen/useChatScreenRuntimeHe
 import { useChatScreenUiCallbacks } from './chatScreen/useChatScreenUiCallbacks';
 import { useChatComposerState } from './useChatComposerState';
 import { useChatScrollController } from './useChatScrollController';
-import { useAgentRunFinalResponse } from './useAgentRunFinalResponse';
 import { useForegroundRequest } from './useForegroundRequest';
 import { useLocalModelRuntimeState } from './useLocalModelRuntimeState';
 import { useStreamingDrafts } from './useStreamingDrafts';
@@ -147,10 +143,8 @@ export const ChatScreen: React.FC = () => {
   const previousVisibleCountRef = useRef(0);
   const previousSourceMessageCountRef = useRef(0);
   const displayStateCacheRef = useRef(createChatDisplayStateCache());
-  const pendingAgentRunFinalizationsRef = useRef(new Map<string, Promise<string | undefined>>());
   const pendingAgentRunTerminalReviewsRef = useRef(new Map<string, Promise<void>>());
   const pendingAgentRunAsyncResumesRef = useRef(new Map<string, Promise<void>>());
-  const ensureAgentRunFinalResponseRef = useRef<EnsureAgentRunFinalResponse | null>(null);
   const resumeAgentRunRef = useRef<
     | ((params: {
         conversationId: string;
@@ -172,7 +166,6 @@ export const ChatScreen: React.FC = () => {
       : null;
   const hasActiveRecoveryOperation = activeRunIdentityKey
     ? pendingAgentRunAsyncResumesRef.current.has(activeRunIdentityKey) ||
-      pendingAgentRunFinalizationsRef.current.has(activeRunIdentityKey) ||
       pendingAgentRunTerminalReviewsRef.current.has(activeRunIdentityKey)
     : false;
   const hasLiveBackgroundWorker =
@@ -245,15 +238,10 @@ export const ChatScreen: React.FC = () => {
   } = useChatScreenRuntimeHelpers({
     addConversationLog,
     pendingAgentRunAsyncResumesRef,
-    pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
   });
 
-  const {
-    ensureConversation,
-    resolveConversationFinalizationContext,
-    resolveConversationFinalizationContextRef,
-  } = useConversationGraphController({
+  const { ensureConversation } = useConversationGraphController({
     activeConversationId,
     activeModel,
     activeProviderId,
@@ -268,32 +256,13 @@ export const ChatScreen: React.FC = () => {
     updatePersonaInConversation,
   });
 
-  const ensureAgentRunFinalResponse = useAgentRunFinalResponse({
-    appendAgentRunCheckpoint,
-    appendConversationLog,
-    ensureAgentRunFinalResponseRef,
-    pendingAgentRunFinalizationsRef,
-    resolveConversationFinalizationContextRef,
-    setAgentRunPhase,
-    updateAgentRunSummary,
-    updateMessage,
-    updateMessageAssistantMetadata,
-    updateMessageProviderReplay,
-  });
-
   const queueTerminalBackgroundReview = useTerminalBackgroundReviewQueue({
     appendConversationLog,
     completeAgentRun,
-    ensureAgentRunFinalResponseRef,
     pendingAgentRunTerminalReviewsRef,
     recordConversationTurnMemory,
-    resolveConversationFinalizationContextRef,
     resumeAgentRunRef,
-    setAgentRunPhase,
-    updateAgentRunAsyncWork,
     updateAgentRunControlGraph,
-    updateAgentRunSummary,
-    updateMessageAssistantMetadata,
   });
 
   useRecoveredAsyncRunResume({
@@ -366,7 +335,6 @@ export const ChatScreen: React.FC = () => {
       clearChatDisplayStateCache(displayStateCacheRef.current);
       clearInteractionReleaseTimer();
       clearPendingScrollFrames();
-      pendingAgentRunFinalizationsRef.current.clear();
       pendingAgentRunTerminalReviewsRef.current.clear();
       pendingAgentRunAsyncResumesRef.current.clear();
     },
@@ -375,9 +343,7 @@ export const ChatScreen: React.FC = () => {
 
   useForegroundRunRecoveryEffects({
     conversations,
-    ensureAgentRunFinalResponse,
     queueTerminalBackgroundReview,
-    resolveConversationFinalizationContext,
     subAgentActivityVersion,
   });
 
@@ -388,7 +354,6 @@ export const ChatScreen: React.FC = () => {
     clearStreamingDraft,
     clearTrackedRunCancellation: clearAgentRunCancellation,
     createId: generateId,
-    ensureAgentRunFinalResponse,
     ensureConversation,
     getConversation,
     getConversations,
@@ -401,7 +366,6 @@ export const ChatScreen: React.FC = () => {
     refs: {
       forceNextScrollRef,
       pendingAgentRunAsyncResumesRef,
-      pendingAgentRunFinalizationsRef,
       pendingAgentRunTerminalReviewsRef,
       shouldAutoFollowRef,
       streamingDraftsRef,
@@ -467,12 +431,10 @@ export const ChatScreen: React.FC = () => {
     completeAgentRun,
     rewindUserMessageForResend,
     editingMessageId,
-    ensureAgentRunFinalResponse,
     ensureConversation,
     forceNextScrollRef,
     generateId,
     pendingAgentRunAsyncResumesRef,
-    pendingAgentRunFinalizationsRef,
     pendingAgentRunTerminalReviewsRef,
     requestChatStorePersistenceCheckpoint,
     returnTextToComposer,

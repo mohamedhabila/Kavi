@@ -104,7 +104,6 @@ export const E2E_PUBLIC_FINISH_REASONS = [
   'stop',
   'stop_sequence',
   'surfaced_worker_output_pending',
-  'terminal_review_pending',
   'tool_call',
   'tool_calls',
   'tool_use',
