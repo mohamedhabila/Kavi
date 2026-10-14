@@ -25,8 +25,6 @@ import { normalizeToolName } from '../tools/toolNameNormalization';
  * the prompt if the vocabulary grows.
  */
 export const MAX_CAPABILITY_INDEX_CATEGORIES = 40;
-/** Tool names shown per domain; the rest are summarized as a count. */
-export const MAX_CAPABILITY_INDEX_TOOLS_PER_CATEGORY = 2;
 
 const EXCLUDED_CATEGORIES = new Set(['other']);
 const DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
@@ -70,11 +68,15 @@ function collectAvailableToolsByCategory(
   return byCategory;
 }
 
+/**
+ * Every tool of the domain by name. Two names and a count hid the ones a task needed:
+ * "calendar: calendar_list, calendar_events, +2 more" left GLM 5.3 Flash no way to know
+ * calendar_create_event existed, so it told the person the event was added without making
+ * it. Any registered tool can be called by name, so a listed name is one call away; all
+ * names cost about 430 more tokens, in the cached prefix.
+ */
 function renderCategoryLine(catalogCategory: string, toolNames: ReadonlyArray<string>): string {
-  const shown = toolNames.slice(0, MAX_CAPABILITY_INDEX_TOOLS_PER_CATEGORY);
-  const remaining = toolNames.length - shown.length;
-  const suffix = remaining > 0 ? `, +${remaining} more` : '';
-  return `- ${catalogCategory}: ${shown.join(', ')}${suffix}`;
+  return `- ${catalogCategory}: ${toolNames.join(', ')}`;
 }
 
 /**

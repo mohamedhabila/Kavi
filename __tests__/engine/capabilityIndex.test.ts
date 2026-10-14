@@ -19,12 +19,23 @@ describe('buildCapabilityIndexPromptSection', () => {
   it('stays inside the prompt budget it is allowed to spend', () => {
     const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
 
-    // Measured against the full registry — the worst case (469 tokens when every category
-    // is listed). It sits in the cacheable prefix, so it is paid once per prefix rather
-    // than per turn. The ceiling exists to catch unbounded growth.
-    expect(estimateTokens(section)).toBeLessThanOrEqual(500);
+    // Measured against the full registry — the worst case (863 tokens with every tool of
+    // every category named). It sits in the cacheable prefix, so it is paid once per prefix
+    // rather than per turn. The ceiling exists to catch unbounded growth.
+    expect(estimateTokens(section)).toBeLessThanOrEqual(1000);
     const categoryLines = section.split('\n').filter((line) => line.startsWith('- '));
     expect(categoryLines.length).toBeLessThanOrEqual(MAX_CAPABILITY_INDEX_CATEGORIES + 1);
+  });
+
+  // "calendar: calendar_list, calendar_events, +2 more" hid calendar_create_event, and GLM 5.3
+  // Flash told the person their flight was in the calendar without creating it.
+  it('names every tool of a domain, so a write tool is never hidden behind a count', () => {
+    const section = buildCapabilityIndexPromptSection({ allTools: TOOL_DEFINITIONS });
+    const calendar = section.split('\n').find((line) => line.startsWith('- calendar:'));
+
+    expect(calendar).toContain('calendar_create_event');
+    expect(calendar).toContain('calendar_update_event');
+    expect(section).not.toMatch(/\+\d+ more/);
   });
 
   it('lists every category the run has, grouped by contract category', () => {
