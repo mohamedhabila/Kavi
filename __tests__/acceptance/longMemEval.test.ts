@@ -22,6 +22,11 @@ import {
 } from '../../src/acceptance/longMemEval/longMemEvalReport';
 import { auditLongMemEvalMemory } from '../../src/acceptance/longMemEval/longMemEvalMemoryAudit';
 import {
+  captureLongMemEvalStore,
+  parseLongMemEvalStoreSnapshot,
+  restoreLongMemEvalStore,
+} from '../../src/acceptance/longMemEval/longMemEvalStoreSnapshot';
+import {
   buildLongMemEvalHistoryMessages,
   buildLongMemEvalScenario,
   extractLongMemEvalHistory,
@@ -294,6 +299,41 @@ describe('LongMemEval as a Kavi conversation', () => {
     });
 
     expect(auditLongMemEvalMemory()).toEqual({ current: 3, superseded: 1, duplicates: 1 });
+  });
+
+  it('restores an extracted store so a retrieval arm answers from the same memories', () => {
+    const instance = parseLongMemEvalInstance(rawInstance());
+    const history = buildLongMemEvalHistoryMessages(instance);
+    addMemoryItem({ text: 'The user hiked Mount Rainier', conversationId: 't', now: 5 });
+    addMemoryItem({
+      text: 'The user bakes sourdough',
+      conversationId: 't',
+      now: 9,
+      sensitive: true,
+    });
+    const snapshot = parseLongMemEvalStoreSnapshot(
+      JSON.parse(JSON.stringify(captureLongMemEvalStore())),
+    );
+    closeMemoryDb();
+    expoSqlite.__resetExpoSqliteForTests();
+    resetMemoryCoreSchemaCacheForTests();
+
+    expect(restoreLongMemEvalStore('thread-1', history, snapshot)).toBe(2);
+
+    expect(
+      listMemoryItems({ limit: 10, offset: 0 }).map(({ text, sensitive, updatedAt }) => ({
+        text,
+        sensitive,
+        updatedAt,
+      })),
+    ).toEqual([
+      { text: 'The user bakes sourdough', sensitive: true, updatedAt: 9 },
+      { text: 'The user hiked Mount Rainier', sensitive: false, updatedAt: 5 },
+    ]);
+    expect(readCaptureCursor('thread-1')?.extractedThroughAt).toBe(history.at(-1)!.timestamp);
+    expect(() => parseLongMemEvalStoreSnapshot({ items: 'x' })).toThrow(
+      'longmemeval_store_snapshot_invalid',
+    );
   });
 });
 

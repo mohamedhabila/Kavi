@@ -5,7 +5,9 @@
 // selected E2E provider's credentials. Optional: LONGMEMEVAL_ARM (memory | context | window |
 // extract, default memory), LONGMEMEVAL_WINDOW_TOKENS (the window arm's raw-history budget, default
 // 32000), LONGMEMEVAL_PER_TYPE (default 10), LONGMEMEVAL_SHARD (i/n: every n-th selected
-// question from the i-th, so n processes split one run), LONGMEMEVAL_JUDGE_MODEL (default
+// question from the i-th, so n processes split one run), LONGMEMEVAL_STORE_DIR (extract arm:
+// restore a question's extracted memory from <dir>/<question id>.json when it is there,
+// otherwise extract and save it, so arms that change only retrieval share the same store), LONGMEMEVAL_JUDGE_MODEL (default
 // LongMemEval's reference judge), LONGMEMEVAL_OUT (results JSONL path). Run with TZ=UTC:
 // LongMemEval's dates carry no zone and are read as UTC.
 // ---------------------------------------------------------------------------
@@ -41,7 +43,15 @@ import {
   LONGMEMEVAL_REFERENCE_JUDGE_MODEL,
   parseLongMemEvalJudgeLabel,
 } from '../../src/acceptance/longMemEval/longMemEvalJudge';
-import { auditLongMemEvalMemory } from '../../src/acceptance/longMemEval/longMemEvalMemoryAudit';
+import {
+  auditLongMemEvalMemory,
+  type LongMemEvalMemoryAudit,
+} from '../../src/acceptance/longMemEval/longMemEvalMemoryAudit';
+import {
+  captureLongMemEvalStore,
+  parseLongMemEvalStoreSnapshot,
+  restoreLongMemEvalStore,
+} from '../../src/acceptance/longMemEval/longMemEvalStoreSnapshot';
 import {
   answerRoundRecall,
   evidenceReachedMemoryPrompt,
@@ -72,6 +82,37 @@ const QUESTION_TIMEOUT_MS = 600_000;
 /** Extraction reads a history four rounds per call: about 125 calls for one LongMemEval_S history. */
 const EXTRACTION_TIMEOUT_MS = 2_400_000;
 const EXTRACT_QUESTION_TIMEOUT_MS = EXTRACTION_TIMEOUT_MS + QUESTION_TIMEOUT_MS;
+const STORE_DIR = process.env.LONGMEMEVAL_STORE_DIR?.trim() ?? '';
+
+/**
+ * The extract arm's memory for one question: restored from the saved store when there is
+ * one, otherwise extracted from the history and saved. Returns whether extraction caught up,
+ * and a restored store's audit (its replaced memories are not restored).
+ */
+async function prepareExtractedMemory(
+  conversationId: string,
+  questionId: string,
+  history: ReturnType<typeof buildLongMemEvalHistoryMessages>,
+): Promise<{ settled: boolean; restoredAudit: LongMemEvalMemoryAudit | null }> {
+  const snapshotPath = STORE_DIR ? path.join(STORE_DIR, `${questionId}.json`) : '';
+  if (snapshotPath && fs.existsSync(snapshotPath)) {
+    const snapshot = parseLongMemEvalStoreSnapshot(
+      JSON.parse(fs.readFileSync(snapshotPath, 'utf8')),
+    );
+    restoreLongMemEvalStore(conversationId, history, snapshot);
+    return { settled: true, restoredAudit: snapshot.audit };
+  }
+  const { settled } = await extractLongMemEvalHistory(
+    conversationId,
+    history,
+    EXTRACTION_TIMEOUT_MS,
+  );
+  if (snapshotPath && settled) {
+    fs.mkdirSync(STORE_DIR, { recursive: true });
+    fs.writeFileSync(snapshotPath, JSON.stringify(captureLongMemEvalStore()));
+  }
+  return { settled, restoredAudit: null };
+}
 
 function selectedArm(): LongMemEvalArm {
   const arm = process.env.LONGMEMEVAL_ARM?.trim() || 'memory';
@@ -171,6 +212,7 @@ describeLive('LongMemEval (live)', () => {
         );
         let result;
         let extractionSettled: boolean | null = null;
+        let restoredAudit: LongMemEvalMemoryAudit | null = null;
         try {
           result = await runE2EScenario(scenario, {
             provider,
@@ -178,13 +220,11 @@ describeLive('LongMemEval (live)', () => {
               ? {
                   scenarioTimeoutMs: EXTRACT_QUESTION_TIMEOUT_MS,
                   beforeTurns: async ({ conversationId }: { conversationId: string }) => {
-                    extractionSettled = (
-                      await extractLongMemEvalHistory(
-                        conversationId,
-                        history,
-                        EXTRACTION_TIMEOUT_MS,
-                      )
-                    ).settled;
+                    ({ settled: extractionSettled, restoredAudit } = await prepareExtractedMemory(
+                      conversationId,
+                      instance.questionId,
+                      history,
+                    ));
                   },
                 }
               : arm !== 'context'
@@ -198,7 +238,7 @@ describeLive('LongMemEval (live)', () => {
         } finally {
           restoreClock();
         }
-        const memoryAudit = arm === 'extract' ? auditLongMemEvalMemory() : null;
+        const memoryAudit = arm === 'extract' ? (restoredAudit ?? auditLongMemEvalMemory()) : null;
         const hypothesis = longMemEvalHypothesis(result);
         const judgeReply = await judgeAnswer(judge, judgeModel, instance, hypothesis);
         const outcome: LongMemEvalOutcome = {
