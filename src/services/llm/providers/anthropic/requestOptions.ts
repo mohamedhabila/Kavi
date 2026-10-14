@@ -10,24 +10,15 @@ import { rejectsSamplingParams } from '../../catalog/providerCapabilities';
 import { isPlainRecord } from '../../core/json';
 import { normalizeStructuredOutputOptions } from '../../core/structuredOutput';
 import { isForcedToolChoice } from '../../core/toolChoice';
+import { simplifyAnthropicSchema, strictifySchema } from './helpers';
 import { canContinueAnthropicThinking, isAnthropicToolLoopInProgress } from './toolReplay';
 
-export function buildAnthropicStructuredOutputFormat(
+function buildAnthropicStructuredOutputFormat(
   structuredOutput: StructuredOutputOptions,
-  helpers: {
-    simplifyAnthropicSchema: (
-      schema: Record<string, any>,
-      options: { strict: boolean },
-    ) => Record<string, any>;
-    strictifySchema: (schema: Record<string, any>) => Record<string, any>;
-  },
 ): Record<string, any> {
-  const normalizedSchema = structuredOutput.schema;
   return {
     type: 'json_schema',
-    schema: helpers.simplifyAnthropicSchema(helpers.strictifySchema(normalizedSchema), {
-      strict: true,
-    }),
+    schema: simplifyAnthropicSchema(strictifySchema(structuredOutput.schema), { strict: true }),
   };
 }
 
@@ -46,15 +37,8 @@ export function normalizeAnthropicOutputConfig(
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
-export function buildAnthropicOutputConfig(
+function buildAnthropicOutputConfig(
   options: MessageRequestOptions,
-  helpers: {
-    simplifyAnthropicSchema: (
-      schema: Record<string, any>,
-      options: { strict: boolean },
-    ) => Record<string, any>;
-    strictifySchema: (schema: Record<string, any>) => Record<string, any>;
-  },
 ): AnthropicOutputConfig | undefined {
   const explicitOutputConfig = normalizeAnthropicOutputConfig(options.output_config);
   const structuredOutput = normalizeStructuredOutputOptions(options.structuredOutput);
@@ -68,7 +52,7 @@ export function buildAnthropicOutputConfig(
     : {};
 
   if (structuredOutput) {
-    outputConfig.format = buildAnthropicStructuredOutputFormat(structuredOutput, helpers);
+    outputConfig.format = buildAnthropicStructuredOutputFormat(structuredOutput);
   }
 
   return Object.keys(outputConfig).length > 0 ? outputConfig : undefined;
@@ -145,17 +129,13 @@ export function sanitizeAnthropicRequestOptions(args: {
   model: string;
   messages: ChatCompletionMessage[];
   options: MessageRequestOptions;
-  buildAnthropicOutputConfig: (
-    options: MessageRequestOptions,
-    model: string,
-  ) => AnthropicOutputConfig | undefined;
 }): {
   thinking?: Record<string, unknown>;
   outputConfig?: AnthropicOutputConfig;
   temperature?: number;
 } {
   const normalizedTemperature = normalizeAnthropicTemperature(args.model, args.options.temperature);
-  const requestedOutputConfig = args.buildAnthropicOutputConfig(args.options, args.model);
+  const requestedOutputConfig = buildAnthropicOutputConfig(args.options);
   const formatOnlyOutputConfig: AnthropicOutputConfig | undefined = isPlainRecord(
     requestedOutputConfig?.format,
   )

@@ -10,7 +10,7 @@ import {
   buildLocalLlmRequestOptions,
   resolveLocalProviderForRequest,
 } from './localProviderRequest';
-import { sendAnthropicMessage } from './providers/anthropic/message';
+import { sendAnthropicMessage } from './providers/anthropic/adapter';
 import { sendGeminiMessage } from './providers/gemini/message';
 import { sendOpenAICompatibleChatMessage } from './providers/openaiChat/message';
 import { sendOpenAIResponsesMessage } from './providers/openaiResponses/message';
@@ -58,7 +58,6 @@ export function sendLlmMessage(params: {
   switch (providerTransport) {
     case 'anthropic':
       return sendAnthropicMessage({
-        provider: params.provider,
         baseUrl,
         headers,
         model,

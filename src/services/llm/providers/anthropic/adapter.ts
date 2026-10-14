@@ -3,15 +3,39 @@ import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudge
 import { normalizeUsage } from '../../../usage/tracker';
 import { isPlainRecord, tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
-import { ANTHROPIC_THINKING_BINDING_BETA } from './helpers';
-import { noteAnthropicInputTransformations } from './inputTransformations';
-import { needsAnthropicInterleavedThinkingBeta } from './requestOptions';
+import { rejectsForcedToolChoice } from '../../catalog/providerCapabilities';
+import type { LlmPerformFetch } from '../../core/fetchTransport';
+import { attachProviderResponse } from '../../core/providerResponse';
+import { buildAnthropicToolChoice, resolveForcedToolChoiceFallback } from '../../core/toolChoice';
 import { createProviderRequestError } from '../../support/providerErrorClassification';
-import type {
-  ChatCompletionMessage,
-  MessageRequestOptions,
-  ToolChoiceMode,
-} from '../../support/contracts';
+import type { ChatCompletionMessage, MessageRequestOptions } from '../../support/contracts';
+import {
+  anthropicContentIsEmpty,
+  mergeAnthropicAssistantContent,
+  mergeAnthropicContent,
+  mergeAnthropicToolResultsById,
+  normalizeAnthropicUserContent,
+} from './contentBlocks';
+import { normalizeAnthropicConversationHistory } from './conversation';
+import {
+  ANTHROPIC_EPHEMERAL_CACHE_CONTROL,
+  ANTHROPIC_INTERLEAVED_THINKING_BETA,
+  ANTHROPIC_THINKING_BINDING_BETA,
+  buildAnthropicSystemPromptContent,
+  reorderAnthropicToolsForCaching,
+  simplifyAnthropicSchema,
+  simplifyAnthropicToolDescription,
+} from './helpers';
+import { noteAnthropicInputTransformations } from './inputTransformations';
+import {
+  needsAnthropicInterleavedThinkingBeta,
+  sanitizeAnthropicRequestOptions,
+} from './requestOptions';
+import {
+  buildAnthropicToolRaw,
+  extractAnthropicReasoningText,
+  normalizeAnthropicAssistantBlocks,
+} from './toolReplay';
 
 const MAX_ANTHROPIC_CACHE_BREAKPOINTS = 4;
 const MAX_ANTHROPIC_MESSAGE_CACHE_BREAKPOINTS = 2;
@@ -32,7 +56,6 @@ function carriesPersonContent(content: string | any[]): boolean {
 function appendAnthropicDynamicSystemTail(args: {
   messages: Array<{ role: string; content: string | any[] }>;
   dynamicText?: string;
-  mergeAnthropicContent: (existing: string | any[], incoming: string | any[]) => string | any[];
 }): Array<{ role: string; content: string | any[] }> {
   const dynamicText = args.dynamicText?.trim();
   if (!dynamicText) {
@@ -46,7 +69,7 @@ function appendAnthropicDynamicSystemTail(args: {
     }
     messages[index] = {
       ...messages[index],
-      content: args.mergeAnthropicContent(messages[index].content, dynamicText),
+      content: mergeAnthropicContent(messages[index].content, dynamicText),
     };
     return messages;
   }
@@ -163,7 +186,7 @@ function applyAnthropicMessageCacheBreakpoints(args: {
   return messages;
 }
 
-export async function sendAnthropicMessages(args: {
+export async function sendAnthropicMessage(args: {
   baseUrl: string;
   headers: Record<string, string>;
   model: string;
@@ -175,64 +198,13 @@ export async function sendAnthropicMessages(args: {
     is_error?: boolean;
   }>;
   options: MessageRequestOptions;
-  sanitizeAnthropicRequestOptions: (
-    model: string,
-    messages: ChatCompletionMessage[],
-    options: MessageRequestOptions,
-  ) => {
-    temperature?: number;
-    thinking?: Record<string, unknown>;
-    outputConfig?: Record<string, any>;
-  };
-  normalizeAnthropicAssistantBlocks: (
-    message: ChatCompletionMessage,
-    options?: { stripThinkingWithoutToolUse?: boolean },
-  ) => any[];
-  mergeAnthropicContent: (existing: string | any[], incoming: string | any[]) => string | any[];
-  mergeAnthropicToolResultsById: (blocks: any[]) => any[];
-  mergeAnthropicAssistantContent: (
-    existing: string | any[],
-    incoming: string | any[],
-  ) => string | any[];
-  normalizeAnthropicUserContent: (content: unknown) => string | any[];
-  anthropicContentIsEmpty: (content: string | any[]) => boolean;
-  normalizeAnthropicConversationHistory: (
-    messages: Array<{ role: string; content: string | any[] }>,
-  ) => Array<{ role: string; content: string | any[] }>;
-  buildAnthropicToolRaw: (id: string, name: string, argumentsText: string) => Record<string, any>;
-  extractAnthropicReasoningText: (assistantBlocks: any[]) => string | undefined;
-  buildAnthropicToolChoice: (choice: ToolChoiceMode | undefined) => Record<string, any> | undefined;
-  /** True when `model` 400s on a forced `tool_choice` (`any`/`tool`) — e.g. Fable 5.1. */
-  rejectsForcedToolChoice: (model: string) => boolean;
-  /** Downgrades a forced `tool_choice` to `auto` plus a system instruction naming the tool. */
-  resolveForcedToolChoiceFallback: (
-    choice: ToolChoiceMode | undefined,
-    tools: ReadonlyArray<{ name: string }> | undefined,
-  ) => { toolChoice: 'auto'; instruction: string } | undefined;
-  buildAnthropicSystemPromptContent: (args: {
-    systemContent?: string;
-    sections?: MessageRequestOptions['systemPromptSections'];
-    enablePromptCaching?: boolean;
-  }) => string | Array<Record<string, any>> | undefined;
-  reorderAnthropicToolsForCaching: (tools: NonNullable<MessageRequestOptions['tools']>) => {
-    orderedTools: NonNullable<MessageRequestOptions['tools']>;
-    lastStablePrefixIndex: number;
-  };
-  simplifyAnthropicToolDescription: (description: string | undefined) => string;
-  simplifyAnthropicSchema: (
-    schema: Record<string, any>,
-    options: { strict: boolean },
-  ) => Record<string, any>;
-  anthropicEphemeralCacheControl: { type: 'ephemeral' };
-  anthropicInterleavedThinkingBeta: string;
-  performFetch: (url: string, init: RequestInit, preferStreaming?: boolean) => Promise<Response>;
-  attachProviderResponse: (payload: any, provider: 'anthropic', raw: any) => any;
+  performFetch: LlmPerformFetch;
 }): Promise<any> {
-  const anthropicOptions = args.sanitizeAnthropicRequestOptions(
-    args.model,
-    args.messages as ChatCompletionMessage[],
-    args.options,
-  );
+  const anthropicOptions = sanitizeAnthropicRequestOptions({
+    model: args.model,
+    messages: args.messages as ChatCompletionMessage[],
+    options: args.options,
+  });
   let systemContent: string | undefined;
   const anthropicMessages: Array<{ role: string; content: string | any[] }> = [];
   let pendingToolResults: any[] = [];
@@ -244,14 +216,14 @@ export async function sendAnthropicMessages(args: {
 
     const lastMsg = anthropicMessages[anthropicMessages.length - 1];
     if (lastMsg?.role === 'user') {
-      lastMsg.content = args.mergeAnthropicContent(
+      lastMsg.content = mergeAnthropicContent(
         lastMsg.content,
-        args.mergeAnthropicToolResultsById(pendingToolResults),
+        mergeAnthropicToolResultsById(pendingToolResults),
       );
     } else {
       anthropicMessages.push({
         role: 'user',
-        content: args.mergeAnthropicToolResultsById(pendingToolResults),
+        content: mergeAnthropicToolResultsById(pendingToolResults),
       });
     }
     pendingToolResults = [];
@@ -283,7 +255,7 @@ export async function sendAnthropicMessages(args: {
     flushPendingToolResults();
 
     if (msg.role === 'assistant') {
-      const contentBlocks = args.normalizeAnthropicAssistantBlocks(msg as ChatCompletionMessage, {
+      const contentBlocks = normalizeAnthropicAssistantBlocks(msg as ChatCompletionMessage, {
         stripThinkingWithoutToolUse: true,
       });
       if (contentBlocks.length === 0) {
@@ -298,7 +270,7 @@ export async function sendAnthropicMessages(args: {
 
       const lastMsg = anthropicMessages[anthropicMessages.length - 1];
       if (lastMsg?.role === 'assistant') {
-        lastMsg.content = args.mergeAnthropicAssistantContent(lastMsg.content, content);
+        lastMsg.content = mergeAnthropicAssistantContent(lastMsg.content, content);
       } else {
         anthropicMessages.push({ role: 'assistant', content });
       }
@@ -306,14 +278,14 @@ export async function sendAnthropicMessages(args: {
     }
 
     if (msg.role === 'user') {
-      const normalizedContent = args.normalizeAnthropicUserContent(msg.content);
-      if (args.anthropicContentIsEmpty(normalizedContent)) {
+      const normalizedContent = normalizeAnthropicUserContent(msg.content);
+      if (anthropicContentIsEmpty(normalizedContent)) {
         continue;
       }
 
       const lastMsg = anthropicMessages[anthropicMessages.length - 1];
       if (lastMsg?.role === 'user') {
-        lastMsg.content = args.mergeAnthropicContent(lastMsg.content, normalizedContent);
+        lastMsg.content = mergeAnthropicContent(lastMsg.content, normalizedContent);
       } else {
         anthropicMessages.push({ role: msg.role, content: normalizedContent });
       }
@@ -323,9 +295,8 @@ export async function sendAnthropicMessages(args: {
   flushPendingToolResults();
   const splitSystemPrompt = splitCacheableSystemPromptSections(args.options.systemPromptSections);
   const normalizedAnthropicMessages = appendAnthropicDynamicSystemTail({
-    messages: args.normalizeAnthropicConversationHistory(anthropicMessages),
+    messages: normalizeAnthropicConversationHistory(anthropicMessages),
     dynamicText: args.options.enablePromptCaching ? splitSystemPrompt.dynamicText : undefined,
-    mergeAnthropicContent: args.mergeAnthropicContent,
   });
 
   const body: Record<string, any> = {
@@ -341,12 +312,12 @@ export async function sendAnthropicMessages(args: {
   // instruction can be appended to it below regardless of whether the caller used a
   // plain system string or cacheable system prompt sections.
   const forcedToolChoiceFallback =
-    args.options.tools?.length && args.rejectsForcedToolChoice(args.model)
-      ? args.resolveForcedToolChoiceFallback(args.options.toolChoice, args.options.tools)
+    args.options.tools?.length && rejectsForcedToolChoice(args.model)
+      ? resolveForcedToolChoiceFallback(args.options.toolChoice, args.options.tools)
       : undefined;
 
   const anthropicSystemContent = appendAnthropicForcedToolChoiceInstruction(
-    args.buildAnthropicSystemPromptContent({
+    buildAnthropicSystemPromptContent({
       systemContent,
       sections: args.options.systemPromptSections,
       enablePromptCaching: args.options.enablePromptCaching,
@@ -365,7 +336,7 @@ export async function sendAnthropicMessages(args: {
   let toolCacheBreakpointCount = 0;
   if (args.options.tools?.length) {
     const anthropicToolPlan = args.options.enablePromptCaching
-      ? args.reorderAnthropicToolsForCaching(args.options.tools)
+      ? reorderAnthropicToolsForCaching(args.options.tools)
       : { orderedTools: args.options.tools, lastStablePrefixIndex: -1 };
     toolCacheBreakpointCount =
       args.options.enablePromptCaching && anthropicToolPlan.lastStablePrefixIndex >= 0 ? 1 : 0;
@@ -375,17 +346,17 @@ export async function sendAnthropicMessages(args: {
     body.tools = anthropicToolPlan.orderedTools.map((tool, index) => {
       const base: Record<string, any> = {
         name: tool.name,
-        description: args.simplifyAnthropicToolDescription(tool.description),
-        input_schema: args.simplifyAnthropicSchema(normalizeToolInputSchema(tool.input_schema), {
+        description: simplifyAnthropicToolDescription(tool.description),
+        input_schema: simplifyAnthropicSchema(normalizeToolInputSchema(tool.input_schema), {
           strict: false,
         }),
       };
       if (args.options.enablePromptCaching && index === anthropicToolPlan.lastStablePrefixIndex) {
-        base.cache_control = args.anthropicEphemeralCacheControl;
+        base.cache_control = ANTHROPIC_EPHEMERAL_CACHE_CONTROL;
       }
       return base;
     });
-    const toolChoice = args.buildAnthropicToolChoice(
+    const toolChoice = buildAnthropicToolChoice(
       forcedToolChoiceFallback ? forcedToolChoiceFallback.toolChoice : args.options.toolChoice,
     );
     if (toolChoice) {
@@ -394,7 +365,7 @@ export async function sendAnthropicMessages(args: {
   }
 
   if (args.options.enablePromptCaching) {
-    body.cache_control = args.anthropicEphemeralCacheControl;
+    body.cache_control = ANTHROPIC_EPHEMERAL_CACHE_CONTROL;
     const automaticCacheBreakpointCount = 1;
     const systemCacheBreakpointCount = Array.isArray(body.system)
       ? body.system.filter(
@@ -411,7 +382,7 @@ export async function sendAnthropicMessages(args: {
     body.messages = applyAnthropicMessageCacheBreakpoints({
       messages: body.messages,
       breakpointsAvailable,
-      cacheControl: args.anthropicEphemeralCacheControl,
+      cacheControl: ANTHROPIC_EPHEMERAL_CACHE_CONTROL,
     });
   }
 
@@ -421,7 +392,7 @@ export async function sendAnthropicMessages(args: {
 
   const betas = [
     ...(needsAnthropicInterleavedThinkingBeta(args.options, anthropicOptions.thinking)
-      ? [args.anthropicInterleavedThinkingBeta]
+      ? [ANTHROPIC_INTERLEAVED_THINKING_BETA]
       : []),
     ...(isPlainRecord(anthropicOptions.thinking?.block_binding)
       ? [ANTHROPIC_THINKING_BINDING_BETA]
@@ -455,11 +426,11 @@ export async function sendAnthropicMessages(args: {
   const json = await response.json();
   noteAnthropicInputTransformations(json.input_transformations, args.model);
   const normalizedUsage = normalizeUsage(json.usage);
-  const assistantBlocks = args.normalizeAnthropicAssistantBlocks({
+  const assistantBlocks = normalizeAnthropicAssistantBlocks({
     role: 'assistant',
     content: Array.isArray(json.content) ? json.content : [],
   });
-  const reasoning = args.extractAnthropicReasoningText(assistantBlocks);
+  const reasoning = extractAnthropicReasoningText(assistantBlocks);
   const providerReplay =
     assistantBlocks.length > 0 ? { anthropicBlocks: assistantBlocks } : undefined;
   const contentText =
@@ -485,7 +456,7 @@ export async function sendAnthropicMessages(args: {
                 name: content.name,
                 arguments: JSON.stringify(content.input),
               },
-              raw: args.buildAnthropicToolRaw(
+              raw: buildAnthropicToolRaw(
                 content.id,
                 content.name,
                 JSON.stringify(content.input ?? {}),
@@ -512,5 +483,5 @@ export async function sendAnthropicMessages(args: {
     },
   };
 
-  return args.attachProviderResponse(normalizedResponse, 'anthropic', json);
+  return attachProviderResponse(normalizedResponse, 'anthropic', json);
 }

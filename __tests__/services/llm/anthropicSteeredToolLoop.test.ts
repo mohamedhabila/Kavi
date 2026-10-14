@@ -62,7 +62,6 @@ describe('a user message inside the tool-result turn', () => {
       model: 'claude-sonnet-4-5',
       messages: steeredToolTurn(PLAIN_TOOL_USE),
       options: { thinking: { type: 'enabled', budget_tokens: 2048 }, maxTokens: 8192 },
-      buildAnthropicOutputConfig: () => undefined,
     });
 
     expect(options.thinking).toBeUndefined();
