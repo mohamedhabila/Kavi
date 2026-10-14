@@ -22,7 +22,6 @@ describe('full-registry turn tool surface', () => {
   it('keeps a new turn on a compact core plus discovery surface', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
-      observedToolNames: new Set<string>(),
       workingMessages: [userMessage],
     });
     const names = new Set(selected.map((tool) => tool.name));
@@ -50,7 +49,6 @@ describe('full-registry turn tool surface', () => {
   it('keeps the core out of unrelated mobile mutation domains', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: TOOL_DEFINITIONS,
-      observedToolNames: new Set<string>(),
       workingMessages: [userMessage],
     });
     const names = new Set(selected.map((tool) => tool.name));

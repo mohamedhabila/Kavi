@@ -1,19 +1,16 @@
 // ---------------------------------------------------------------------------
 // Kavi — Turn Tool Surface
 // ---------------------------------------------------------------------------
-// Resolves which tools are exposed for a model turn using structural signals
-// only: the core workbench, async monitors, explicit pins, discovery
-// activation, and workflow continuation.
+// The tools a model turn sees: the core workbench and the discovery tools, then every tool
+// the live conversation has called or activated, in the order it first appeared, then the
+// run's pins and async monitors. Nothing a conversation brought onto the surface leaves it
+// until its messages leave the history window, so the declaration block only ever grows at
+// its end: a prompt cache keeps the prefix, and a tool the model used stays callable.
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
-import {
-  normalizeToolWorkflowContract,
-  workflowProductionSatisfiesConsumption,
-} from './toolWorkflowContracts';
 import { normalizeToolName } from './toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from './plan-definitions';
-import { isRepeatableActivatedTool, shouldAcceptContinuationTool } from './toolSurfaceRetention';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 /**
@@ -50,52 +47,12 @@ export const DEFAULT_CORE_TOOL_ORDER = [
   'javascript',
 ] as const;
 
-const STABLE_TOOL_SURFACE_ORDER_VALUES = [
-  REQUEST_CLARIFICATION_TOOL_NAME,
-  UPDATE_PLAN_TOOL_NAME,
-  'memory_remember',
-  'memory_search',
-  'memory_forget',
-  'read_file',
-  'write_file',
-  'sessions_spawn',
-  'sessions_wait',
-  'wait',
-  'list_files',
-  'cron',
-  'reminder',
-  'file_edit',
-  'glob_search',
-  'text_search',
-  'web_search',
-  'web_fetch',
-  'calendar_events',
-  'calendar_create_event',
-  'contacts_search',
-  'contacts_pick',
-  'email_compose',
-  'sms_compose',
-  'phone_call',
-  'maps_open',
-  'share_text',
-  'clipboard_read',
-  'clipboard_write',
-  'photos_pick',
-  'location_current',
-  'device_query',
-  'notification_send',
-  'javascript',
-] as const;
-
 export const DEFAULT_CORE_TOOL_NAMES: ReadonlySet<string> = new Set<string>(
   DEFAULT_CORE_TOOL_ORDER,
 );
-const STABLE_TOOL_SURFACE_ORDER = new Map(
-  [...STABLE_TOOL_SURFACE_ORDER_VALUES, 'tool_catalog', 'tool_describe'].map((name, index) => [
-    name,
-    index,
-  ]),
-);
+
+/** How the model loads any registered tool the surface does not carry yet. */
+const DISCOVERY_TOOL_ORDER = ['tool_catalog', 'tool_describe'] as const;
 
 type PromptCachePlacement = Exclude<
   NonNullable<ToolDefinition['promptCache']>['placement'],
@@ -118,217 +75,42 @@ function withPromptCachePlacement(
   };
 }
 
-function prunePrematureWorkflowConsumers(params: {
-  selectedNames: Set<string>;
-  toolByName: ReadonlyMap<string, ToolDefinition>;
-  observedToolNames: ReadonlySet<string>;
-}): void {
-  const observedProductions = Array.from(params.observedToolNames).flatMap(
-    (toolName) => normalizeToolWorkflowContract(params.toolByName.get(toolName)?.contract).produces,
-  );
-  const selectedProducers = Array.from(params.selectedNames).flatMap((toolName) => {
-    const contract = normalizeToolWorkflowContract(params.toolByName.get(toolName)?.contract);
-    return contract.produces.map((production) => ({ toolName, production }));
-  });
-
-  for (const toolName of Array.from(params.selectedNames)) {
-    const requiredConsumptions = normalizeToolWorkflowContract(
-      params.toolByName.get(toolName)?.contract,
-    ).consumes.filter((consumption) => consumption.required !== false);
-    if (requiredConsumptions.length === 0) {
-      continue;
-    }
-
-    const unsatisfiedRequiredConsumptions = requiredConsumptions.filter(
-      (consumption) =>
-        !observedProductions.some((production) =>
-          workflowProductionSatisfiesConsumption(production, consumption),
-        ),
-    );
-    if (unsatisfiedRequiredConsumptions.length === 0) {
-      continue;
-    }
-
-    const hasSelectedUpstreamProducer = unsatisfiedRequiredConsumptions.some((consumption) =>
-      selectedProducers.some(
-        ({ toolName: producerName, production }) =>
-          producerName !== toolName &&
-          workflowProductionSatisfiesConsumption(production, consumption),
-      ),
-    );
-    if (hasSelectedUpstreamProducer) {
-      params.selectedNames.delete(toolName);
-    }
-  }
-}
-
 export interface ResolveTurnToolSurfaceParams {
   allTools: ReadonlyArray<ToolDefinition>;
-  pendingAsyncMonitorToolNames: ReadonlySet<string>;
+  /** Tools the live conversation called or activated, in the order they first appeared. */
+  conversationToolNames: ReadonlyArray<string>;
+  pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
-  observedToolNames: Iterable<string>;
-  recentContinuationToolNames: ReadonlySet<string>;
-  workflowContinuationToolNames?: ReadonlySet<string>;
-  activatedCatalogToolNames: ReadonlySet<string>;
-  unresolvedDiscoveryToolCallInTurn?: boolean;
-  includeToolCatalog?: boolean;
 }
 
 export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): ToolDefinition[] {
-  const selectedNames = new Set<string>();
-  const stablePrefixToolNames = new Set<string>();
   const toolByName = new Map(
     params.allTools
       .map((tool): [string, ToolDefinition] => [normalizeToolName(tool.name), tool])
       .filter(([toolName]) => Boolean(toolName)),
   );
-
-  for (const toolName of DEFAULT_CORE_TOOL_NAMES) {
-    selectedNames.add(toolName);
-    stablePrefixToolNames.add(toolName);
-  }
-
-  for (const toolName of params.pendingAsyncMonitorToolNames) {
-    const normalized = normalizeToolName(toolName);
-    if (normalized) {
-      selectedNames.add(normalized);
+  const surface = new Map<string, ToolDefinition>();
+  const add = (toolNames: Iterable<string>) => {
+    for (const toolName of toolNames) {
+      const normalized = normalizeToolName(toolName);
+      const tool = toolByName.get(normalized);
+      if (tool && !surface.has(normalized)) {
+        surface.set(normalized, tool);
+      }
     }
-  }
+  };
 
-  for (const toolName of params.explicitToolSurfaceToolNames ?? []) {
-    const normalized = normalizeToolName(toolName);
-    if (normalized) {
-      selectedNames.add(normalized);
-      stablePrefixToolNames.add(normalized);
-    }
-  }
+  add(DEFAULT_CORE_TOOL_ORDER);
+  add(DISCOVERY_TOOL_ORDER);
+  // The prefix every turn shares; a provider cache breakpoint after it never moves, so a call
+  // whose later tools changed still reads it.
+  const stablePrefixLength = surface.size;
+  // Only grows at its end, so an added tool leaves every earlier declaration where it was.
+  add(params.conversationToolNames);
+  add(params.explicitToolSurfaceToolNames ?? []);
+  add(params.pendingAsyncMonitorToolNames ?? []);
 
-  const completedWorkflowToolNames = new Set(
-    Array.from(params.observedToolNames)
-      .map((toolName) => normalizeToolName(toolName))
-      .filter(Boolean),
+  return Array.from(surface.values()).map((tool, index) =>
+    withPromptCachePlacement(tool, index < stablePrefixLength ? 'stable_prefix' : 'dynamic_suffix'),
   );
-
-  for (const normalized of completedWorkflowToolNames) {
-    if (
-      normalized &&
-      shouldAcceptContinuationTool({
-        toolName: normalized,
-        toolByName,
-        completedWorkflowToolNames,
-      })
-    ) {
-      selectedNames.add(normalized);
-    }
-  }
-
-  for (const toolName of params.recentContinuationToolNames) {
-    if (
-      shouldAcceptContinuationTool({
-        toolName,
-        toolByName,
-        completedWorkflowToolNames,
-        allowUnownedSideEffectfulTool: params.workflowContinuationToolNames?.has(toolName) === true,
-      })
-    ) {
-      selectedNames.add(toolName);
-    }
-  }
-
-  /**
-   * An explicit catalog activation of a repeatable capability is durable for the run.
-   *
-   * Activation used to be re-litigated every turn against the same completion sets that
-   * govern incidental continuation, waived only for `mcp__`/`skill__` names. Every other
-   * discovered tool was therefore evicted by its own first success — and because the
-   * eviction keys off having been observed, re-running `tool_catalog` could not restore
-   * it. The off-surface refusal names `tool_catalog` as the recovery, so the run was told
-   * to take a step that provably could not work.
-   *
-   * Traced on-device: a feasibility study needing Monte Carlo activated `python`, ran it
-   * once, and could never call it again. It alternated rejected `python` calls and
-   * useless `tool_catalog` calls until the iteration budget ran out. The run failed with
-   * no legal move available to it.
-   *
-   * Eviction still holds for a pure mutator, where a second call means a second effect
-   * and the tool has nothing further to contribute once its write has landed. It is
-   * lifted for tools whose contract declares a repeatable capability, because computing
-   * another scenario or reading another source is the work itself. Side-effectful tools
-   * still run the approval path on every call.
-   */
-  for (const toolName of params.activatedCatalogToolNames) {
-    const tool = toolByName.get(toolName);
-    if (
-      shouldAcceptContinuationTool({
-        toolName,
-        toolByName,
-        completedWorkflowToolNames,
-        allowUnownedSideEffectfulTool: true,
-        allowCompletedTool: isRepeatableActivatedTool(toolName, tool),
-      })
-    ) {
-      selectedNames.add(toolName);
-    }
-  }
-
-  const hasActivatedCatalogTools = params.activatedCatalogToolNames.size > 0;
-  const shouldExposeDiscoveryTools =
-    params.unresolvedDiscoveryToolCallInTurn === true ||
-    hasActivatedCatalogTools ||
-    (!hasActivatedCatalogTools &&
-      (params.includeToolCatalog ||
-        params.recentContinuationToolNames.has('tool_catalog') ||
-        params.recentContinuationToolNames.has('tool_describe')));
-
-  if (shouldExposeDiscoveryTools) {
-    selectedNames.add('tool_catalog');
-    selectedNames.add('tool_describe');
-    stablePrefixToolNames.add('tool_catalog');
-    stablePrefixToolNames.add('tool_describe');
-  }
-
-  prunePrematureWorkflowConsumers({
-    selectedNames,
-    toolByName,
-    observedToolNames: new Set([
-      ...completedWorkflowToolNames,
-      ...params.recentContinuationToolNames,
-    ]),
-  });
-
-  return orderTurnToolSurface(
-    Array.from(toolByName.values()).filter((tool) =>
-      selectedNames.has(normalizeToolName(tool.name)),
-    ),
-    stablePrefixToolNames,
-  ).map((tool) => {
-    const normalizedName = normalizeToolName(tool.name);
-    return withPromptCachePlacement(
-      tool,
-      stablePrefixToolNames.has(normalizedName) ? 'stable_prefix' : 'dynamic_suffix',
-    );
-  });
-}
-
-function orderTurnToolSurface(
-  tools: ReadonlyArray<ToolDefinition>,
-  stablePrefixToolNames: ReadonlySet<string>,
-): ToolDefinition[] {
-  return [...tools].sort((left, right) => {
-    const leftName = normalizeToolName(left.name);
-    const rightName = normalizeToolName(right.name);
-    const leftStable = stablePrefixToolNames.has(leftName);
-    const rightStable = stablePrefixToolNames.has(rightName);
-    if (leftStable !== rightStable) {
-      return leftStable ? -1 : 1;
-    }
-    const leftOrder = STABLE_TOOL_SURFACE_ORDER.get(leftName);
-    const rightOrder = STABLE_TOOL_SURFACE_ORDER.get(rightName);
-
-    if (leftOrder !== undefined || rightOrder !== undefined) {
-      return (leftOrder ?? Number.MAX_SAFE_INTEGER) - (rightOrder ?? Number.MAX_SAFE_INTEGER);
-    }
-
-    return leftName.localeCompare(rightName);
-  });
 }

@@ -1,57 +1,62 @@
-import {
-  collectActivatedToolNamesFromDiscoveryPayload,
-  hasUnresolvedDiscoveryToolCallInTurn,
-} from '../../src/engine/graph/discoveryToolActivation';
+import { collectActivatedToolNamesFromDiscoveryPayload } from '../../src/engine/graph/discoveryToolActivation';
+import { collectConversationToolNames } from '../../src/engine/graph/turnToolSurface';
 import type { Message } from '../../src/types/message';
 
-describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
-  it('returns true when a discovery tool call has no matching tool result', () => {
-    const messages: Message[] = [
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '',
-        timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tc-catalog',
-            name: 'tool_catalog',
-            arguments: '{"query":"memory_search"}',
-            status: 'pending',
-          },
-        ],
-      },
-    ];
+function assistantCall(id: string, name: string, args = '{}'): Message {
+  return {
+    id: `assistant-${id}`,
+    role: 'assistant',
+    content: '',
+    timestamp: 1,
+    toolCalls: [{ id, name, arguments: args, status: 'completed' }],
+  };
+}
 
-    expect(hasUnresolvedDiscoveryToolCallInTurn(messages)).toBe(true);
+function toolResult(id: string, content: string): Message {
+  return { id: `tool-${id}`, role: 'tool', content, toolCallId: id, timestamp: 2 };
+}
+
+function catalogResult(...names: string[]): string {
+  return JSON.stringify({
+    tools: names.map((name) => ({ name, activation: { name, eligible: true } })),
+  });
+}
+
+describe('collectConversationToolNames', () => {
+  it('lists every called or activated tool in the order it first appeared', () => {
+    const names = collectConversationToolNames([
+      { id: 'user-1', role: 'user', content: 'Plan my trip', timestamp: 0 },
+      assistantCall('tc-read', 'read_file'),
+      toolResult('tc-read', 'notes'),
+      assistantCall('tc-catalog', 'tool_catalog', '{"query":"calendar"}'),
+      toolResult('tc-catalog', catalogResult('calendar_create_event', 'calendar_list')),
+      assistantCall('tc-create', 'calendar_create_event'),
+      toolResult('tc-create', '{"status":"created"}'),
+    ]);
+
+    expect(names).toEqual(['read_file', 'calendar_create_event', 'calendar_list']);
   });
 
-  it('returns false after the discovery tool result settles', () => {
-    const messages: Message[] = [
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '',
-        timestamp: 1,
-        toolCalls: [
-          {
-            id: 'tc-catalog',
-            name: 'tool_catalog',
-            arguments: '{"query":"memory_search"}',
-            status: 'completed',
-          },
-        ],
-      },
-      {
-        id: 'tool-1',
-        role: 'tool',
-        content: '{"tools":[{"name":"memory_search"}]}',
-        toolCallId: 'tc-catalog',
-        timestamp: 2,
-      },
-    ];
+  it('keeps activations from every turn in the window, not only the latest search', () => {
+    const names = collectConversationToolNames([
+      { id: 'user-1', role: 'user', content: 'First', timestamp: 0 },
+      assistantCall('tc-1', 'tool_catalog'),
+      toolResult('tc-1', catalogResult('pdf_read')),
+      { id: 'user-2', role: 'user', content: 'Second', timestamp: 3 },
+      assistantCall('tc-2', 'tool_catalog'),
+      toolResult('tc-2', catalogResult('camera_snap')),
+    ]);
 
-    expect(hasUnresolvedDiscoveryToolCallInTurn(messages)).toBe(false);
+    expect(names).toEqual(['pdf_read', 'camera_snap']);
+  });
+
+  it('does not list the discovery tools themselves', () => {
+    expect(
+      collectConversationToolNames([
+        assistantCall('tc-1', 'tool_describe', '{"name":"pdf_read"}'),
+        toolResult('tc-1', 'not json'),
+      ]),
+    ).toEqual([]);
   });
 });
 

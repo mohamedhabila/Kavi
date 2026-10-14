@@ -19,48 +19,43 @@ function tool(name: string, description = `${name} tool`): ToolDefinition {
 }
 
 describe('toolCaching', () => {
-  it('keeps selected tools in deterministic provider order as a cacheable prefix', () => {
-    expect(
-      reorderToolsForPromptCaching([
-        tool('browser_click'),
-        tool('tool_catalog'),
-        tool('memory_recall'),
-        tool('read_file'),
-      ]).map((entry) => entry.name),
-    ).toEqual(['browser_click', 'memory_recall', 'read_file', 'tool_catalog']);
+  // The turn surface lists tools in the order the conversation first brought them in, so
+  // ordering keeps that order: a newly added tool lands at the end instead of shifting every
+  // declaration after it (name order put an activated tool in the middle of the block).
+  it('keeps tools in the order given, so an added tool lands at the end', () => {
+    const before = reorderToolsForPromptCaching([
+      tool('read_file'),
+      tool('tool_catalog'),
+      tool('calendar_create_event'),
+    ]).map((entry) => entry.name);
+    const after = reorderToolsForPromptCaching([
+      tool('read_file'),
+      tool('tool_catalog'),
+      tool('calendar_create_event'),
+      tool('browser_click'),
+    ]).map((entry) => entry.name);
+
+    expect(before).toEqual(['read_file', 'tool_catalog', 'calendar_create_event']);
+    expect(after.slice(0, before.length)).toEqual(before);
+    expect(after.at(-1)).toBe('browser_click');
   });
 
-  it('keeps mobile-native tools in deterministic provider order to avoid rotating prefixes', () => {
-    expect(
-      reorderToolsForPromptCaching([
-        tool('browser_navigate'),
-        tool('sms_compose'),
-        tool('memory_recall'),
-        tool('calendar_list'),
-      ]).map((entry) => entry.name),
-    ).toEqual(['browser_navigate', 'calendar_list', 'memory_recall', 'sms_compose']);
-  });
-
-  it('treats selected core, MCP, skill, and mobile tools as one stable declaration prefix', () => {
+  it('treats tools without a placement as one stable declaration prefix', () => {
     const { orderedTools, lastStablePrefixIndex } = buildPromptCachingToolOrder([
       tool('mcp__device__calendar_list'),
       tool('calendar_list'),
       tool('tool_catalog'),
-      tool('skill__local__sms_compose'),
-      tool('sms_compose'),
     ]);
 
     expect(orderedTools.map((entry) => entry.name)).toEqual([
-      'calendar_list',
       'mcp__device__calendar_list',
-      'skill__local__sms_compose',
-      'sms_compose',
+      'calendar_list',
       'tool_catalog',
     ]);
-    expect(lastStablePrefixIndex).toBe(4);
+    expect(lastStablePrefixIndex).toBe(2);
   });
 
-  it('keeps graph-marked dynamic tools after the reusable stable prefix', () => {
+  it('keeps dynamic-suffix tools after the stable prefix, each group in the order given', () => {
     const { orderedTools, lastStablePrefixIndex } = buildPromptCachingToolOrder([
       { ...tool('sms_compose'), promptCache: { placement: 'dynamic_suffix' } },
       { ...tool('tool_catalog'), promptCache: { placement: 'stable_prefix' } },
@@ -69,16 +64,19 @@ describe('toolCaching', () => {
     ]);
 
     expect(orderedTools.map((entry) => entry.name)).toEqual([
-      'memory_recall',
       'tool_catalog',
-      'calendar_list',
+      'memory_recall',
       'sms_compose',
+      'calendar_list',
     ]);
     expect(lastStablePrefixIndex).toBe(1);
   });
 
   it('does not mutate the caller-owned tool array while ordering for providers', () => {
-    const tools = [tool('write_file'), tool('read_file')];
+    const tools = [
+      { ...tool('write_file'), promptCache: { placement: 'dynamic_suffix' as const } },
+      { ...tool('read_file'), promptCache: { placement: 'stable_prefix' as const } },
+    ];
 
     const orderedTools = reorderToolsForPromptCaching(tools);
 

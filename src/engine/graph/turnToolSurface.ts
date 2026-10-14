@@ -1,251 +1,67 @@
 import type { Message } from '../../types/message';
 import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolName } from '../tools/toolNameNormalization';
-import { isTurnOpeningUserMessage } from '../../utils/steeringMessages';
-import {
-  normalizeToolWorkflowContract,
-  workflowProductionSatisfiesConsumption,
-} from '../tools/toolWorkflowContracts';
-import { DEFAULT_CORE_TOOL_NAMES, resolveTurnToolSurface } from '../tools/toolSurface';
+import { resolveTurnToolSurface } from '../tools/toolSurface';
 import {
   DISCOVERY_ACTIVATION_TOOL_NAMES,
-  extractDiscoveryActivatedToolNames,
-  extractPreviousTurnDynamicToolNames,
-  hasUnresolvedDiscoveryToolCallInTurn,
-  mergeActivatedCatalogToolNames,
+  extractActivatedToolNamesFromDiscoveryToolResult,
 } from './discoveryToolActivation';
 
-function getMessagesSinceLatestUserMessage(
-  workingMessages: ReadonlyArray<Message>,
-): ReadonlyArray<Message> {
-  for (let index = workingMessages.length - 1; index >= 0; index -= 1) {
-    if (isTurnOpeningUserMessage(workingMessages[index])) {
-      return workingMessages.slice(index + 1);
-    }
-  }
-
-  return workingMessages;
-}
-
-function getMessagesFromPreviousUserTurn(
-  workingMessages: ReadonlyArray<Message>,
-): ReadonlyArray<Message> {
-  let latestUserIndex = -1;
-
-  for (let index = workingMessages.length - 1; index >= 0; index -= 1) {
-    if (!isTurnOpeningUserMessage(workingMessages[index])) {
-      continue;
-    }
-    if (latestUserIndex < 0) {
-      latestUserIndex = index;
-      continue;
-    }
-    return workingMessages.slice(index + 1, latestUserIndex);
-  }
-
-  return [];
-}
-
-function normalizeToolCallNames(toolCalls: ReadonlyArray<{ name?: string }> | undefined): string[] {
-  return (toolCalls ?? [])
-    .map((toolCall) => (typeof toolCall.name === 'string' ? normalizeToolName(toolCall.name) : ''))
-    .filter(Boolean);
-}
-
 /**
- * Tools already on the default surface are excluded from continuation *signals*:
- * they are selected anyway, and counting them would suppress the discovery surface.
- * They are still returned separately because a default-core tool can legitimately
- * start a workflow chain — a contacts lookup that should make messaging eligible —
- * and dropping it from the workflow seed would silently break that edge.
+ * Every tool the conversation in hand has called or activated (through a tool_catalog or
+ * tool_describe result), in the order each first appeared. The surface keeps them all, so a
+ * tool the model has used stays callable and the declaration block only grows at its end.
  */
-function extractRecentContinuationToolNames(
-  messagesSinceLatestUserMessage: ReadonlyArray<Message>,
-): {
-  signals: Set<string>;
-  workflowSeeds: Set<string>;
-} {
-  const signals = new Set<string>();
-  const workflowSeeds = new Set<string>();
-
-  for (const message of messagesSinceLatestUserMessage) {
-    for (const toolName of normalizeToolCallNames(message.toolCalls)) {
-      if (!toolName || DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
-        continue;
-      }
-      workflowSeeds.add(toolName);
-      if (DEFAULT_CORE_TOOL_NAMES.has(toolName)) {
-        continue;
-      }
-      signals.add(toolName);
-    }
-  }
-
-  return { signals, workflowSeeds };
-}
-
-function extractCompletedContinuationToolNames(messages: ReadonlyArray<Message>): {
-  signals: Set<string>;
-  workflowSeeds: Set<string>;
-} {
-  const signals = new Set<string>();
-  const workflowSeeds = new Set<string>();
+export function collectConversationToolNames(messages: ReadonlyArray<Message>): string[] {
+  const toolNames = new Set<string>();
+  const toolNameByCallId = new Map<string, string>();
 
   for (const message of messages) {
-    for (const toolCall of message.toolCalls ?? []) {
-      if (toolCall.status !== 'completed') {
-        continue;
+    if (message.role === 'assistant') {
+      for (const toolCall of message.toolCalls ?? []) {
+        const toolName = normalizeToolName(toolCall.name);
+        const toolCallId = toolCall.id?.trim();
+        if (toolCallId) {
+          toolNameByCallId.set(toolCallId, toolName);
+        }
+        if (toolName && !DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
+          toolNames.add(toolName);
+        }
       }
-      const toolName = normalizeToolName(toolCall.name);
-      if (!toolName || DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
-        continue;
-      }
-      workflowSeeds.add(toolName);
-      if (DEFAULT_CORE_TOOL_NAMES.has(toolName)) {
-        continue;
-      }
-      signals.add(toolName);
-    }
-  }
-
-  return { signals, workflowSeeds };
-}
-
-function resolveWorkflowContinuationToolNames(
-  allTools: ReadonlyArray<ToolDefinition>,
-  seedToolNames: Iterable<string>,
-): Set<string> {
-  const toolByName = new Map<string, ToolDefinition>();
-  const contractByName = new Map<string, ReturnType<typeof normalizeToolWorkflowContract>>();
-  for (const tool of allTools) {
-    const normalizedName = normalizeToolName(tool.name);
-    if (normalizedName) {
-      toolByName.set(normalizedName, tool);
-      contractByName.set(normalizedName, normalizeToolWorkflowContract(tool.contract));
-    }
-  }
-  const continuationToolNames = new Set<string>();
-  const observedProductions: Array<{
-    producerName: string;
-    production: ReturnType<typeof normalizeToolWorkflowContract>['produces'][number];
-  }> = [];
-  const normalizedSeedToolNames = new Set<string>();
-
-  for (const seedToolName of seedToolNames) {
-    const normalizedSeedToolName = normalizeToolName(seedToolName);
-    const tool = toolByName.get(normalizedSeedToolName);
-    const contract = contractByName.get(normalizedSeedToolName);
-    if (!tool || !contract) {
-      continue;
-    }
-    normalizedSeedToolNames.add(normalizedSeedToolName);
-
-    for (const successor of contract.precedes) {
-      const normalized = normalizeToolName(successor);
-      if (normalized && toolByName.has(normalized)) {
-        continuationToolNames.add(normalized);
-      }
-    }
-
-    for (const production of contract.produces) {
-      observedProductions.push({
-        producerName: normalizedSeedToolName,
-        production,
-      });
-    }
-  }
-
-  if (observedProductions.length === 0) {
-    return continuationToolNames;
-  }
-
-  for (const [toolName, contract] of contractByName) {
-    if (normalizedSeedToolNames.has(toolName)) {
       continue;
     }
 
-    const consumesObservedResource = contract.consumes.some((consumption) =>
-      observedProductions.some(
-        ({ producerName, production }) =>
-          producerName !== toolName &&
-          workflowProductionSatisfiesConsumption(production, consumption),
-      ),
-    );
-    if (consumesObservedResource && toolByName.has(toolName)) {
-      continuationToolNames.add(toolName);
+    if (message.role === 'tool') {
+      const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId.trim() : '';
+      const toolName = toolCallId ? toolNameByCallId.get(toolCallId) : undefined;
+      if (toolName && DISCOVERY_ACTIVATION_TOOL_NAMES.has(toolName)) {
+        for (const activated of extractActivatedToolNamesFromDiscoveryToolResult(
+          toolName,
+          message.content,
+        )) {
+          toolNames.add(activated);
+        }
+      }
     }
   }
 
-  return continuationToolNames;
+  return Array.from(toolNames);
 }
 
-export async function resolveDefaultGroundedRequestScopedTools(params: {
+export function resolveDefaultGroundedRequestScopedTools(params: {
   allTools: ReadonlyArray<ToolDefinition>;
-  observedToolNames: Iterable<string>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   workingMessages: ReadonlyArray<Message>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
-}): Promise<ToolDefinition[]> {
-  const messagesSinceLatestUserMessage = getMessagesSinceLatestUserMessage(params.workingMessages);
-  const previousTurnMessages = getMessagesFromPreviousUserTurn(params.workingMessages);
-  const turnActivatedCatalogToolNames = extractDiscoveryActivatedToolNames(
-    messagesSinceLatestUserMessage,
-  );
-  const previousTurnDynamicToolNames = extractPreviousTurnDynamicToolNames(previousTurnMessages);
-  const activatedCatalogToolNames = mergeActivatedCatalogToolNames(turnActivatedCatalogToolNames, [
-    ...(params.sessionActivatedToolNames ?? []),
-    ...previousTurnDynamicToolNames,
-  ]);
-  const unresolvedDiscoveryToolCallInTurn = hasUnresolvedDiscoveryToolCallInTurn(
-    messagesSinceLatestUserMessage,
-  );
-  const turnToolSurfaceParams = {
-    unresolvedDiscoveryToolCallInTurn,
-    activatedCatalogToolNames,
-  };
-  const pendingAsyncMonitorToolNames = params.pendingAsyncMonitorToolNames ?? new Set<string>();
-  const recentContinuation = extractRecentContinuationToolNames(messagesSinceLatestUserMessage);
-  const recentContinuationToolNames = recentContinuation.signals;
-  const previousTurnContinuation = extractCompletedContinuationToolNames(previousTurnMessages);
-  const observedToolNames = Array.from(params.observedToolNames)
-    .map((toolName) => normalizeToolName(toolName))
-    .filter(Boolean);
-  const workflowContinuationToolNames = resolveWorkflowContinuationToolNames(params.allTools, [
-    ...recentContinuation.workflowSeeds,
-    ...previousTurnContinuation.workflowSeeds,
-    ...observedToolNames,
-  ]);
-  const conversationalWorkflowContinuationToolNames = resolveWorkflowContinuationToolNames(
-    params.allTools,
-    [...recentContinuation.workflowSeeds, ...previousTurnContinuation.workflowSeeds],
-  );
-  const turnContinuationToolNames = new Set([
-    ...recentContinuationToolNames,
-    ...workflowContinuationToolNames,
-  ]);
-  const hasObservedToolNames = observedToolNames.length > 0;
-  const explicitToolSurfaceToolNames = params.explicitToolSurfaceToolNames ?? [];
-  const hasSurfaceContinuationSignals =
-    pendingAsyncMonitorToolNames.size > 0 ||
-    explicitToolSurfaceToolNames.length > 0 ||
-    turnContinuationToolNames.size > 0 ||
-    hasObservedToolNames ||
-    activatedCatalogToolNames.size > 0 ||
-    unresolvedDiscoveryToolCallInTurn;
-
+}): ToolDefinition[] {
   return resolveTurnToolSurface({
     allTools: params.allTools,
-    pendingAsyncMonitorToolNames,
-    explicitToolSurfaceToolNames,
-    observedToolNames,
-    recentContinuationToolNames: turnContinuationToolNames,
-    workflowContinuationToolNames: conversationalWorkflowContinuationToolNames,
-    ...turnToolSurfaceParams,
-    includeToolCatalog:
-      !hasSurfaceContinuationSignals ||
-      (activatedCatalogToolNames.size === 0 &&
-        pendingAsyncMonitorToolNames.size === 0 &&
-        explicitToolSurfaceToolNames.length === 0),
+    conversationToolNames: [
+      ...collectConversationToolNames(params.workingMessages),
+      ...(params.sessionActivatedToolNames ?? []),
+    ],
+    pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
+    explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
   });
 }

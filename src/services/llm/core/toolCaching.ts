@@ -36,10 +36,11 @@ export function buildToolDeclarationDigest(tools: ReadonlyArray<ToolDefinition>)
   return `tools-fnv1a32:${fnv1a32(stableStringify(material))}`;
 }
 
-function compareToolNames(left: ToolDefinition, right: ToolDefinition): number {
-  return left.name.localeCompare(right.name);
-}
-
+/**
+ * Stable-prefix tools first, then the rest, each in the order given: the turn surface lists
+ * tools in the order the conversation first brought them in, so a newly added tool lands at
+ * the end of its group instead of shifting every declaration after it.
+ */
 export function buildPromptCachingToolOrder(tools: ToolDefinition[]): {
   orderedTools: ToolDefinition[];
   lastStablePrefixIndex: number;
@@ -51,10 +52,7 @@ export function buildPromptCachingToolOrder(tools: ToolDefinition[]): {
   const dynamicTools = hasExplicitPlacement
     ? tools.filter((tool) => tool.promptCache?.placement !== 'stable_prefix')
     : [];
-  const orderedTools = [
-    ...[...stableTools].sort(compareToolNames),
-    ...[...dynamicTools].sort(compareToolNames),
-  ];
+  const orderedTools = [...stableTools, ...dynamicTools];
 
   return {
     orderedTools,

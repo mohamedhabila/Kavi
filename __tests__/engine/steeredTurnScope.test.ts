@@ -73,7 +73,6 @@ describe('tool surface across steers', () => {
 
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: [...tools, { name, description: 'Read a ledger record.', input_schema: schema }],
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Reconcile my ledger.', 100),
         ...toolStep('tc-discovery', 'tool_catalog', '{"query":"ledger"}', discovery, 110),

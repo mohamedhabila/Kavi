@@ -14,7 +14,6 @@ export async function evaluateSessionToolActivationFixture(
 ): Promise<AcceptanceFixtureOutcome> {
   const selectedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: fixture.allTools,
-    observedToolNames: new Set<string>(),
     sessionActivatedToolNames: fixture.sessionActivatedToolNames,
     workingMessages: fixture.workingMessages,
   });

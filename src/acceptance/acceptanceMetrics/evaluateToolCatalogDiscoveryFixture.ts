@@ -11,7 +11,6 @@ export async function evaluateToolCatalogDiscoveryFixture(
 ): Promise<AcceptanceFixtureOutcome> {
   const selectedTools = await resolveDefaultGroundedRequestScopedTools({
     allTools: fixture.allTools,
-    observedToolNames: new Set<string>(),
     workingMessages: fixture.workingMessages,
   });
   const selectedNames = new Set(selectedTools.map((tool) => tool.name));

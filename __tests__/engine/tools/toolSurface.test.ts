@@ -127,30 +127,24 @@ function selectedNames(surface: ToolDefinition[]): Set<string> {
 }
 
 describe('resolveTurnToolSurface discovery decay', () => {
-  it('combines pending async monitors and default core tools', () => {
+  it('combines pending async monitors with the core and discovery tools', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
+      conversationToolNames: [],
       pendingAsyncMonitorToolNames: new Set(['read_file']),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
     });
 
     expect(selectedNames(surface).has('memory_search')).toBe(true);
     expect(selectedNames(surface).has('read_file')).toBe(true);
-    expect(selectedNames(surface).has('tool_catalog')).toBe(false);
+    // The discovery tools are always on the surface: they are how any other tool gets there.
+    expect(selectedNames(surface).has('tool_catalog')).toBe(true);
   });
 
   it('keeps discovery tools available after session activation', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_search']),
+      conversationToolNames: ['memory_search'],
       unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
     });
 
     const names = selectedNames(surface);
@@ -163,12 +157,8 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps discovery tools after the same user turn activated catalog results', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_search']),
+      conversationToolNames: ['memory_search'],
       unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
     });
 
     const names = selectedNames(surface);
@@ -181,11 +171,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps the plan tool on the core surface', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: [],
     });
 
     expect(selectedNames(surface).has('update_plan')).toBe(true);
@@ -194,11 +180,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('exposes the stable core workbench', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: [],
     });
 
     const names = selectedNames(surface);
@@ -222,11 +204,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
     };
     const surface = resolveTurnToolSurface({
       allTools: [...discoveryTools, javascript],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: [],
     });
 
     expect(selectedNames(surface).has('javascript')).toBe(true);
@@ -235,11 +213,7 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('exposes the discovery entrypoint when asked', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: true,
+      conversationToolNames: [],
     });
 
     const names = selectedNames(surface);
@@ -250,12 +224,8 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps discovery tools while a catalog call is unresolved in the current user turn', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
+      conversationToolNames: [],
       unresolvedDiscoveryToolCallInTurn: true,
-      includeToolCatalog: false,
     });
 
     const names = selectedNames(surface);
@@ -266,12 +236,8 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps discovery tools when catalog activation has already exposed callable tools', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['memory_search']),
+      conversationToolNames: ['memory_search'],
       unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: true,
     });
 
     const names = selectedNames(surface);
@@ -283,40 +249,18 @@ describe('resolveTurnToolSurface discovery decay', () => {
   it('keeps a side-effectful catalog activation until the tool runs', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['browser_navigate']),
+      conversationToolNames: ['browser_navigate'],
       unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
     });
 
     expect(selectedNames(surface).has('browser_navigate')).toBe(true);
   });
 
-  it('does not reactivate an already completed side-effectful workflow tool from catalog', () => {
-    const surface = resolveTurnToolSurface({
-      allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['workspace_note_write'],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['workspace_note_write']),
-      unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
-    });
-
-    expect(selectedNames(surface).has('workspace_note_write')).toBe(false);
-  });
-
   it('keeps a core reader after it ran', () => {
     const surface = resolveTurnToolSurface({
       allTools: discoveryTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['read_file'],
-      recentContinuationToolNames: new Set(['read_file']),
-      activatedCatalogToolNames: new Set<string>(),
+      conversationToolNames: ['read_file', 'read_file'],
       unresolvedDiscoveryToolCallInTurn: false,
-      includeToolCatalog: false,
     });
 
     expect(selectedNames(surface).has('read_file')).toBe(true);

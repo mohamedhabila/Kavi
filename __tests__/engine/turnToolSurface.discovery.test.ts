@@ -11,7 +11,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('exposes the stable plan and discovery tools when no graph surface is available', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [userMessage('Compare the docs and reply.')],
     });
 
@@ -21,8 +20,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'memory_search',
       'read_file',
       'write_file',
-      'sessions_spawn',
       'list_files',
+      'sessions_spawn',
       'web_search',
       'web_fetch',
       'javascript',
@@ -34,7 +33,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps the discovery surface stable regardless of registry order', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: [...tools].reverse(),
-      observedToolNames: new Set<string>(),
       workingMessages: [userMessage('Compare the docs and reply.')],
     });
 
@@ -44,8 +42,8 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
       'memory_search',
       'read_file',
       'write_file',
-      'sessions_spawn',
       'list_files',
+      'sessions_spawn',
       'web_search',
       'web_fetch',
       'javascript',
@@ -57,11 +55,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('exposes discovery tools as a stable graph bootstrap surface', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: true,
+      conversationToolNames: [],
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
@@ -76,11 +70,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps unrequested mobile domains behind the compact catalog surface', () => {
     const selected = resolveTurnToolSurface({
       allTools: [...tools, ...resourceFlowTools],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: true,
+      conversationToolNames: [],
     });
 
     const names = new Set(selected.map((tool) => tool.name));
@@ -95,25 +85,17 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('admits the canonical read-only device query after exact catalog activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: [DEVICE_QUERY_TOOL],
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(['device_query']),
-      includeToolCatalog: false,
+      conversationToolNames: ['device_query'],
     });
 
     expect(selected.map((tool) => tool.name)).toEqual(['device_query']);
   });
 
-  it('keeps explicitly pinned mobile discovery ahead of dynamically activated consumers', () => {
+  it('places an explicit pin after the tools the conversation brought in', () => {
     const selected = resolveTurnToolSurface({
       allTools: [CALENDAR_EVENTS_TOOL, CALENDAR_LIST_TOOL],
-      pendingAsyncMonitorToolNames: new Set<string>(),
+      conversationToolNames: ['calendar_events'],
       explicitToolSurfaceToolNames: ['calendar_list'],
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(['calendar_events']),
-      includeToolCatalog: false,
     });
 
     expect(
@@ -122,21 +104,17 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
         placement: tool.promptCache?.placement,
       })),
     ).toEqual([
-      // calendar_events is part of the default read-only core, so it now shares the
-      // stable cache prefix with the explicit pin instead of trailing it.
+      // calendar_events is core; an explicit pin comes and goes with the run, so it follows
+      // the part of the surface that only grows.
       { name: 'calendar_events', placement: 'stable_prefix' },
-      { name: 'calendar_list', placement: 'stable_prefix' },
+      { name: 'calendar_list', placement: 'dynamic_suffix' },
     ]);
   });
 
   it('keeps an unrequested tool off the surface until activation', () => {
     const selected = resolveTurnToolSurface({
       allTools: resourceFlowTools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(['contacts_search']),
-      includeToolCatalog: true,
+      conversationToolNames: ['contacts_search'],
     });
 
     const names = new Set(selected.map((tool) => tool.name));
@@ -149,7 +127,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('loads the discovered category tools on the turn after tool_catalog', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Find the browser tools and continue.'),
         {
@@ -195,7 +172,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('loads code tools on the turn after tool_catalog discovers the code category', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Find code tools and continue.'),
         {
@@ -235,7 +211,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('loads pdf tools on the turn after tool_catalog discovers the pdf category', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Find the PDF tools and continue.'),
         {
@@ -274,7 +249,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('loads search hits on the turn after tool_catalog search', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Search the catalog for memory recall tooling.'),
         {
@@ -314,7 +288,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('loads described tools on the turn after tool_describe', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Describe memory recall before using it.'),
         {
@@ -352,7 +325,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps discovery tools after catalog activation exposes callable tools', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       sessionActivatedToolNames: ['memory_search'],
       workingMessages: [userMessage('Recall the stored fact.')],
     });
@@ -366,7 +338,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps discovery tools after same-turn activation', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Discover memory recall.'),
         {
@@ -403,7 +374,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps web_search available after prior search and fetch activity', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Compare the docs and reply.'),
         {

@@ -45,18 +45,13 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   );
   const explicitToolSurfaceToolNames = params.explicitToolSurfaceToolNames ?? [];
 
-  const resolvedGroundedRequestScopedTools = await resolveDefaultGroundedRequestScopedTools({
+  const groundedRequestScopedTools = resolveDefaultGroundedRequestScopedTools({
     allTools: policyAuthorizedTools,
-    observedToolNames: params.completedWorkflowToolNames,
     pendingAsyncMonitorToolNames,
     workingMessages: params.workingMessages,
     explicitToolSurfaceToolNames,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
   });
-  // Tool selection may suspend while policy changes. Re-authorize the complete
-  // result after the async boundary so stale memory capabilities never reach
-  // prompt construction, pinning, or provider dispatch.
-  const groundedRequestScopedTools = filterToolsForMemoryPolicy(resolvedGroundedRequestScopedTools);
   const groundedToolNames = new Set(
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
   );

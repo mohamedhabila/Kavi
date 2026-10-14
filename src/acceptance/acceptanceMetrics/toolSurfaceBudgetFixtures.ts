@@ -6,7 +6,6 @@ export interface ToolSurfaceBudgetFixture {
   id: string;
   /** Tools a discovery call activated for the turn. */
   activatedCatalogToolNames?: ReadonlyArray<string>;
-  includeToolCatalog?: boolean;
 }
 
 export const TOOL_SURFACE_BUDGET_FIXTURES: ReadonlyArray<ToolSurfaceBudgetFixture> = [
@@ -20,6 +19,5 @@ export const TOOL_SURFACE_BUDGET_FIXTURES: ReadonlyArray<ToolSurfaceBudgetFixtur
   },
   {
     id: 'bootstrap-turn',
-    includeToolCatalog: true,
   },
 ];

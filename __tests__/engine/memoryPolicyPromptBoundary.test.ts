@@ -105,8 +105,9 @@ describe('memory policy prompt boundary', () => {
     );
   });
 
-  it('re-authorizes the resolved tool surface after its async selection boundary', async () => {
-    const resolution = resolveModelTurnGroundedToolSurface({
+  it('keeps memory tools the policy forbids off the surface, whatever the run activated', async () => {
+    useSettingsStore.setState({ disableLongTermMemory: true });
+    const resolved = await resolveModelTurnGroundedToolSurface({
       allTools: [memoryWriteTool, memoryErasureTool, deviceWriteTool],
       completedWorkflowToolNames: new Set(),
       explicitToolSurfaceToolNames: [
@@ -129,9 +130,6 @@ describe('memory policy prompt boundary', () => {
         },
       ],
     });
-
-    useSettingsStore.setState({ disableLongTermMemory: true });
-    const resolved = await resolution;
 
     expect(resolved.groundedRequestScopedTools.map((entry) => entry.name).sort()).toEqual(
       [deviceWriteTool.name, memoryErasureTool.name].sort(),

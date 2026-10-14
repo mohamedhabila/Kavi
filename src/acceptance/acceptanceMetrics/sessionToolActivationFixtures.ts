@@ -129,7 +129,8 @@ export const SESSION_TOOL_ACTIVATION_FIXTURES: ReadonlyArray<SessionToolActivati
     expectedActivatedTools: ['pdf_read'],
   },
   {
-    id: 'without-session-cache-new-user-turn-drops-catalog-activation',
+    // The surface keeps what the live conversation activated: a later user turn still has it.
+    id: 'window-keeps-catalog-activation-across-user-turn-without-session-cache',
     allTools: SESSION_ACTIVATION_CATALOG,
     sessionActivatedToolNames: [],
     workingMessages: [
@@ -161,6 +162,6 @@ export const SESSION_TOOL_ACTIVATION_FIXTURES: ReadonlyArray<SessionToolActivati
       },
       { id: 'user-2', role: 'user', content: 'Use the PDF reader now.', timestamp: 4 },
     ],
-    expectedActivatedTools: [],
+    expectedActivatedTools: ['pdf_read'],
   },
 ];

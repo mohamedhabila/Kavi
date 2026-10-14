@@ -25,7 +25,6 @@ import {
 } from '../orchestratorCompaction';
 import { repairModelVisibleToolResultTranscript } from '../orchestratorToolTranscript';
 import { sanitizeModelVisibleWorkingMessages } from './modelVisibleWorkingMessages';
-import { stampPromptCachePlacement } from './promptCacheToolPlacement';
 import {
   joinSystemPromptSections,
   replaceMemoryPromptSection,
@@ -261,7 +260,7 @@ export async function prepareAgentTurnRequestBudget(
     : { requestModel: params.requestModel, onDeviceProvider: params.onDeviceProvider === true };
   const contextWindow = getWorkingContextWindow(params.requestModel, workingContextOptions);
   let workingMessages = repairModelVisibleToolResultTranscript(params.workingMessages);
-  const toolsForIteration = stampPromptCachePlacement(params.toolsForIteration ?? []);
+  const toolsForIteration = [...(params.toolsForIteration ?? [])];
   const planPromptSection = extractPlanPromptSection(params.enrichedSystemPromptSections);
   const workflowTaskAnchorPromptSection = extractWorkflowTaskAnchorPromptSection(
     params.enrichedSystemPromptSections,

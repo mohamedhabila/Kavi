@@ -1,4 +1,5 @@
 import { resolveDefaultGroundedRequestScopedTools } from '../../src/engine/graph/turnToolSurface';
+import { resolveTurnToolSurface } from '../../src/engine/tools/toolSurface';
 import { buildToolSchemaDigest } from '../../src/engine/tools/builtin-tool-schemaDigest';
 import { mcpManager } from '../../src/services/mcp/manager';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -82,45 +83,9 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     jest.restoreAllMocks();
   });
 
-  it('surfaces delegated session wait after a session producer has run', async () => {
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: tools,
-      observedToolNames: ['sessions_spawn'],
-      workingMessages: [
-        { id: 'u1', role: 'user', content: 'Delegate this and use the result.', timestamp: 1 },
-        {
-          id: 'a1',
-          role: 'assistant',
-          content: '',
-          timestamp: 2,
-          toolCalls: [
-            {
-              id: 'tc1',
-              name: 'sessions_spawn',
-              arguments: '{"prompt":"do work"}',
-              status: 'completed',
-            },
-          ],
-        },
-        {
-          id: 't1',
-          role: 'tool',
-          toolCallId: 'tc1',
-          content: '{"status":"running","sessionId":"worker-1"}',
-          timestamp: 3,
-        },
-      ],
-    });
-
-    const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('sessions_spawn')).toBe(true);
-    expect(selectedToolNames.has('sessions_wait')).toBe(true);
-  });
-
   it('surfaces session delegation on the agentic core', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: [],
       workingMessages: [
         {
           id: 'u1',
@@ -138,7 +103,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps catalog-activated tools on surface across a new user turn via session cache', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       sessionActivatedToolNames: ['memory_search'],
       workingMessages: [
         userMessage('Find memory recall tooling.'),
@@ -180,7 +144,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('drops non-core catalog activation on a new user turn without session cache', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       workingMessages: [
         userMessage('Find memory recall tooling.'),
         {
@@ -220,7 +183,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('surfaces session-activated tools without discovery pins', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       sessionActivatedToolNames: ['memory_search'],
       workingMessages: [userMessage('Recall the stored fact.')],
     });
@@ -242,7 +204,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     };
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: [...tools, integrationTool],
-      observedToolNames: new Set<string>([integrationTool.name]),
       sessionActivatedToolNames: [integrationTool.name],
       workingMessages: [
         userMessage('Complete the current workflow.'),
@@ -283,7 +244,6 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
 
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: [...tools, ...integrationTools],
-      observedToolNames: new Set<string>(),
       workingMessages: previousTurnDiscoveryMessages(schemaDigest),
     });
 
@@ -292,37 +252,19 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(true);
   });
 
-  it('requires rediscovery when an MCP registry refresh follows the prior discovery result', async () => {
-    const integrationTools = mockConnectedIntegration(121);
-    const schemaDigest = buildToolSchemaDigest(INTEGRATION_SCHEMA);
-    if (!schemaDigest) {
-      throw new Error('Expected the integration schema to have a digest.');
-    }
+  it('keeps an MCP tool the conversation activated while it is registered', () => {
+    const mcpTool = {
+      name: 'mcp__docs__search_docs',
+      description: 'Search the docs.',
+      input_schema: { type: 'object' as const, properties: {} },
+    };
+    const surface = (allTools: typeof tools) =>
+      resolveTurnToolSurface({ allTools, conversationToolNames: [mcpTool.name] }).map(
+        (tool) => tool.name,
+      );
 
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: [...tools, ...integrationTools],
-      observedToolNames: new Set<string>(),
-      workingMessages: previousTurnDiscoveryMessages(schemaDigest),
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has(INTEGRATION_TOOL_NAMES[0])).toBe(false);
-    expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(false);
-    expect(names.has('tool_catalog')).toBe(true);
-  });
-
-  it('requires rediscovery when the current dynamic tool schema no longer matches', async () => {
-    const integrationTools = mockConnectedIntegration(90);
-
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: [...tools, ...integrationTools],
-      observedToolNames: new Set<string>(),
-      workingMessages: previousTurnDiscoveryMessages('schema-fnv1a32:stale'),
-    });
-
-    const names = new Set(selected.map((tool) => tool.name));
-    expect(names.has(INTEGRATION_TOOL_NAMES[0])).toBe(false);
-    expect(names.has(INTEGRATION_TOOL_NAMES[1])).toBe(false);
-    expect(names.has('tool_catalog')).toBe(true);
+    expect(surface([...tools, mcpTool])).toContain(mcpTool.name);
+    // Once its server is gone, the registry no longer lists it, and neither does the surface.
+    expect(surface(tools)).not.toContain(mcpTool.name);
   });
 });

@@ -499,6 +499,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     );
     expectPreparedGroundedTools([
       { name: 'write_file', placement: 'stable_prefix' },
+      { name: 'tool_catalog', placement: 'stable_prefix' },
       { name: 'sessions_wait', placement: 'dynamic_suffix' },
     ]);
   });
@@ -559,6 +560,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expectPreparedGroundedTools([
       { name: 'write_file', placement: 'stable_prefix' },
       { name: 'tool_catalog', placement: 'stable_prefix' },
+      // Activated tools follow the fixed core prefix, appended in the order they arrived.
       { name: 'browser_navigate', placement: 'dynamic_suffix' },
       { name: 'browser_snapshot', placement: 'dynamic_suffix' },
     ]);

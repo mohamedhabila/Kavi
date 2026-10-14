@@ -6,20 +6,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps code execution behind discovery', () => {
     const unscoped = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: [],
     });
 
     const scoped = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['python']),
-      includeToolCatalog: false,
+      conversationToolNames: ['python'],
     });
 
     const unscopedToolNames = new Set(unscoped.map((tool) => tool.name));
@@ -34,20 +26,12 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps side-effect tools outside the core behind discovery', () => {
     const unscoped = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: [],
     });
 
     const scoped = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: [],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set(['browser_navigate']),
-      includeToolCatalog: false,
+      conversationToolNames: ['browser_navigate'],
     });
 
     const unscopedToolNames = new Set(unscoped.map((tool) => tool.name));
@@ -62,11 +46,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps read-only same-turn continuation without adding unrelated side-effect tools', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['list_files'],
-      recentContinuationToolNames: new Set<string>(['list_files']),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: ['list_files', 'list_files'],
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
@@ -78,11 +58,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('does not keep direct latest-user side-effect tools after successful completion', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['write_file'],
-      recentContinuationToolNames: new Set<string>(['write_file']),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: ['write_file', 'write_file'],
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
@@ -92,11 +68,7 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
   it('keeps core workbench tools on the surface after they ran', () => {
     const selected = resolveTurnToolSurface({
       allTools: tools,
-      pendingAsyncMonitorToolNames: new Set<string>(),
-      observedToolNames: ['write_file', 'read_file'],
-      recentContinuationToolNames: new Set<string>(),
-      activatedCatalogToolNames: new Set<string>(),
-      includeToolCatalog: false,
+      conversationToolNames: ['write_file', 'read_file'],
     });
 
     const selectedToolNames = new Set(selected.map((tool) => tool.name));
@@ -104,59 +76,22 @@ describe('resolveDefaultGroundedRequestScopedTools', () => {
     expect(selectedToolNames.has('read_file')).toBe(true);
   });
 
-  it('does not carry forward side-effectful category tools from recent use alone', async () => {
+  it('adds pending async monitor tools to the core and discovery surface', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
-      workingMessages: [
-        userMessage('Inspect the page and continue.'),
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: '',
-          timestamp: 2,
-          toolCalls: [
-            {
-              id: 'tc-browser',
-              name: 'browser_navigate',
-              arguments: '{"urls":["https://example.com"]}',
-              status: 'completed',
-            },
-          ],
-        },
-        {
-          id: 'tool-1',
-          role: 'tool',
-          content: '{"ok":true}',
-          toolCallId: 'tc-browser',
-          timestamp: 3,
-        },
-      ],
-    });
-
-    const selectedToolNames = new Set(selected.map((tool) => tool.name));
-    expect(selectedToolNames.has('browser_navigate')).toBe(false);
-    expect(selectedToolNames.has('browser_snapshot')).toBe(false);
-    expect(selectedToolNames.has('browser_click')).toBe(false);
-  });
-
-  it('keeps pending async monitor tools without broad default or discovery fallback', async () => {
-    const selected = await resolveDefaultGroundedRequestScopedTools({
-      allTools: tools,
-      observedToolNames: new Set(['read_file', 'web_search']),
       pendingAsyncMonitorToolNames: new Set(['sessions_status']),
       workingMessages: [userMessage('Recall the stored fact.')],
     });
 
     expect(selected.some((tool) => tool.name === 'sessions_status')).toBe(true);
     expect(selected.some((tool) => tool.name === 'write_file')).toBe(true);
-    expect(selected.some((tool) => tool.name === 'tool_catalog')).toBe(false);
+    // The discovery tools are always on the surface: they are how any other tool gets there.
+    expect(selected.some((tool) => tool.name === 'tool_catalog')).toBe(true);
   });
 
   it('keeps core tools a session also activated', async () => {
     const selected = await resolveDefaultGroundedRequestScopedTools({
       allTools: tools,
-      observedToolNames: new Set<string>(),
       sessionActivatedToolNames: ['write_file', 'memory_remember'],
       workingMessages: [userMessage('Verify the saved state.')],
     });

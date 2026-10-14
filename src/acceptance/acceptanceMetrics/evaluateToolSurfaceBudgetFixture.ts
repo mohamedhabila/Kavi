@@ -23,11 +23,7 @@ export function evaluateToolSurfaceBudgetFixture(
 ): AcceptanceFixtureOutcome {
   const selectedTools = resolveTurnToolSurface({
     allTools: ALL_BUILTIN_TOOL_DEFINITIONS,
-    pendingAsyncMonitorToolNames: new Set<string>(),
-    observedToolNames: [],
-    recentContinuationToolNames: new Set<string>(),
-    activatedCatalogToolNames: new Set(fixture.activatedCatalogToolNames ?? []),
-    includeToolCatalog: fixture.includeToolCatalog ?? false,
+    conversationToolNames: fixture.activatedCatalogToolNames ?? [],
   });
 
   const pinnedToolNames = new Set<string>();

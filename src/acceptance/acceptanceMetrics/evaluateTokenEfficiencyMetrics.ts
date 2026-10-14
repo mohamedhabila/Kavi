@@ -48,11 +48,12 @@ function estimateLegacyPromptFacingToolTokens(tools: ReadonlyArray<ToolDefinitio
 export function evaluateToolDefinitionTokenReductionBenchmark(): AcceptanceFixtureOutcome {
   const surface = resolveTurnToolSurface({
     allTools: TOOL_DEFINITIONS,
-    pendingAsyncMonitorToolNames: new Set<string>(),
-    observedToolNames: ['mcp__docs__search_docs', 'skill__weather__forecast'],
-    recentContinuationToolNames: new Set(['browser_navigate']),
-    activatedCatalogToolNames: new Set(['pdf_read']),
-    includeToolCatalog: true,
+    conversationToolNames: [
+      'mcp__docs__search_docs',
+      'skill__weather__forecast',
+      'browser_navigate',
+      'pdf_read',
+    ],
   });
 
   const pinnedToolNames = new Set(['web_search', 'write_file', 'read_file']);

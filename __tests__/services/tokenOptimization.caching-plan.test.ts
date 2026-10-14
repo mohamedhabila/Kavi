@@ -164,7 +164,9 @@ describe('buildPromptCachingPlan', () => {
     });
   });
 
-  it('keeps the stable prefix digest invariant when stable core tools arrive in different order', () => {
+  // Tools go out in the order the surface lists them, and a provider caches that exact order,
+  // so the digest follows it: the surface keeps it stable by only ever appending.
+  it('reports a different tool prefix when the same tools arrive in a different order', () => {
     const first = buildPromptCachingPlan({
       provider: makeProvider(),
       model: 'gpt-5.4',
@@ -185,10 +187,9 @@ describe('buildPromptCachingPlan', () => {
     expect(first.telemetry.stableSystemPromptDigest).toBe(
       second.telemetry.stableSystemPromptDigest,
     );
-    expect(first.telemetry.stableToolDeclarationDigest).toBe(
+    expect(first.telemetry.stableToolDeclarationDigest).not.toBe(
       second.telemetry.stableToolDeclarationDigest,
     );
-    expect(first.telemetry.cacheablePrefixDigest).toBe(second.telemetry.cacheablePrefixDigest);
   });
 
   it('keeps the OpenAI routing key stable while reporting changed cacheable prefixes', () => {
