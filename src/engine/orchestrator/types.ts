@@ -98,9 +98,9 @@ export interface OrchestratorOptions {
    * as opposed to a delegated worker, a scheduled job, or any other background run.
    * Set exclusively by the interactive chat entry point
    * (graph/foregroundRun/execution.ts); delegated workers and scheduled/boot runs
-   * must omit it. Bounds the tool-iteration and wall-clock budget far tighter (see
-   * orchestrator/constants.ts) and forces a text-only checkpoint turn instead of an
-   * unbroken multi-minute tool-calling grind or a hard failure on a stalled model turn.
+   * must omit it. A silent model turn of such a run times out after
+   * FOREGROUND_MODEL_TURN_INACTIVITY_TIMEOUT_MS and is retried, instead of waiting out
+   * the background run's 15 minutes.
    */
   isForegroundRun?: boolean;
   temperature?: number;

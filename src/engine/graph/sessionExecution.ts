@@ -109,7 +109,6 @@ export async function executeAgentControlGraphSession(
           currentLimit: iterationLimit,
           extensionSize: iterationExtensionSize,
           toolCallHistory: params.toolRuntime.toolCallHistory,
-          isForegroundRun: params.isForegroundRun === true,
         });
         if (nextIterationLimit !== null) {
           params.graph.recordObservability({

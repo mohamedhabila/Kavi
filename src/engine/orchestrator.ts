@@ -66,7 +66,6 @@ export async function runOrchestrator(
     systemPrompt,
     toolFilter: options.toolFilter,
     agentRunId: options.agentRunId,
-    isForegroundRun: options.isForegroundRun,
     ...(options.mobileController ? { mobileController: options.mobileController } : {}),
   });
   callbacks.onTurnLatencyMark?.('session_bootstrapped');

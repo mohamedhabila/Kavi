@@ -49,11 +49,6 @@ describe('agent control graph forced text turns', () => {
       'State the unverified requested side effect, the blocker, and the smallest missing input',
     ],
     [
-      'foreground_budget_checkpoint',
-      '[SYSTEM FOREGROUND CHECKPOINT]',
-      'concisely report what has been done so far, what remains, and ask whether to continue',
-    ],
-    [
       'loop_recovery',
       '[SYSTEM DIRECT RESPONSE REQUIRED]',
       'Answer from gathered evidence, or state the blocker clearly',
@@ -83,14 +78,4 @@ describe('agent control graph forced text turns', () => {
     expect(prompt).toContain('Mobile operating systems may suspend background execution');
     expect(prompt).toContain('do not claim completion or guaranteed continuous execution');
   });
-
-  it('tells the model to answer in the user\'s own language and stay resumable at the foreground checkpoint', () => {
-    const prompt = buildAgentControlGraphForcedTextOnlyTurnPrompt('foreground_budget_checkpoint');
-
-    expect(prompt).toContain("In the user's own language");
-    expect(prompt).toContain('Do not claim the task is complete if work remains');
-    expect(prompt).toContain('do not invent a tool result');
-    expect(prompt).toContain('The next message can resume the work.');
-  });
-
 });

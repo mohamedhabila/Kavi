@@ -40,11 +40,7 @@ import {
   getRuntimeToolAvailabilityContext,
   type RuntimeToolAvailabilityContext,
 } from '../tools/runtimeAvailability';
-import {
-  FOREGROUND_MAX_TOOL_ITERATIONS,
-  MAX_TOOL_ITERATIONS,
-  resolveToolIterationBudget,
-} from './constants';
+import { MAX_TOOL_ITERATIONS, resolveToolIterationBudget } from './constants';
 import type { OrchestratorCallbacks } from './types';
 import {
   admitMobileControllerRuntime,
@@ -166,8 +162,6 @@ export async function prepareOrchestratorSessionBootstrap(params: {
   };
   messages: Message[];
   maxToolIterations?: number;
-  /** See OrchestratorOptions.isForegroundRun; clamps the default iteration budget. */
-  isForegroundRun?: boolean;
   model: string;
   personaId?: string;
   provider: LlmProviderConfig;
@@ -205,16 +199,9 @@ export async function prepareOrchestratorSessionBootstrap(params: {
     );
   }
   const persona: AgentPersona | undefined = chosenPersona ?? getPersona(DEFAULT_PERSONA_ID);
-  // A foreground interactive run (a person waiting on the screen) never earns the
-  // full persona ceiling as its *default* budget; an explicit caller-supplied
-  // `maxToolIterations` still passes through resolveToolIterationBudget unclamped,
-  // since explicit caller limits remain fixed (see orchestrator/constants.ts).
-  const defaultIterationBudget = params.isForegroundRun
-    ? Math.min(MAX_TOOL_ITERATIONS, FOREGROUND_MAX_TOOL_ITERATIONS)
-    : MAX_TOOL_ITERATIONS;
   const maxToolIterations = resolveToolIterationBudget(
     params.maxToolIterations,
-    defaultIterationBudget,
+    MAX_TOOL_ITERATIONS,
   );
   params.logger.debug(
     `conversationId=${params.conversationId}, persona=${persona?.name || 'none'}, maxIterations=${maxToolIterations}`,

@@ -8,26 +8,24 @@ import {
   normalizeAgentRunControlGraphState,
 } from '../../src/services/agents/agentControlGraphState';
 
-// The foreground work window forces a checkpoint turn that reports what was done and asks
-// whether to continue. Its reason was missing from the hand-kept list the graph normalizes
-// against, so the engine read it back as no reason — the checkpoint got the generic
-// "answer from gathered evidence" prompt — and the stored run lost it, so the one-tap
-// Continue offered on a checkpoint stop could never appear.
+// A forced text-only turn carries the reason that picks its prompt. A reason missing from
+// the hand-kept list the graph normalizes against was read back as no reason — the turn
+// got the generic "answer from gathered evidence" prompt — and the stored run lost it.
 
 describe('a forced-text reason survives the graph', () => {
-  it('keeps the foreground checkpoint through the engine reducer', () => {
+  it('keeps a background handoff through the engine reducer', () => {
     const snapshot = reduceAgentControlGraph(
       createInitialAgentRunControlGraphState(),
       [
         buildAgentControlGraphTurnDirectivesRecordedEvent(
-          { forceFinalText: true, forcedTextReason: 'foreground_budget_checkpoint' },
-          'foreground_budget_checkpoint',
+          { forceFinalText: true, forcedTextReason: 'background_session_started' },
+          'background_session_started',
         ),
       ],
     );
 
     expect(getAgentControlGraphTurnDirectives(snapshot).forcedTextReason).toBe(
-      'foreground_budget_checkpoint',
+      'background_session_started',
     );
   });
 
@@ -38,11 +36,11 @@ describe('a forced-text reason survives the graph', () => {
         forceFinalText: true,
         requireWorkflowTool: false,
         incompleteFinalTextRecoveryCount: 0,
-        forcedTextReason: 'foreground_budget_checkpoint',
+        forcedTextReason: 'background_session_started',
       },
     });
 
-    expect(stored?.turnDirectives?.forcedTextReason).toBe('foreground_budget_checkpoint');
+    expect(stored?.turnDirectives?.forcedTextReason).toBe('background_session_started');
   });
 
   it('reads a reason it does not know as no reason', () => {

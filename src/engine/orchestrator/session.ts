@@ -209,7 +209,6 @@ export async function runOrchestratorGraphSession(params: {
         workingMessages,
       },
       isForegroundRun: options.isForegroundRun,
-      runStartedAtMs: Date.now(),
       allowLongHorizonIterationExtensions,
       maxToolIterations,
       maxTokens,

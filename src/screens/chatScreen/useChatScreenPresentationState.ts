@@ -169,9 +169,7 @@ export function useChatScreenPresentationState(
   );
   const continuableMessageId = useMemo(() => {
     const latest = resolvedDisplayMessages.at(-1);
-    return latest &&
-      !latest.isStreaming &&
-      isContinuableStop(latest.resolvedMessage, latest.agentRun)
+    return latest && !latest.isStreaming && isContinuableStop(latest.resolvedMessage)
       ? latest.resolvedMessage.id
       : null;
   }, [resolvedDisplayMessages]);

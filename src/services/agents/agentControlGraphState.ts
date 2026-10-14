@@ -49,14 +49,13 @@ const CONTROL_GRAPH_STATUSES = new Set<AgentRunControlGraphStatus>([
 
 /**
  * Keyed by the reason type, so a new reason cannot be added without listing it here. A
- * hand-kept set drifted: it lacked `foreground_budget_checkpoint`, so the engine read the
- * checkpoint back as no reason and the stored run lost it.
+ * hand-kept set drifted: it lacked a reason the engine recorded, so the engine read that
+ * reason back as none and the stored run lost it.
  */
 const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true> = {
   background_session_started: true,
   empty_delivery_recovery: true,
   execution_loop_recovery: true,
-  foreground_budget_checkpoint: true,
   incomplete_delivery_continuation: true,
   loop_recovery: true,
   request_clarification: true,

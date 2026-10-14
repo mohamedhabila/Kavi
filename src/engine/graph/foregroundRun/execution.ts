@@ -523,8 +523,7 @@ async function executeReservedForegroundConversationRun(
           workflowTaskAnchor: resumePreparation.workflowTaskAnchor,
           agentRunId: bootstrapResult.trackedAgentRunId,
           // This is the interactive chat entry point: a person is watching the screen
-          // wait for a reply, so this run gets the tighter foreground iteration/wall-clock
-          // budget and inactivity timeout instead of the full background ceiling.
+          // wait for a reply, so a silent model turn times out sooner than a background one.
           isForegroundRun: true,
           ...(mobileController
             ? {
