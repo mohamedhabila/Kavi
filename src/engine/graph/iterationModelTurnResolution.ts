@@ -2,8 +2,6 @@ import { getEscalatedFinalizationMaxTokens } from '../../services/context/tokenO
 import { normalizeToolName } from '../tools/toolNameNormalization';
 import type { AssistantCompletionMetadata, MessageProviderReplay } from '../../types/message';
 import { mergeAssistantContinuationText } from '../orchestratorText';
-import { trimAgentControlGraphPendingToolCallsAfterYield } from './sessionsYield';
-import { selectOneShotDiscoveryToolCalls } from './discoveryToolActivation';
 import { resolveAgentControlGraphNoToolTurn } from './noToolTurnResolution';
 import type {
   AgentControlGraphIterationRuntimeState,
@@ -38,10 +36,10 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
   const turnAssistantContent = continuationPrefix
     ? mergeAssistantContinuationText(continuationPrefix, params.fullContent)
     : params.fullContent;
-  const executableToolCalls = selectOneShotDiscoveryToolCalls(
-    trimAgentControlGraphPendingToolCallsAfterYield(params.pendingToolCalls),
-  );
-  if (executableToolCalls.length === 0) {
+  // Every call the model made runs and is answered: a provider rejects a history that leaves
+  // one unanswered (Claude: "The final block in an assistant message cannot be `thinking`"
+  // once the unanswered tool_use is stripped), and the model needs every result to go on.
+  if (params.pendingToolCalls.length === 0) {
     const noToolTurnResolution = await resolveAgentControlGraphNoToolTurn({
       iteration: params.iterationParams.iteration,
       trackedAsyncOperations: params.iterationParams.trackedAsyncOperations,
@@ -103,6 +101,6 @@ export async function resolvePreparedAgentControlGraphModelTurnResult(params: {
     reasoning: params.reasoning,
     providerReplay: params.providerReplay,
     completion: params.completion,
-    pendingToolCalls: executableToolCalls,
+    pendingToolCalls: params.pendingToolCalls,
   });
 }

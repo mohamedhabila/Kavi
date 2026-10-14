@@ -54,18 +54,3 @@ export function buildAgentControlGraphSessionsYieldCompletionNote(message?: stri
     .filter(Boolean)
     .join('\n');
 }
-
-export function trimAgentControlGraphPendingToolCallsAfterYield<
-  T extends {
-    name: string;
-  },
->(pendingToolCalls: ReadonlyArray<T>): T[] {
-  const firstYieldIndex = pendingToolCalls.findIndex(
-    (toolCall) => normalizeToolName(toolCall.name) === 'sessions_yield',
-  );
-  if (firstYieldIndex < 0) {
-    return [...pendingToolCalls];
-  }
-
-  return pendingToolCalls.slice(0, firstYieldIndex + 1);
-}

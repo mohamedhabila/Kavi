@@ -1,7 +1,6 @@
 import {
   collectActivatedToolNamesFromDiscoveryPayload,
   hasUnresolvedDiscoveryToolCallInTurn,
-  selectOneShotDiscoveryToolCalls,
 } from '../../src/engine/graph/discoveryToolActivation';
 import type { Message } from '../../src/types/message';
 
@@ -53,28 +52,6 @@ describe('hasUnresolvedDiscoveryToolCallInTurn', () => {
     ];
 
     expect(hasUnresolvedDiscoveryToolCallInTurn(messages)).toBe(false);
-  });
-});
-
-describe('selectOneShotDiscoveryToolCalls', () => {
-  it('keeps ordinary tool batches unchanged', () => {
-    const calls = [
-      { id: 'tc-read', name: 'memory_search' },
-      { id: 'tc-write', name: 'memory_remember' },
-    ];
-
-    expect(selectOneShotDiscoveryToolCalls(calls)).toEqual(calls);
-  });
-
-  it('executes only the earliest discovery call in a model turn', () => {
-    expect(
-      selectOneShotDiscoveryToolCalls([
-        { id: 'tc-read', name: 'memory_search' },
-        { id: 'tc-catalog-1', name: 'tool_catalog' },
-        { id: 'tc-catalog-2', name: 'tool_catalog' },
-        { id: 'tc-describe', name: 'tool_describe' },
-      ]),
-    ).toEqual([{ id: 'tc-catalog-1', name: 'tool_catalog' }]);
   });
 });
 

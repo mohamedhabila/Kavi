@@ -195,7 +195,7 @@ describe('Orchestrator', () => {
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
-    it('drops tool calls that appear after sessions_yield in the same assistant turn', async () => {
+    it('runs tool calls that appear after sessions_yield in the same assistant turn', async () => {
       (executeTool as jest.Mock).mockImplementationOnce(async (toolName: string) => {
         expect(toolName).toBe('sessions_yield');
         return {
@@ -258,7 +258,7 @@ describe('Orchestrator', () => {
 
       await runOrchestrator(options, callbacks);
 
-      expect(executeTool).toHaveBeenCalledTimes(1);
+      expect(executeTool).toHaveBeenCalledTimes(2);
       expect(executeTool).toHaveBeenCalledWith(
         'sessions_yield',
         '{"message":"checkpoint"}',
@@ -268,10 +268,20 @@ describe('Orchestrator', () => {
           model: 'gpt-5.4',
         }),
       );
+      expect(executeTool).toHaveBeenCalledWith(
+        'read_file',
+        '{"path":"after-yield.txt"}',
+        'conv-yield',
+        expect.any(Object),
+      );
       expect(callbacks.calls.onAssistantMessage[0].toolCalls).toEqual([
         expect.objectContaining({ id: 'tc-yield', name: 'sessions_yield' }),
+        expect.objectContaining({ id: 'tc-extra', name: 'read_file' }),
       ]);
-      expect(callbacks.calls.onToolMessage).toEqual([expect.objectContaining({ id: 'tc-yield' })]);
+      expect(callbacks.calls.onToolMessage).toEqual([
+        expect.objectContaining({ id: 'tc-yield' }),
+        expect.objectContaining({ id: 'tc-extra' }),
+      ]);
       expect(callbacks.calls.onAssistantMessage[1]).toEqual(
         expect.objectContaining({
           content: 'Finalized after yield.',

@@ -17,9 +17,6 @@ import { buildAgentControlGraphLoopRecoveryDecision } from './loopRecovery';
 import { buildLoopDetectedObservabilityDetail } from './graphObservability';
 import { buildRunStoppedMessage } from './runStoppedMessage';
 import type { PendingAgentToolCall } from './modelTurnExecutionTypes';
-import { trimAgentControlGraphPendingToolCallsAfterYield } from './sessionsYield';
-import { normalizeToolName } from '../tools/toolNameNormalization';
-import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
 
 export type PrepareAgentControlGraphToolTurnResult =
   | {
@@ -41,7 +38,6 @@ export type PrepareAgentControlGraphToolTurnResult =
       status: 'prepared';
       assistantMetadata: AssistantMessageMetadata;
       assistantToolTurnContent: string;
-      executableToolCalls: ReadonlyArray<PendingAgentToolCall>;
       toolCallObjects: ToolCall[];
       warningInjectedThisRound: boolean;
       workingMessages: Message[];
@@ -66,13 +62,8 @@ export interface PrepareAgentControlGraphToolTurnParams {
 export function prepareAgentControlGraphToolTurn(
   params: PrepareAgentControlGraphToolTurnParams,
 ): PrepareAgentControlGraphToolTurnResult {
-  const yieldedToolCalls = trimAgentControlGraphPendingToolCallsAfterYield(params.pendingToolCalls);
-  const clarificationToolCall = yieldedToolCalls.find(
-    (toolCall) => normalizeToolName(toolCall.name) === REQUEST_CLARIFICATION_TOOL_NAME,
-  );
-  const executableToolCalls = clarificationToolCall ? [clarificationToolCall] : yieldedToolCalls;
   const loopCheck = detectLoops(params.toolCallHistory, params.stagnationSignatures);
-  const toolCallObjects: ToolCall[] = executableToolCalls.map((toolCall) => ({
+  const toolCallObjects: ToolCall[] = params.pendingToolCalls.map((toolCall) => ({
     id: toolCall.id,
     name: toolCall.name,
     arguments: toolCall.arguments,
@@ -133,7 +124,6 @@ export function prepareAgentControlGraphToolTurn(
     status: 'prepared',
     assistantMetadata,
     assistantToolTurnContent,
-    executableToolCalls,
     toolCallObjects,
     warningInjectedThisRound,
     workingMessages,

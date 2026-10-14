@@ -288,19 +288,6 @@ export function extractActivatedToolNamesFromDiscoveryToolResult(
   }
 }
 
-export function selectOneShotDiscoveryToolCalls<T extends { name?: string }>(
-  toolCalls: ReadonlyArray<T>,
-): T[] {
-  const firstDiscoveryIndex = toolCalls.findIndex((toolCall) =>
-    DISCOVERY_ACTIVATION_TOOL_NAMES.has(normalizeToolName(toolCall.name ?? '')),
-  );
-  if (firstDiscoveryIndex < 0) {
-    return [...toolCalls];
-  }
-  const discoveryCall = toolCalls[firstDiscoveryIndex];
-  return discoveryCall ? [discoveryCall] : [];
-}
-
 export function mergeActivatedCatalogToolNames(
   turnActivated: ReadonlySet<string>,
   sessionActivated?: ReadonlyArray<string>,

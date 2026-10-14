@@ -15,7 +15,32 @@ afterEach(() => {
 });
 
 describe('resolvePreparedAgentControlGraphModelTurnResult', () => {
-  it('hands only the earliest discovery call to tool execution', async () => {
+  // A call dropped from a batch stayed in Claude's replayed blocks with no result, so the
+  // next request carried an unanswered tool_use (live: "messages.5: The final block in an
+  // assistant message cannot be `thinking`", 2 of 3 Sonnet trip-organizer runs).
+  it.each([
+    [
+      'a discovery call',
+      [
+        { id: 'tc-describe', name: 'tool_describe', arguments: '{"name":"calendar_create_event"}' },
+        { id: 'tc-create', name: 'calendar_create_event', arguments: '{"title":"Flight"}' },
+      ],
+    ],
+    [
+      'a sessions_yield',
+      [
+        { id: 'tc-yield', name: 'sessions_yield', arguments: '{}' },
+        { id: 'tc-read', name: 'read_file', arguments: '{"path":"a.txt"}' },
+      ],
+    ],
+    [
+      'a clarification',
+      [
+        { id: 'tc-read', name: 'read_file', arguments: '{"path":"a.txt"}' },
+        { id: 'tc-ask', name: 'request_clarification', arguments: '{"question":"Which?"}' },
+      ],
+    ],
+  ])('hands every call to tool execution when a batch holds %s', async (_label, calls) => {
     const applyAgentControlGraphEvents = jest.fn();
     const executePendingToolTurn = jest.fn().mockResolvedValue('continued');
     const status = await resolvePreparedAgentControlGraphModelTurnResult({
@@ -33,11 +58,7 @@ describe('resolvePreparedAgentControlGraphModelTurnResult', () => {
       } as any,
       fullContent: '',
       reasoning: '',
-      pendingToolCalls: [
-        { id: 'tc-memory', name: 'memory_recall', arguments: '{}' },
-        { id: 'tc-catalog-1', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
-        { id: 'tc-catalog-2', name: 'tool_catalog', arguments: '{"query":"memory_remember"}' },
-      ],
+      pendingToolCalls: calls,
       contextWindow: 100_000,
       requestMaxTokens: 2048,
       executePendingToolTurn,
@@ -46,11 +67,7 @@ describe('resolvePreparedAgentControlGraphModelTurnResult', () => {
     expect(status).toBe('continued');
     expect(applyAgentControlGraphEvents).not.toHaveBeenCalled();
     expect(executePendingToolTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pendingToolCalls: [
-          { id: 'tc-catalog-1', name: 'tool_catalog', arguments: '{"query":"memory_recall"}' },
-        ],
-      }),
+      expect.objectContaining({ pendingToolCalls: calls }),
     );
   });
 });

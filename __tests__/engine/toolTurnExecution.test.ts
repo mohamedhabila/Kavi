@@ -127,7 +127,7 @@ describe('toolTurnExecution', () => {
     expect(content).toContain('repeating the same step without making progress');
   });
 
-  it('trims queued tool calls after sessions_yield before assistant staging and execution', async () => {
+  it('stages and runs calls queued after sessions_yield, so every call is answered', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
     const params = createParams({
@@ -148,26 +148,23 @@ describe('toolTurnExecution', () => {
 
     await executeAgentControlGraphToolTurn(params);
 
+    const batch = [
+      expect.objectContaining({ id: 'tc-1', name: 'write_file' }),
+      expect.objectContaining({ id: 'tc-2', name: 'sessions_yield' }),
+      expect.objectContaining({ id: 'tc-3', name: 'read_file' }),
+    ];
     expect(params.callbacks.onAssistantMessage).toHaveBeenCalledWith(
       'Working on it',
-      [
-        expect.objectContaining({ id: 'tc-1', name: 'write_file' }),
-        expect.objectContaining({ id: 'tc-2', name: 'sessions_yield' }),
-      ],
+      batch,
       undefined,
       expect.any(Object),
     );
     expect(mockedExecuteToolExecutionBatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        executableToolCalls: [
-          expect.objectContaining({ id: 'tc-1', name: 'write_file' }),
-          expect.objectContaining({ id: 'tc-2', name: 'sessions_yield' }),
-        ],
-      }),
+      expect.objectContaining({ executableToolCalls: batch }),
     );
   });
 
-  it('makes structured clarification exclusive before assistant staging or tool execution', async () => {
+  it('stages and runs every call batched with a clarification; nothing is dropped unanswered', async () => {
     mockedDetectLoops.mockReturnValue({ loopDetected: false });
     mockedExecuteToolExecutionBatch.mockResolvedValue([]);
     const params = createParams({
@@ -202,26 +199,19 @@ describe('toolTurnExecution', () => {
 
     await executeAgentControlGraphToolTurn(params);
 
+    const batch = [
+      expect.objectContaining({ id: 'tc-write', name: 'write_file' }),
+      expect.objectContaining({ id: 'tc-clarify', name: 'request_clarification' }),
+      expect.objectContaining({ id: 'tc-sms', name: 'sms_compose' }),
+    ];
     expect(params.callbacks.onAssistantMessage).toHaveBeenCalledWith(
       'Working on it',
-      [
-        expect.objectContaining({
-          id: 'tc-clarify',
-          name: 'request_clarification',
-        }),
-      ],
+      batch,
       undefined,
       expect.any(Object),
     );
     expect(mockedExecuteToolExecutionBatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        executableToolCalls: [
-          expect.objectContaining({
-            id: 'tc-clarify',
-            name: 'request_clarification',
-          }),
-        ],
-      }),
+      expect.objectContaining({ executableToolCalls: batch }),
     );
   });
 

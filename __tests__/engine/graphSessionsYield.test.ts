@@ -1,7 +1,6 @@
 import {
   buildAgentControlGraphSessionsYieldCompletionNote,
   parseAgentControlGraphSessionsYieldResult,
-  trimAgentControlGraphPendingToolCallsAfterYield,
 } from '../../src/engine/graph/sessionsYield';
 
 describe('agent control graph sessions-yield helpers', () => {
@@ -41,17 +40,6 @@ describe('agent control graph sessions-yield helpers', () => {
     expect(parseAgentControlGraphSessionsYieldResult('read_file', '{}')).toEqual({
       yielded: false,
     });
-  });
-
-  it('trims tool calls after the first sessions_yield', () => {
-    const trimmed = trimAgentControlGraphPendingToolCallsAfterYield([
-      { id: '1', name: 'read_file', arguments: '{}' },
-      { id: '2', name: 'sessions_yield', arguments: '{}' },
-      { id: '3', name: 'read_file', arguments: '{}' },
-    ]);
-
-    expect(trimmed).toHaveLength(2);
-    expect(trimmed.map((toolCall) => toolCall.id)).toEqual(['1', '2']);
   });
 
   it('builds a completion finalization note', () => {

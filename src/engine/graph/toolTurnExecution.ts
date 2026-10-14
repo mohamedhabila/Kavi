@@ -231,7 +231,7 @@ export async function executeAgentControlGraphToolTurn(
       workingMessages: toolTurnPreparation.workingMessages,
     };
   }
-  const executableToolCalls = toolTurnPreparation.executableToolCalls;
+  const executableToolCalls = params.pendingToolCalls;
   let workingMessages = toolTurnPreparation.workingMessages;
   const warningInjectedThisRound = toolTurnPreparation.warningInjectedThisRound;
 
