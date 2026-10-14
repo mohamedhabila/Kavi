@@ -1,13 +1,8 @@
 import { resolveAgentControlGraphToolExecutionOutcomes } from '../../src/engine/graph/toolExecutionOutcomeResolution';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import {
   buildRequestClarificationToolResult,
   type RequestClarification,
 } from '../../src/services/agents/requestClarification';
-import {
-  projectRequestUnderstanding,
-  summarizeRequestUnderstanding,
-} from '../../src/services/agents/requestUnderstandingProjection';
 import { buildBaseParams, createToolMessage } from '../helpers/toolExecutionOutcomeHarness';
 
 describe('tool execution clarification outcome resolution', () => {
@@ -20,16 +15,6 @@ describe('tool execution clarification outcome resolution', () => {
       ],
       question: 'Who is the recipient, and what should the message say?',
     };
-    const entryFrame = buildGraphEntryRequestFrame({
-      text: 'Draft a message for me.',
-      attachmentCount: 0,
-      continuation: 'new',
-    });
-    params.getGraphSnapshot = jest.fn().mockReturnValue({
-      requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame: entryFrame }),
-      ),
-    });
     params.executableToolCalls = [
       {
         name: 'request_clarification',
@@ -92,23 +77,12 @@ describe('tool execution clarification outcome resolution', () => {
         sessionEndReason: 'request_clarification',
       }),
     );
-    expect(params.applyGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        projection: expect.objectContaining({
-          routing: expect.objectContaining({
-            status: 'known',
-            decisionAction: 'clarify',
-            decisionReason: 'required_information_missing',
-          }),
-          registeredRequiredInformation: expect.objectContaining({
-            status: 'known',
-            count: 2,
-            unresolvedCount: 2,
-          }),
-        }),
-      }),
-    ]);
+    // The pending user input is the one record of what is missing; no routing copy is kept.
+    expect(
+      params.applyGraphEvents.mock.calls.flatMap(([events]: [Array<{ type: string }>]) =>
+        events.map((event) => event.type),
+      ),
+    ).toEqual(['TOOL_RESULT_RECORDED']);
     expect(params.onStateChange).not.toHaveBeenCalledWith('thinking');
   });
 });

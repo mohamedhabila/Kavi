@@ -18,7 +18,6 @@ import {
   type AgentControlGraphAssignArgs,
 } from './agentControlGraphAssign';
 import { createRecordAsyncWaitingAction } from './agentControlGraphAsyncActions';
-import { normalizeRequestUnderstandingSnapshot } from '../../services/agents/requestUnderstandingProjection';
 
 export function createAgentControlGraphActions() {
   return {
@@ -174,22 +173,6 @@ export function createAgentControlGraphActions() {
           plan: plan.length > 0 ? plan : undefined,
           updatedAt: getTimestamp(event),
           audit: appendAudit(context.audit, event),
-        };
-      },
-    ),
-    recordRequestUnderstandingProjected: assignAgentControlGraph(
-      ({ context, event }: AgentControlGraphAssignArgs) => {
-        if (event.type !== 'REQUEST_UNDERSTANDING_PROJECTED') {
-          return {};
-        }
-        const requestUnderstanding = normalizeRequestUnderstandingSnapshot(event.projection);
-        if (!requestUnderstanding) {
-          return {};
-        }
-        return {
-          requestUnderstanding,
-          updatedAt: getTimestamp(event),
-          audit: appendAudit(context.audit, event, `integrity:${requestUnderstanding.integrity}`),
         };
       },
     ),

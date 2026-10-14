@@ -14,8 +14,6 @@ export function buildAgentControlGraphForcedTextOnlyTurnPrompt(
       return '[SYSTEM FINAL ANSWER CONTINUE]\nTool use is disabled for this turn.\nContinue the interrupted final answer from where it stopped.\nPreserve the existing answer and finish cleanly.';
     case 'empty_delivery_recovery':
       return '[SYSTEM EMPTY RESPONSE RECOVERY]\nTool use is disabled for this turn.\nReturn one concise, visible user-facing answer now.\nState the verified outcome or the concrete blocker; do not return an empty response.';
-    case 'request_clarification':
-      return '[SYSTEM CLARIFICATION REQUIRED]\nTool use is disabled for this turn.\nAsk one concise clarification question for the missing required information.';
     case 'execution_loop_recovery':
       return '[SYSTEM EXECUTION BLOCKED]\nTool use is disabled for this turn.\nState the unverified requested side effect, the blocker, and the smallest missing input if autonomous progress is no longer possible.';
     case 'loop_recovery':

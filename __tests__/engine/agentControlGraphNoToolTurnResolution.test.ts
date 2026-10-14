@@ -5,26 +5,12 @@ import {
   buildBaseParams,
   createPendingOperation,
 } from './helpers/noToolTurnResolution';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
-import {
-  projectRequestUnderstanding,
-  summarizeRequestUnderstanding,
-} from '../../src/services/agents/requestUnderstandingProjection';
 import { buildRunStoppedMessage } from '../../src/engine/graph/runStoppedMessage';
 
 describe('agent control graph no-tool turn resolution', () => {
   it('finalizes an actionable agentic request answered without tools on the first pass', async () => {
     const params = buildBaseParams();
-    const requestFrame = buildGraphEntryRequestFrame({
-      text: 'Disable the named scheduled task.',
-      attachmentCount: 0,
-      continuation: 'new',
-    });
-    params.controlGraph = buildGraphScenarioSnapshot({
-      requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame }),
-      ),
-    });
+    params.controlGraph = buildGraphScenarioSnapshot();
     params.selectedToolNames = new Set(['request_clarification', 'cron']);
     params.selectedToolCount = params.selectedToolNames.size;
     params.turnAssistantContent = 'I need the internal task identifier.';

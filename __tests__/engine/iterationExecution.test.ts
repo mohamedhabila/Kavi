@@ -1,11 +1,6 @@
 import { executeAgentControlGraphIteration } from '../../src/engine/graph/iterationExecution';
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
-import {
-  projectRequestUnderstanding,
-  summarizeRequestUnderstanding,
-} from '../../src/services/agents/requestUnderstandingProjection';
 
 jest.mock('../../src/engine/graph/prepareAgentControlGraphModelTurn', () => ({
   prepareAgentControlGraphModelTurn: jest.fn(),
@@ -70,11 +65,6 @@ function params(iteration: number) {
       skillPrompts: '',
     },
     reportUsage: jest.fn(),
-    requestFrame: buildGraphEntryRequestFrame({
-      text: 'PRIVATE-REQUEST-TEXT-NEVER-PROJECT',
-      attachmentCount: 0,
-      continuation: 'new',
-    }),
     runtime,
     thinkingLevel: 'off',
     toolRuntime: {
@@ -91,7 +81,7 @@ function params(iteration: number) {
   } as any;
 }
 
-describe('iteration request understanding continuity', () => {
+describe('agent control graph iteration', () => {
   beforeEach(() => {
     mockedPrepareModelTurn.mockReset();
     mockedExecutePreparedTurn.mockReset();
@@ -102,46 +92,16 @@ describe('iteration request understanding continuity', () => {
     }));
   });
 
-  // The projection is graph state only. As a prompt section it added about 220 tokens of
-  // routing bookkeeping to the uncached tail from the second iteration on, and the changed
-  // tail made every tool loop re-process its turn at full price.
-  it('records the request route in the graph on a later iteration, never in the prompt', async () => {
+  // Every iteration used to project a request-routing summary into the graph, an event and an
+  // audit entry that nothing read.
+  it('writes nothing to the graph of its own before the model turn', async () => {
     const input = params(2);
     await executeAgentControlGraphIteration(input);
 
-    expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        iteration: 2,
-        projection: expect.objectContaining({
-          version: 4,
-          integrity: 'valid',
-          effectAuthorization: { status: 'unknown' },
-        }),
-      }),
-    ]);
+    expect(input.graph.applyAgentControlGraphEvents).not.toHaveBeenCalled();
     expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptContextSupport: expect.objectContaining({ runtimeContext: 'Runtime context' }),
-      }),
-    );
-  });
-
-  it('records a typed summary on a first turn without touching the prompt', async () => {
-    const input = params(1);
-    await executeAgentControlGraphIteration(input);
-
-    expect(input.graph.applyAgentControlGraphEvents).toHaveBeenCalledWith([
-      expect.objectContaining({
-        type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        projection: expect.objectContaining({ version: 4, integrity: 'valid' }),
-      }),
-    ]);
-    expect(mockedPrepareModelTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        promptContextSupport: expect.objectContaining({
-          runtimeContext: 'Runtime context',
-        }),
       }),
     );
   });
@@ -157,19 +117,5 @@ describe('iteration request understanding continuity', () => {
     await executeAgentControlGraphIteration(input);
 
     expect(mockedPrepareModelTurn.mock.calls[0]?.[0].promptContextSupport.graphPlan).toEqual(plan);
-  });
-
-  it('does not write an unchanged projection again', async () => {
-    const input = params(3);
-    input.graph.getGraphSnapshot.mockReturnValue({
-      requestUnderstanding: summarizeRequestUnderstanding(
-        projectRequestUnderstanding({ requestFrame: input.requestFrame }),
-      ),
-    });
-
-    await executeAgentControlGraphIteration(input);
-
-    expect(input.graph.applyAgentControlGraphEvents).not.toHaveBeenCalled();
-    expect(mockedPrepareModelTurn).toHaveBeenCalledTimes(1);
   });
 });

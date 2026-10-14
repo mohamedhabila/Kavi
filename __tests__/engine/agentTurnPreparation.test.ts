@@ -100,7 +100,7 @@ describe('prepareAgentTurn', () => {
       effectiveForceTextThisTurn: true,
       groundedRequestScopedTools: tools,
       promptBundleContext: {
-        effectiveForceTextReasonThisTurn: 'request_clarification',
+        effectiveForceTextReasonThisTurn: 'empty_delivery_recovery',
         groundedRequestScopedTools: tools,
         iteration: 2,
         maxToolIterations: 4,
@@ -111,6 +111,6 @@ describe('prepareAgentTurn', () => {
     });
 
     expect(preparedTurn.selectedTools).toEqual([]);
-    expect(preparedTurn.enrichedSystemPrompt).toContain('CLARIFICATION REQUIRED');
+    expect(preparedTurn.enrichedSystemPrompt).toContain('EMPTY RESPONSE RECOVERY');
   });
 });

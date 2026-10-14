@@ -57,6 +57,20 @@ describe('agent control graph run tracking', () => {
     ).toBe(true);
   });
 
+  it('does not track input that is only Unicode whitespace', () => {
+    expect(
+      shouldTrackForegroundAgentRun({ latestUserMessage: userMessage('\u2003\u3000\n') }),
+    ).toBe(false);
+  });
+
+  // Symbols and any script are input: nothing guesses what they mean.
+  it.each(['...', '؟،', '…。', '🫶🏽', '∑→∞', '\u0301', '\u200d'])(
+    'tracks nonempty symbol or mixed-script input: %s',
+    (content) => {
+      expect(shouldTrackForegroundAgentRun({ latestUserMessage: userMessage(content) })).toBe(true);
+    },
+  );
+
   it('does not create workflow runs for registered slash commands', () => {
     expect(
       shouldTrackForegroundAgentRun({

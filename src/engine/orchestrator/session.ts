@@ -107,7 +107,6 @@ export async function runOrchestratorGraphSession(params: {
     currentUserMessage,
     memory,
     memoryRefreshInternalUserMessages,
-    requestFrame,
     skillPrompts,
     workingMessages,
   } = await prepareOrchestratorRequestBundle({
@@ -123,7 +122,6 @@ export async function runOrchestratorGraphSession(params: {
     memoryConversationId: sharedConversationId,
     messages: options.messages,
     workflowScopeUserMessageId: options.workflowScopeUserMessageId,
-    graphSnapshot: options.initialAgentControlGraphState,
   });
   callbacks.onTurnLatencyMark?.('request_context_prepared');
   const graphCallbacks = {
@@ -218,7 +216,6 @@ export async function runOrchestratorGraphSession(params: {
         callbacks.onUsage?.(usage);
         recordUsage(usageConversationId, usage);
       },
-      requestFrame,
       refreshSessionMemory: (workingMessages) =>
         loadOrchestratorMemoryAccessContext({
           internalUserMessageCount: memoryRefreshInternalUserMessages.length,

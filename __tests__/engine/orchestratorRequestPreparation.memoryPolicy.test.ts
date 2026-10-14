@@ -74,25 +74,6 @@ describe('orchestrator request memory policy', () => {
     );
   });
 
-  it('captures a waiting-async resume as code-owned continuation state', async () => {
-    mockedReadSessionMemory.mockReturnValue(memoryRead());
-    const result = await prepareOrchestratorRequestBundle({
-      ...baseParams(),
-      graphSnapshot: {
-        status: 'waiting_async',
-        asyncWork: {
-          awaitingBackgroundWorkers: false,
-          pendingOperations: [],
-          updatedAt: 1,
-        },
-      } as never,
-    });
-
-    expect(result.requestFrame).toMatchObject({
-      continuation: 'resume_waiting_async',
-    });
-  });
-
   it('grounds current-user identity to sanitized raw content, never runtime context or enrichment', async () => {
     mockedReadSessionMemory.mockReturnValue(memoryRead());
 

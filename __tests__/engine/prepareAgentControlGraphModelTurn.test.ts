@@ -1,5 +1,4 @@
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { planIterationModel } from '../../src/services/context/tokenOptimization';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
@@ -143,11 +142,6 @@ function createBaseParams() {
       resolvedPrompt: 'You are a test agent.',
       skillPrompts: '',
     },
-    requestFrame: buildGraphEntryRequestFrame({
-      text: 'Run the task',
-      attachmentCount: 0,
-      continuation: 'new',
-    }),
     thinkingLevel: 'low' as const,
     trackedAsyncOperations: new Map<string, any>(),
     turnDirectives: {
@@ -212,13 +206,9 @@ describe('prepareAgentControlGraphModelTurn', () => {
 
     const result = await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
-      requestFrame: buildGraphEntryRequestFrame({
-        text: '',
-        attachmentCount: 0,
-        continuation: 'new',
-      }),
       turnDirectives: {
-        forceFinalText: false,
+        forceFinalText: true,
+        forcedTextReason: 'empty_delivery_recovery',
         requireWorkflowTool: false,
         maxTokensOverride: 2048,
         incompleteFinalTextRecoveryCount: 0,
@@ -228,38 +218,9 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(result.requestModel).toBe('gpt-5-mini');
     expect(result.requestMaxTokens).toBe(2048);
     expect(result.effectiveForceTextThisTurn).toBe(true);
-    expect(result.effectiveForceTextReasonThisTurn).toBe('request_clarification');
+    expect(result.effectiveForceTextReasonThisTurn).toBe('empty_delivery_recovery');
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
-
-  it.each([['clarify', 'required_information_missing', 'request_clarification']] as const)(
-    'maps the %s request decision to its exact forced-text contract',
-    async (action, reason, forcedTextReason) => {
-      mockedPlanIterationModel.mockReturnValue({
-        model: 'gpt-5-mini',
-        maxTokens: 1024,
-        thinkingLevel: 'minimal',
-        reason: 'test',
-      } as any);
-      mockPreparedTurn();
-      const requestFrame = buildGraphEntryRequestFrame({
-        text: 'Run the task',
-        attachmentCount: 0,
-        continuation: 'new',
-      });
-
-      const result = await prepareAgentControlGraphModelTurn({
-        ...createBaseParams(),
-        requestFrame: {
-          ...requestFrame,
-          decision: { action, reason },
-        },
-      });
-
-      expect(result.effectiveForceTextThisTurn).toBe(true);
-      expect(result.effectiveForceTextReasonThisTurn).toBe(forcedTextReason);
-    },
-  );
 
   it('treats forced-text proceed turns as non-actionable for budgeting and memory', async () => {
     mockedPlanIterationModel.mockReturnValue({
@@ -278,7 +239,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
       },
       turnDirectives: {
         forceFinalText: true,
-        forcedTextReason: 'request_clarification',
+        forcedTextReason: 'empty_delivery_recovery',
         requireWorkflowTool: false,
         incompleteFinalTextRecoveryCount: 0,
       },
@@ -346,11 +307,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
 
     await prepareAgentControlGraphModelTurn({
       ...createBaseParams(),
-      requestFrame: buildGraphEntryRequestFrame({
-        text: 'Run the task',
-        attachmentCount: 0,
-        continuation: 'new',
-      }),
       promptContextSupport: {
         ...createBaseParams().promptContextSupport,
         memory: memoryRead('Living memory section'),

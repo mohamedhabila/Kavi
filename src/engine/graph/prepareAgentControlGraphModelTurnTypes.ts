@@ -1,4 +1,3 @@
-import type { RequestFrame } from '../../services/agents/requestFrame';
 import type { AgentPlanStep } from '../../types/agentRun';
 import type { LlmProviderConfig } from '../../types/provider';
 import type { Message } from '../../types/message';
@@ -48,7 +47,6 @@ export interface PrepareAgentControlGraphModelTurnParams {
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
   promptContextSupport: PromptContextSupport;
-  requestFrame: RequestFrame;
   thinkingLevel: ThinkingLevel;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   turnDirectives: AgentControlTurnDirectives;

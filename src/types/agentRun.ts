@@ -1,4 +1,3 @@
-import type { RequestUnderstandingSnapshot } from './requestUnderstanding';
 import type { WorkflowTaskAnchor } from './workflowTaskAnchor';
 import type { ToolEffectDigest } from './toolEffectReceipt';
 
@@ -217,7 +216,6 @@ export type AgentRunControlGraphForcedTextReason =
   | 'execution_loop_recovery'
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'
-  | 'request_clarification'
   | 'yield_finalization';
 
 export type AgentRunMobileControllerRecoveryState =
@@ -326,7 +324,6 @@ export interface AgentRunControlGraphState {
   terminalReason?: string;
   activeTaskId?: string;
   plan?: AgentPlanStep[];
-  requestUnderstanding?: RequestUnderstandingSnapshot;
   pendingUserInput?: AgentRunControlGraphPendingUserInput;
   asyncWork: AgentRunControlGraphAsyncWorkState;
   performance: AgentRunControlGraphPerformance;

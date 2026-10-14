@@ -28,11 +28,6 @@ describe('agent control graph forced text turns', () => {
       'State the verified outcome or the concrete blocker',
     ],
     [
-      'request_clarification',
-      '[SYSTEM CLARIFICATION REQUIRED]',
-      'Ask one concise clarification question for the missing required information.',
-    ],
-    [
       'execution_loop_recovery',
       '[SYSTEM EXECUTION BLOCKED]',
       'State the unverified requested side effect, the blocker, and the smallest missing input',

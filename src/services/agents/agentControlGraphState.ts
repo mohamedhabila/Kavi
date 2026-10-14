@@ -19,7 +19,6 @@ import {
   normalizeAgentRunControlGraphAsyncWorkState,
   normalizeAgentRunAsyncOperations,
 } from './agentRunAsyncState';
-import { normalizeRequestUnderstandingSnapshot } from './requestUnderstandingProjection';
 import { normalizeAgentControlGraphPendingUserInput } from './agentControlGraphClarificationState';
 
 export const AGENT_RUN_CONTROL_GRAPH_VERSION = 1;
@@ -58,7 +57,6 @@ const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true
   execution_loop_recovery: true,
   incomplete_delivery_continuation: true,
   loop_recovery: true,
-  request_clarification: true,
   yield_finalization: true,
 };
 const FORCED_TEXT_REASONS: ReadonlySet<string> = new Set(Object.keys(FORCED_TEXT_REASON_KEYS));
@@ -342,7 +340,6 @@ export function createInitialAgentRunControlGraphState(
   const sessionActivatedToolNames = normalizeAgentRunControlGraphSessionActivatedToolNames(
     state.sessionActivatedToolNames,
   );
-  const requestUnderstanding = normalizeRequestUnderstandingSnapshot(state.requestUnderstanding);
   const pendingUserInput = normalizeAgentControlGraphPendingUserInput(state.pendingUserInput);
 
   return {
@@ -360,7 +357,6 @@ export function createInitialAgentRunControlGraphState(
     ...(terminalReason ? { terminalReason } : {}),
     ...(activeTaskId ? { activeTaskId } : {}),
     ...(plan.length > 0 ? { plan } : {}),
-    ...(requestUnderstanding ? { requestUnderstanding } : {}),
     ...(pendingUserInput ? { pendingUserInput } : {}),
     asyncWork,
     performance,

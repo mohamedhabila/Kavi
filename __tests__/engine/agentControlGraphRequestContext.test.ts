@@ -21,7 +21,6 @@ describe('agent control graph request context', () => {
 
     const context = prepareAgentControlGraphRequestContext({
       memoryScopedMessages: messages,
-      continuation: 'new',
       workflowScopeUserMessageId: 'u-current',
     });
 
@@ -45,7 +44,6 @@ describe('agent control graph request context', () => {
 
     const context = prepareAgentControlGraphRequestContext({
       memoryScopedMessages: messages,
-      continuation: 'new',
       workflowScopeUserMessageId: 'missing-user',
     });
 
@@ -56,7 +54,6 @@ describe('agent control graph request context', () => {
   it('keeps request context focused on the active user message', () => {
     const context = prepareAgentControlGraphRequestContext({
       memoryScopedMessages: [msg('u-current', 'user', 'Continue the task')],
-      continuation: 'resume',
       workflowScopeUserMessageId: 'u-current',
     });
 
@@ -66,18 +63,30 @@ describe('agent control graph request context', () => {
   it('keeps standalone literal-token requests on the normal workflow path', () => {
     const context = prepareAgentControlGraphRequestContext({
       memoryScopedMessages: [msg('u-direct', 'user', 'CHECKNO42')],
-      continuation: 'new',
       workflowScopeUserMessageId: 'u-direct',
     });
 
-    expect(context.requestFrame).toMatchObject({
-      version: 3,
-      input: { kind: 'text', attachmentCount: 0 },
-      continuation: 'new',
-      requiredInformation: [],
-      decision: { action: 'act', reason: 'actionable_input' },
-    });
+    expect(context.hasWorkflowScopeAnchor).toBe(true);
     expect(context.lastUserMessageText).toBe('CHECKNO42');
+  });
+
+  // An empty latest request used to skip the graph-owned context rules: worker event rows
+  // stayed in the model's context and the run's anchor went unchecked.
+  it('applies the same context rules when the latest request is empty', () => {
+    const workerEvent: Message = {
+      ...msg('a-worker', 'assistant', 'Worker finished.'),
+      subAgentEvent: { type: 'sub-agent', event: 'completed' } as never,
+    };
+
+    const context = prepareAgentControlGraphRequestContext({
+      memoryScopedMessages: [msg('u-empty', 'user', ''), workerEvent],
+      workflowScopeUserMessageId: 'u-empty',
+    });
+
+    expect(context.graphOwnedModelContextMessages.map((message) => message.id)).toEqual([
+      'u-empty',
+    ]);
+    expect(context.hasWorkflowScopeAnchor).toBe(true);
   });
 
   it('treats a model-visible attachment as actionable without invented text', () => {
@@ -95,14 +104,10 @@ describe('agent control graph request context', () => {
 
     const context = prepareAgentControlGraphRequestContext({
       memoryScopedMessages: [userMessage],
-      continuation: 'new',
       workflowScopeUserMessageId: 'u-attachment',
     });
 
-    expect(context.requestFrame).toMatchObject({
-      input: { kind: 'attachments', attachmentCount: 1 },
-      decision: { action: 'act', reason: 'actionable_input' },
-    });
+    expect(context.requestContextLastUserMessage?.id).toBe('u-attachment');
     expect(context.hasWorkflowScopeAnchor).toBe(true);
   });
 });

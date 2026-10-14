@@ -5,7 +5,6 @@ import type {
   AgentRunTerminalReason,
 } from '../../types/agentRun';
 import type { AssistantCompletionStatus } from '../../types/message';
-import type { RequestUnderstandingRouting } from '../../types/requestUnderstanding';
 import type { E2ERubric } from './types';
 
 function completeEnum<All extends string>() {
@@ -38,10 +37,6 @@ export const E2E_PUBLIC_GRAPH_STATUSES = completeEnum<AgentRunControlGraphStatus
   'cancelled',
   'failed',
 ]);
-
-export const E2E_PUBLIC_REQUEST_CONTINUATIONS = completeEnum<
-  RequestUnderstandingRouting['continuation']
->()(['new', 'resume', 'resume_waiting_async', 'resume_waiting_user']);
 
 export const E2E_PUBLIC_RUN_PHASES = completeEnum<AgentRunPhaseKey>()([
   'assess',

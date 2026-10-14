@@ -1,9 +1,4 @@
 import { getPendingTrackedAsyncOperations } from '../pendingAsyncOperations';
-import {
-  areRequestUnderstandingSnapshotsEqual,
-  projectRequestUnderstanding,
-  summarizeRequestUnderstanding,
-} from '../../services/agents/requestUnderstandingProjection';
 import { prepareAgentControlGraphModelTurn } from './prepareAgentControlGraphModelTurn';
 import { executePreparedAgentControlGraphTurn } from './iterationReadyTurnExecution';
 import type {
@@ -26,22 +21,6 @@ export async function executeAgentControlGraphIteration(
   }
 
   const graphSnapshot = params.graph.getGraphSnapshot();
-  const requestUnderstanding = projectRequestUnderstanding({ requestFrame: params.requestFrame });
-  const requestUnderstandingSnapshot = summarizeRequestUnderstanding(requestUnderstanding);
-  if (
-    !areRequestUnderstandingSnapshotsEqual(
-      graphSnapshot.requestUnderstanding,
-      requestUnderstandingSnapshot,
-    )
-  ) {
-    params.graph.applyAgentControlGraphEvents([
-      {
-        type: 'REQUEST_UNDERSTANDING_PROJECTED',
-        projection: requestUnderstandingSnapshot,
-        iteration: params.iteration,
-      },
-    ]);
-  }
   const modelTurnPreparation = await prepareAgentControlGraphModelTurn({
     activeModel: runtime.activeModel,
     activeProvider: runtime.activeProvider,
@@ -57,7 +36,6 @@ export async function executeAgentControlGraphIteration(
       graphPlan: graphSnapshot.plan,
       memory: runtime.memory,
     },
-    requestFrame: params.requestFrame,
     thinkingLevel: params.thinkingLevel,
     trackedAsyncOperations: params.trackedAsyncOperations,
     turnDirectives: params.graph.getCurrentTurnDirectives(),

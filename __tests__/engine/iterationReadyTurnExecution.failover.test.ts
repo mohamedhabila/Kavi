@@ -7,7 +7,6 @@ import {
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
 import { executePreparedAgentControlGraphTurn } from '../../src/engine/graph/iterationReadyTurnExecution';
 import { resolveModelTurnIterationRequest } from '../../src/engine/graph/modelTurn/resolveIterationRequest';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import type { AgentControlTurnDirectives } from '../../src/engine/graph/agentControlGraph';
 import type { LlmProviderConfig } from '../../src/types/provider';
 import type { ToolDefinition } from '../../src/types/tool';
@@ -126,11 +125,6 @@ function buildParams() {
           skillPrompts: '',
         },
         reportUsage: jest.fn(),
-        requestFrame: buildGraphEntryRequestFrame({
-          text: 'Return the recovered answer.',
-          attachmentCount: 0,
-          continuation: 'new',
-        }),
         runtime,
         thinkingLevel: 'off',
         toolRuntime: {
@@ -201,7 +195,6 @@ describe('prepared graph turn directive consumption', () => {
       activeProvider: result.runtime.activeProvider,
       iteration: 3,
       maxTokens: 4096,
-      requestFrame: fixture.params.iterationParams.requestFrame,
       thinkingLevel: 'off',
       turnDirectives: retainedDirectives,
       workingMessages: [],

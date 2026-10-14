@@ -47,11 +47,6 @@ describe('orchestrator request memory read', () => {
     ]);
     expect(result.memory).toBe(MEMORY_READ);
     expect(result.currentUserMessage).toEqual({ id: 'user-current', text: 'Continue.' });
-    expect(result.requestFrame).toMatchObject({
-      input: { kind: 'text' },
-      continuation: 'new',
-      decision: { action: 'act' },
-    });
   });
 
   it('keeps tool grounding on raw user text rather than enriched model context', async () => {

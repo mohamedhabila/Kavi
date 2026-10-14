@@ -8,9 +8,7 @@ import {
   type SessionMemoryRead,
 } from '../services/memory/memoryAccessGateway';
 import { excludeTrailingInternalUserMessages } from '../services/context/messageScoping';
-import type { RequestContinuation, RequestFrame } from '../services/agents/requestFrame';
 import { getSkillSystemPrompts } from '../services/skills/manager';
-import type { AgentRunControlGraphState } from '../types/agentRun';
 import type { LlmProviderConfig } from '../types/provider';
 import type { Attachment } from '../types/attachment';
 import type { Message } from '../types/message';
@@ -92,23 +90,6 @@ export type OrchestratorMemoryAccessInput = Readonly<{
   memoryConversationId: string;
   messages: Message[];
 }>;
-
-function resolveRequestContinuation(
-  graphSnapshot: AgentRunControlGraphState | undefined,
-): RequestContinuation {
-  if (!graphSnapshot) return 'new';
-  if (graphSnapshot.pendingUserInput) return 'resume_waiting_user';
-  if (
-    graphSnapshot.status === 'waiting_async' ||
-    graphSnapshot.asyncWork.awaitingBackgroundWorkers ||
-    graphSnapshot.asyncWork.pendingOperations.some(
-      (operation) => operation.status === 'running' || operation.status === 'cancel_requested',
-    )
-  ) {
-    return 'resume_waiting_async';
-  }
-  return 'resume';
-}
 
 async function enrichLatestUserMessageForRequest(params: {
   activeModel: string;
@@ -238,13 +219,11 @@ export async function prepareOrchestratorRequestBundle(params: {
   mediaUnderstandingEnabled: boolean;
   messages: Message[];
   workflowScopeUserMessageId?: string;
-  graphSnapshot?: AgentRunControlGraphState;
 }): Promise<{
   currentUserMessage?: CodeOwnedCurrentUserMessage;
   latestUserMessageText: string;
   memory: SessionMemoryRead;
   memoryRefreshInternalUserMessages: ReadonlyArray<Message>;
-  requestFrame: RequestFrame;
   skillPrompts: Awaited<ReturnType<typeof getSkillSystemPrompts>>;
   workingMessages: Message[];
 }> {
@@ -271,7 +250,6 @@ export async function prepareOrchestratorRequestBundle(params: {
   const requestContext = prepareAgentControlGraphRequestContext({
     memoryScopedMessages: memoryAccessContext.scopedMessages,
     workflowScopeUserMessageId: params.workflowScopeUserMessageId,
-    continuation: resolveRequestContinuation(params.graphSnapshot),
   });
   if (requestContext.missingWorkflowScopeAnchorId) {
     params.logger.devWarn(
@@ -342,7 +320,6 @@ export async function prepareOrchestratorRequestBundle(params: {
     latestUserMessageText: requestContext.lastUserMessageText,
     memory: memoryAccessContext.memory,
     memoryRefreshInternalUserMessages,
-    requestFrame: requestContext.requestFrame,
     skillPrompts,
     workingMessages,
   };

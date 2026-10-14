@@ -165,7 +165,9 @@ describe('runOrchestrator — simple text response', () => {
     ]);
   });
 
-  it('forces a no-tools clarification turn for structurally empty user input', async () => {
+  // A turn with no text used to be forced into a tool-less clarification turn. Every turn
+  // now reaches the model the same way; the composer cannot send an empty turn anyway.
+  it('runs a turn with no text like any other, with no forced clarification', async () => {
     const { isSlashCommand } = require('../../src/services/commands/parser');
     isSlashCommand.mockReturnValue(false);
 
@@ -189,12 +191,7 @@ describe('runOrchestrator — simple text response', () => {
       role: string;
       content?: string;
     }>;
-    const requestOptions = mockStreamMessage.mock.calls[0][1] as { tools?: unknown } | undefined;
-    expect(firstTurnMessages[0]?.content).toContain('[SYSTEM CLARIFICATION REQUIRED]');
-    expect(firstTurnMessages[0]?.content).toContain(
-      'Ask one concise clarification question for the missing required information.',
-    );
-    expect(requestOptions?.tools).toBeUndefined();
+    expect(firstTurnMessages[0]?.content).not.toContain('Tool use is disabled for this turn');
     expect(callbacks.onAssistantMessage).toHaveBeenCalledWith(
       'What concrete outcome do you want me to accomplish?',
       [],

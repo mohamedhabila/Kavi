@@ -1,13 +1,9 @@
 import type { Message } from '../../types/message';
-import type { RequestContinuation, RequestFrame } from '../../services/agents/requestFrame';
-import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getUserMessagePromptContent } from '../prompts/orchestratorPromptSections';
 import { sanitizeGraphOwnedModelContextMessages } from './modelContextSanitization';
-import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
 type PrepareAgentControlGraphRequestContextParams = {
   memoryScopedMessages: ReadonlyArray<Message>;
-  continuation: RequestContinuation;
   workflowScopeUserMessageId?: string;
 };
 
@@ -16,7 +12,6 @@ export type AgentControlGraphRequestContext = {
   hasWorkflowScopeAnchor: boolean;
   lastUserMessageText: string;
   missingWorkflowScopeAnchorId?: string;
-  requestFrame: RequestFrame;
   requestContextLastUserMessage?: Message;
 };
 
@@ -34,24 +29,15 @@ export function prepareAgentControlGraphRequestContext(
   const lastUserMessageText = requestContextLastUserMessage
     ? getUserMessagePromptContent(requestContextLastUserMessage)
     : '';
-  const requestFrame = buildGraphEntryRequestFrame({
-    text: lastUserMessageText,
-    attachmentCount:
-      filterModelVisibleAttachments(requestContextLastUserMessage?.attachments)?.length ?? 0,
-    continuation: params.continuation,
-  });
-  const workflowCandidateRequest = requestFrame.decision.action === 'act';
-  const graphOwnedModelContextMessages = workflowCandidateRequest
-    ? sanitizeGraphOwnedModelContextMessages(params.memoryScopedMessages)
-    : [...params.memoryScopedMessages];
+  const graphOwnedModelContextMessages = sanitizeGraphOwnedModelContextMessages(
+    params.memoryScopedMessages,
+  );
   const requestContextUserMessages = selectUserMessages(graphOwnedModelContextMessages);
-  const hasWorkflowScopeAnchor =
-    workflowCandidateRequest && normalizedWorkflowScopeUserMessageId
-      ? graphOwnedModelContextMessages.some(
-          (message) =>
-            message.role === 'user' && message.id === normalizedWorkflowScopeUserMessageId,
-        )
-      : false;
+  const hasWorkflowScopeAnchor = normalizedWorkflowScopeUserMessageId
+    ? graphOwnedModelContextMessages.some(
+        (message) => message.role === 'user' && message.id === normalizedWorkflowScopeUserMessageId,
+      )
+    : false;
   const effectiveRequestContextLastUserMessage =
     requestContextUserMessages[requestContextUserMessages.length - 1] ??
     requestContextLastUserMessage;
@@ -60,11 +46,8 @@ export function prepareAgentControlGraphRequestContext(
     hasWorkflowScopeAnchor,
     lastUserMessageText,
     ...(normalizedWorkflowScopeUserMessageId && !hasWorkflowScopeAnchor
-      ? workflowCandidateRequest
-        ? { missingWorkflowScopeAnchorId: normalizedWorkflowScopeUserMessageId }
-        : {}
+      ? { missingWorkflowScopeAnchorId: normalizedWorkflowScopeUserMessageId }
       : {}),
-    requestFrame,
     ...(effectiveRequestContextLastUserMessage
       ? { requestContextLastUserMessage: effectiveRequestContextLastUserMessage }
       : {}),

@@ -1,4 +1,3 @@
-import type { RequestFrame } from '../../../services/agents/requestFrame';
 import { planIterationModel } from '../../../services/context/tokenOptimization';
 import {
   isOnDeviceLlmProvider,
@@ -10,12 +9,6 @@ import { hasModelVisibleAttachments } from '../../../utils/messageAttachments';
 import type { ThinkingLevel } from '../../thinking';
 import type { AgentControlTurnDirectives } from '../agentControlGraph';
 
-function requestDecisionForcedTextReason(
-  action: RequestFrame['decision']['action'],
-): AgentControlTurnDirectives['forcedTextReason'] {
-  return action === 'clarify' ? 'request_clarification' : undefined;
-}
-
 export function resolveModelTurnIterationRequest(params: {
   activeModel: string;
   activeProvider: LlmProviderConfig;
@@ -23,7 +16,6 @@ export function resolveModelTurnIterationRequest(params: {
   iteration: number;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
-  requestFrame: RequestFrame;
   thinkingLevel: ThinkingLevel;
   turnDirectives: AgentControlTurnDirectives;
   workingMessages: ReadonlyArray<Message>;
@@ -35,8 +27,7 @@ export function resolveModelTurnIterationRequest(params: {
   requestModel: string;
   toolingEnabledForProvider: boolean;
 } {
-  const effectiveForceTextThisTurn =
-    params.turnDirectives.forceFinalText || params.requestFrame.decision.action !== 'act';
+  const effectiveForceTextThisTurn = params.turnDirectives.forceFinalText;
   const actionablePromptTurn = !effectiveForceTextThisTurn;
   const hasRecentToolMessages = params.workingMessages
     .slice(-6)
@@ -66,7 +57,7 @@ export function resolveModelTurnIterationRequest(params: {
 
   const effectiveForceTextReasonThisTurn = params.turnDirectives.forceFinalText
     ? params.turnDirectives.forcedTextReason
-    : requestDecisionForcedTextReason(params.requestFrame.decision.action);
+    : undefined;
 
   return {
     effectiveForceTextThisTurn,

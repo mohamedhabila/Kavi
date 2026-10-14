@@ -1,6 +1,5 @@
 import { executeAgentControlGraphIteration } from '../../src/engine/graph/iterationExecution';
 import type { ExecuteAgentControlGraphSessionParams } from '../../src/engine/graph/sessionExecution';
-import { buildGraphEntryRequestFrame } from '../../src/engine/graph/requestEntrySignals';
 import { executeAgentControlGraphSession } from '../../src/engine/graph/sessionExecution';
 import { emitSessionEvent } from '../../src/services/events/bus';
 import { GRAPH_OBSERVABILITY_AUDIT_TYPES } from '../../src/engine/graph/graphObservability';
@@ -74,11 +73,6 @@ function createParams(
     refreshSessionMemory: jest.fn(() => ({
       status: 'unavailable' as const,
     })),
-    requestFrame: buildGraphEntryRequestFrame({
-      text: 'Run the task',
-      attachmentCount: 0,
-      continuation: 'new',
-    }),
     thinkingLevel: 'off',
     toolRuntime: {
       availableToolNames: new Set<string>(),

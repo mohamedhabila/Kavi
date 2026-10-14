@@ -2,7 +2,6 @@ import type { Message } from '../../types/message';
 import { filterModelVisibleAttachments } from '../../utils/messageAttachments';
 import { getCommand } from '../../services/commands/builtins';
 import { parseCommand } from '../../services/commands/parser';
-import { buildGraphEntryRequestFrame } from './requestEntrySignals';
 
 export function isRegisteredSlashCommand(content: string | undefined): boolean {
   const command = parseCommand(content);
@@ -22,12 +21,7 @@ export function shouldTrackForegroundAgentRun(params: {
     return false;
   }
 
-  const frame = buildGraphEntryRequestFrame({
-    text: params.latestUserMessage?.content,
-    attachmentCount:
-      filterModelVisibleAttachments(params.latestUserMessage?.attachments)?.length ?? 0,
-    continuation: 'new',
-  });
-
-  return frame.decision.action === 'act';
+  const attachmentCount =
+    filterModelVisibleAttachments(params.latestUserMessage?.attachments)?.length ?? 0;
+  return attachmentCount > 0 || (params.latestUserMessage?.content.trim().length ?? 0) > 0;
 }

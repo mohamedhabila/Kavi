@@ -1,4 +1,3 @@
-import type { RequestFrame } from '../../services/agents/requestFrame';
 import type { GraphObservabilityAuditType } from './graphObservability';
 import type { AgentRunControlGraphState } from '../../types/agentRun';
 import type {
@@ -190,7 +189,6 @@ export interface ExecuteAgentControlGraphIterationParams {
   /** Reads memory again for the run's current messages. */
   refreshSessionMemory: (workingMessages: ReadonlyArray<Message>) => SessionMemoryRead;
   reportUsage: (usage: TokenUsage) => void;
-  requestFrame: RequestFrame;
   runtime: AgentControlGraphIterationRuntimeState;
   signal?: AbortController;
   temperature?: number;

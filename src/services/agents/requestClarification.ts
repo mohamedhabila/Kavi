@@ -1,4 +1,3 @@
-import type { RequiredInformationPurpose, RequiredRequestInformation } from './requestFrame';
 import type { AgentRunControlGraphUserInformationSemanticRole } from '../../types/agentRun';
 
 export const REQUEST_CLARIFICATION_TOOL_NAME = 'request_clarification';
@@ -8,6 +7,9 @@ export const MAX_REQUEST_CLARIFICATION_QUESTION_CHARACTERS = 1_200;
 export const REQUEST_INFORMATION_KEY_PATTERN = /^[a-z][a-z0-9_.-]{0,63}$/u;
 
 export type RequestClarificationSemanticRole = AgentRunControlGraphUserInformationSemanticRole;
+
+/** What the missing information is needed for. */
+export type RequestClarificationPurpose = 'understanding' | 'execution';
 
 const REQUEST_CLARIFICATION_SEMANTIC_ROLES = new Set<RequestClarificationSemanticRole>([
   'authorization',
@@ -26,7 +28,7 @@ const REQUEST_CLARIFICATION_SEMANTIC_ROLES = new Set<RequestClarificationSemanti
 
 export type RequestClarificationField = Readonly<{
   key: string;
-  requiredFor: Exclude<RequiredInformationPurpose, 'authorization'>;
+  requiredFor: RequestClarificationPurpose;
   semanticRole: RequestClarificationSemanticRole;
 }>;
 
@@ -41,9 +43,9 @@ export type RequestClarificationToolResult = Readonly<{
   question: string;
   requiredInformation: ReadonlyArray<
     Readonly<{
-      key: RequiredRequestInformation['key'];
+      key: string;
       authority: 'user';
-      requiredFor: Exclude<RequiredInformationPurpose, 'authorization'>;
+      requiredFor: RequestClarificationPurpose;
       resolution: 'unresolved';
       semanticRole: RequestClarificationSemanticRole;
     }>

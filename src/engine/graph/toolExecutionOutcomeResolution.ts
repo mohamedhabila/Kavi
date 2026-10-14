@@ -31,10 +31,7 @@ import {
   REQUEST_CLARIFICATION_TOOL_NAME,
   type RequestClarificationToolResult,
 } from '../../services/agents/requestClarification';
-import {
-  buildClarificationRequestUnderstanding,
-  updateToolCallHistoryResult,
-} from './toolExecutionOutcomeResolutionSupport';
+import { updateToolCallHistoryResult } from './toolExecutionOutcomeResolutionSupport';
 import {
   isTerminalToolEffectDispatchObservation,
   type ToolEffectDispatchObservation,
@@ -332,19 +329,6 @@ export async function resolveAgentControlGraphToolExecutionOutcomes(params: {
     const requestedAfterUserMessageId = params.currentUserMessage?.id.trim();
     if (!requestedAfterUserMessageId) {
       throw new Error('request_clarification_current_user_message_missing');
-    }
-    const requestUnderstanding = buildClarificationRequestUnderstanding({
-      graphSnapshot: params.getGraphSnapshot(),
-      request: clarificationRequest,
-    });
-    if (requestUnderstanding) {
-      params.applyGraphEvents([
-        {
-          type: 'REQUEST_UNDERSTANDING_PROJECTED',
-          projection: requestUnderstanding,
-          iteration: params.iteration,
-        },
-      ]);
     }
     await params.finishWaitingForUserInput({
       graphEvent: {
