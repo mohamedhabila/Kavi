@@ -13,6 +13,20 @@ import {
   type OrchestratorOptions,
 } from '../../helpers/orchestratorHarness';
 
+const SONNET_4_6_DECLARED = {
+  'claude-sonnet-4-6': {
+    vision: true,
+    tools: true,
+    fileInput: true,
+    // Anthropic's models API declaration, as model discovery records it.
+    reasoning: {
+      mandatory: false,
+      supportedEfforts: ['low', 'medium', 'high', 'max'],
+      thinkingModes: ['enabled', 'adaptive', 'disabled'],
+    },
+  },
+};
+
 describe('Orchestrator', () => {
   describe('Tool call handling part 4', () => {
     it('keeps Anthropic thinking enabled on lightweight direct turns without forcing tool use', async () => {
@@ -33,6 +47,7 @@ describe('Orchestrator', () => {
           name: 'Anthropic',
           baseUrl: 'https://api.anthropic.com/v1',
           model: 'claude-sonnet-4-6',
+          modelCapabilities: SONNET_4_6_DECLARED,
         }),
         model: 'claude-sonnet-4-6',
         conversationId: 'conv-anthropic-thinking',
@@ -74,6 +89,7 @@ describe('Orchestrator', () => {
           name: 'Anthropic',
           baseUrl: 'https://api.anthropic.com/v1',
           model: 'claude-sonnet-4-6',
+          modelCapabilities: SONNET_4_6_DECLARED,
         }),
         model: 'claude-sonnet-4-6',
         conversationId: 'conv-anthropic-tool-loop',
@@ -162,6 +178,7 @@ describe('Orchestrator', () => {
           name: 'Anthropic',
           baseUrl: 'https://api.anthropic.com/v1',
           model: 'claude-sonnet-4-6',
+          modelCapabilities: SONNET_4_6_DECLARED,
         }),
         model: 'claude-sonnet-4-6',
         conversationId: 'conv-anthropic-redacted-tool-loop',
