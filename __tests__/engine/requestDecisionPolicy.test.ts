@@ -17,9 +17,6 @@ function decide(overrides: Partial<Parameters<typeof resolveRequestDecision>[0]>
   return resolveRequestDecision({
     frame: baseFrame(),
     requiredInformation: [],
-    policyDisposition: 'allowed',
-    permissionState: 'not_required',
-    awaitingExternalOperation: false,
     ...overrides,
   });
 }
@@ -33,27 +30,6 @@ function required(
 }
 
 describe('request decision policy', () => {
-  it.each([
-    {
-      input: { policyDisposition: 'prohibited' as const },
-      expected: { action: 'decline', reason: 'prohibited' },
-    },
-    {
-      input: { policyDisposition: 'approval_required' as const },
-      expected: { action: 'consent', reason: 'authorization_required' },
-    },
-    {
-      input: { permissionState: 'missing' as const },
-      expected: { action: 'consent', reason: 'permission_missing' },
-    },
-    {
-      input: { awaitingExternalOperation: true },
-      expected: { action: 'wait', reason: 'waiting_for_async' },
-    },
-  ])('selects the closed $expected.action outcome', ({ input, expected }) => {
-    expect(decide(input).decision).toEqual(expected);
-  });
-
   it('clarifies only information whose authority is the user', () => {
     const information = required('user');
     expect(decide({ requiredInformation: [information] })).toMatchObject({
@@ -68,17 +44,12 @@ describe('request decision policy', () => {
     ).toEqual({ action: 'act', reason: 'information_lookup_required' });
   });
 
-  it('requires consent for unresolved authorization policy', () => {
+  // Consent, decline and wait outcomes forced a tool-less turn on a resumed run; the model
+  // now reads what it still needs with its tools, and approval stays per concrete effect.
+  it('acts on unresolved policy information instead of forcing a tool-less turn', () => {
     expect(
       decide({ requiredInformation: [required('policy', 'unresolved', 'authorization')] }).decision,
-    ).toEqual({ action: 'consent', reason: 'authorization_required' });
-  });
-
-  it('declines when non-authorization policy evidence is unavailable', () => {
-    expect(decide({ requiredInformation: [required('policy')] }).decision).toEqual({
-      action: 'decline',
-      reason: 'policy_information_unavailable',
-    });
+    ).toEqual({ action: 'act', reason: 'information_lookup_required' });
   });
 
   it('acts when every required item has matching authority evidence', () => {
@@ -94,7 +65,7 @@ describe('request decision policy', () => {
     ).toEqual({ action: 'act', reason: 'requirements_resolved' });
   });
 
-  it('checks persisted decisions against every possible unknown external policy context', () => {
+  it('checks a persisted decision against the one the policy reaches', () => {
     const userInformation = required('user');
     expect(
       requestDecisionIsPolicyReachable({
@@ -112,13 +83,13 @@ describe('request decision policy', () => {
     ).toBe(false);
   });
 
-  it('preserves structural empty-input clarification ahead of policy context', () => {
+  it('clarifies an empty input', () => {
     const frame = buildGraphEntryRequestFrame({
       text: '',
       attachmentCount: 0,
       continuation: 'new',
     });
-    expect(decide({ frame, policyDisposition: 'prohibited' }).decision).toEqual({
+    expect(decide({ frame }).decision).toEqual({
       action: 'clarify',
       reason: 'missing_input',
     });

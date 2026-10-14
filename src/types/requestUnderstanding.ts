@@ -34,18 +34,13 @@ export type RequestUnderstandingRouting = Readonly<{
   inputKind: 'empty' | 'text' | 'attachments' | 'text_and_attachments';
   attachmentCount: number;
   continuation: 'new' | 'resume' | 'resume_waiting_async' | 'resume_waiting_user';
-  decisionAction: 'act' | 'clarify' | 'wait' | 'decline' | 'consent';
+  decisionAction: 'act' | 'clarify';
   decisionReason:
     | 'actionable_input'
     | 'requirements_resolved'
     | 'missing_input'
     | 'required_information_missing'
-    | 'information_lookup_required'
-    | 'waiting_for_async'
-    | 'permission_missing'
-    | 'policy_information_unavailable'
-    | 'prohibited'
-    | 'authorization_required';
+    | 'information_lookup_required';
 }>;
 
 export type RequestUnderstandingRequiredInformation = Readonly<{
@@ -65,18 +60,7 @@ export type RequestUnderstandingBoundedList<T> = Readonly<{
   omittedCount: number;
 }>;
 
-export type RequestUnderstandingEffectAuthorization =
-  | Readonly<{
-      status: 'required';
-      reason: 'authorization_required' | 'permission_missing';
-      source: 'request_frame';
-    }>
-  | Readonly<{
-      status: 'unavailable';
-      reason: 'prohibited' | 'policy_information_unavailable';
-      source: 'request_frame';
-    }>
-  | RequestUnderstandingUnknown;
+export type RequestUnderstandingEffectAuthorization = RequestUnderstandingUnknown;
 
 export interface RequestUnderstandingProjection {
   version: typeof REQUEST_UNDERSTANDING_PROJECTION_VERSION;
@@ -111,6 +95,6 @@ export interface RequestUnderstandingSnapshot {
     unresolvedCount: number;
   }>;
   effectAuthorization: Readonly<{
-    status: 'required' | 'unavailable' | 'unknown';
+    status: 'unknown';
   }>;
 }

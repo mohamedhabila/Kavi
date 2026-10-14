@@ -60,9 +60,6 @@ export function buildClarificationRequestUnderstanding(params: {
   const clarificationFrame = resolveRequestDecision({
     frame: baseFrame,
     requiredInformation: params.request.requiredInformation,
-    policyDisposition: 'allowed',
-    permissionState: 'not_required',
-    awaitingExternalOperation: false,
   });
   return summarizeRequestUnderstanding(
     projectRequestUnderstanding({ requestFrame: clarificationFrame }),

@@ -218,9 +218,6 @@ export type AgentRunControlGraphForcedTextReason =
   | 'incomplete_delivery_continuation'
   | 'loop_recovery'
   | 'request_clarification'
-  | 'request_consent'
-  | 'request_decline'
-  | 'request_wait'
   | 'yield_finalization';
 
 export type AgentRunMobileControllerRecoveryState =

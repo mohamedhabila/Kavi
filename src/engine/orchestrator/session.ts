@@ -4,7 +4,6 @@ import { createLogger } from '../../utils/logger';
 import { isJestRuntime } from '../../utils/runtime';
 
 import { createOrchestratorGraphBindings } from '../graph/orchestratorGraphBindings';
-import { resolveGraphEntryRequestDecision } from '../graph/requestDecisionSignals';
 import { executeAgentControlGraphSession } from '../graph/sessionExecution';
 import {
   loadOrchestratorMemoryAccessContext,
@@ -14,7 +13,6 @@ import { buildRuntimeContextNote } from '../prompts/orchestratorPromptSections';
 import { yieldToUiFrame } from '../toolExecution/toolCallLifecycleRecording';
 import { prepareOrchestratorSessionBootstrap } from './bootstrap';
 import type { OrchestratorCallbacks, OrchestratorOptions } from './types';
-import { buildRuntimeRequestDecisionToolAuthority } from './requestDecisionAuthority';
 import type { OrchestratorRunResult, OrchestratorTerminalDisposition } from './types';
 import { resolveWorkflowTaskAnchor } from '../graph/workflowTaskAnchor';
 import { rebuildSessionMemoryRefreshMessages } from './sessionMemoryRefreshMessages';
@@ -109,7 +107,7 @@ export async function runOrchestratorGraphSession(params: {
     currentUserMessage,
     memory,
     memoryRefreshInternalUserMessages,
-    requestFrame: structuralRequestFrame,
+    requestFrame,
     skillPrompts,
     workingMessages,
   } = await prepareOrchestratorRequestBundle({
@@ -128,11 +126,6 @@ export async function runOrchestratorGraphSession(params: {
     graphSnapshot: options.initialAgentControlGraphState,
   });
   callbacks.onTurnLatencyMark?.('request_context_prepared');
-  const requestFrame = resolveGraphEntryRequestDecision({
-    frame: structuralRequestFrame,
-    graphSnapshot: options.initialAgentControlGraphState,
-    toolAuthority: buildRuntimeRequestDecisionToolAuthority(availableToolNames),
-  });
   const graphCallbacks = {
     ...callbacks,
     onToolCallComplete: (toolCall: Parameters<typeof callbacks.onToolCallComplete>[0]) => {

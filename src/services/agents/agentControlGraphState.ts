@@ -59,9 +59,6 @@ const FORCED_TEXT_REASON_KEYS: Record<AgentRunControlGraphForcedTextReason, true
   incomplete_delivery_continuation: true,
   loop_recovery: true,
   request_clarification: true,
-  request_consent: true,
-  request_decline: true,
-  request_wait: true,
   yield_finalization: true,
 };
 const FORCED_TEXT_REASONS: ReadonlySet<string> = new Set(Object.keys(FORCED_TEXT_REASON_KEYS));

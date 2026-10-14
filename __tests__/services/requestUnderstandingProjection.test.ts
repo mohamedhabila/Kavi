@@ -143,16 +143,6 @@ describe('request understanding projection', () => {
       decision: { action: 'clarify' as const, reason: 'required_information_missing' as const },
     },
     {
-      name: 'external-operation wait',
-      requiredInformation: [unresolved('tool')],
-      decision: { action: 'wait' as const, reason: 'waiting_for_async' as const },
-    },
-    {
-      name: 'unavailable policy decline',
-      requiredInformation: [unresolved('policy')],
-      decision: { action: 'decline' as const, reason: 'policy_information_unavailable' as const },
-    },
-    {
       name: 'safe information lookup',
       requiredInformation: [unresolved('tool')],
       decision: { action: 'act' as const, reason: 'information_lookup_required' as const },
@@ -178,14 +168,9 @@ describe('request understanding projection', () => {
       decision: { action: 'act' as const, reason: 'requirements_resolved' as const },
     },
     {
-      name: 'acting without policy information',
-      requiredInformation: [unresolved('policy')],
+      name: 'acting without user information despite a lookup',
+      requiredInformation: [unresolved('user'), unresolved('tool')],
       decision: { action: 'act' as const, reason: 'information_lookup_required' as const },
-    },
-    {
-      name: 'waiting instead of clarifying',
-      requiredInformation: [unresolved('user')],
-      decision: { action: 'wait' as const, reason: 'waiting_for_async' as const },
     },
   ])('fails closed when $name contradicts policy', ({ requiredInformation, decision }) => {
     expect(
@@ -202,52 +187,10 @@ describe('request understanding projection', () => {
     });
   });
 
-  it('never turns an act decision into effect authority', () => {
-    const base = frame();
-    expect(projectRequestUnderstanding({ requestFrame: base }).effectAuthorization).toEqual({
+  it('never turns a decision into effect authority', () => {
+    expect(projectRequestUnderstanding({ requestFrame: frame() }).effectAuthorization).toEqual({
       status: 'unknown',
       reason: 'not_evaluated_per_effect',
-    });
-
-    const consent = projectRequestUnderstanding({
-      requestFrame: {
-        ...base,
-        requiredInformation: [
-          {
-            key: 'effect.authorization',
-            authority: 'policy',
-            requiredFor: 'authorization',
-            resolution: 'unresolved',
-          },
-        ],
-        decision: { action: 'consent', reason: 'authorization_required' },
-      },
-    });
-    expect(consent).toMatchObject({
-      integrity: 'valid',
-      effectAuthorization: {
-        status: 'required',
-        reason: 'authorization_required',
-        source: 'request_frame',
-      },
-    });
-
-    const contradictory = projectRequestUnderstanding({
-      requestFrame: {
-        ...base,
-        requiredInformation: [
-          {
-            key: 'effect.authorization',
-            authority: 'policy',
-            requiredFor: 'authorization',
-            resolution: 'unresolved',
-          },
-        ],
-      },
-    });
-    expect(contradictory).toMatchObject({
-      integrity: 'conflict',
-      effectAuthorization: { status: 'unknown', reason: 'state_conflict' },
     });
   });
 

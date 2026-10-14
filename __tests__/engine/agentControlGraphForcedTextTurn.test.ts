@@ -33,17 +33,6 @@ describe('agent control graph forced text turns', () => {
       'Ask one concise clarification question for the missing required information.',
     ],
     [
-      'request_consent',
-      '[SYSTEM CONSENT REQUIRED]',
-      'ask for focused consent without claiming the action occurred.',
-    ],
-    ['request_decline', '[SYSTEM REQUEST DECLINED]', 'do not claim execution'],
-    [
-      'request_wait',
-      '[SYSTEM WAITING FOR VERIFIED RESULT]',
-      'no verified completion is available yet',
-    ],
-    [
       'execution_loop_recovery',
       '[SYSTEM EXECUTION BLOCKED]',
       'State the unverified requested side effect, the blocker, and the smallest missing input',

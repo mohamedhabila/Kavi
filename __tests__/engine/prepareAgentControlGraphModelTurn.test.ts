@@ -232,12 +232,7 @@ describe('prepareAgentControlGraphModelTurn', () => {
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    ['clarify', 'required_information_missing', 'request_clarification'],
-    ['consent', 'authorization_required', 'request_consent'],
-    ['decline', 'prohibited', 'request_decline'],
-    ['wait', 'waiting_for_async', 'request_wait'],
-  ] as const)(
+  it.each([['clarify', 'required_information_missing', 'request_clarification']] as const)(
     'maps the %s request decision to its exact forced-text contract',
     async (action, reason, forcedTextReason) => {
       mockedPlanIterationModel.mockReturnValue({

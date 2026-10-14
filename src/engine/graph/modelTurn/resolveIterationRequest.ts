@@ -13,18 +13,7 @@ import type { AgentControlTurnDirectives } from '../agentControlGraph';
 function requestDecisionForcedTextReason(
   action: RequestFrame['decision']['action'],
 ): AgentControlTurnDirectives['forcedTextReason'] {
-  switch (action) {
-    case 'clarify':
-      return 'request_clarification';
-    case 'consent':
-      return 'request_consent';
-    case 'decline':
-      return 'request_decline';
-    case 'wait':
-      return 'request_wait';
-    case 'act':
-      return undefined;
-  }
+  return action === 'clarify' ? 'request_clarification' : undefined;
 }
 
 export function resolveModelTurnIterationRequest(params: {

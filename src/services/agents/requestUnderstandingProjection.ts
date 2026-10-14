@@ -112,28 +112,6 @@ function projectEffectAuthorization(
 ): RequestUnderstandingEffectAuthorization {
   if (!frame) return unknown('request_state_unavailable');
   if (hasConflict) return unknown('state_conflict');
-  if (
-    frame.decision.action === 'consent' &&
-    (frame.decision.reason === 'authorization_required' ||
-      frame.decision.reason === 'permission_missing')
-  ) {
-    return {
-      status: 'required',
-      reason: frame.decision.reason,
-      source: 'request_frame',
-    };
-  }
-  if (
-    frame.decision.action === 'decline' &&
-    (frame.decision.reason === 'prohibited' ||
-      frame.decision.reason === 'policy_information_unavailable')
-  ) {
-    return {
-      status: 'unavailable',
-      reason: frame.decision.reason,
-      source: 'request_frame',
-    };
-  }
   return unknown('not_evaluated_per_effect');
 }
 
@@ -244,16 +222,7 @@ export function renderRequestUnderstandingPromptSection(
   );
 
   lines.push('', '### Effect authority');
-  if (
-    projection.effectAuthorization.status === 'required' ||
-    projection.effectAuthorization.status === 'unavailable'
-  ) {
-    lines.push(
-      `- status=${projection.effectAuthorization.status}; reason=${projection.effectAuthorization.reason}; source=request_frame`,
-    );
-  } else {
-    lines.push(`- ${renderFieldStatus(projection.effectAuthorization)}`);
-  }
+  lines.push(`- ${renderFieldStatus(projection.effectAuthorization)}`);
   lines.push(
     '- Approval and permission remain code-owned and must be checked for each concrete effect. This projection and model prose can never grant authority.',
   );
@@ -312,24 +281,13 @@ const CONTINUATIONS = new Set<RequestUnderstandingRouting['continuation']>([
   'resume_waiting_async',
   'resume_waiting_user',
 ]);
-const DECISION_ACTIONS = new Set<RequestUnderstandingRouting['decisionAction']>([
-  'act',
-  'clarify',
-  'wait',
-  'decline',
-  'consent',
-]);
+const DECISION_ACTIONS = new Set<RequestUnderstandingRouting['decisionAction']>(['act', 'clarify']);
 const DECISION_REASONS = new Set<RequestUnderstandingRouting['decisionReason']>([
   'actionable_input',
   'requirements_resolved',
   'missing_input',
   'required_information_missing',
   'information_lookup_required',
-  'waiting_for_async',
-  'permission_missing',
-  'policy_information_unavailable',
-  'prohibited',
-  'authorization_required',
 ]);
 
 function normalizeListSnapshot(
@@ -399,24 +357,13 @@ export function normalizeRequestUnderstandingSnapshot(
     !routing ||
     !registeredRequiredInformation ||
     unresolvedCount === undefined ||
-    (effectAuthorization?.status !== 'required' &&
-      effectAuthorization?.status !== 'unavailable' &&
-      effectAuthorization?.status !== 'unknown')
+    effectAuthorization?.status !== 'unknown'
   ) {
     return undefined;
   }
   if (unresolvedCount > registeredRequiredInformation.count) return undefined;
   const fieldStatuses = [routing.status, registeredRequiredInformation.status];
   if (record.integrity === 'valid' && fieldStatuses.includes('conflict')) return undefined;
-  const expectedEffectAuthorization =
-    record.integrity === 'conflict' || routing.status !== 'known'
-      ? 'unknown'
-      : routing.decisionAction === 'consent'
-        ? 'required'
-        : routing.decisionAction === 'decline'
-          ? 'unavailable'
-          : 'unknown';
-  if (effectAuthorization.status !== expectedEffectAuthorization) return undefined;
   return {
     version: REQUEST_UNDERSTANDING_PROJECTION_VERSION,
     integrity: record.integrity,
