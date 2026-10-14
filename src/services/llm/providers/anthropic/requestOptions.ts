@@ -250,10 +250,21 @@ export function sanitizeAnthropicRequestOptions(args: {
   }
 
   return {
-    thinking: visibleThinking,
+    thinking: withDroppedStaleThinking(visibleThinking),
     ...(requestedOutputConfig ? { outputConfig: requestedOutputConfig } : {}),
     temperature: undefined,
   };
+}
+
+/**
+ * Thinking that drops a replayed block the API can no longer bind to its conversation,
+ * rather than failing the request (ANTHROPIC_THINKING_BINDING_BETA). Accepted with adaptive
+ * and enabled thinking on every model; models without the check ignore it.
+ */
+function withDroppedStaleThinking(thinking: Record<string, unknown>): Record<string, unknown> {
+  return thinking.type === 'adaptive' || thinking.type === 'enabled'
+    ? { ...thinking, block_binding: { prefix_mismatch_behavior: 'drop_block' } }
+    : thinking;
 }
 
 export function shouldIncludeAnthropicInterleavedThinkingBeta(args: {

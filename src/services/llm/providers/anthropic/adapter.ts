@@ -3,6 +3,8 @@ import { resolveModelOutputTokenBudget } from '../../../context/outputTokenBudge
 import { normalizeUsage } from '../../../usage/tracker';
 import { isPlainRecord, tryParseJson } from '../../core/json';
 import { splitCacheableSystemPromptSections } from '../../core/systemPromptSections';
+import { ANTHROPIC_THINKING_BINDING_BETA } from './helpers';
+import { noteAnthropicInputTransformations } from './inputTransformations';
 import { createProviderRequestError } from '../../support/providerErrorClassification';
 import type {
   ChatCompletionMessage,
@@ -13,6 +15,19 @@ import type {
 const MAX_ANTHROPIC_CACHE_BREAKPOINTS = 4;
 const MAX_ANTHROPIC_MESSAGE_CACHE_BREAKPOINTS = 2;
 
+/** A user message with something the person sent, not only tool results. */
+function carriesPersonContent(content: string | any[]): boolean {
+  if (typeof content === 'string') return content.trim().length > 0;
+  return content.some((block) => !isPlainRecord(block) || block.type !== 'tool_result');
+}
+
+/**
+ * Puts the request's dynamic context on the newest message the person sent. Tool results
+ * are user messages in Anthropic's format; putting it on the newest of those moved it every
+ * step of a tool loop, editing the history before the thinking Claude had just produced, so
+ * the API no longer accepted that thinking back. On the person's message it stays put for
+ * the whole loop (ANTHROPIC_THINKING_BINDING_BETA).
+ */
 function appendAnthropicDynamicSystemTail(args: {
   messages: Array<{ role: string; content: string | any[] }>;
   dynamicText?: string;
@@ -25,7 +40,7 @@ function appendAnthropicDynamicSystemTail(args: {
 
   const messages = args.messages.map((message) => ({ ...message }));
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].role !== 'user') {
+    if (messages[index].role !== 'user' || !carriesPersonContent(messages[index].content)) {
       continue;
     }
     messages[index] = {
@@ -419,15 +434,19 @@ export async function sendAnthropicMessages(args: {
     ? { ...args.headers, Accept: 'text/event-stream' }
     : { ...args.headers };
 
-  if (
-    args.shouldIncludeAnthropicInterleavedThinkingBeta(
+  const betas = [
+    ...(args.shouldIncludeAnthropicInterleavedThinkingBeta(
       args.model,
       args.options,
       anthropicOptions.thinking,
     )
-  ) {
-    requestHeaders['anthropic-beta'] = args.anthropicInterleavedThinkingBeta;
-  }
+      ? [args.anthropicInterleavedThinkingBeta]
+      : []),
+    ...(isPlainRecord(anthropicOptions.thinking?.block_binding)
+      ? [ANTHROPIC_THINKING_BINDING_BETA]
+      : []),
+  ];
+  if (betas.length > 0) requestHeaders['anthropic-beta'] = betas.join(',');
 
   let response = await args.performFetch(
     `${args.baseUrl}/messages`,
@@ -482,6 +501,7 @@ export async function sendAnthropicMessages(args: {
   }
 
   const json = await response.json();
+  noteAnthropicInputTransformations(json.input_transformations, args.model);
   const normalizedUsage = normalizeUsage(json.usage);
   const assistantBlocks = args.normalizeAnthropicAssistantBlocks({
     role: 'assistant',

@@ -11,6 +11,7 @@ import {
   normalizeStreamUsage,
 } from '../../core/streaming/metadataBuilder';
 import { iterateSseData } from '../../core/streaming/sseReader';
+import { noteAnthropicInputTransformations } from './inputTransformations';
 import {
   type AnthropicStreamToolCall,
   attachAnthropicStreamToolRaws,
@@ -161,6 +162,10 @@ export async function* streamAnthropicMessages(args: {
           break;
         }
         case 'message_start': {
+          noteAnthropicInputTransformations(
+            parsed.message?.input_transformations,
+            String(parsed.message?.model ?? ''),
+          );
           const usage = normalizeStreamUsage(parsed.message?.usage);
           if (usage) {
             yield { type: 'usage', usage };

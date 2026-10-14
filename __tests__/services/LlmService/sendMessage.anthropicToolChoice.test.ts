@@ -179,7 +179,11 @@ describe('LlmService', () => {
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.tools).toHaveLength(1);
-      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
       expect(body.output_config).toEqual({ effort: 'medium' });
     });
   });

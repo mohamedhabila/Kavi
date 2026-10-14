@@ -249,7 +249,11 @@ describe('LlmService', () => {
           { type: 'tool_use', id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } },
         ],
       });
-      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
       expect(body.output_config).toEqual({ effort: 'medium' });
       expect(body.temperature).toBeUndefined();
     });
@@ -331,7 +335,11 @@ describe('LlmService', () => {
           { type: 'tool_use', id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } },
         ],
       });
-      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
       expect(body.output_config).toEqual({ effort: 'medium' });
     });
   });

@@ -66,7 +66,7 @@ describe('LlmService', () => {
       ]);
     });
 
-    it('should omit the deprecated anthropic-beta header for Claude 4.6 adaptive thinking requests', async () => {
+    it('omits the deprecated interleaved-thinking beta for Claude 4.6 adaptive thinking requests', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -106,7 +106,10 @@ describe('LlmService', () => {
       expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
         'anthropic-version': '2023-06-01',
       });
-      expect(mockFetch.mock.calls[0][1].headers).not.toHaveProperty('anthropic-beta');
+      // Only the thinking-binding beta: the interleaved-thinking one is not needed here.
+      expect(mockFetch.mock.calls[0][1].headers['anthropic-beta']).toBe(
+        'thinking-binding-controls-2026-08-01',
+      );
     });
 
     it('should include anthropic-beta header for manual Claude 4 tool-use thinking requests that still require it', async () => {
@@ -146,7 +149,7 @@ describe('LlmService', () => {
       });
 
       expect(mockFetch.mock.calls[0][1].headers).toMatchObject({
-        'anthropic-beta': 'interleaved-thinking-2025-05-14',
+        'anthropic-beta': 'interleaved-thinking-2025-05-14,thinking-binding-controls-2026-08-01',
         'anthropic-version': '2023-06-01',
       });
     });

@@ -113,7 +113,11 @@ describe('LlmService', () => {
       });
 
       const body = requestBody();
-      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
       expect(body.temperature).toBeUndefined();
       expect(body.output_config).toEqual({ effort: 'xhigh' });
     });
@@ -137,7 +141,11 @@ describe('LlmService', () => {
       });
 
       const body = requestBody();
-      expect(body.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(body.thinking).toEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
       expect(body.temperature).toBeUndefined();
     });
 
@@ -190,6 +198,7 @@ describe('LlmService', () => {
         type: 'enabled',
         budget_tokens: 5000,
         display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
       });
       // xhigh isn't in 4.6's supported range, so the whole output_config drops (no format either).
       expect(body.output_config).toBeUndefined();
@@ -242,6 +251,7 @@ describe('LlmService', () => {
         type: 'enabled',
         budget_tokens: 3000,
         display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
       });
       expect(body.output_config).toBeUndefined();
     });

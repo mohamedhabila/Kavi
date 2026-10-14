@@ -9,6 +9,14 @@ import { truncateToUtf16BudgetGraphemeSafe } from '../../../../utils/graphemes';
 
 export const MAX_ANTHROPIC_STRICT_TOOLS = 4;
 export const ANTHROPIC_INTERLEAVED_THINKING_BETA = 'interleaved-thinking-2025-05-14';
+/**
+ * Lets a request set thinking.block_binding. Claude Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku
+ * 5.5 accept a replayed thinking block only while everything before it is unchanged, and
+ * Kavi changes earlier history on purpose (the history window, compaction, each turn's
+ * context): with drop_block the API drops such a block instead of refusing the request.
+ * https://platform.claude.com/docs/en/build-with-claude/preserved-thinking
+ */
+export const ANTHROPIC_THINKING_BINDING_BETA = 'thinking-binding-controls-2026-08-01';
 export const ANTHROPIC_EPHEMERAL_CACHE_CONTROL = { type: 'ephemeral' } as const;
 const ANTHROPIC_TOOL_DESCRIPTION_CHAR_LIMIT = 2000;
 
