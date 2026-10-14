@@ -23,6 +23,7 @@ jest.mock('expo-notifications', () =>
 import fs from 'fs';
 import path from 'path';
 import {
+  buildE2EProviderForKey,
   buildE2EProviderWithDiscoveredCatalog,
   shouldRunE2EAgentEval,
 } from '../../src/acceptance/e2eAgent/providerConfig';
@@ -180,7 +181,9 @@ describeLive('LongMemEval (live)', () => {
 
   beforeAll(async () => {
     provider = await buildE2EProviderWithDiscoveredCatalog();
-    judge = new LlmService({ ...provider, model: judgeModel });
+    // The reference judge is an OpenRouter model, and it judges every arm the same way
+    // whichever provider answers.
+    judge = new LlmService({ ...buildE2EProviderForKey('openrouter'), model: judgeModel });
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, '');
   });
