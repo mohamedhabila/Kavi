@@ -33,6 +33,15 @@ describe('e2e mail integration', () => {
       expect(search.content).toContain('"m-5"');
       expect(search.content.indexOf('"m-5"')).toBeLessThan(search.content.indexOf('"m-2"'));
 
+      // Every word must appear somewhere in the mail, in any order, ignoring case.
+      const words = await call('mail_search', { query: 'RUI month rent' });
+      expect(JSON.parse(words.content)).toMatchObject({
+        count: 2,
+        messages: [{ id: 'm-5' }, { id: 'm-2' }],
+      });
+      const unmatched = await call('mail_search', { query: 'rent landlord' });
+      expect(JSON.parse(unmatched.content)).toEqual({ count: 0, messages: [] });
+
       const read = await call('mail_read', { id: 'm-4' });
       expect(read.content).toContain('Check-in');
 

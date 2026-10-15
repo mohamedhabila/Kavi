@@ -53,12 +53,17 @@ function preview(message: E2EMailMessage) {
   };
 }
 
+function foldForSearch(value: string): string {
+  return value.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+}
+
+/** Every word of the query appears in the sender, subject or text, as mail search works. */
 function matches(message: E2EMailMessage, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return true;
-  return [message.from.name, message.from.email, message.subject, message.body].some((field) =>
-    field.toLocaleLowerCase().includes(needle),
+  const terms = foldForSearch(query).split(/\s+/u).filter(Boolean);
+  const fields = [message.from.name, message.from.email, message.subject, message.body].map(
+    foldForSearch,
   );
+  return terms.every((term) => fields.some((field) => field.includes(term)));
 }
 
 function requireString(args: Record<string, unknown>, name: string): string {
@@ -71,7 +76,7 @@ const TOOLS = [
   {
     name: 'mail_search',
     description:
-      'Search the inbox; newest first. The query matches sender, subject and text; empty lists the latest mail.',
+      'Search the inbox; newest first. Every word of the query must appear in the sender, subject or text; empty lists the latest mail.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
