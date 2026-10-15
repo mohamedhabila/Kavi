@@ -237,6 +237,9 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'pw-ja-calendar-address-to-sms': PHONE_WORLD_REGISTRATION,
   'pw-de-book-free-hour': PHONE_WORLD_REGISTRATION,
   'pw-es-no-ask-full-name': PHONE_WORLD_REGISTRATION,
+  'pw-mail-reply-latest': PHONE_WORLD_REGISTRATION,
+  'pw-mail-checkin-to-calendar': PHONE_WORLD_REGISTRATION,
+  'pw-es-mail-reply-latest': PHONE_WORLD_REGISTRATION,
   'file-write-read': {
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['tool_usage', 'task_completion', 'token_efficiency'],

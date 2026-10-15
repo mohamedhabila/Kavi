@@ -37,6 +37,7 @@ import {
   type E2EFixtureContact,
   type E2EFixtureNotification,
 } from './e2eNativeMessagingFixtures';
+import type { E2EMailMessage, E2EMailReply } from './e2eMailMcpServer';
 
 export {
   E2E_FIXTURE_DEVICE_HEALTH_JSON,
@@ -66,6 +67,8 @@ export type E2ENativeFixtureSeed = Readonly<{
   contacts?: ReadonlyArray<E2EFixtureContact>;
   calendarEvents?: ReadonlyArray<E2ECalendarEvent>;
   notifications?: ReadonlyArray<E2EFixtureNotification>;
+  /** The person's inbox, connected as a mail integration (an MCP server) for the scenario. */
+  mailbox?: ReadonlyArray<E2EMailMessage>;
 }>;
 
 export type E2ENativeMobileFixtureStateSnapshot = {
@@ -95,6 +98,14 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     text: string;
     readCount: number;
     writeCount: number;
+  };
+  /** Replies the model wrote through the mail integration. */
+  mail: {
+    replyCount: number;
+    sentCount: number;
+    lastReplyTo: string;
+    lastReplyBody: string;
+    lastReplySent: boolean;
   };
   share: {
     opened: boolean;
@@ -143,6 +154,13 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       text: '',
       readCount: 0,
       writeCount: 0,
+    },
+    mail: {
+      replyCount: 0,
+      sentCount: 0,
+      lastReplyTo: '',
+      lastReplyBody: '',
+      lastReplySent: false,
     },
     share: {
       opened: false,
@@ -246,6 +264,16 @@ export function seedE2ENativeMobileFixtures(seed: E2ENativeFixtureSeed): void {
 export function recordE2ENotificationScheduled(delaySeconds: number): void {
   e2eNativeFixtureState.notification.scheduled = true;
   e2eNativeFixtureState.notification.delaySeconds = delaySeconds;
+}
+
+/** The model drafted a reply through the mail integration, or sent one it drafted. */
+export function recordE2EMailReply(reply: E2EMailReply): void {
+  const { mail } = e2eNativeFixtureState;
+  if (reply.sent) mail.sentCount += 1;
+  else mail.replyCount += 1;
+  mail.lastReplyTo = reply.inReplyTo;
+  mail.lastReplyBody = reply.body;
+  mail.lastReplySent = reply.sent;
 }
 
 /** The operating system withdrew a notification it had scheduled. */

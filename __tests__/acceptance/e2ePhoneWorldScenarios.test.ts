@@ -8,6 +8,7 @@ import {
   PHONE_WORLD_CONTACTS,
   PHONE_WORLD_DENTIST_ADDRESS,
   PHONE_WORLD_E2E_SCENARIOS,
+  PHONE_WORLD_MAILBOX,
   phoneWorldMonday,
 } from '../../src/acceptance/e2eAgent/scenariosPhoneWorld';
 import {
@@ -131,6 +132,27 @@ describe('phone-world scenarios', () => {
     expect(new Date(moved).getUTCDay()).toBe(4);
     expect(moved.slice(11)).toBe(dentist?.startDate.slice(11));
     expect(Date.parse(dentist!.startDate)).toBeGreaterThan(Date.now());
+  });
+
+  it('reply to the latest of the landlord emails, and take the check-in from the hotel email', () => {
+    const fromLandlord = PHONE_WORLD_MAILBOX.filter((mail) => mail.from.name === 'Rui Costa');
+    expect(fromLandlord).toHaveLength(2);
+    const latest = [...fromLandlord].sort(
+      (left, right) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt),
+    )[0];
+    expect(expectedValue('pw-mail-reply-latest', 'mail.lastReplyTo')).toBe(latest.id);
+    expect(expectedValue('pw-es-mail-reply-latest', 'mail.lastReplyTo')).toBe(latest.id);
+
+    const checkIn = expectedValue('pw-mail-checkin-to-calendar', 'calendar.lastCreatedStartDate');
+    const hotelMail = PHONE_WORLD_MAILBOX.filter((mail) => mail.body.includes('Check-in'));
+    expect(hotelMail).toHaveLength(1);
+    expect(hotelMail[0].body).toContain(`Check-in: ${checkIn.slice(0, 10)} from 15:00`);
+    expect(checkIn.slice(11, 16)).toBe('15:00');
+
+    const startOfToday = new Date().setUTCHours(0, 0, 0, 0);
+    for (const mail of PHONE_WORLD_MAILBOX) {
+      expect(Date.parse(mail.receivedAt)).toBeLessThan(startOfToday);
+    }
   });
 
   it('never tell the model which tool to use', () => {

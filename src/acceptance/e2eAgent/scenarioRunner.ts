@@ -10,6 +10,7 @@ import {
 } from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
+import { connectE2EMailIntegration } from './e2eMailIntegration';
 import { seedE2ENativeMobileFixtures } from './e2eNativeMobileFixtures';
 import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
 import { buildE2EProviderWithDiscoveredCatalog, isE2EAgentEvalEnabled } from './providerConfig';
@@ -115,8 +116,11 @@ export async function runE2EScenario(
       Math.max(1, Math.floor(scenarioTimeoutMs / userTurns.length)),
     );
   const uninstallScenarioEnvironment = installE2EScenarioEnvironment();
+  const mailbox = scenario.initialNativeFixture?.mailbox;
+  let mail: Awaited<ReturnType<typeof connectE2EMailIntegration>> | null = null;
 
   try {
+    if (mailbox) mail = await connectE2EMailIntegration(mailbox);
     const driverResult = await runForegroundScenario({
       provider,
       conversationId,
@@ -154,6 +158,7 @@ export async function runE2EScenario(
     });
     return result;
   } finally {
+    await mail?.disconnect();
     uninstallScenarioEnvironment();
   }
 }

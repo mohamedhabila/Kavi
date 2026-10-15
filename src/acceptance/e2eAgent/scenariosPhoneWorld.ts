@@ -10,6 +10,7 @@
 // as they would to the person. The slice runs on its own, so an unsaturated score does not
 // gate the main suite.
 
+import type { E2EMailMessage } from './e2eMailMcpServer';
 import type { E2ECalendarEvent } from './e2eNativeCalendarFixtures';
 import type { E2EFixtureContact } from './e2eNativeMessagingFixtures';
 import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
@@ -69,6 +70,15 @@ const at = (daysAfterMonday: number, hour: number): string =>
 const TUESDAY = 1;
 const WEDNESDAY = 2;
 const THURSDAY = 3;
+const FRIDAY = 4;
+/** Mail arrived whole days before the run, so it is always in the past. */
+const TODAY_MS = Date.UTC(
+  new Date().getUTCFullYear(),
+  new Date().getUTCMonth(),
+  new Date().getUTCDate(),
+);
+const daysBefore = (days: number, hour: number): string =>
+  new Date(TODAY_MS - days * DAY_MS + hour * 60 * 60 * 1000).toISOString();
 
 /** A day as the person would say it in `locale`: "Thursday 22 October 2026". */
 function spokenDay(locale: string, daysAfterMonday: number): string {
@@ -93,6 +103,49 @@ export const PHONE_WORLD_CALENDAR: ReadonlyArray<E2ECalendarEvent> = [
   event('pw-workshop', 'Workshop', at(WEDNESDAY, 15), at(WEDNESDAY, 18)),
   event('pw-design-review', 'Design review', at(THURSDAY, 13), at(THURSDAY, 16)),
   event('pw-one-on-one', '1:1 with Sam', at(THURSDAY, 17), at(THURSDAY, 18)),
+];
+
+const LANDLORD = { name: 'Rui Costa', email: 'rui.costa@example.invalid' };
+
+/** The person's inbox: the landlord wrote twice, and only the hotel mail has the check-in. */
+export const PHONE_WORLD_MAILBOX: ReadonlyArray<E2EMailMessage> = [
+  {
+    id: 'm-1',
+    from: { name: 'City Library', email: 'news@library.example.invalid' },
+    subject: 'New this month',
+    body: 'Twelve new titles arrived this month, and the reading room now opens at 9.',
+    receivedAt: daysBefore(9, 8),
+  },
+  {
+    id: 'm-2',
+    from: LANDLORD,
+    subject: 'Rent',
+    body: 'Hi! A friendly reminder that rent is due on the first of the month. Thanks, Rui',
+    receivedAt: daysBefore(8, 9),
+  },
+  {
+    id: 'm-3',
+    from: { name: 'Ana Lopes', email: 'ana.lopes@example.invalid' },
+    subject: 'Dinner?',
+    body: 'Are you free for dinner one evening next week?',
+    receivedAt: daysBefore(5, 19),
+  },
+  {
+    id: 'm-4',
+    from: { name: 'Hotel Ribeira Porto', email: 'bookings@hotelribeira.example.invalid' },
+    subject: 'Your booking is confirmed',
+    body:
+      `Your room is booked. Check-in: ${at(FRIDAY, 15).slice(0, 10)} from 15:00 (UTC). ` +
+      'Check-out: by 11:00 two days later. Booking reference PR-4471.',
+    receivedAt: daysBefore(3, 14),
+  },
+  {
+    id: 'm-5',
+    from: LANDLORD,
+    subject: 'Rent for this month',
+    body: "Hi, I haven't received this month's rent yet. Could you tell me when you can pay? Rui",
+    receivedAt: daysBefore(1, 10),
+  },
 ];
 
 const smsTo = (number: string): E2ERubric => ({
@@ -124,6 +177,11 @@ const createdOneEventAt = (startDate: string): E2ERubric[] => [
   },
 ];
 
+const repliedOnceTo = (messageId: string): E2ERubric[] => [
+  { kind: 'native_fixture_state', path: 'mail.replyCount', expectedValue: '1' },
+  { kind: 'native_fixture_state', path: 'mail.lastReplyTo', expectedValue: messageId },
+];
+
 function phoneWorldScenario(spec: {
   id: string;
   turns: readonly [string, ...string[]];
@@ -135,7 +193,11 @@ function phoneWorldScenario(spec: {
     contentClass: 'synthetic_public',
     prompt: spec.turns[0],
     ...(spec.turns.length > 1 ? { userTurns: spec.turns.map((content) => ({ content })) } : {}),
-    initialNativeFixture: { contacts: PHONE_WORLD_CONTACTS, calendarEvents: PHONE_WORLD_CALENDAR },
+    initialNativeFixture: {
+      contacts: PHONE_WORLD_CONTACTS,
+      calendarEvents: PHONE_WORLD_CALENDAR,
+      mailbox: PHONE_WORLD_MAILBOX,
+    },
     rubrics: [
       ...spec.rubrics,
       { kind: 'graph_terminal_success' },
@@ -207,6 +269,31 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
       `Finde am ${spokenDay('de-DE', WEDNESDAY)}, zwischen 13 und 18 Uhr eine freie Stunde für ein Budget-Sync und trag sie in meinen Kalender ein.`,
     ],
     rubrics: createdOneEventAt(at(WEDNESDAY, 14)),
+  }),
+  phoneWorldScenario({
+    id: 'pw-mail-reply-latest',
+    turns: ["Reply to my landlord's latest email: I'll pay on Friday."],
+    rubrics: [
+      ...repliedOnceTo('m-5'),
+      { kind: 'native_fixture_contains', path: 'mail.lastReplyBody', contains: 'Friday' },
+    ],
+  }),
+  phoneWorldScenario({
+    id: 'pw-mail-checkin-to-calendar',
+    turns: ['Add my Porto hotel check-in to my calendar.'],
+    rubrics: [
+      { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
+      {
+        kind: 'native_fixture_state',
+        path: 'calendar.lastCreatedStartDate',
+        expectedValue: at(FRIDAY, 15),
+      },
+    ],
+  }),
+  phoneWorldScenario({
+    id: 'pw-es-mail-reply-latest',
+    turns: ['Responde al último correo de mi casero: pagaré el viernes.'],
+    rubrics: repliedOnceTo('m-5'),
   }),
   phoneWorldScenario({
     id: 'pw-es-no-ask-full-name',
