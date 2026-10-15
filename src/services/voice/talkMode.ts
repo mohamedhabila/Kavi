@@ -1,112 +1,80 @@
 // ---------------------------------------------------------------------------
 // Kavi — Voice Talk Mode
 // ---------------------------------------------------------------------------
-// Continuous voice conversation: listen → transcribe → agent → speak.
-// State machine: idle → listening → transcribing → processing → speaking → idle
+// A spoken conversation: listen → send what was said → speak the reply while it streams
+// → listen again. The phone's recognizer hears the person and decides when they finished;
+// the reply is spoken sentence by sentence as it arrives.
+//
+// idle → listening → processing ⇄ speaking → listening …   (error ends the session)
 
-import {
-  startRecording,
-  stopRecording,
-  getRecordingStatus,
-  transcribeAudio,
-  speakText,
-  stopSpeaking,
-  type TTSProvider,
-} from './voice';
+import { createLogger } from '../../utils/logger';
 import { unrefTimerIfSupported } from '../../utils/timers';
-import { isLikelyVoiceEcho } from './voiceEchoSimilarity';
+import {
+  startSpeechRecognition,
+  type SpeechRecognitionHandlers,
+  type SpeechRecognitionSession,
+} from './speechRecognition';
+import { createSpokenReply, type SpokenReply } from './spokenReply';
+import { speakText, stopSpeaking, type TTSProvider } from './voice';
 
-// ── Types ────────────────────────────────────────────────────────────────
+const logger = createLogger('TalkMode');
 
-export type TalkModeState =
-  | 'idle'
-  | 'listening'
-  | 'transcribing'
-  | 'processing'
-  | 'speaking'
-  | 'paused'
-  | 'error';
+export type TalkModeState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
 
-export interface TalkModeConfig {
-  ttsProvider?: TTSProvider;
-  initialSilenceTimeoutMs?: number;
-  silenceTimeoutMs?: number;
-  shortSpeechSilenceTimeoutMs?: number;
-  maxRecordingMs?: number;
-  wakeWord?: string;
-  autoListen?: boolean;
-  restartListeningDelayMs?: number;
-  echoSuppressionWindowMs?: number;
-  speechMeteringThreshold?: number;
-  minSpeechDurationMs?: number;
-  recorderStatusPollIntervalMs?: number;
+/** What the agent says back for one spoken turn. */
+export type AgentReply = Readonly<{
+  /** The final answer, shown in the session transcript. */
+  response: string;
+  /** Everything the turn said, in order, as streamed through onReplyText. */
+  spokenText: string;
+}>;
+
+export type AgentHandler = (
+  input: string,
+  turn: Readonly<{ onReplyText: (replySoFar: string) => void }>,
+) => Promise<AgentReply>;
+
+export type TalkModeEventHandlers = Readonly<{
+  onError?: (error: Error) => void;
+}>;
+
+export type TalkModeDependencies = Readonly<{
+  recognize: (handlers: SpeechRecognitionHandlers) => SpeechRecognitionSession;
+  speak: (sentence: string) => Promise<void>;
+  stopSpeaking: () => Promise<void>;
+}>;
+
+/** Pause before listening again, so a recognizer that ends at once cannot spin. */
+const RESTART_LISTENING_DELAY_MS = 300;
+
+export function createTalkModeDependencies(ttsProvider: TTSProvider): TalkModeDependencies {
+  return {
+    recognize: startSpeechRecognition,
+    speak: (sentence) => speakText(sentence, ttsProvider),
+    stopSpeaking,
+  };
 }
 
-export type TalkModeEventHandler = {
-  onStateChange?: (state: TalkModeState) => void;
-  onTranscription?: (text: string) => void;
-  onAgentResponse?: (text: string) => void;
-  onError?: (error: Error) => void;
-};
-
-export type AgentHandler = (input: string) => Promise<string>;
-
-// ── Talk Mode Manager ────────────────────────────────────────────────────
+type Listener<T> = (value: T) => void;
 
 export class TalkModeManager {
   private state: TalkModeState = 'idle';
-  private config: TalkModeConfig;
-  private handlers: TalkModeEventHandler;
-  private agentHandler: AgentHandler;
-  private maxTimer: ReturnType<typeof setTimeout> | null = null;
-  private recorderPollTimer: ReturnType<typeof setInterval> | null = null;
   private active = false;
-  private stateListeners: Array<(s: TalkModeState) => void> = [];
-  private transcriptListeners: Array<(t: string) => void> = [];
-  private responseListeners: Array<(r: string) => void> = [];
+  /** Bumped on every start and stop; callbacks from an older session are ignored. */
+  private generation = 0;
+  private recognition: SpeechRecognitionSession | null = null;
+  private reply: SpokenReply | null = null;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastSpokenResponse = '';
-  private lastSpokenAt = 0;
-  private listeningStartedAt = 0;
-  private speechDetectedAt = 0;
-  private lastSpeechAt = 0;
-  private heardSpeechDuringCurrentTurn = false;
-  private pendingProcessing = false;
-  private sessionGeneration = 0;
-  private pendingStartListening: Promise<void> | null = null;
-  private pendingStop: Promise<void> | null = null;
+  private readonly stateListeners = new Set<Listener<TalkModeState>>();
+  private readonly partialListeners = new Set<Listener<string>>();
+  private readonly transcriptListeners = new Set<Listener<string>>();
+  private readonly responseListeners = new Set<Listener<string>>();
 
   constructor(
-    configOrAgent: TalkModeConfig | AgentHandler,
-    handlers?: TalkModeEventHandler,
-    config?: TalkModeConfig,
-  ) {
-    if (typeof configOrAgent === 'function') {
-      // 3-arg form: (agentHandler, handlers, config)
-      this.agentHandler = configOrAgent;
-      this.handlers = handlers || {};
-      config = config || {};
-    } else {
-      // 1-arg form: (config) — used by VoiceScreen
-      this.agentHandler = async (input: string) => input;
-      this.handlers = {};
-      config = configOrAgent || {};
-    }
-    this.config = {
-      ttsProvider: config.ttsProvider || 'system',
-      initialSilenceTimeoutMs: config.initialSilenceTimeoutMs ?? 1800,
-      silenceTimeoutMs: config.silenceTimeoutMs ?? 900,
-      shortSpeechSilenceTimeoutMs: config.shortSpeechSilenceTimeoutMs ?? 550,
-      maxRecordingMs: config.maxRecordingMs || 30000,
-      wakeWord: config.wakeWord,
-      autoListen: config.autoListen ?? true,
-      restartListeningDelayMs: config.restartListeningDelayMs ?? 280,
-      echoSuppressionWindowMs: config.echoSuppressionWindowMs ?? 12000,
-      speechMeteringThreshold: config.speechMeteringThreshold ?? -52,
-      minSpeechDurationMs: config.minSpeechDurationMs ?? 250,
-      recorderStatusPollIntervalMs: config.recorderStatusPollIntervalMs ?? 80,
-    };
-  }
+    private readonly agentHandler: AgentHandler,
+    private readonly handlers: TalkModeEventHandlers,
+    private readonly dependencies: TalkModeDependencies,
+  ) {}
 
   getState(): TalkModeState {
     return this.state;
@@ -116,377 +84,152 @@ export class TalkModeManager {
     return this.active;
   }
 
-  // ── Subscriber-based event registration (for React components) ────
-
-  onStateChange(cb: (s: TalkModeState) => void): () => void {
-    this.stateListeners.push(cb);
-    return () => {
-      this.stateListeners = this.stateListeners.filter((l) => l !== cb);
-    };
+  onStateChange(listener: Listener<TalkModeState>): () => void {
+    return this.subscribe(this.stateListeners, listener);
   }
 
-  onTranscript(cb: (t: string) => void): () => void {
-    this.transcriptListeners.push(cb);
-    return () => {
-      this.transcriptListeners = this.transcriptListeners.filter((l) => l !== cb);
-    };
+  /** The words heard so far while the person is speaking. */
+  onPartialTranscript(listener: Listener<string>): () => void {
+    return this.subscribe(this.partialListeners, listener);
   }
 
-  onResponse(cb: (r: string) => void): () => void {
-    this.responseListeners.push(cb);
-    return () => {
-      this.responseListeners = this.responseListeners.filter((l) => l !== cb);
-    };
+  /** What the person said, once per turn. */
+  onTranscript(listener: Listener<string>): () => void {
+    return this.subscribe(this.transcriptListeners, listener);
   }
 
-  // ── Lifecycle ─────────────────────────────────────────────────────
+  onResponse(listener: Listener<string>): () => void {
+    return this.subscribe(this.responseListeners, listener);
+  }
 
   async start(): Promise<void> {
-    if (this.pendingStop) {
-      await this.pendingStop;
-    }
     if (this.active) return;
-    this.sessionGeneration += 1;
     this.active = true;
-    await this.startListening();
+    this.generation += 1;
+    this.listen(this.generation);
   }
 
-  stop(): Promise<void> {
-    if (this.pendingStop) {
-      return this.pendingStop;
-    }
-
-    const stopOperation = this.performStop();
-    const trackedStop = stopOperation.finally(() => {
-      if (this.pendingStop === trackedStop) {
-        this.pendingStop = null;
-      }
-    });
-    this.pendingStop = trackedStop;
-    return trackedStop;
-  }
-
-  private async performStop(): Promise<void> {
-    const pendingStartListening = this.pendingStartListening;
-    this.active = false;
-    this.sessionGeneration += 1;
-    this.clearTimers();
-    await Promise.allSettled([
-      stopSpeaking(),
-      ...(this.state === 'listening' || this.pendingProcessing ? [stopRecording()] : []),
-    ]);
-    if (pendingStartListening) {
-      await Promise.allSettled([pendingStartListening]);
-      await Promise.allSettled([stopSpeaking(), stopRecording()]);
-    }
-
+  async stop(): Promise<void> {
+    await this.halt();
     this.setState('idle');
   }
 
-  async pause(): Promise<void> {
-    this.sessionGeneration += 1;
-    this.clearTimers();
-    await Promise.allSettled([
-      ...(this.state === 'speaking' ? [stopSpeaking()] : []),
-      ...(this.state === 'listening' ? [stopRecording()] : []),
-    ]);
-    this.setState('paused');
+  /** The person is done speaking: end the utterance now instead of waiting for silence. */
+  finishSpeaking(): void {
+    if (this.state === 'listening') this.recognition?.stop();
   }
 
-  async resume(): Promise<void> {
-    if (this.state !== 'paused') return;
-    this.sessionGeneration += 1;
-    await this.startListening();
+  /** Stop the reply being spoken; Kavi listens as soon as the turn is over. */
+  stopReply(): void {
+    this.reply?.stop();
   }
 
-  // ── Internal state machine ────────────────────────────────────────
+  private listen(generation: number): void {
+    if (!this.isCurrent(generation)) return;
+    this.setState('listening');
+    try {
+      this.recognition = this.dependencies.recognize({
+        onPartial: (transcript) => {
+          if (!this.isCurrent(generation)) return;
+          for (const listener of this.partialListeners) listener(transcript);
+        },
+        onEnd: (transcript) => {
+          if (!this.isCurrent(generation)) return;
+          this.recognition = null;
+          if (transcript) void this.takeTurn(generation, transcript);
+          else this.listenAgainSoon(generation);
+        },
+        onError: (error) => {
+          if (!this.isCurrent(generation)) return;
+          this.recognition = null;
+          void this.fail(error);
+        },
+      });
+    } catch (error) {
+      void this.fail(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
 
-  private startListening(): Promise<void> {
-    if (!this.active) return Promise.resolve();
-
-    const startOperation = this.performStartListening();
-    const trackedStart = startOperation.finally(() => {
-      if (this.pendingStartListening === trackedStart) {
-        this.pendingStartListening = null;
-      }
+  private async takeTurn(generation: number, transcript: string): Promise<void> {
+    for (const listener of this.transcriptListeners) listener(transcript);
+    this.setState('processing');
+    const reply = createSpokenReply({
+      speak: async (sentence) => {
+        if (this.isCurrent(generation)) this.setState('speaking');
+        await this.dependencies.speak(sentence);
+      },
+      stopSpeaking: this.dependencies.stopSpeaking,
+      // Spoken all that has arrived while the run is still working (a tool, say).
+      onQuiet: () => {
+        if (this.isCurrent(generation)) this.setState('processing');
+      },
     });
-    this.pendingStartListening = trackedStart;
-    return trackedStart;
-  }
-
-  private async performStartListening(): Promise<void> {
-    const sessionGeneration = this.sessionGeneration;
-
+    this.reply = reply;
     try {
-      this.clearRestartTimer();
-      this.pendingProcessing = false;
-      this.listeningStartedAt = Date.now();
-      this.speechDetectedAt = 0;
-      this.lastSpeechAt = 0;
-      this.heardSpeechDuringCurrentTurn = false;
-      await stopSpeaking();
-      if (!this.isCurrentActiveSession(sessionGeneration)) {
-        return;
-      }
-      await startRecording();
-      if (!this.isCurrentActiveSession(sessionGeneration)) {
-        await Promise.allSettled([stopRecording()]);
-        this.setState('idle');
-        return;
-      }
-      this.setState('listening');
-
-      this.startRecorderStatusPolling();
-
-      // Hard max recording limit
-      this.maxTimer = setTimeout(async () => {
-        if (this.state === 'listening') {
-          await this.processRecording();
-        }
-      }, this.config.maxRecordingMs!);
-      unrefTimerIfSupported(this.maxTimer);
-    } catch (err: unknown) {
-      if (this.isCurrentActiveSession(sessionGeneration)) {
-        await this.handleError(err instanceof Error ? err : new Error(String(err)));
-      } else {
-        await Promise.allSettled([stopRecording()]);
+      const { response, spokenText } = await this.agentHandler(transcript, {
+        onReplyText: (replySoFar) => {
+          if (this.isCurrent(generation)) reply.update(replySoFar);
+        },
+      });
+      if (!this.isCurrent(generation)) return;
+      for (const listener of this.responseListeners) listener(response);
+      await reply.finish(spokenText || response);
+      if (!this.isCurrent(generation)) return;
+      this.reply = null;
+      this.listenAgainSoon(generation);
+    } catch (error) {
+      if (this.isCurrent(generation)) {
+        await this.fail(error instanceof Error ? error : new Error(String(error)));
       }
     }
   }
 
-  private async processRecording(): Promise<void> {
-    if (this.state !== 'listening' || this.pendingProcessing) return;
-    const sessionGeneration = this.sessionGeneration;
-    this.pendingProcessing = true;
-    this.clearTimers();
-
-    try {
-      this.setState('transcribing');
-      const audioUri = await stopRecording();
-      if (!this.isCurrentActiveSession(sessionGeneration)) {
-        this.setState('idle');
-        return;
-      }
-      if (!audioUri) {
-        if (this.config.autoListen && this.active) {
-          await this.startListening();
-        } else {
-          this.finishSession();
-        }
-        return;
-      }
-
-      const result = await transcribeAudio(audioUri);
-      if (!this.isCurrentActiveSession(sessionGeneration)) {
-        this.setState('idle');
-        return;
-      }
-      const text = result.text.trim();
-
-      if (!text) {
-        // No speech detected, restart listening
-        if (this.config.autoListen && this.active) {
-          await this.startListening();
-        } else {
-          this.finishSession();
-        }
-        return;
-      }
-
-      if (this.isLikelyEcho(text)) {
-        if (this.config.autoListen && this.active) {
-          this.scheduleListeningRestart();
-        } else {
-          this.finishSession();
-        }
-        return;
-      }
-
-      this.handlers.onTranscription?.(text);
-      for (const cb of this.transcriptListeners) cb(text);
-
-      // Check for wake word if configured
-      if (this.config.wakeWord) {
-        const lowerText = text.toLowerCase();
-        const lowerWake = this.config.wakeWord.toLowerCase();
-        if (!lowerText.includes(lowerWake)) {
-          // Wake word not detected, restart listening
-          if (this.config.autoListen && this.active) {
-            await this.startListening();
-          } else {
-            this.finishSession();
-          }
-          return;
-        }
-      }
-
-      // Process through agent
-      this.setState('processing');
-      const response = await this.agentHandler(text);
-      if (!this.isCurrentActiveSession(sessionGeneration)) {
-        this.setState('idle');
-        return;
-      }
-      this.handlers.onAgentResponse?.(response);
-      for (const cb of this.responseListeners) cb(response);
-
-      // Speak the response
-      if (response && this.active) {
-        this.setState('speaking');
-        this.lastSpokenResponse = response;
-        this.lastSpokenAt = Date.now();
-        await speakText(response, this.config.ttsProvider);
-        if (!this.isCurrentActiveSession(sessionGeneration) || this.getState() === 'paused') {
-          return;
-        }
-      }
-
-      // Auto-restart listening
-      if (this.config.autoListen && this.active) {
-        this.scheduleListeningRestart();
-      } else {
-        this.finishSession();
-      }
-    } catch (err: unknown) {
-      if (this.isCurrentActiveSession(sessionGeneration)) {
-        await this.handleError(err instanceof Error ? err : new Error(String(err)));
-      }
-    } finally {
-      this.pendingProcessing = false;
-    }
+  private listenAgainSoon(generation: number): void {
+    this.clearRestartTimer();
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      this.listen(generation);
+    }, RESTART_LISTENING_DELAY_MS);
+    unrefTimerIfSupported(this.restartTimer);
   }
 
-  /**
-   * Manually trigger stop recording and process
-   */
-  async stopAndProcess(): Promise<void> {
-    if (this.state === 'listening') {
-      await this.processRecording();
-    }
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────
-
-  private setState(state: TalkModeState): void {
-    if (this.state === state) return;
-    this.state = state;
-    this.handlers.onStateChange?.(state);
-    for (const cb of this.stateListeners) cb(state);
-  }
-
-  private async handleError(error: Error): Promise<void> {
+  private async halt(): Promise<void> {
     this.active = false;
-    this.sessionGeneration += 1;
-    this.clearTimers();
-    await Promise.allSettled([stopSpeaking(), stopRecording()]);
+    this.generation += 1;
+    this.clearRestartTimer();
+    this.recognition?.abort();
+    this.recognition = null;
+    this.reply?.stop();
+    this.reply = null;
+    await this.dependencies.stopSpeaking().catch((error: unknown) => {
+      logger.warn('Could not stop speaking.', { error: String(error) });
+    });
+  }
+
+  private async fail(error: Error): Promise<void> {
+    await this.halt();
     this.handlers.onError?.(error);
     this.setState('error');
   }
 
-  private clearTimers(): void {
-    if (this.maxTimer) {
-      clearTimeout(this.maxTimer);
-      this.maxTimer = null;
-    }
-    if (this.recorderPollTimer) {
-      clearInterval(this.recorderPollTimer);
-      this.recorderPollTimer = null;
-    }
-    this.clearRestartTimer();
-  }
-
-  private finishSession(): void {
-    this.active = false;
-    this.setState('idle');
-  }
-
-  private isCurrentActiveSession(sessionGeneration: number): boolean {
-    return this.active && this.sessionGeneration === sessionGeneration;
+  private isCurrent(generation: number): boolean {
+    return this.active && this.generation === generation;
   }
 
   private clearRestartTimer(): void {
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer);
-      this.restartTimer = null;
-    }
+    if (!this.restartTimer) return;
+    clearTimeout(this.restartTimer);
+    this.restartTimer = null;
   }
 
-  private scheduleListeningRestart(): void {
-    this.clearRestartTimer();
-    this.restartTimer = setTimeout(() => {
-      this.restartTimer = null;
-      void this.startListening();
-    }, this.config.restartListeningDelayMs);
-    unrefTimerIfSupported(this.restartTimer);
+  private setState(state: TalkModeState): void {
+    if (this.state === state) return;
+    this.state = state;
+    for (const listener of this.stateListeners) listener(state);
   }
 
-  private startRecorderStatusPolling(): void {
-    if (this.recorderPollTimer) {
-      clearInterval(this.recorderPollTimer);
-    }
-
-    this.recorderPollTimer = setInterval(() => {
-      void this.handleRecorderStatusTick();
-    }, this.config.recorderStatusPollIntervalMs);
-    unrefTimerIfSupported(this.recorderPollTimer);
-  }
-
-  private async handleRecorderStatusTick(): Promise<void> {
-    if (this.state !== 'listening' || this.pendingProcessing) {
-      return;
-    }
-
-    const now = Date.now();
-    const status = getRecordingStatus();
-    const metering = status?.metering;
-    const durationMillis = status?.durationMillis ?? 0;
-    const hasMetering = typeof metering === 'number' && Number.isFinite(metering);
-    const isSpeechActive = hasMetering && metering >= (this.config.speechMeteringThreshold ?? -52);
-
-    if (isSpeechActive) {
-      if (!this.heardSpeechDuringCurrentTurn) {
-        this.speechDetectedAt = now;
-      }
-      this.heardSpeechDuringCurrentTurn = true;
-      this.lastSpeechAt = now;
-      return;
-    }
-
-    if (!this.heardSpeechDuringCurrentTurn) {
-      const initialSilenceElapsed = now - this.listeningStartedAt;
-      if (initialSilenceElapsed >= (this.config.initialSilenceTimeoutMs ?? 0)) {
-        await this.processRecording();
-      }
-      return;
-    }
-
-    const observedSpeechDuration = Math.max(0, this.lastSpeechAt - this.speechDetectedAt);
-    const speechDuration = observedSpeechDuration > 0 ? observedSpeechDuration : durationMillis;
-    const silenceElapsed = now - this.lastSpeechAt;
-    const silenceTimeout =
-      observedSpeechDuration >= 1500
-        ? (this.config.silenceTimeoutMs ?? 0)
-        : Math.min(
-            this.config.shortSpeechSilenceTimeoutMs ?? this.config.silenceTimeoutMs ?? 0,
-            this.config.silenceTimeoutMs ?? 0,
-          );
-
-    if (speechDuration < (this.config.minSpeechDurationMs ?? 0)) {
-      return;
-    }
-
-    if (silenceElapsed >= silenceTimeout) {
-      await this.processRecording();
-    }
-  }
-
-  private isLikelyEcho(transcript: string): boolean {
-    const response = this.lastSpokenResponse.trim();
-    if (!response) return false;
-    if (Date.now() - this.lastSpokenAt > (this.config.echoSuppressionWindowMs || 0)) {
-      return false;
-    }
-
-    return isLikelyVoiceEcho(transcript, response);
+  private subscribe<T>(listeners: Set<Listener<T>>, listener: Listener<T>): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 }

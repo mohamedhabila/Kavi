@@ -6,6 +6,23 @@ import {
 } from '../../../src/services/voice/voiceConversationBridge';
 import { useChatStore } from '../../../src/store/useChatStore';
 import { addConversation } from '../../helpers/chatConversationFixtures';
+import type { StreamingDraftListener } from '../../../src/screens/useStreamingDrafts';
+
+function streamingDrafts() {
+  const listeners = new Set<StreamingDraftListener>();
+  return {
+    subscribe: jest.fn((listener: StreamingDraftListener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }),
+    publish: (messageId: string, content: string | undefined) => {
+      for (const listener of listeners) {
+        listener(messageId, content === undefined ? undefined : { content });
+      }
+    },
+    listenerCount: () => listeners.size,
+  };
+}
 
 describe('useVoiceConversationBridge', () => {
   beforeEach(() => {
@@ -41,16 +58,19 @@ describe('useVoiceConversationBridge', () => {
         },
       });
     });
-    renderHook(() => useVoiceConversationBridge(handleSend));
+    renderHook(() => useVoiceConversationBridge(handleSend, streamingDrafts().subscribe));
 
-    let response = '';
+    let response: unknown;
     await act(async () => {
       response = await sendVoiceConversationTurn('spoken request', {
         additionalSystemPrompt: 'Be concise.',
       });
     });
 
-    expect(response).toBe('Persisted canonical reply');
+    expect(response).toEqual({
+      response: 'Persisted canonical reply',
+      spokenText: 'Persisted canonical reply',
+    });
     expect(handleSend).toHaveBeenCalledWith('spoken request', {
       additionalSystemPrompt: 'Be concise.',
     });
@@ -64,7 +84,7 @@ describe('useVoiceConversationBridge', () => {
       content: 'Old response',
     });
     const handleSend = jest.fn().mockResolvedValue(undefined);
-    renderHook(() => useVoiceConversationBridge(handleSend));
+    renderHook(() => useVoiceConversationBridge(handleSend, streamingDrafts().subscribe));
 
     await expect(sendVoiceConversationTurn('new request')).rejects.toMatchObject({
       kind: 'no_response',
@@ -96,8 +116,60 @@ describe('useVoiceConversationBridge', () => {
         },
       });
     });
-    renderHook(() => useVoiceConversationBridge(handleSend));
+    renderHook(() => useVoiceConversationBridge(handleSend, streamingDrafts().subscribe));
 
-    await expect(sendVoiceConversationTurn('hello')).resolves.toBe('Finished reply');
+    await expect(sendVoiceConversationTurn('hello')).resolves.toEqual({
+      response: 'Finished reply',
+      spokenText: 'Working draft\n\nFinished reply',
+    });
+  });
+
+  it('reports what the turn says as it streams, every assistant message in order', async () => {
+    const conversationId = addConversation('openrouter', 'system prompt');
+    useChatStore.getState().addMessage(conversationId, {
+      id: 'earlier',
+      role: 'assistant',
+      content: 'An earlier answer',
+    });
+    const drafts = streamingDrafts();
+    const handleSend = jest.fn(async () => {
+      drafts.publish('earlier', 'An earlier answer, edited');
+      drafts.publish('step', 'Let me check');
+      drafts.publish('step', 'Let me check your calendar.');
+      drafts.publish('answer', 'You are free');
+      drafts.publish('answer', undefined);
+      const store = useChatStore.getState();
+      store.addMessage(conversationId, {
+        id: 'step',
+        role: 'assistant',
+        content: 'Let me check your calendar.',
+        assistantMetadata: { kind: 'intermediate', completionStatus: 'incomplete' },
+      });
+      store.addMessage(conversationId, {
+        id: 'answer',
+        role: 'assistant',
+        content: 'You are free at three.',
+        assistantMetadata: { kind: 'final', completionStatus: 'complete', finishReason: 'stop' },
+      });
+    });
+    renderHook(() => useVoiceConversationBridge(handleSend, drafts.subscribe));
+    const onReplyText = jest.fn();
+
+    let reply: unknown;
+    await act(async () => {
+      reply = await sendVoiceConversationTurn('Am I free this afternoon?', { onReplyText });
+    });
+
+    expect(onReplyText.mock.calls).toEqual([
+      ['Let me check'],
+      ['Let me check your calendar.'],
+      ['Let me check your calendar.\n\nYou are free'],
+    ]);
+    expect(reply).toEqual({
+      response: 'You are free at three.',
+      spokenText: 'Let me check your calendar.\n\nYou are free at three.',
+    });
+    expect(handleSend).toHaveBeenCalledWith('Am I free this afternoon?', undefined);
+    expect(drafts.listenerCount()).toBe(0);
   });
 });

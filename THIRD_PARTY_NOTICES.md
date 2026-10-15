@@ -58,7 +58,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | CC-BY-4.0 | 1 |
 | CC0-1.0 | 1 |
 | ISC | 46 |
-| MIT | 907 |
+| MIT | 908 |
 | MPL-2.0 | 12 |
 | Public Domain | 1 |
 | Python-2.0 | 1 |
@@ -598,6 +598,7 @@ Kavi accepts the dependency license identifiers and reviewed expressions listed 
 | expo-sharing | 55.0.24 | runtime | MIT |
 | expo-sms | 55.0.18 | runtime | MIT |
 | expo-speech | 55.0.18 | runtime | MIT |
+| expo-speech-recognition | 3.1.3 | runtime | MIT |
 | expo-sqlite | 55.0.20 | runtime | MIT |
 | expo-status-bar | 55.0.6 | runtime | MIT |
 | expo-task-manager | 55.0.20 | runtime | MIT |

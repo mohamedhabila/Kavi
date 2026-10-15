@@ -15,14 +15,20 @@ describe('voiceConversationBridge', () => {
   });
 
   it('routes a voice turn through the registered canonical chat handler', async () => {
-    const handler = jest.fn().mockResolvedValue('  Saved assistant response  ');
+    const handler = jest.fn().mockResolvedValue({
+      response: '  Saved assistant response  ',
+      spokenText: ' Let me look. Saved assistant response ',
+    });
     registerVoiceConversationHandler(handler);
 
     await expect(
       sendVoiceConversationTurn('Help me plan dinner', {
         additionalSystemPrompt: 'Be concise.',
       }),
-    ).resolves.toBe('Saved assistant response');
+    ).resolves.toEqual({
+      response: 'Saved assistant response',
+      spokenText: 'Let me look. Saved assistant response',
+    });
     expect(handler).toHaveBeenCalledWith('Help me plan dinner', {
       additionalSystemPrompt: 'Be concise.',
     });
@@ -38,7 +44,9 @@ describe('voiceConversationBridge', () => {
   });
 
   it('rejects an empty response instead of speaking a false success', async () => {
-    registerVoiceConversationHandler(jest.fn().mockResolvedValue('   '));
+    registerVoiceConversationHandler(
+      jest.fn().mockResolvedValue({ response: '   ', spokenText: '' }),
+    );
 
     await expect(sendVoiceConversationTurn('hello')).rejects.toEqual(
       expect.objectContaining<Partial<VoiceConversationBridgeError>>({
@@ -48,11 +56,14 @@ describe('voiceConversationBridge', () => {
   });
 
   it('only unregisters the handler associated with that registration', async () => {
-    const firstCleanup = registerVoiceConversationHandler(jest.fn().mockResolvedValue('first'));
-    registerVoiceConversationHandler(jest.fn().mockResolvedValue('second'));
+    const reply = (text: string) => ({ response: text, spokenText: text });
+    const firstCleanup = registerVoiceConversationHandler(
+      jest.fn().mockResolvedValue(reply('first')),
+    );
+    registerVoiceConversationHandler(jest.fn().mockResolvedValue(reply('second')));
 
     firstCleanup();
 
-    await expect(sendVoiceConversationTurn('hello')).resolves.toBe('second');
+    await expect(sendVoiceConversationTurn('hello')).resolves.toEqual(reply('second'));
   });
 });

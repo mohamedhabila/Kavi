@@ -25,7 +25,8 @@
         "NSLocationWhenInUseUsageDescription": "Kavi uses your location only when you ask the assistant to open maps or run a location-aware action.",
         "NSContactsUsageDescription": "Kavi accesses contacts only for actions you request, such as picking a contact or an explicitly approved contact search, view, edit, create, or share action.",
         "NSCalendarsUsageDescription": "Kavi accesses your calendar only when you ask the assistant to view events or create a calendar entry.",
-        "NSRemindersUsageDescription": "Kavi accesses your reminders only when you ask it to read, create, update, or delete a reminder on your behalf."
+        "NSRemindersUsageDescription": "Kavi accesses your reminders only when you ask it to read, create, update, or delete a reminder on your behalf.",
+        "NSSpeechRecognitionUsageDescription": "Kavi turns what you say in a voice conversation into text, on your device when it can."
       }
     },
     "android": {
@@ -113,6 +114,7 @@
           "microphonePermission": "Kavi uses the microphone only for voice input, voice notes, and audio captured during a user-requested recording."
         }
       ],
+      "expo-speech-recognition",
       "./plugins/withReleaseOptimizations",
       "./plugins/withIosSimulatorArch",
       "./plugins/withAndroidHtmlAssets",

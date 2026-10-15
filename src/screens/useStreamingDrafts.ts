@@ -5,6 +5,9 @@ import {
   type StreamingDraft,
 } from './chatScreenDisplayState';
 
+/** Told about every change to a streaming message's draft; undefined once it is cleared. */
+export type StreamingDraftListener = (messageId: string, draft: StreamingDraft | undefined) => void;
+
 export function useStreamingDrafts(): {
   clearStreamingDraft: (messageId: string) => void;
   mergeStreamingDraft: (messageId: string, patch: Partial<StreamingDraft>) => void;
@@ -12,6 +15,7 @@ export function useStreamingDrafts(): {
   streamingDraftSignaturesRef: MutableRefObject<Record<string, string>>;
   streamingDraftState: { version: number; drafts: Record<string, StreamingDraft> };
   streamingDraftsRef: MutableRefObject<Record<string, StreamingDraft>>;
+  subscribeToStreamingDrafts: (listener: StreamingDraftListener) => () => void;
   updateStreamingDraft: (
     messageId: string,
     updater: (currentDraft: StreamingDraft | undefined) => StreamingDraft | undefined,
@@ -20,6 +24,7 @@ export function useStreamingDrafts(): {
   const [streamingDraftVersion, setStreamingDraftVersion] = useState(0);
   const streamingDraftsRef = useRef<Record<string, StreamingDraft>>({});
   const streamingDraftSignaturesRef = useRef<Record<string, string>>({});
+  const streamingDraftListenersRef = useRef(new Set<StreamingDraftListener>());
 
   const updateStreamingDraft = useCallback(
     (
@@ -49,9 +54,17 @@ export function useStreamingDrafts(): {
       streamingDraftsRef.current = nextDrafts;
       streamingDraftSignaturesRef.current = nextSignatures;
       setStreamingDraftVersion((value) => value + 1);
+      for (const listener of streamingDraftListenersRef.current) listener(messageId, nextDraft);
     },
     [],
   );
+
+  const subscribeToStreamingDrafts = useCallback((listener: StreamingDraftListener) => {
+    streamingDraftListenersRef.current.add(listener);
+    return () => {
+      streamingDraftListenersRef.current.delete(listener);
+    };
+  }, []);
 
   const mergeStreamingDraft = useCallback(
     (messageId: string, patch: Partial<StreamingDraft>) => {
@@ -89,6 +102,7 @@ export function useStreamingDrafts(): {
     streamingDraftSignaturesRef,
     streamingDraftState,
     streamingDraftsRef,
+    subscribeToStreamingDrafts,
     updateStreamingDraft,
   };
 }

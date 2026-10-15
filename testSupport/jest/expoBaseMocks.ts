@@ -28,3 +28,28 @@ jest.mock('expo-crypto', () => {
     }),
   };
 });
+
+// The phone's speech recognizer. Tests drive it with `__emitSpeechRecognitionEvent`.
+jest.mock('expo-speech-recognition', () => {
+  const listeners = new Map<string, Set<(event: unknown) => void>>();
+  return {
+    ExpoSpeechRecognitionModule: {
+      isRecognitionAvailable: jest.fn(() => true),
+      requestPermissionsAsync: jest.fn(async () => ({ granted: true, status: 'granted' })),
+      start: jest.fn(),
+      stop: jest.fn(),
+      abort: jest.fn(),
+      addListener: jest.fn((name: string, listener: (event: unknown) => void) => {
+        const named = listeners.get(name) ?? new Set();
+        named.add(listener);
+        listeners.set(name, named);
+        return { remove: () => named.delete(listener) };
+      }),
+    },
+    __emitSpeechRecognitionEvent: (name: string, event: unknown = null) => {
+      for (const listener of [...(listeners.get(name) ?? [])]) listener(event);
+    },
+    __speechRecognitionListenerCount: () =>
+      [...listeners.values()].reduce((count, named) => count + named.size, 0),
+  };
+});

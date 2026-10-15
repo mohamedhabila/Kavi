@@ -36,6 +36,11 @@
     <intent>
       <action android:name="com.termux.RUN_COMMAND"/>
     </intent>
+    <!-- Voice conversations use the phone's speech recognizer (expo-speech-recognition). -->
+    <package android:name="com.google.android.googlequicksearchbox"/>
+    <intent>
+      <action android:name="android.speech.RecognitionService"/>
+    </intent>
   </queries>
   <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true" android:enableOnBackInvokedCallback="false" android:fullBackupContent="@xml/secure_store_backup_rules" android:dataExtractionRules="@xml/secure_store_data_extraction_rules">
     <uses-native-library android:name="libvndksupport.so" android:required="false"/>

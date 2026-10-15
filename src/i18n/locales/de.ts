@@ -1317,45 +1317,41 @@ export const de: TranslationMap = mergeTranslations(en, {
     transcribing: 'Transkribiere…',
     processing: 'Verarbeite…',
     speaking: 'Spreche…',
-    paused: 'Pausiert',
     start: 'Sprachunterhaltung starten',
     finishSpeaking: 'Sprechen beenden',
     stopReply: 'Antwort stoppen',
-    resume: 'Zuhören fortsetzen',
     startHint: 'Tippen Sie auf das Mikrofon und sprechen Sie ganz natürlich.',
     finishSpeakingHint: 'Tippen Sie auf das Mikrofon, wenn Sie fertig gesprochen haben.',
-    transcribingHint: 'Ihre Aufnahme wird in Text umgewandelt.',
     processingHint: 'Kavi bearbeitet Ihre Anfrage.',
     stopReplyHint: 'Tippen Sie auf das Mikrofon, um die Sprachantwort zu stoppen.',
-    resumeHint: 'Tippen Sie auf das Mikrofon, um weiterzusprechen.',
-    retryHint: 'Erneut versuchen, Sprache einrichten oder mit Text fortfahren.',
+    retryHint: 'Erneut versuchen oder mit Text fortfahren.',
     preparingHint: 'Die Sprachbereitschaft wird vor dem Mikrofonstart geprüft.',
     endSession: 'Sprachunterhaltung beenden',
     continueWithText: 'Mit Text fortfahren',
     openDeviceSettings: 'Geräteeinstellungen öffnen',
-    setUpVoice: 'Sprache einrichten',
     privacyTitle: 'Ihre Stimme bleibt unter Ihrer Kontrolle',
     privacyDescription:
-      'Kavi hört nur zu, solange auf diesem Bildschirm „Höre zu“ steht. Audio wird zur Transkription an den eingerichteten Sprachdienst gesendet; Antworten liest Ihr Gerät vor.',
+      'Kavi hört nur zu, solange auf diesem Bildschirm „Höre zu“ steht. Die Spracherkennung Ihres Telefons wandelt Gesprochenes in Text um, wenn möglich direkt auf dem Gerät; Antworten liest Ihr Gerät vor.',
     savedToChat: 'Transkripte und Antworten werden in {title} gespeichert.',
     currentChat: 'Ihrem aktuellen Chat',
     sessionTranscript: 'Diese Sprachsitzung',
     errorTitle: 'Die Sprachunterhaltung konnte nicht fortgesetzt werden',
     permissionDeniedError:
-      'Der Mikrofonzugriff ist deaktiviert. Aktivieren Sie ihn in den Geräteeinstellungen und versuchen Sie es erneut.',
+      'Der Zugriff auf Mikrofon oder Spracherkennung ist deaktiviert. Aktivieren Sie beides in den Geräteeinstellungen und versuchen Sie es erneut.',
     providerUnavailableError:
-      'Die Sprachtranskription ist noch nicht eingerichtet. Verbinden Sie in den Einstellungen einen unterstützten Sprachdienst oder fahren Sie mit Text fort.',
+      'Die Spracherkennung ist auf diesem Telefon für Ihre Sprache nicht verfügbar. Fahren Sie mit Text fort oder prüfen Sie die Spracheinstellungen Ihres Telefons.',
     invalidRecordingError:
       'Diese Aufnahme konnte nicht gelesen werden. Versuchen Sie erneut zu sprechen.',
     networkError:
-      'Der Transkriptionsdienst ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
+      'Der Sprachdienst ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
     serviceError:
       'Kavi konnte diese Spracheingabe nicht abschließen. Versuchen Sie es erneut oder fahren Sie im Chat fort.',
     genericError:
       'Die Spracheingabe wurde unerwartet beendet. Versuchen Sie es erneut oder fahren Sie im Chat fort.',
     you: 'Du',
     kavi: 'Kavi',
-    conciseResponseInstruction: 'Halten Sie Antworten kurz und dialogorientiert.',
+    conciseResponseInstruction:
+      'Ihre Antwort wird vorgelesen. Antworten Sie in kurzen, natürlichen Sätzen, ohne Markdown, Listen, Links, Code oder Emojis.',
     conversationPlaceholder:
       'Ihre gesprochenen Beiträge erscheinen hier und werden auch im aktuellen Chat gespeichert.',
   },

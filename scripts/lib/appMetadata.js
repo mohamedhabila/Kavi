@@ -19,6 +19,7 @@ const REQUIRED_IOS_USAGE_DESCRIPTION_KEYS = [
   'NSPhotoLibraryUsageDescription',
   'NSRemindersFullAccessUsageDescription',
   'NSRemindersUsageDescription',
+  'NSSpeechRecognitionUsageDescription',
 ];
 
 function readText(projectRoot, relativePath) {

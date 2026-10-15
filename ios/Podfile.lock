@@ -130,6 +130,8 @@ PODS:
     - ExpoModulesCore
   - ExpoSpeech (55.0.18):
     - ExpoModulesCore
+  - ExpoSpeechRecognition (3.1.3):
+    - ExpoModulesCore
   - ExpoSQLite (55.0.20):
     - ExpoModulesCore
   - ExpoTaskManager (55.0.20):
@@ -3256,6 +3258,7 @@ DEPENDENCIES:
   - ExpoSharing (from `../node_modules/expo-sharing/ios`)
   - ExpoSMS (from `../node_modules/expo-sms/ios`)
   - ExpoSpeech (from `../node_modules/expo-speech/ios`)
+  - ExpoSpeechRecognition (from `../node_modules/expo-speech-recognition/ios`)
   - ExpoSQLite (from `../node_modules/expo-sqlite/ios`)
   - ExpoTaskManager (from `../node_modules/expo-task-manager/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
@@ -3432,6 +3435,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-sms/ios"
   ExpoSpeech:
     :path: "../node_modules/expo-speech/ios"
+  ExpoSpeechRecognition:
+    :path: "../node_modules/expo-speech-recognition/ios"
   ExpoSQLite:
     :path: "../node_modules/expo-sqlite/ios"
   ExpoTaskManager:
@@ -3660,6 +3665,7 @@ SPEC CHECKSUMS:
   ExpoSharing: f628ba7d9d0bf72cf624ebb60d2e69de07fbc241
   ExpoSMS: 77dbcec6746ba32d84b3070c4bc00ebdac0fd6d1
   ExpoSpeech: 09255c9cd0c71c279e4827e92fbd87c83bf41f23
+  ExpoSpeechRecognition: 95a6287f24fb8764ded6e9d0dd667a1e9e633dab
   ExpoSQLite: 701087e311e8a75ccb751b40b120ae12cd8ddc42
   ExpoTaskManager: 30a8729c6f6fc1872d96589bffc4ad8d5384b8d9
   ExpoWebBrowser: 93992534927ba810f67e3171f6acf862c7098674

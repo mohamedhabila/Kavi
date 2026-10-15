@@ -71,31 +71,34 @@ jest.mock('../../src/store/useChatStore', () => ({
 
 const mockStart = jest.fn();
 const mockStop = jest.fn();
-const mockPause = jest.fn();
-const mockResume = jest.fn();
-const mockStopAndProcess = jest.fn();
+const mockFinishSpeaking = jest.fn();
+const mockStopReply = jest.fn();
 const mockOnStateChange = jest.fn();
+const mockOnPartialTranscript = jest.fn();
 const mockOnTranscript = jest.fn();
 const mockOnResponse = jest.fn();
 let mockManagerState = 'idle';
 
 jest.mock('../../src/services/voice/talkMode', () => ({
+  createTalkModeDependencies: jest.fn((ttsProvider: string) => ({ ttsProvider })),
   TalkModeManager: jest.fn().mockImplementation(() => ({
     start: mockStart,
     stop: mockStop,
-    pause: mockPause,
-    resume: mockResume,
-    stopAndProcess: mockStopAndProcess,
+    finishSpeaking: mockFinishSpeaking,
+    stopReply: mockStopReply,
     getState: jest.fn(() => mockManagerState),
     onStateChange: mockOnStateChange,
+    onPartialTranscript: mockOnPartialTranscript,
     onTranscript: mockOnTranscript,
     onResponse: mockOnResponse,
   })),
 }));
 
-const mockResolveSpeechBackend = jest.fn();
-jest.mock('../../src/services/voice/voiceBackend', () => ({
-  resolveSpeechBackend: (...args: unknown[]) => mockResolveSpeechBackend(...args),
+const mockIsSpeechRecognitionAvailable = jest.fn();
+const mockRequestSpeechRecognitionPermission = jest.fn();
+jest.mock('../../src/services/voice/speechRecognition', () => ({
+  isSpeechRecognitionAvailable: () => mockIsSpeechRecognitionAvailable(),
+  requestSpeechRecognitionPermission: () => mockRequestSpeechRecognitionPermission(),
 }));
 
 const mockSendVoiceConversationTurn = jest.fn();
@@ -125,8 +128,22 @@ function getLatestManagerCall(): any[] {
   return TalkModeManager.mock.calls[TalkModeManager.mock.calls.length - 1];
 }
 
-function getLatestAgentHandler(): (input: string) => Promise<string> {
+function getLatestAgentHandler(): (
+  input: string,
+  turn: { onReplyText: (text: string) => void },
+) => Promise<unknown> {
   return getLatestManagerCall()[0];
+}
+
+const silentTurn = { onReplyText: jest.fn() };
+
+function captureListener(mock: jest.Mock): (value: string) => void {
+  let listener: (value: string) => void = () => {};
+  mock.mockImplementation((callback) => {
+    listener = callback;
+    return jest.fn();
+  });
+  return (value) => listener(value);
 }
 
 function emitManagerError(error: Error): void {
@@ -142,18 +159,16 @@ beforeEach(() => {
     mockManagerState = 'listening';
   });
   mockStop.mockResolvedValue(undefined);
-  mockPause.mockResolvedValue(undefined);
-  mockResume.mockResolvedValue(undefined);
-  mockStopAndProcess.mockResolvedValue(undefined);
   mockOnStateChange.mockReturnValue(jest.fn());
+  mockOnPartialTranscript.mockReturnValue(jest.fn());
   mockOnTranscript.mockReturnValue(jest.fn());
   mockOnResponse.mockReturnValue(jest.fn());
-  mockResolveSpeechBackend.mockResolvedValue({
-    apiKey: 'not-rendered',
-    baseUrl: 'https://speech.example.test',
-    providerName: 'Speech',
+  mockIsSpeechRecognitionAvailable.mockReturnValue(true);
+  mockRequestSpeechRecognitionPermission.mockResolvedValue(true);
+  mockSendVoiceConversationTurn.mockResolvedValue({
+    response: 'A concise reply',
+    spokenText: 'A concise reply',
   });
-  mockSendVoiceConversationTurn.mockResolvedValue('A concise reply');
   mockEmitVoiceEvent.mockResolvedValue(undefined);
   mockHandleBack.mockReset();
   jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
@@ -199,75 +214,90 @@ describe('VoiceScreen', () => {
     ).toBeTruthy();
   });
 
-  it('uses safe system speech and the canonical chat handler for assistant turns', async () => {
+  it('speaks with system speech and runs turns through the chat, streaming the reply', async () => {
+    const { createTalkModeDependencies } = jest.requireMock('../../src/services/voice/talkMode');
     render(<VoiceScreen />);
 
-    const config = getLatestManagerCall()[2];
-    expect(config.ttsProvider).toBe('system');
+    expect(createTalkModeDependencies).toHaveBeenCalledWith('system');
+    expect(getLatestManagerCall()[2]).toEqual({ ttsProvider: 'system' });
 
-    await expect(getLatestAgentHandler()('Plan my afternoon')).resolves.toBe('A concise reply');
+    await expect(getLatestAgentHandler()('Plan my afternoon', silentTurn)).resolves.toEqual({
+      response: 'A concise reply',
+      spokenText: 'A concise reply',
+    });
     expect(mockSendVoiceConversationTurn).toHaveBeenCalledWith('Plan my afternoon', {
-      additionalSystemPrompt: 'Keep responses concise and conversational.',
+      additionalSystemPrompt:
+        'Your reply is spoken aloud. Answer in short, natural sentences, without markdown, lists, links, code or emoji.',
+      onReplyText: silentTurn.onReplyText,
     });
   });
 
-  it('checks speech readiness before starting and emits a truthful start event', async () => {
+  it('asks for speech recognition before starting and emits a truthful start event', async () => {
     const { getByTestId } = render(<VoiceScreen />);
 
     fireEvent.press(getByTestId('voice-primary-button'));
 
-    await waitFor(() => expect(mockResolveSpeechBackend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockRequestSpeechRecognitionPermission).toHaveBeenCalledTimes(1));
     expect(mockStart).toHaveBeenCalledTimes(1);
     expect(mockEmitVoiceEvent).toHaveBeenCalledWith('started');
   });
 
-  it('cancels a pending readiness check when the voice screen closes', async () => {
-    let resolveBackend!: (value: { apiKey: string; baseUrl: string; providerName: string }) => void;
-    mockResolveSpeechBackend.mockImplementationOnce(
+  it('cancels a pending permission request when the voice screen closes', async () => {
+    let grant!: (granted: boolean) => void;
+    mockRequestSpeechRecognitionPermission.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveBackend = resolve;
+          grant = resolve;
         }),
     );
     const { getByTestId, unmount } = render(<VoiceScreen />);
 
     fireEvent.press(getByTestId('voice-primary-button'));
-    await waitFor(() => expect(mockResolveSpeechBackend).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockRequestSpeechRecognitionPermission).toHaveBeenCalledTimes(1));
     unmount();
     await act(async () => {
-      resolveBackend({
-        apiKey: 'not-rendered',
-        baseUrl: 'https://speech.example.test',
-        providerName: 'Speech',
-      });
+      grant(true);
       await Promise.resolve();
     });
 
     expect(mockStart).not.toHaveBeenCalled();
   });
 
-  it('offers setup and text fallback when transcription is not configured', async () => {
-    mockResolveSpeechBackend.mockResolvedValueOnce(null);
-    const { getByTestId, getByText } = render(<VoiceScreen />);
+  it('explains when this phone has no speech recognition and offers text instead', async () => {
+    mockIsSpeechRecognitionAvailable.mockReturnValue(false);
+    const { getByTestId, getByText, queryByTestId } = render(<VoiceScreen />);
 
     fireEvent.press(getByTestId('voice-primary-button'));
 
     await waitFor(() => {
       expect(
         getByText(
-          'Voice transcription is not set up yet. Connect a supported speech service in Settings or continue with text.',
+          "Speech recognition isn't available on this phone for your language. Continue with text, or check your phone's speech settings.",
         ),
       ).toBeTruthy();
     });
+    expect(mockRequestSpeechRecognitionPermission).not.toHaveBeenCalled();
     expect(mockStart).not.toHaveBeenCalled();
+    expect(queryByTestId('voice-recovery-settings')).toBeNull();
+    expect(getByTestId('voice-continue-with-text')).toBeTruthy();
+  });
 
-    fireEvent.press(getByTestId('voice-recovery-settings'));
+  it('sends the person to device settings when speech recognition is not allowed', async () => {
+    mockRequestSpeechRecognitionPermission.mockResolvedValueOnce(false);
+    const { getByTestId, getByText } = render(<VoiceScreen />);
+
+    fireEvent.press(getByTestId('voice-primary-button'));
+
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith('Settings', {
-        destination: 'advanced-ai',
-        returnTo: { name: 'Voice' },
-      }),
+      expect(
+        getByText(
+          'Microphone or speech recognition access is off. Enable both in your device settings, then try again.',
+        ),
+      ).toBeTruthy(),
     );
+    expect(mockStart).not.toHaveBeenCalled();
+    fireEvent.press(getByTestId('voice-recovery-settings'));
+    await waitFor(() => expect(Linking.openSettings).toHaveBeenCalledTimes(1));
   });
 
   it('maps microphone denial to safe copy and opens device settings without raw errors', async () => {
@@ -288,7 +318,9 @@ describe('VoiceScreen', () => {
     });
 
     expect(
-      getByText('Microphone access is off. Enable it in your device settings, then try again.'),
+      getByText(
+        'Microphone or speech recognition access is off. Enable both in your device settings, then try again.',
+      ),
     ).toBeTruthy();
     expect(queryByText('secret native recorder code 0xBAD')).toBeNull();
 
@@ -305,7 +337,7 @@ describe('VoiceScreen', () => {
     );
     render(<VoiceScreen />);
 
-    await expect(getLatestAgentHandler()('hello')).rejects.toMatchObject({
+    await expect(getLatestAgentHandler()('hello', silentTurn)).rejects.toMatchObject({
       name: 'VoiceOperationError',
       kind: 'unexpected',
       message: 'Voice assistant turn failed',
@@ -324,25 +356,26 @@ describe('VoiceScreen', () => {
     expect(getByText('Tap the microphone when you are finished speaking.')).toBeTruthy();
     fireEvent.press(getByTestId('voice-primary-button'));
 
-    expect(mockStopAndProcess).toHaveBeenCalledTimes(1);
+    expect(mockFinishSpeaking).toHaveBeenCalledTimes(1);
     expect(mockStop).not.toHaveBeenCalled();
   });
 
-  it('provides explicit end, stop-reply, and resume controls for session states', async () => {
+  it('provides explicit end and stop-reply controls for session states', async () => {
     let stateCallback: (state: string) => void = () => {};
     mockOnStateChange.mockImplementation((callback) => {
       stateCallback = callback;
       return jest.fn();
     });
-    const { getByTestId } = render(<VoiceScreen />);
+    const { getByTestId, getByLabelText } = render(<VoiceScreen />);
 
     act(() => stateCallback('speaking'));
+    expect(getByLabelText('Stop reply')).toBeTruthy();
     fireEvent.press(getByTestId('voice-primary-button'));
-    expect(mockPause).toHaveBeenCalledTimes(1);
+    expect(mockStopReply).toHaveBeenCalledTimes(1);
 
-    act(() => stateCallback('paused'));
+    act(() => stateCallback('processing'));
     fireEvent.press(getByTestId('voice-primary-button'));
-    expect(mockResume).toHaveBeenCalledTimes(1);
+    expect(mockStopReply).toHaveBeenCalledTimes(1);
 
     fireEvent.press(getByTestId('voice-end-session'));
     await waitFor(() => expect(mockStop).toHaveBeenCalled());
@@ -376,6 +409,35 @@ describe('VoiceScreen', () => {
     expect(mockEmitVoiceEvent).toHaveBeenCalledWith('transcript', {
       transcript: 'Second question',
     });
+  });
+
+  it('shows the words heard while the person speaks, until the turn is taken', () => {
+    const emitPartial = captureListener(mockOnPartialTranscript);
+    const emitTranscript = captureListener(mockOnTranscript);
+    const { getByTestId, queryByTestId, getByText } = render(<VoiceScreen />);
+
+    act(() => emitPartial('Remind me to'));
+    expect(getByTestId('voice-partial-transcript')).toBeTruthy();
+    expect(getByText('Remind me to')).toBeTruthy();
+
+    act(() => emitTranscript('Remind me to call Ana'));
+    expect(queryByTestId('voice-partial-transcript')).toBeNull();
+    expect(getByText('Remind me to call Ana')).toBeTruthy();
+  });
+
+  it('clears the words heard when listening stops without a turn', () => {
+    const emitPartial = captureListener(mockOnPartialTranscript);
+    const emitState = captureListener(mockOnStateChange);
+    const { queryByTestId } = render(<VoiceScreen />);
+
+    act(() => {
+      emitState('listening');
+      emitPartial('Never mind');
+    });
+    expect(queryByTestId('voice-partial-transcript')).toBeTruthy();
+    act(() => emitState('idle'));
+
+    expect(queryByTestId('voice-partial-transcript')).toBeNull();
   });
 
   it('stops voice and returns to Chat for text fallback', async () => {

@@ -10,7 +10,6 @@ import {
   AlertCircle,
   Keyboard,
   Mic,
-  PauseCircle,
   RotateCcw,
   Settings,
   ShieldCheck,
@@ -20,13 +19,16 @@ import { ApprovalBanner } from '../components/approval/ApprovalBanner';
 import { useAppTheme, AppPalette } from '../theme/useAppTheme';
 import { useTranslation } from '../i18n/useTranslation';
 import {
+  createTalkModeDependencies,
   TalkModeManager,
-  TalkModeState,
-  TalkModeConfig,
-  AgentHandler,
+  type AgentHandler,
+  type TalkModeState,
 } from '../services/voice/talkMode';
 import { VoiceOperationError, type VoiceOperationFailureKind } from '../services/voice/voiceErrors';
-import { resolveSpeechBackend } from '../services/voice/voiceBackend';
+import {
+  isSpeechRecognitionAvailable,
+  requestSpeechRecognitionPermission,
+} from '../services/voice/speechRecognition';
 import {
   sendVoiceConversationTurn,
   VoiceConversationBridgeError,
@@ -37,49 +39,30 @@ import { useChatStore } from '../store/useChatStore';
 import { createVoiceScreenStyles } from './VoiceScreen.styles';
 import { BackIcon } from '../components/navigation/DirectionalIcons';
 
-const defaultConfig: TalkModeConfig = {
-  // System speech keeps assistant replies on-device by default. Recorded audio
-  // still uses the explicitly configured transcription service.
-  ttsProvider: 'system',
-  initialSilenceTimeoutMs: 1800,
-  silenceTimeoutMs: 900,
-  shortSpeechSilenceTimeoutMs: 550,
-  maxRecordingMs: 30000,
-  autoListen: true,
-  restartListeningDelayMs: 320,
-  echoSuppressionWindowMs: 12000,
-  speechMeteringThreshold: -52,
-  minSpeechDurationMs: 250,
-  recorderStatusPollIntervalMs: 80,
-};
+// System speech keeps spoken replies on the device.
+const TALK_MODE_TTS_PROVIDER = 'system';
 
 const stateLabelsMap: Record<TalkModeState, string> = {
   idle: 'voice.ready',
   listening: 'voice.listening',
-  transcribing: 'voice.transcribing',
   processing: 'voice.processing',
   speaking: 'voice.speaking',
-  paused: 'voice.paused',
   error: 'voice.needsAttention',
 };
 
 const stateHintsMap: Record<TalkModeState, string> = {
   idle: 'voice.startHint',
   listening: 'voice.finishSpeakingHint',
-  transcribing: 'voice.transcribingHint',
   processing: 'voice.processingHint',
   speaking: 'voice.stopReplyHint',
-  paused: 'voice.resumeHint',
   error: 'voice.retryHint',
 };
 
 const stateColors = (colors: AppPalette): Record<TalkModeState, string> => ({
   idle: colors.textSecondary,
   listening: colors.primary,
-  transcribing: colors.warning || colors.primary,
   processing: colors.info || colors.primary,
   speaking: colors.success || colors.primary,
-  paused: colors.textTertiary,
   error: colors.danger,
 });
 
@@ -135,11 +118,13 @@ export const VoiceScreen: React.FC = () => {
   const startAttemptRef = useRef(0);
   const isPreparingRef = useRef(false);
 
-  const agentHandlerRef = useRef<AgentHandler>(async () => '');
-  agentHandlerRef.current = async (input: string) => {
+  const [partialTranscript, setPartialTranscript] = useState('');
+  const agentHandlerRef = useRef<AgentHandler>(async () => ({ response: '', spokenText: '' }));
+  agentHandlerRef.current = async (input, turn) => {
     try {
       return await sendVoiceConversationTurn(input, {
         additionalSystemPrompt: t('voice.conciseResponseInstruction'),
+        onReplyText: turn.onReplyText,
       });
     } catch (error) {
       const kind =
@@ -153,11 +138,9 @@ export const VoiceScreen: React.FC = () => {
   const [manager] = useState(
     () =>
       new TalkModeManager(
-        (input) => agentHandlerRef.current(input),
-        {
-          onError: (error) => setVoiceError(error),
-        },
-        defaultConfig,
+        (input, turn) => agentHandlerRef.current(input, turn),
+        { onError: (error) => setVoiceError(error) },
+        createTalkModeDependencies(TALK_MODE_TTS_PROVIDER),
       ),
   );
 
@@ -176,6 +159,7 @@ export const VoiceScreen: React.FC = () => {
   useEffect(() => {
     const unsubscribeState = manager.onStateChange((nextState) => {
       setState(nextState);
+      if (nextState !== 'listening') setPartialTranscript('');
       if (nextState !== 'error') {
         setVoiceError(null);
       }
@@ -183,7 +167,9 @@ export const VoiceScreen: React.FC = () => {
         void emitVoiceEvent('error');
       }
     });
+    const unsubscribePartial = manager.onPartialTranscript(setPartialTranscript);
     const unsubscribeTranscript = manager.onTranscript((text) => {
+      setPartialTranscript('');
       const id = nextTurnIdRef.current++;
       setTurns((currentTurns) => [...currentTurns, { id, transcript: text }]);
       if (text) {
@@ -211,6 +197,7 @@ export const VoiceScreen: React.FC = () => {
 
     return () => {
       unsubscribeState();
+      unsubscribePartial();
       unsubscribeTranscript();
       unsubscribeResponse();
       void manager.stop();
@@ -242,14 +229,16 @@ export const VoiceScreen: React.FC = () => {
     setIsPreparing(true);
     setVoiceError(null);
     try {
-      const speechBackend = await resolveSpeechBackend();
+      const unavailable = !isSpeechRecognitionAvailable()
+        ? new VoiceOperationError('provider_unavailable', 'Speech recognition unavailable')
+        : !(await requestSpeechRecognitionPermission())
+          ? new VoiceOperationError('permission_denied', 'Speech recognition not allowed')
+          : null;
       if (!isScreenFocusedRef.current || startAttemptRef.current !== attempt) {
         return;
       }
-      if (!speechBackend) {
-        setVoiceError(
-          new VoiceOperationError('provider_unavailable', 'Speech provider unavailable'),
-        );
+      if (unavailable) {
+        setVoiceError(unavailable);
         setState('error');
         void emitVoiceEvent('error');
         return;
@@ -310,15 +299,11 @@ export const VoiceScreen: React.FC = () => {
         void handleStart();
         break;
       case 'listening':
-        void manager.stopAndProcess();
+        manager.finishSpeaking();
         break;
       case 'speaking':
-        void manager.pause();
+        manager.stopReply();
         break;
-      case 'paused':
-        void manager.resume();
-        break;
-      case 'transcribing':
       case 'processing':
         break;
     }
@@ -338,28 +323,20 @@ export const VoiceScreen: React.FC = () => {
   }, [cancelPendingStart, manager, navigation]);
 
   const failureKind = voiceError ? resolveFailureKind(voiceError) : null;
-  const handleOpenRecoverySettings = useCallback(async () => {
+  const handleOpenDeviceSettings = useCallback(async () => {
     cancelPendingStart();
     await manager.stop();
-    if (failureKind === 'permission_denied') {
-      try {
-        await Linking.openSettings();
-      } catch {
-        setVoiceError(new VoiceOperationError('unexpected', 'Device settings could not be opened'));
-        setState('error');
-        void emitVoiceEvent('error');
-      }
-      return;
+    try {
+      await Linking.openSettings();
+    } catch {
+      setVoiceError(new VoiceOperationError('unexpected', 'Device settings could not be opened'));
+      setState('error');
+      void emitVoiceEvent('error');
     }
-
-    navigation.navigate('Settings', {
-      destination: 'advanced-ai',
-      returnTo: { name: 'Voice' },
-    });
-  }, [cancelPendingStart, failureKind, manager, navigation]);
+  }, [cancelPendingStart, manager]);
 
   const isSessionActive = state !== 'idle' && state !== 'error';
-  const isPrimaryDisabled = isPreparing || state === 'transcribing' || state === 'processing';
+  const isPrimaryDisabled = isPreparing || state === 'processing';
   const semanticState = isPreparing ? 'processing' : state;
   const statusColors = useMemo(() => stateColors(colors), [colors]);
   const statusLabel = isPreparing ? t('voice.preparing') : t(stateLabelsMap[state]);
@@ -371,8 +348,6 @@ export const VoiceScreen: React.FC = () => {
         return t('voice.finishSpeaking');
       case 'speaking':
         return t('voice.stopReply');
-      case 'paused':
-        return t('voice.resume');
       case 'error':
         return t('common.retry');
       default:
@@ -381,7 +356,7 @@ export const VoiceScreen: React.FC = () => {
   })();
 
   const stateIcon = (() => {
-    if (isPreparing || state === 'transcribing' || state === 'processing') {
+    if (isPreparing || state === 'processing') {
       return <ActivityIndicator size="large" color={statusColors[semanticState]} />;
     }
     switch (state) {
@@ -389,8 +364,6 @@ export const VoiceScreen: React.FC = () => {
         return <Mic size={48} color={colors.primary} />;
       case 'speaking':
         return <Volume2 size={48} color={statusColors[state]} />;
-      case 'paused':
-        return <PauseCircle size={48} color={statusColors[state]} />;
       case 'error':
         return <AlertCircle size={48} color={statusColors[state]} />;
       default:
@@ -436,7 +409,7 @@ export const VoiceScreen: React.FC = () => {
             accessibilityLabel={primaryActionLabel}
             accessibilityHint={statusHint}
             accessibilityState={{
-              busy: isPreparing || state === 'processing' || state === 'transcribing',
+              busy: isPreparing || state === 'processing',
               disabled: isPrimaryDisabled,
             }}
             testID="voice-primary-button"
@@ -488,24 +461,16 @@ export const VoiceScreen: React.FC = () => {
               <Text style={styles.primaryTextButtonText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           ) : null}
-          {failureKind === 'permission_denied' || failureKind === 'provider_unavailable' ? (
+          {failureKind === 'permission_denied' ? (
             <TouchableOpacity
-              accessibilityLabel={
-                failureKind === 'permission_denied'
-                  ? t('voice.openDeviceSettings')
-                  : t('voice.setUpVoice')
-              }
+              accessibilityLabel={t('voice.openDeviceSettings')}
               accessibilityRole="button"
-              onPress={handleOpenRecoverySettings}
+              onPress={handleOpenDeviceSettings}
               style={styles.secondaryButton}
               testID="voice-recovery-settings"
             >
               <Settings size={18} color={colors.text} />
-              <Text style={styles.secondaryButtonText}>
-                {failureKind === 'permission_denied'
-                  ? t('voice.openDeviceSettings')
-                  : t('voice.setUpVoice')}
-              </Text>
+              <Text style={styles.secondaryButtonText}>{t('voice.openDeviceSettings')}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
@@ -535,7 +500,7 @@ export const VoiceScreen: React.FC = () => {
 
         <View style={styles.conversationSection}>
           <Text style={styles.sectionTitle}>{t('voice.sessionTranscript')}</Text>
-          {turns.length === 0 ? (
+          {turns.length === 0 && !partialTranscript ? (
             <Text style={styles.placeholderText}>{t('voice.conversationPlaceholder')}</Text>
           ) : (
             turns.map((turn) => (
@@ -555,6 +520,12 @@ export const VoiceScreen: React.FC = () => {
               </View>
             ))
           )}
+          {partialTranscript ? (
+            <View style={styles.transcriptBox} testID="voice-partial-transcript">
+              <Text style={styles.boxLabel}>{t('voice.you')}</Text>
+              <Text style={styles.transcriptText}>{partialTranscript}</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>

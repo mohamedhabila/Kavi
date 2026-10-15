@@ -4,6 +4,7 @@ import type { Attachment } from '../../types/attachment';
 import { useIncomingChatRequest } from '../useIncomingChatRequest';
 import { useIncomingShareIntoComposer } from '../useIncomingShareIntoComposer';
 import { usePreparedChatDraft } from '../usePreparedChatDraft';
+import type { StreamingDraftListener } from '../useStreamingDrafts';
 import { useVoiceConversationBridge } from './useVoiceConversationBridge';
 
 export type ChatScreenExternalInputParams = Readonly<{
@@ -27,10 +28,11 @@ export function useChatScreenExternalInput(params: {
   routeParams?: ChatScreenExternalInputParams;
   sendFromOutsideComposer: (text: string, runOptions?: RunChatOptions) => Promise<void>;
   setRouteParams: (params: Partial<Record<keyof ChatScreenExternalInputParams, undefined>>) => void;
+  subscribeToStreamingDrafts: (listener: StreamingDraftListener) => () => void;
 }): void {
   const { routeParams, sendFromOutsideComposer, setRouteParams } = params;
 
-  useVoiceConversationBridge(sendFromOutsideComposer);
+  useVoiceConversationBridge(sendFromOutsideComposer, params.subscribeToStreamingDrafts);
 
   const clearPreparedDraft = useCallback(
     () => setRouteParams({ preparedDraft: undefined }),

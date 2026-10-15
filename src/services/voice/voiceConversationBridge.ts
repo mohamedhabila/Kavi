@@ -1,11 +1,21 @@
 import type { RunChatOptions } from '../../engine/graph/foregroundRun/contracts';
 
-export type VoiceConversationTurnOptions = Pick<RunChatOptions, 'additionalSystemPrompt'>;
+export type VoiceConversationTurnOptions = Pick<RunChatOptions, 'additionalSystemPrompt'> & {
+  /** Everything the turn has said so far, each time more of it streams in. */
+  onReplyText?: (replySoFar: string) => void;
+};
+
+export type VoiceConversationReply = Readonly<{
+  /** The turn's final answer. */
+  response: string;
+  /** Everything the turn said, in the order it streamed: what onReplyText last reported. */
+  spokenText: string;
+}>;
 
 export type VoiceConversationHandler = (
   input: string,
   options?: VoiceConversationTurnOptions,
-) => Promise<string>;
+) => Promise<VoiceConversationReply>;
 
 export class VoiceConversationBridgeError extends Error {
   readonly kind: 'unavailable' | 'no_response';
@@ -38,18 +48,19 @@ export function registerVoiceConversationHandler(handler: VoiceConversationHandl
 export async function sendVoiceConversationTurn(
   input: string,
   options?: VoiceConversationTurnOptions,
-): Promise<string> {
+): Promise<VoiceConversationReply> {
   const handler = registeredHandler;
   if (!handler) {
     throw new VoiceConversationBridgeError('unavailable');
   }
 
-  const response = (await handler(input, options)).trim();
+  const reply = await handler(input, options);
+  const response = reply.response.trim();
   if (!response) {
     throw new VoiceConversationBridgeError('no_response');
   }
 
-  return response;
+  return { response, spokenText: reply.spokenText.trim() };
 }
 
 export function resetVoiceConversationBridgeForTests(): void {

@@ -127,6 +127,7 @@ export const ChatScreen: React.FC = () => {
     resetStreamingDrafts,
     streamingDraftState,
     streamingDraftsRef,
+    subscribeToStreamingDrafts,
     updateStreamingDraft,
   } = useStreamingDrafts();
   const {
@@ -447,6 +448,7 @@ export const ChatScreen: React.FC = () => {
     routeParams: route.params,
     sendFromOutsideComposer: handleSendFromOutsideComposer,
     setRouteParams: navigation.setParams,
+    subscribeToStreamingDrafts,
   });
   const handleContinueTask = useCallback(
     () => void handleSendFromOutsideComposer(t('chat.continueTaskMessage')),
