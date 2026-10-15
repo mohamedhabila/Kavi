@@ -33,6 +33,7 @@ export const E2E_BENCHMARK_FAMILIES = [
   'beam-direct',
   'provider-prompt-cache-direct',
   'kavi-long-task',
+  'mobileworld-interaction-adapted',
 ] as const;
 
 export type E2EBenchmarkFamily = (typeof E2E_BENCHMARK_FAMILIES)[number];
@@ -203,6 +204,13 @@ export const E2E_BENCHMARK_FAMILY_META: Readonly<
     adaptationNotes:
       'Natural multi-file everyday tasks with a stale fact, distractor, interruption or changed requirement; final-state validators plus token and tool-call budgets at 1.5× a reference path.',
   },
+  'mobileworld-interaction-adapted': {
+    label: 'MobileWorld user-interaction (adapted)',
+    externalReference:
+      'MobileWorld (Tongyi, 2025) — user-interaction tasks: ambiguous requests the agent must resolve with the person',
+    adaptationNotes:
+      'Seeded address book and calendar on the native fixture, graded on final device state; Kavi uses tool APIs, not the screen.',
+  },
 };
 
 export type E2EScenarioBenchmarkRegistration = {
@@ -210,9 +218,25 @@ export type E2EScenarioBenchmarkRegistration = {
   assessmentDimensions: ReadonlyArray<E2EAssessmentDimension>;
 };
 
+/** The phone-world slice (scenariosPhoneWorld.ts), registered alike. */
+const PHONE_WORLD_REGISTRATION: E2EScenarioBenchmarkRegistration = {
+  benchmarkFamilies: ['mobileworld-interaction-adapted'],
+  assessmentDimensions: ['mobile_native', 'task_understanding', 'task_completion'],
+};
+
 export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   Record<string, E2EScenarioBenchmarkRegistration>
 > = {
+  'pw-ask-which-alex': PHONE_WORLD_REGISTRATION,
+  'pw-no-ask-full-name': PHONE_WORLD_REGISTRATION,
+  'pw-calendar-address-to-sms': PHONE_WORLD_REGISTRATION,
+  'pw-book-free-hour': PHONE_WORLD_REGISTRATION,
+  'pw-ask-when-to-move': PHONE_WORLD_REGISTRATION,
+  'pw-ask-for-unknown-number': PHONE_WORLD_REGISTRATION,
+  'pw-ar-ask-which-karim': PHONE_WORLD_REGISTRATION,
+  'pw-ja-calendar-address-to-sms': PHONE_WORLD_REGISTRATION,
+  'pw-de-book-free-hour': PHONE_WORLD_REGISTRATION,
+  'pw-es-no-ask-full-name': PHONE_WORLD_REGISTRATION,
   'file-write-read': {
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['tool_usage', 'task_completion', 'token_efficiency'],

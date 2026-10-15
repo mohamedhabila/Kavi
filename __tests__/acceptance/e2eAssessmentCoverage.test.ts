@@ -11,6 +11,7 @@ import {
   E2E_SCENARIO_BENCHMARK_REGISTRY,
   lookupE2EScenarioBenchmarkMeta,
 } from '../../src/acceptance/e2eAgent/e2eBenchmarkRegistry';
+import { PHONE_WORLD_E2E_SCENARIOS } from '../../src/acceptance/e2eAgent/scenariosPhoneWorld';
 
 const MIN_SCENARIOS_PER_DIMENSION = 2;
 
@@ -50,7 +51,10 @@ describe('e2eAssessmentCoverage', () => {
   it('maps every benchmark family to at least one scenario', () => {
     const familyScenarioIds = new Map<string, string[]>();
 
-    for (const scenarioId of allScenarioIds) {
+    for (const scenarioId of [
+      ...allScenarioIds,
+      ...PHONE_WORLD_E2E_SCENARIOS.map((scenario) => scenario.id),
+    ]) {
       const { benchmarkFamilies } = lookupE2EScenarioBenchmarkMeta(scenarioId);
       for (const family of benchmarkFamilies) {
         const existing = familyScenarioIds.get(family) ?? [];

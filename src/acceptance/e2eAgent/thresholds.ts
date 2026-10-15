@@ -129,16 +129,46 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'long-task-recover-wrong-folder': 115_000, // GLM 35.9k, Sonnet 55.3k
   'long-task-exact-ledger': 60_000, // GLM 15.0k, Sonnet 20.0k
   'long-task-chained-investigation': 90_000, // GLM 44.0k, Sonnet 32.9k
+  'pw-ask-which-alex': 80_000,
+  'pw-no-ask-full-name': 60_000,
+  'pw-calendar-address-to-sms': 80_000,
+  'pw-book-free-hour': 80_000,
+  'pw-ask-when-to-move': 80_000,
+  'pw-ask-for-unknown-number': 80_000,
+  'pw-ar-ask-which-karim': 80_000,
+  'pw-ja-calendar-address-to-sms': 80_000,
+  'pw-de-book-free-hour': 80_000,
+  'pw-es-no-ask-full-name': 60_000,
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
 export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = new Set([
   'organic-mobile-assistant-continuity',
   'paired-causal-global-preference',
+  'pw-ask-which-alex',
+  'pw-no-ask-full-name',
+  'pw-calendar-address-to-sms',
+  'pw-book-free-hour',
+  'pw-ask-when-to-move',
+  'pw-ask-for-unknown-number',
+  'pw-ar-ask-which-karim',
+  'pw-ja-calendar-address-to-sms',
+  'pw-de-book-free-hour',
+  'pw-es-no-ask-full-name',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */
 export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_640_000;
+
+/** The phone-world slice runs in its own opt-in test file; ceiling for one pass of it. */
+export const E2E_PHONE_WORLD_PROGRAM_MAX_TOTAL_TOKENS = 760_000;
+
+/**
+ * The frontier bar for the phone-world slice: MobileWorld's best user-interaction score is
+ * 61.4% (Seed-2.0-Pro, its README); a phone assistant with tool access should clear most of
+ * the slice on the first try and nearly all of it on any run.
+ */
+export const E2E_PHONE_WORLD_MIN_PASS_RATE = 0.9;
 
 /** Delegation scenario runs in a separate opt-in test file. */
 export const E2E_DELEGATION_PROGRAM_MAX_TOTAL_TOKENS = 200_000;
