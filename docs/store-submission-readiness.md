@@ -201,10 +201,16 @@ headless task waits only for the native all-leases-idle signal; it does not insp
 route, repeat, or score assistant work. Persisted recovery remains authoritative if
 Android terminates the process.
 
+On-device generation has its own `specialUse` service
+(`LocalLlmForegroundService`). It runs only while a local model is producing a reply
+the person asked for, and stops when that reply ends. It replaced a `shortService`,
+which Android ends after about three minutes: that limit cancelled long CPU replies
+even with the app open.
+
 Before Play submission:
 
-- Complete the foreground-service declaration for `specialUse` in Play Console and
-  use the same explanation as the shipped manifest.
+- Complete the foreground-service declaration for `specialUse` in Play Console, cover
+  both services, and use the same explanations as the shipped manifest subtypes.
 - Describe the user benefit, why deferral or interruption breaks the workflow, and
   why another foreground-service type does not fit.
 - Attach a demo video showing the user starting work in Chat, backgrounding Kavi,

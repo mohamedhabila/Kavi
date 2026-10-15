@@ -26,9 +26,7 @@ internal class LocalLlmRuntime(
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val lifecycleMutex = Mutex()
   private val activeRequests = ActiveRequestRegistry()
-  private val foregroundCoordinator = LocalLlmForegroundCoordinator(reactContext) {
-    activeRequests.cancelAll()
-  }
+  private val foregroundCoordinator = LocalLlmForegroundCoordinator(reactContext)
   private val metrics = RuntimeMetrics()
   private val gson = Gson()
   private val deviceInfo = LocalLlmDeviceInfo(reactContext)

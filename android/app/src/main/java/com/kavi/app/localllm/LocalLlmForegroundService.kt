@@ -29,11 +29,6 @@ class LocalLlmForegroundService : Service() {
     return START_NOT_STICKY
   }
 
-  override fun onTimeout(startId: Int, fgsType: Int) {
-    timeoutHandler?.invoke()
-    stopForegroundService()
-  }
-
   private fun startForegroundService() {
     ensureNotificationChannel()
     val notification = buildNotification()
@@ -41,7 +36,7 @@ class LocalLlmForegroundService : Service() {
       startForeground(
         NOTIFICATION_ID,
         notification,
-        ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
       )
     } else {
       startForeground(NOTIFICATION_ID, notification)
@@ -101,8 +96,6 @@ class LocalLlmForegroundService : Service() {
   companion object {
     private const val ACTION_START = "com.kavi.mobile.localllm.START"
     private const val ACTION_STOP = "com.kavi.mobile.localllm.STOP"
-    @Volatile
-    internal var timeoutHandler: (() -> Unit)? = null
 
     fun start(context: Context) {
       val intent = Intent(context, LocalLlmForegroundService::class.java).setAction(ACTION_START)

@@ -55,7 +55,10 @@
         <action android:name="androidx.media3.session.MediaSessionService"/>
       </intent-filter>
     </service>
-    <service android:name=".localllm.LocalLlmForegroundService" android:exported="false" android:foregroundServiceType="shortService"/>
+    <!-- specialUse, not shortService: Android ends a short service after about three minutes, and a long on-device reply on the CPU takes longer. -->
+    <service android:name=".localllm.LocalLlmForegroundService" android:exported="false" android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="On-device AI generating the reply the user asked for, so it finishes if they switch apps; Kavi shows a notification and stops the service when the reply is done."/>
+    </service>
     <!-- Reads other apps' notifications back to the person, once they turn on notification access. -->
     <service android:name=".notifications.KaviNotificationListenerService" android:exported="true" android:label="@string/app_name" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
       <intent-filter>

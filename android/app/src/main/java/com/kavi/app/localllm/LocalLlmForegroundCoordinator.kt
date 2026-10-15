@@ -6,15 +6,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "KaviLocalLlmForeground"
 
-internal class LocalLlmForegroundCoordinator(
-  private val context: Context,
-  private val onTimeout: () -> Unit,
-) {
+internal class LocalLlmForegroundCoordinator(private val context: Context) {
   private val activeRequestCount = AtomicInteger(0)
-
-  init {
-    LocalLlmForegroundService.timeoutHandler = { onTimeout() }
-  }
 
   fun onRequestStarted() {
     if (activeRequestCount.incrementAndGet() != 1) {
@@ -41,7 +34,6 @@ internal class LocalLlmForegroundCoordinator(
 
   fun close() {
     activeRequestCount.set(0)
-    LocalLlmForegroundService.timeoutHandler = null
     try {
       LocalLlmForegroundService.stop(context)
     } catch (error: Throwable) {

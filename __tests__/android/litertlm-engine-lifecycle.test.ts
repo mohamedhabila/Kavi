@@ -95,22 +95,26 @@ describe('android litertlm engine lifecycle hardening', () => {
     );
   });
 
-  test('keeps active local inference alive with a bounded foreground short service', () => {
+  // A short service is ended after about three minutes, and its timeout cancelled every local
+  // request in flight, so a long CPU reply was cut off even with the app open.
+  test('keeps active local inference alive in a foreground service with no time limit', () => {
     const manifestSource = readFileSync(join(androidMainRoot, 'AndroidManifest.xml'), 'utf8');
     const runtimeSource = readAndroidSource('LocalLlmRuntime.kt');
     const coordinatorSource = readAndroidSource('LocalLlmForegroundCoordinator.kt');
     const serviceSource = readAndroidSource('LocalLlmForegroundService.kt');
-
-    expect(manifestSource).toContain('android:name=".localllm.LocalLlmForegroundService"');
-    expect(manifestSource).toContain('android:foregroundServiceType="shortService"');
-    expect(runtimeSource).toContain(
-      'private val foregroundCoordinator = LocalLlmForegroundCoordinator',
+    const serviceDeclaration = manifestSource.slice(
+      manifestSource.indexOf('android:name=".localllm.LocalLlmForegroundService"'),
     );
-    expect(runtimeSource).toContain('activeRequests.cancelAll()');
+
+    expect(serviceDeclaration).toMatch(/^[^>]*android:foregroundServiceType="specialUse">/);
+    expect(serviceDeclaration.slice(0, serviceDeclaration.indexOf('</service>'))).toContain(
+      'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE',
+    );
+    expect(manifestSource).not.toContain('android:foregroundServiceType="shortService"');
+    expect(serviceSource).toContain('FOREGROUND_SERVICE_TYPE_SPECIAL_USE');
+    expect(serviceSource).not.toContain('onTimeout');
+    expect(coordinatorSource).not.toContain('timeoutHandler');
     expect(runtimeSource).toContain('foregroundCoordinator.onRequestStarted()');
     expect(runtimeSource).toContain('foregroundCoordinator.onRequestFinished()');
-    expect(coordinatorSource).toContain('LocalLlmForegroundService.timeoutHandler');
-    expect(serviceSource).toContain('FOREGROUND_SERVICE_TYPE_SHORT_SERVICE');
-    expect(serviceSource).toContain('override fun onTimeout(startId: Int, fgsType: Int)');
   });
 });
