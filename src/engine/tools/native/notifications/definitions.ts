@@ -39,9 +39,10 @@ export const NOTIFICATIONS_READ_TOOL: ToolDefinition = {
   name: 'notifications_read',
   description:
     'Read the notifications other apps showed on this phone: messages, deliveries, alerts, ' +
-    'reminders, what the person missed. Each has the app, title, text, time, and whether it ' +
-    'still shows. Android only, once the person turned on notification access for Kavi; ' +
-    'covers what arrived since then while the phone was on.',
+    'reminders, what the person missed. Each has an id, the app, title, text, time, whether it ' +
+    'still shows, and whether Kavi can reply from it (canReply). Android only, once the person ' +
+    'turned on notification access for Kavi; covers what arrived since then while the phone ' +
+    'was on.',
   input_schema: {
     type: 'object',
     properties: {
@@ -66,5 +67,46 @@ export const NOTIFICATIONS_READ_TOOL: ToolDefinition = {
     riskHints: ['read_only', 'idempotent', 'requires_approval'],
     providesEvidence: ['verification'],
     workflowStages: ['discover_resource', 'inspect_resource'],
+  }),
+};
+
+/** The longest reply Kavi sends through a notification. */
+export const NOTIFICATIONS_REPLY_MAX_MESSAGE_LENGTH = 4_000;
+
+export const NOTIFICATIONS_REPLY_TOOL: ToolDefinition = {
+  name: 'notifications_reply',
+  description:
+    "Reply to a message notification (WhatsApp, Telegram, Signal, Messages, …) through the app's " +
+    'own reply, exactly as the person would from the notification shade; it is sent as soon as ' +
+    'the person approves. Use the id of a notification from notifications_read whose canReply ' +
+    'is true; it works only while that notification still shows. Android only.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      id: {
+        type: 'string',
+        minLength: 1,
+        description: 'The notification id from notifications_read.',
+      },
+      message: {
+        type: 'string',
+        minLength: 1,
+        maxLength: NOTIFICATIONS_REPLY_MAX_MESSAGE_LENGTH,
+        description: 'The reply, written as the person would send it.',
+      },
+    },
+    required: ['id', 'message'],
+  },
+  contract: nativeContract({
+    category: 'communication',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['external_run'],
+    riskLevel: 'high',
+    permissionPrerequisites: ['notifications.read'],
+    recoverableErrors: [...RECOVERABLE_PLATFORM_ERRORS],
+    riskHints: ['requires_approval'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
   }),
 };

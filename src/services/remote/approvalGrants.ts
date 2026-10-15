@@ -75,6 +75,7 @@ const NON_REUSABLE_TOOL_NAMES = new Set([
   'email_compose',
   'memory_forget',
   'mobile_ui_action',
+  'notifications_reply',
   'open_url',
   'phone_call',
   'photos_pick',

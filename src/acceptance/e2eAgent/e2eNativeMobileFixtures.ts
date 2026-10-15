@@ -30,6 +30,7 @@ import {
   buildE2ESmsDraft,
   getE2EContact,
   readE2ENotifications,
+  replyToE2ENotification,
   resetE2EMessagingFixtures,
   searchE2EContacts,
   seedE2EContacts,
@@ -118,6 +119,13 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     cancelled: boolean;
     delaySeconds: number;
   };
+  /** Replies the model sent through other apps' notifications. */
+  reply: {
+    count: number;
+    app: string;
+    to: string;
+    message: string;
+  };
   media: {
     photoCount: number;
     screenStatus: string;
@@ -172,6 +180,12 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       scheduled: false,
       cancelled: false,
       delaySeconds: 0,
+    },
+    reply: {
+      count: 0,
+      app: '',
+      to: '',
+      message: '',
     },
     media: {
       photoCount: 0,
@@ -356,6 +370,12 @@ async function executeE2ENativeMobileTool(
       return completedE2ENativeOutcome(getE2EContact(args.id));
     case 'notifications_read':
       return completedE2ENativeOutcome(readE2ENotifications(args));
+    case 'notifications_reply': {
+      const { result, reply } = replyToE2ENotification(args);
+      if (!reply) return failedE2ENativeOutcome(result);
+      e2eNativeFixtureState.reply = { count: e2eNativeFixtureState.reply.count + 1, ...reply };
+      return completedE2ENativeOutcome(result);
+    }
     case 'sms_compose': {
       const built = buildE2ESmsDraft(args);
       if ('error' in built) {

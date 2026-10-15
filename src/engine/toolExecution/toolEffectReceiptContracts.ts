@@ -477,6 +477,17 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
     contacts_share: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_text: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
     share_file: effectful('share.handoff', nativeOutcomes({ handed_off: VERIFIED_HANDOFF })),
+    notifications_reply: effectful(
+      'communication.send',
+      nativeOutcomes({
+        sent: APPLIED,
+        not_showing: FAILED,
+        no_reply_action: FAILED,
+        expired: FAILED,
+        not_granted: FAILED,
+        invalid_arguments: FAILED,
+      }),
+    ),
     notification_send: effectful(
       'notification.send',
       { notification_accepted: outcome('accepted', 'acknowledged') },

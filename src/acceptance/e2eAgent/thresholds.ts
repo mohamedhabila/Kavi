@@ -142,6 +142,8 @@ export const E2E_SCENARIO_TOKEN_BUDGETS: Readonly<Record<string, number>> = {
   'pw-mail-reply-latest': 80_000,
   'pw-mail-checkin-to-calendar': 80_000,
   'pw-es-mail-reply-latest': 80_000,
+  'pw-reply-whatsapp-ana': 80_000,
+  'pw-ar-reply-karim': 80_000,
 };
 
 /** Conservative ceilings pending clean first-attempt live measurements and recalibration. */
@@ -161,13 +163,15 @@ export const E2E_PROVISIONAL_SCENARIO_TOKEN_BUDGET_IDS: ReadonlySet<string> = ne
   'pw-mail-reply-latest',
   'pw-mail-checkin-to-calendar',
   'pw-es-mail-reply-latest',
+  'pw-reply-whatsapp-ana',
+  'pw-ar-reply-karim',
 ]);
 
 /** Program-level regression guard across all scenarios in one harness run. */
 export const E2E_PROGRAM_MAX_TOTAL_TOKENS = 4_640_000;
 
 /** The phone-world slice runs in its own opt-in test file; ceiling for one pass of it. */
-export const E2E_PHONE_WORLD_PROGRAM_MAX_TOTAL_TOKENS = 1_000_000;
+export const E2E_PHONE_WORLD_PROGRAM_MAX_TOTAL_TOKENS = 1_160_000;
 
 /**
  * The frontier bar for the phone-world slice: MobileWorld's best user-interaction score is

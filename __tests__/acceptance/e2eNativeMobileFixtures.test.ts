@@ -418,6 +418,50 @@ describe('E2E native mobile fixtures', () => {
     });
   });
 
+  it('replies through a seeded notification whose app offers a reply, and records it', async () => {
+    seedE2ENativeMobileFixtures({
+      notifications: [
+        { app: 'Post', title: 'Parcel', text: 'Delivered', postedAt: '2026-10-15T08:00:00.000Z' },
+        {
+          app: 'WhatsApp',
+          title: 'Ana Lopes',
+          text: 'Free for dinner on Friday?',
+          postedAt: '2026-10-15T09:00:00.000Z',
+          canReply: true,
+        },
+      ],
+    });
+    const read = parseCompletedToolOutcome(await executeToolInner('notifications_read', '{}', 'c'));
+    const [whatsApp, parcel] = (read as { notifications: Array<Record<string, unknown>> })
+      .notifications;
+    expect(whatsApp).toMatchObject({ app: 'WhatsApp', canReply: true });
+    expect(parcel).toMatchObject({ app: 'Post', canReply: false });
+
+    const refused = await executeToolInner(
+      'notifications_reply',
+      JSON.stringify({ id: parcel.id, message: 'Thanks' }),
+      'c',
+    );
+    expect(refused.status).toBe('failed');
+    expect(getE2ENativeMobileFixtureStateSnapshot().reply.count).toBe(0);
+
+    const sent = await executeToolInner(
+      'notifications_reply',
+      JSON.stringify({ id: whatsApp.id, message: 'Yes, Friday works!' }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(sent)).toMatchObject({
+      status: 'sent',
+      conversation: 'Ana Lopes',
+    });
+    expect(getE2ENativeMobileFixtureStateSnapshot().reply).toEqual({
+      count: 1,
+      app: 'WhatsApp',
+      to: 'Ana Lopes',
+      message: 'Yes, Friday works!',
+    });
+  });
+
   it('treats a calendar id the phone does not have as the device does', async () => {
     seedE2ENativeMobileFixtures({
       calendarEvents: [

@@ -33,6 +33,7 @@ import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 import { isMobileControllerDeferredExecution } from '../mobileController/runtimeExecution';
 import { isEffectFreeToolPolicy } from '../durability/toolEffectPolicy';
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
+import { resolveDirectSendReview } from './native/directSendReview';
 import {
   buildEffectReconciliationRequiredResult,
   finalizeEffectReceiptCapture,
@@ -180,6 +181,9 @@ export async function executeTool(
     needsApprovalWithContext(normalizedName, parsedArgs);
   if (approvalRequired) {
     const truncatedArgs = truncateGraphemesWithSuffix(argsString, 200, '…');
+    const directSendReview = mobileControllerApprovalRequest
+      ? undefined
+      : await resolveDirectSendReview(normalizedName, parsedArgs ?? {});
     const decision = await requestToolApproval({
       toolName: normalizedName,
       targetId: parsedArgs?.targetId,
@@ -190,7 +194,9 @@ export async function executeTool(
             reviewPresentation: mobileControllerApprovalRequest,
             decisionPolicy: ONE_SHOT_APPROVAL_DECISION_POLICY,
           }
-        : {}),
+        : directSendReview
+          ? { reviewPresentation: directSendReview }
+          : {}),
     });
     if (decision !== 'approved') {
       logToolCall(normalizedName, argsString, 'denied', 0, conversationId);

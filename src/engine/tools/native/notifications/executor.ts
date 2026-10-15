@@ -1,11 +1,20 @@
-import { readRecentNotifications } from '../../../../services/notifications/notificationReader';
+import {
+  readRecentNotifications,
+  replyToNotification,
+  type NotificationReplyStatus,
+} from '../../../../services/notifications/notificationReader';
+import type { ToolCallFailureKind } from '../../../../types/message';
 import { sendLocalNotification } from '../../../../services/notifications/service';
 import {
   completedToolOutcome,
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../../../types/toolRuntimeOutcome';
-import { NOTIFICATIONS_READ_MAX_LIMIT, NOTIFICATIONS_READ_MAX_SINCE_MINUTES } from './definitions';
+import {
+  NOTIFICATIONS_READ_MAX_LIMIT,
+  NOTIFICATIONS_READ_MAX_SINCE_MINUTES,
+  NOTIFICATIONS_REPLY_MAX_MESSAGE_LENGTH,
+} from './definitions';
 
 export async function executeNotificationSend(args: {
   title: string;
@@ -72,12 +81,72 @@ export async function executeNotificationsRead(
       since: new Date(since).toISOString(),
       count: notifications.length,
       notifications: notifications.map((notification) => ({
+        id: notification.id,
         app: notification.app,
         title: notification.title,
         text: notification.text,
         postedAt: new Date(notification.postedAt).toISOString(),
         showing: notification.showing,
+        canReply: notification.canReply,
       })),
     }),
+  );
+}
+
+const REPLY_FAILURES: Record<
+  Exclude<NotificationReplyStatus, 'sent'>,
+  Readonly<{ error: string; failureKind: ToolCallFailureKind }>
+> = {
+  not_showing: {
+    error:
+      "That notification no longer shows, and its app's reply went with it. Open the chat in " +
+      'the app instead, or tell the person.',
+    failureKind: 'not_found',
+  },
+  no_reply_action: {
+    error: "This notification's app offers no reply from the notification.",
+    failureKind: 'unavailable',
+  },
+  expired: {
+    error: 'The app withdrew this reply; the conversation may have been opened already.',
+    failureKind: 'not_found',
+  },
+  not_granted: {
+    error:
+      'Notification access is off. The person can turn it on in Kavi Settings, Notifications & voice.',
+    failureKind: 'permission',
+  },
+  unavailable: {
+    error: "This phone does not let apps reply to other apps' notifications.",
+    failureKind: 'unavailable',
+  },
+};
+
+export async function executeNotificationsReply(
+  args: Record<string, unknown> | undefined,
+): Promise<ToolRuntimeOutcome> {
+  const id = typeof args?.id === 'string' ? args.id.trim() : '';
+  const message = typeof args?.message === 'string' ? args.message.trim() : '';
+  if (!id || !message || message.length > NOTIFICATIONS_REPLY_MAX_MESSAGE_LENGTH) {
+    return failedToolOutcome(
+      JSON.stringify({
+        status: 'invalid_arguments',
+        error: `notifications_reply needs a notification id and a message of 1 to ${NOTIFICATIONS_REPLY_MAX_MESSAGE_LENGTH} characters.`,
+      }),
+      'invalid_arguments',
+    );
+  }
+  const result = await replyToNotification(id, message);
+  const where = {
+    ...(result.app ? { app: result.app } : {}),
+    ...(result.title ? { conversation: result.title } : {}),
+  };
+  if (result.status === 'sent') {
+    return completedToolOutcome(JSON.stringify({ status: 'sent', ...where, message }));
+  }
+  const failure = REPLY_FAILURES[result.status];
+  return failedToolOutcome(
+    JSON.stringify({ status: result.status, code: result.status, ...where, error: failure.error }),
+    failure.failureKind,
   );
 }

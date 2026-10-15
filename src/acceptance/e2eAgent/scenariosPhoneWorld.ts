@@ -12,7 +12,7 @@
 
 import type { E2EMailMessage } from './e2eMailMcpServer';
 import type { E2ECalendarEvent } from './e2eNativeCalendarFixtures';
-import type { E2EFixtureContact } from './e2eNativeMessagingFixtures';
+import type { E2EFixtureContact, E2EFixtureNotification } from './e2eNativeMessagingFixtures';
 import { E2E_SCENARIO_TOKEN_BUDGETS } from './thresholds';
 import type { E2ERubric, E2EScenario } from './types';
 
@@ -177,6 +177,45 @@ const createdOneEventAt = (startDate: string): E2ERubric[] => [
   },
 ];
 
+/** Minutes before the run, so every notification is recent and still showing. */
+const minutesAgo = (minutes: number): string =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
+
+/**
+ * What the phone's notification shade shows: Ana (not in the contacts) asked about Friday on
+ * WhatsApp, one of the two Karims asked whether the person arrived, and a parcel update that
+ * offers no reply.
+ */
+export const PHONE_WORLD_NOTIFICATIONS: ReadonlyArray<E2EFixtureNotification> = [
+  {
+    app: 'Parcel Post',
+    title: 'Your parcel is on its way',
+    text: 'It arrives today between 14:00 and 16:00.',
+    postedAt: minutesAgo(95),
+  },
+  {
+    app: 'WhatsApp',
+    title: 'Ana Lopes',
+    text: 'Are you free for dinner on Friday?',
+    postedAt: minutesAgo(40),
+    canReply: true,
+  },
+  {
+    app: 'Messages',
+    title: 'كريم حداد',
+    text: 'هل وصلت؟',
+    postedAt: minutesAgo(12),
+    canReply: true,
+  },
+];
+
+const repliedInNotification = (app: string, to: string): E2ERubric[] => [
+  { kind: 'native_fixture_state', path: 'reply.count', expectedValue: '1' },
+  { kind: 'native_fixture_state', path: 'reply.app', expectedValue: app },
+  { kind: 'native_fixture_state', path: 'reply.to', expectedValue: to },
+  { kind: 'native_fixture_state', path: 'sms.recipients', expectedValue: '' },
+];
+
 const repliedOnceTo = (messageId: string): E2ERubric[] => [
   { kind: 'native_fixture_state', path: 'mail.replyCount', expectedValue: '1' },
   { kind: 'native_fixture_state', path: 'mail.lastReplyTo', expectedValue: messageId },
@@ -197,6 +236,7 @@ function phoneWorldScenario(spec: {
       contacts: PHONE_WORLD_CONTACTS,
       calendarEvents: PHONE_WORLD_CALENDAR,
       mailbox: PHONE_WORLD_MAILBOX,
+      notifications: PHONE_WORLD_NOTIFICATIONS,
     },
     rubrics: [
       ...spec.rubrics,
@@ -299,5 +339,15 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'pw-es-no-ask-full-name',
     turns: ['Mándale a Alex Morgan un mensaje diciendo que llego en cinco minutos.'],
     rubrics: [firstTurnCalls('sms_compose', 1), smsTo('+15550102001')],
+  }),
+  phoneWorldScenario({
+    id: 'pw-reply-whatsapp-ana',
+    turns: ['Tell Ana yes, Friday dinner works for me.'],
+    rubrics: repliedInNotification('WhatsApp', 'Ana Lopes'),
+  }),
+  phoneWorldScenario({
+    id: 'pw-ar-reply-karim',
+    turns: ['رد على كريم وقل له إني وصلت.'],
+    rubrics: repliedInNotification('Messages', 'كريم حداد'),
   }),
 ];

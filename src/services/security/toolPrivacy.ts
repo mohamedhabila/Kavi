@@ -116,6 +116,7 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'notifications_read' ||
+    toolName === 'notifications_reply' ||
     toolName === 'screen_record' ||
     toolName === 'open_url' ||
     toolName.startsWith('share_') ||
@@ -172,6 +173,8 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.contactsGetFullTitle');
     case 'notifications_read':
       return i18n.t('toolApproval.actions.notificationsReadTitle');
+    case 'notifications_reply':
+      return i18n.t('toolApproval.actions.notificationsReplyTitle');
     case 'share_text':
       return i18n.t('toolApproval.actions.shareTextTitle');
     case 'share_file':
@@ -404,6 +407,17 @@ function summarizeNativeTool(
       redactedArguments = {
         sinceMinutes: typeof args.since_minutes === 'number' ? args.since_minutes : undefined,
         limit: typeof args.limit === 'number' ? args.limit : undefined,
+      };
+      break;
+    }
+    case 'notifications_reply': {
+      if (hasNonEmptyString(args.message))
+        pushDetail(details, 'toolApproval.details.textLength', {
+          count: String(args.message).length,
+        });
+      redactedArguments = {
+        hasNotification: hasNonEmptyString(args.id),
+        messageLength: hasNonEmptyString(args.message) ? String(args.message).length : 0,
       };
       break;
     }

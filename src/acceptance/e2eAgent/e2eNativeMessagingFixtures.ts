@@ -20,7 +20,12 @@ export type E2EFixtureNotification = Readonly<{
   text: string;
   /** ISO time it was posted. */
   postedAt: string;
+  /** Its app offers a reply from the notification, as messaging apps do. */
+  canReply?: boolean;
 }>;
+
+/** A reply the model sent through a notification. */
+export type E2ENotificationReply = Readonly<{ app: string; to: string; message: string }>;
 
 export type E2ESmsDraft = Readonly<{
   /** E.164 numbers, in the order the model gave them. */
@@ -49,14 +54,48 @@ export function seedE2ENotifications(notifications: ReadonlyArray<E2EFixtureNoti
   e2eNotifications = notifications;
 }
 
+function notificationId(index: number): string {
+  return `e2e-notification-${index + 1}`;
+}
+
 /** What notifications_read returns on the scenario phone: the seed, newest first. */
 export function readE2ENotifications(args: Record<string, unknown>): Record<string, unknown> {
   const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : 30;
-  const notifications = [...e2eNotifications]
+  const notifications = e2eNotifications
+    .map((notification, index) => ({
+      id: notificationId(index),
+      app: notification.app,
+      title: notification.title,
+      text: notification.text,
+      postedAt: notification.postedAt,
+      showing: true,
+      canReply: notification.canReply === true,
+    }))
     .sort((left, right) => Date.parse(right.postedAt) - Date.parse(left.postedAt))
-    .slice(0, limit)
-    .map((notification) => ({ ...notification, showing: true }));
+    .slice(0, limit);
   return { status: 'completed', count: notifications.length, notifications };
+}
+
+/**
+ * What notifications_reply does on the scenario phone: the seeded notifications all still
+ * show, and only those whose app offers a reply can be answered.
+ */
+export function replyToE2ENotification(args: Record<string, unknown>): {
+  result: Record<string, unknown>;
+  reply?: E2ENotificationReply;
+} {
+  const index = e2eNotifications.findIndex((_, candidate) => notificationId(candidate) === args.id);
+  const notification = index >= 0 ? e2eNotifications[index] : undefined;
+  const message = typeof args.message === 'string' ? args.message.trim() : '';
+  if (!notification) return { result: { status: 'not_showing', code: 'not_showing' } };
+  const where = { app: notification.app, conversation: notification.title };
+  if (notification.canReply !== true) {
+    return { result: { status: 'no_reply_action', code: 'no_reply_action', ...where } };
+  }
+  return {
+    result: { status: 'sent', ...where, message },
+    reply: { app: notification.app, to: notification.title, message },
+  };
 }
 
 export function seedE2EContacts(contacts: ReadonlyArray<E2EFixtureContact>): void {

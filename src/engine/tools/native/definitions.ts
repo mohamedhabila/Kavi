@@ -24,7 +24,11 @@ import {
 import { DEVICE_QUERY_TOOL } from './device/definitions';
 import { LOCATION_CURRENT_TOOL } from './location/definitions';
 import { CAMERA_CLIP_TOOL, PHOTOS_PICK_TOOL, SCREEN_RECORD_TOOL } from './media/definitions';
-import { NOTIFICATION_SEND_TOOL, NOTIFICATIONS_READ_TOOL } from './notifications/definitions';
+import {
+  NOTIFICATION_SEND_TOOL,
+  NOTIFICATIONS_READ_TOOL,
+  NOTIFICATIONS_REPLY_TOOL,
+} from './notifications/definitions';
 import { SHARE_FILE_TOOL, SHARE_TEXT_TOOL } from './share/definitions';
 
 export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -50,6 +54,7 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   OPEN_URL_TOOL,
   NOTIFICATION_SEND_TOOL,
   NOTIFICATIONS_READ_TOOL,
+  NOTIFICATIONS_REPLY_TOOL,
   DEVICE_QUERY_TOOL,
   PHOTOS_PICK_TOOL,
   CAMERA_CLIP_TOOL,

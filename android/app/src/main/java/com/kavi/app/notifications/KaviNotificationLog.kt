@@ -25,6 +25,9 @@ internal class KaviNotificationLog(private val capacity: Int = DEFAULT_CAPACITY)
     while (records.size > capacity) records.removeFirst()
   }
 
+  @Synchronized
+  fun find(key: String): KaviNotificationRecord? = records.lastOrNull { it.key == key }
+
   /** Records posted at or after [sinceMs], newest first, at most [limit]. */
   @Synchronized
   fun recent(sinceMs: Long, limit: Int): List<KaviNotificationRecord> =

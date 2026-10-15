@@ -49,6 +49,7 @@ const ALWAYS_CONFIRM = new Set<string>([
   'open_url',
   'notification_send',
   'notifications_read',
+  'notifications_reply',
   'photos_pick',
   'camera_clip',
   'screen_record',

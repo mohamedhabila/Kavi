@@ -240,6 +240,8 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'pw-mail-reply-latest': PHONE_WORLD_REGISTRATION,
   'pw-mail-checkin-to-calendar': PHONE_WORLD_REGISTRATION,
   'pw-es-mail-reply-latest': PHONE_WORLD_REGISTRATION,
+  'pw-reply-whatsapp-ana': PHONE_WORLD_REGISTRATION,
+  'pw-ar-reply-karim': PHONE_WORLD_REGISTRATION,
   'file-write-read': {
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['tool_usage', 'task_completion', 'token_efficiency'],

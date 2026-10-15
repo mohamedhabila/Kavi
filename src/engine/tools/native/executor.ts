@@ -30,7 +30,11 @@ import {
 } from './device/executor';
 import { executeLocationCurrent } from './location/executor';
 import { executeCameraClip, executePhotosPick, executeScreenRecord } from './media/executor';
-import { executeNotificationSend, executeNotificationsRead } from './notifications/executor';
+import {
+  executeNotificationSend,
+  executeNotificationsRead,
+  executeNotificationsReply,
+} from './notifications/executor';
 import { executeShareFile, executeShareText } from './share/executor';
 import { failedToolOutcome, type ToolRuntimeOutcome } from '../../../types/toolRuntimeOutcome';
 
@@ -102,6 +106,8 @@ export async function executeNativeTool(
       return executeNotificationSend(args);
     case 'notifications_read':
       return executeNotificationsRead(args);
+    case 'notifications_reply':
+      return executeNotificationsReply(args);
     case 'device_query': {
       const kind = typeof args?.kind === 'string' ? args.kind.toLowerCase() : 'status';
       if (kind === 'status') return executeDeviceStatus();

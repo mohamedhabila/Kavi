@@ -30,12 +30,14 @@ beforeEach(() => {
     access: 'granted',
     notifications: [
       {
+        id: '0|com.example.sms|7|ana|10001',
         app: 'Messages',
         packageName: 'com.example.sms',
         title: 'Ana',
         text: 'Running 10 minutes late',
         postedAt: POSTED_AT,
         showing: true,
+        canReply: true,
       },
     ],
   });
@@ -92,11 +94,13 @@ describe('notifications_read', () => {
       count: 1,
       notifications: [
         {
+          id: '0|com.example.sms|7|ana|10001',
           app: 'Messages',
           title: 'Ana',
           text: 'Running 10 minutes late',
           postedAt: new Date(POSTED_AT).toISOString(),
           showing: true,
+          canReply: true,
         },
       ],
     });

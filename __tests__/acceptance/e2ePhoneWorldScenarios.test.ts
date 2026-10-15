@@ -9,6 +9,7 @@ import {
   PHONE_WORLD_DENTIST_ADDRESS,
   PHONE_WORLD_E2E_SCENARIOS,
   PHONE_WORLD_MAILBOX,
+  PHONE_WORLD_NOTIFICATIONS,
   phoneWorldMonday,
 } from '../../src/acceptance/e2eAgent/scenariosPhoneWorld';
 import {
@@ -152,6 +153,21 @@ describe('phone-world scenarios', () => {
     const startOfToday = new Date().setUTCHours(0, 0, 0, 0);
     for (const mail of PHONE_WORLD_MAILBOX) {
       expect(Date.parse(mail.receivedAt)).toBeLessThan(startOfToday);
+    }
+  });
+
+  it('reply to Ana and to the Karim who wrote, both reachable only through their notification', () => {
+    const replyable = PHONE_WORLD_NOTIFICATIONS.filter((notification) => notification.canReply);
+    const [ana, karim] = ['pw-reply-whatsapp-ana', 'pw-ar-reply-karim'].map((id) =>
+      replyable.find((notification) => notification.title === expectedValue(id, 'reply.to')),
+    );
+    expect(ana?.app).toBe(expectedValue('pw-reply-whatsapp-ana', 'reply.app'));
+    expect(karim?.app).toBe(expectedValue('pw-ar-reply-karim', 'reply.app'));
+    // Ana is not in the contacts, and two Karims are: only the notification says who wrote.
+    expect(PHONE_WORLD_CONTACTS.some((entry) => entry.name.includes('Ana'))).toBe(false);
+    expect(PHONE_WORLD_CONTACTS.filter((entry) => entry.name.startsWith('كريم'))).toHaveLength(2);
+    for (const notification of PHONE_WORLD_NOTIFICATIONS) {
+      expect(Date.parse(notification.postedAt)).toBeLessThan(Date.now());
     }
   });
 

@@ -230,7 +230,8 @@ export function getApprovalScope(toolName: string): ApprovalScope {
     toolName === 'screen_record' ||
     toolName.startsWith('share_') ||
     toolName === 'open_url' ||
-    toolName.startsWith('notification_')
+    toolName.startsWith('notification_') ||
+    toolName.startsWith('notifications_')
   ) {
     return 'native';
   }
