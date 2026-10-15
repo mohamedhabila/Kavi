@@ -24,6 +24,7 @@ import type {
   ForegroundScenarioMemoryPromptEvidence,
 } from './foregroundScenarioMemoryItemsEvidence';
 import type { RequestClarificationSemanticRole } from '../../services/agents/requestClarification';
+import type { E2ENativeFixtureSeed } from './e2eNativeMobileFixtures';
 
 export type E2EToolCallRecord = {
   id: string;
@@ -286,6 +287,8 @@ export type E2ERubric =
       path: string;
       expectedValue: string;
     }
+  /** The device field's text contains this, ignoring case (an address in a drafted message). */
+  | { kind: 'native_fixture_contains'; path: string; contains: string }
   | {
       kind: 'file_hash';
       path: string;
@@ -314,6 +317,8 @@ export type E2EScenario = {
   systemPrompt?: string;
   initialMessages?: ReadonlyArray<Message>;
   initialWorkspaceFiles?: ReadonlyArray<E2EWorkspaceSeedFile>;
+  /** The phone's contacts and calendar before the first turn; the default device otherwise. */
+  initialNativeFixture?: E2ENativeFixtureSeed;
   /** Frozen condition-aware scoring contract used only by paired evaluation. */
   pairedEvaluation?: E2EPairedCausalMemoryContract;
 };

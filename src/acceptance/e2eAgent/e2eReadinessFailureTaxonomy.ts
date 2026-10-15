@@ -43,6 +43,7 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'worker_result_token',
   'memory_turns_indexed',
   'native_fixture_state',
+  'native_fixture_contains',
   'file_hash',
   'graph_audit_observed',
 ]);
@@ -141,6 +142,7 @@ function rubricFailureCategories(
       }
       return ['wrong_args'];
     case 'native_fixture_state':
+    case 'native_fixture_contains':
       if (entry.assessmentDimensions.includes('privacy_safety')) {
         return ['permission_failure'];
       }

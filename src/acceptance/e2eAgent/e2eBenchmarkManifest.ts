@@ -168,6 +168,7 @@ const FINAL_STATE_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'memory_item',
   'memory_item_absent',
   'native_fixture_state',
+  'native_fixture_contains',
   'worker_result_token',
 ]);
 
@@ -239,6 +240,7 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'file_hash':
       return 'artifact_hash';
     case 'native_fixture_state':
+    case 'native_fixture_contains':
       return 'native_fixture_state';
     case 'memory_item':
     case 'memory_item_absent':

@@ -450,6 +450,20 @@ export function evaluateE2ERubric(
       return { fixtureId, passed: true };
     }
 
+    case 'native_fixture_contains': {
+      const snapshot = result.turnTraces[result.turnTraces.length - 1]?.native?.stateAfter;
+      const actual = readJsonFieldAtPath(snapshot, rubric.path);
+      const fold = (value: string) => value.normalize('NFKC').toLocaleLowerCase();
+      if (typeof actual !== 'string' || !fold(actual).includes(fold(rubric.contains))) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `native fixture state ${rubric.path} does not contain ${rubric.contains}`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
     case 'file_hash': {
       const content = readWorkspaceRelativeFile(result.conversationId, rubric.path);
       if (content === undefined) {

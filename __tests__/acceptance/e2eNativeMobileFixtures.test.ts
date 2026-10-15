@@ -8,6 +8,7 @@ import {
   getE2ENativeMobileFixtureStateSnapshot,
   getE2ENativeMobileInvocationSnapshots,
   resetE2ENativeMobileFixtures,
+  seedE2ENativeMobileFixtures,
   tryExecuteE2ENativeCalendarTool,
   tryExecuteE2ENativeMobileTool,
 } from '../../src/acceptance/e2eAgent/e2eNativeMobileFixtures';
@@ -332,6 +333,90 @@ describe('E2E native mobile fixtures', () => {
       opened: true,
       recipientCount: 1,
       messageLength: 11,
+      recipients: '+15550101001',
+      message: 'Hello Avery',
+    });
+  });
+
+  it('searches a seeded address book by name, ignoring case and accents', async () => {
+    seedE2ENativeMobileFixtures({
+      contacts: [
+        {
+          id: 'c-1',
+          name: 'Alex Morgan',
+          phoneNumbers: [{ label: 'mobile', number: '+15550102001' }],
+        },
+        {
+          id: 'c-2',
+          name: 'Alex Rivera',
+          phoneNumbers: [{ label: 'mobile', number: '+15550102002' }],
+        },
+        {
+          id: 'c-3',
+          name: 'Sofía Díaz',
+          phoneNumbers: [{ label: 'mobile', number: '+351910000003' }],
+        },
+      ],
+    });
+
+    const alex = await executeToolInner('contacts_search', JSON.stringify({ query: 'alex' }), 'c');
+    expect(parseCompletedToolOutcome(alex)).toEqual([
+      expect.objectContaining({ id: 'c-1' }),
+      expect.objectContaining({ id: 'c-2' }),
+    ]);
+    const sofia = await executeToolInner(
+      'contacts_search',
+      JSON.stringify({ query: 'Sofia' }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(sofia)).toEqual([expect.objectContaining({ id: 'c-3' })]);
+    expect(getE2ENativeMobileFixtureStateSnapshot().contacts).toEqual({
+      resultCount: 1,
+      lastQuery: 'Sofia',
+    });
+    const avery = await executeToolInner(
+      'contacts_search',
+      JSON.stringify({ query: 'Avery' }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(avery)).toEqual([]);
+
+    resetE2ENativeMobileFixtures();
+    const restored = await executeToolInner(
+      'contacts_search',
+      JSON.stringify({ query: 'Avery' }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(restored)).toHaveLength(1);
+  });
+
+  it('records when a seeded event is moved', async () => {
+    seedE2ENativeMobileFixtures({
+      calendarEvents: [
+        {
+          id: 'e-dentist',
+          calendarId: 'e2e-cal-1',
+          title: 'Dentist',
+          startDate: '2027-10-19T10:00:00.000Z',
+          endDate: '2027-10-19T11:00:00.000Z',
+          location: 'Rua Augusta 274',
+          allDay: false,
+        },
+      ],
+    });
+
+    await executeToolInner(
+      'calendar_update_event',
+      JSON.stringify({ id: 'e-dentist', startDate: '2027-10-21T10:00:00.000Z' }),
+      'c',
+    );
+
+    expect(getE2ENativeMobileFixtureStateSnapshot().calendar).toMatchObject({
+      updatedEventCount: 1,
+      lastUpdatedEventId: 'e-dentist',
+      lastUpdatedStartDate: '2027-10-21T10:00:00.000Z',
+      lastUpdatedEndDate: '2027-10-21T11:00:00.000Z',
+      createdEventCount: 0,
     });
   });
 
@@ -379,6 +464,8 @@ describe('E2E native mobile fixtures', () => {
       opened: false,
       recipientCount: 0,
       messageLength: 0,
+      recipients: '',
+      message: '',
     });
   });
 

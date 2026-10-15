@@ -2,7 +2,6 @@
 // this fixture at the generic native-tool boundary for the duration of a run.
 
 import { ALL_NATIVE_TOOL_DEFINITIONS } from '../../engine/tools/native/definitions';
-import { normalizePhoneNumberList } from '../../services/nativeActions/builders/phone';
 import {
   recordE2ENativeMobileInvocation,
   resetE2ENativeMobileInvocationEvidence,
@@ -20,10 +19,21 @@ import {
   type E2ENativeMobileOutcome,
 } from './e2eNativeMobileOutcome';
 import {
-  E2E_FIXTURE_CALENDAR_LIST_JSON,
-  hasE2ECalendarUpdateField,
+  createEmptyE2ECalendarState,
+  executeE2ECalendarFixtureTool,
+  resetE2ECalendarEvents,
+  seedE2ECalendarEvents,
   type E2ECalendarEvent,
+  type E2ECalendarFixtureState,
 } from './e2eNativeCalendarFixtures';
+import {
+  buildE2ESmsDraft,
+  getE2EContact,
+  resetE2EContacts,
+  searchE2EContacts,
+  seedE2EContacts,
+  type E2EFixtureContact,
+} from './e2eNativeMessagingFixtures';
 
 export {
   E2E_FIXTURE_DEVICE_HEALTH_JSON,
@@ -48,27 +58,14 @@ function applyE2EPermissionFixtureState(): void {
     E2E_NATIVE_PERMISSION_STATES.unavailable.screenCapture.status;
 }
 
-const E2E_CONTACTS = [
-  {
-    id: 'e2e-contact-avery',
-    name: 'Avery Chen',
-    phoneNumbers: [{ label: 'mobile', number: '+15550101001' }],
-    emails: [{ label: 'work', email: 'avery@example.invalid' }],
-  },
-] as const;
+/** What a scenario's phone holds before the first turn, instead of the default device. */
+export type E2ENativeFixtureSeed = Readonly<{
+  contacts?: ReadonlyArray<E2EFixtureContact>;
+  calendarEvents?: ReadonlyArray<E2ECalendarEvent>;
+}>;
 
 export type E2ENativeMobileFixtureStateSnapshot = {
-  calendar: {
-    listed: boolean;
-    allowsModifications: boolean;
-    createdEventCount: number;
-    updatedEventCount: number;
-    lastCreatedEventId: string;
-    lastCreatedTitle: string;
-    lastCreatedStartDate: string;
-    lastCreatedEndDate: string;
-    lastCreatedDurationMinutes: number;
-  };
+  calendar: E2ECalendarFixtureState;
   permissions: {
     location: string;
     mediaLibrary: string;
@@ -86,6 +83,9 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     opened: boolean;
     recipientCount: number;
     messageLength: number;
+    /** The draft's E.164 recipients, comma-separated. */
+    recipients: string;
+    message: string;
   };
   clipboard: {
     text: string;
@@ -114,17 +114,7 @@ export type E2ENativeMobileFixtureStateSnapshot = {
 
 function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
   return {
-    calendar: {
-      listed: false,
-      allowsModifications: false,
-      createdEventCount: 0,
-      updatedEventCount: 0,
-      lastCreatedEventId: '',
-      lastCreatedTitle: '',
-      lastCreatedStartDate: '',
-      lastCreatedEndDate: '',
-      lastCreatedDurationMinutes: 0,
-    },
+    calendar: createEmptyE2ECalendarState(),
     permissions: {
       location: '',
       mediaLibrary: '',
@@ -142,6 +132,8 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       opened: false,
       recipientCount: 0,
       messageLength: 0,
+      recipients: '',
+      message: '',
     },
     clipboard: {
       text: '',
@@ -170,9 +162,6 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
 }
 
 let e2eClipboardText = '';
-let e2eCalendarEventId = 0;
-let e2eCalendarEvents: E2ECalendarEvent[] = [];
-let e2eLastCreatedCalendarEventId: string | null = null;
 let e2eNativeFixtureState = createEmptyNativeFixtureState();
 const e2eNativeToolDefinitionsByName = new Map(
   ALL_NATIVE_TOOL_DEFINITIONS.map((tool) => [tool.name, tool]),
@@ -236,11 +225,16 @@ function validateE2ENativeRequiredArgs(
 
 export function resetE2ENativeMobileFixtures(): void {
   e2eClipboardText = '';
-  e2eCalendarEventId = 0;
-  e2eCalendarEvents = [];
-  e2eLastCreatedCalendarEventId = null;
+  resetE2ECalendarEvents();
   e2eNativeFixtureState = createEmptyNativeFixtureState();
+  resetE2EContacts();
   resetE2ENativeMobileInvocationEvidence();
+}
+
+/** Gives the phone the scenario's own contacts and calendar, after a reset. */
+export function seedE2ENativeMobileFixtures(seed: E2ENativeFixtureSeed): void {
+  if (seed.contacts) seedE2EContacts(seed.contacts);
+  if (seed.calendarEvents) seedE2ECalendarEvents(seed.calendarEvents);
 }
 
 /** The operating system accepted a notification that fires `delaySeconds` from now. */
@@ -268,112 +262,7 @@ export async function tryExecuteE2ENativeCalendarTool(
     return validationError;
   }
 
-  switch (name) {
-    case 'calendar_list':
-      e2eNativeFixtureState.calendar.listed = true;
-      e2eNativeFixtureState.calendar.allowsModifications = true;
-      return completedE2ENativeOutcome(E2E_FIXTURE_CALENDAR_LIST_JSON);
-    case 'calendar_events':
-      e2eNativeFixtureState.calendar.listed = true;
-      return completedE2ENativeOutcome(readE2ECalendarEvents(args));
-    default:
-      return null;
-  }
-}
-
-function readStringArg(args: Record<string, unknown>, key: string, fallback: string): string {
-  const value = args[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function readOptionalStringArg(args: Record<string, unknown>, key: string): string | undefined {
-  const value = args[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function readDateMs(value: unknown): number | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function normalizeFixtureDate(value: unknown, fallbackIso: string): string {
-  const timestamp = readDateMs(value);
-  return timestamp === undefined ? fallbackIso : new Date(timestamp).toISOString();
-}
-
-function normalizeFixtureEndDate(startIso: string, value: unknown, fallbackIso: string): string {
-  const startMs = Date.parse(startIso);
-  const endMs = readDateMs(value);
-  if (endMs !== undefined && endMs > startMs) {
-    return new Date(endMs).toISOString();
-  }
-  const fallbackMs = Date.parse(fallbackIso);
-  return new Date(Math.max(fallbackMs, startMs + 60 * 60 * 1000)).toISOString();
-}
-
-function serializeE2ECalendarEvent(event: E2ECalendarEvent): Record<string, unknown> {
-  return {
-    id: event.id,
-    calendarId: event.calendarId,
-    title: event.title,
-    startDate: event.startDate,
-    endDate: event.endDate,
-    location: event.location,
-    notes: event.notes?.slice(0, 200),
-    allDay: event.allDay,
-  };
-}
-
-function e2eCalendarEventsEqual(left: E2ECalendarEvent, right: E2ECalendarEvent): boolean {
-  return (
-    left.id === right.id &&
-    left.calendarId === right.calendarId &&
-    left.title === right.title &&
-    left.startDate === right.startDate &&
-    left.endDate === right.endDate &&
-    left.location === right.location &&
-    left.notes === right.notes &&
-    left.allDay === right.allDay
-  );
-}
-
-function recordLastCreatedCalendarTiming(event: E2ECalendarEvent): void {
-  const durationMinutes = (Date.parse(event.endDate) - Date.parse(event.startDate)) / 60_000;
-  e2eNativeFixtureState.calendar.lastCreatedEventId = event.id;
-  e2eNativeFixtureState.calendar.lastCreatedTitle = event.title;
-  e2eNativeFixtureState.calendar.lastCreatedStartDate = event.startDate;
-  e2eNativeFixtureState.calendar.lastCreatedEndDate = event.endDate;
-  e2eNativeFixtureState.calendar.lastCreatedDurationMinutes = Math.max(
-    0,
-    Math.min(10_080, durationMinutes),
-  );
-}
-
-function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, unknown>[] {
-  const calendarId = readOptionalStringArg(args, 'calendarId');
-  const startMs = readDateMs(args.startDate);
-  const endMs = readDateMs(args.endDate);
-
-  return e2eCalendarEvents
-    .filter((event) => {
-      if (calendarId && event.calendarId !== calendarId) {
-        return false;
-      }
-      const eventStartMs = Date.parse(event.startDate);
-      const eventEndMs = Date.parse(event.endDate);
-      if (startMs !== undefined && eventEndMs < startMs) {
-        return false;
-      }
-      if (endMs !== undefined && eventStartMs > endMs) {
-        return false;
-      }
-      return true;
-    })
-    .slice(0, 50)
-    .map(serializeE2ECalendarEvent);
+  return executeE2ECalendarFixtureTool(name, args, e2eNativeFixtureState.calendar);
 }
 
 async function executeE2ENativeMobileTool(
@@ -392,90 +281,6 @@ async function executeE2ENativeMobileTool(
   }
 
   switch (name) {
-    case 'calendar_create_event': {
-      e2eCalendarEventId += 1;
-      e2eNativeFixtureState.calendar.createdEventCount += 1;
-      const startDate = normalizeFixtureDate(args.startDate, '2026-06-12T10:00:00.000Z');
-      const event: E2ECalendarEvent = {
-        id: `e2e-event-${e2eCalendarEventId}`,
-        calendarId: readStringArg(args, 'calendarId', 'e2e-cal-1'),
-        title: readStringArg(args, 'title', `E2E Event ${e2eCalendarEventId}`),
-        startDate,
-        endDate: normalizeFixtureEndDate(startDate, args.endDate, '2026-06-12T11:00:00.000Z'),
-        ...(readOptionalStringArg(args, 'location')
-          ? { location: readOptionalStringArg(args, 'location') }
-          : {}),
-        ...(readOptionalStringArg(args, 'notes')
-          ? { notes: readOptionalStringArg(args, 'notes') }
-          : {}),
-        allDay: typeof args.allDay === 'boolean' ? args.allDay : false,
-      };
-      e2eCalendarEvents.push(event);
-      e2eLastCreatedCalendarEventId = event.id;
-      recordLastCreatedCalendarTiming(event);
-      return completedE2ENativeOutcome({
-        status: 'created_verified',
-        eventId: event.id,
-        calendarId: event.calendarId,
-        event: serializeE2ECalendarEvent(event),
-      });
-    }
-    case 'calendar_update_event': {
-      const eventId = readStringArg(args, 'id', 'e2e-event-1');
-      if (!hasE2ECalendarUpdateField(args)) {
-        return failedE2ENativeOutcome({
-          status: 'invalid_request',
-          error: 'Calendar update requires at least one field to change.',
-        });
-      }
-      const eventIndex = e2eCalendarEvents.findIndex((event) => event.id === eventId);
-      if (eventIndex < 0) {
-        return failedE2ENativeOutcome({
-          status: 'not_found',
-          code: 'not_found',
-          eventId,
-        });
-      }
-      const existing = e2eCalendarEvents[eventIndex]!;
-      const nextStartDate =
-        typeof args.startDate === 'string'
-          ? normalizeFixtureDate(args.startDate, existing.startDate)
-          : existing.startDate;
-      const nextEndDate =
-        typeof args.endDate === 'string'
-          ? normalizeFixtureEndDate(nextStartDate, args.endDate, existing.endDate)
-          : normalizeFixtureEndDate(nextStartDate, existing.endDate, existing.endDate);
-      const nextTitle = readOptionalStringArg(args, 'title');
-      const nextLocation = readOptionalStringArg(args, 'location');
-      const nextNotes = readOptionalStringArg(args, 'notes');
-      const updated: E2ECalendarEvent = {
-        ...existing,
-        ...(nextTitle ? { title: nextTitle } : {}),
-        startDate: nextStartDate,
-        endDate: nextEndDate,
-        ...(nextLocation !== undefined ? { location: nextLocation } : {}),
-        ...(nextNotes !== undefined ? { notes: nextNotes } : {}),
-        ...(typeof args.allDay === 'boolean' ? { allDay: args.allDay } : {}),
-      };
-      if (e2eCalendarEventsEqual(existing, updated)) {
-        return completedE2ENativeOutcome({
-          status: 'updated_verified',
-          eventId,
-          event: serializeE2ECalendarEvent(existing),
-          idempotent: true,
-        });
-      }
-      e2eCalendarEvents[eventIndex] = updated;
-      e2eNativeFixtureState.calendar.updatedEventCount += 1;
-      if (e2eLastCreatedCalendarEventId === updated.id) {
-        recordLastCreatedCalendarTiming(updated);
-      }
-      return completedE2ENativeOutcome({
-        status: 'updated_verified',
-        eventId,
-        event: serializeE2ECalendarEvent(updated),
-      });
-    }
     case 'maps_open': {
       const targetKind =
         typeof args.latitude === 'number' && typeof args.longitude === 'number'
@@ -507,44 +312,26 @@ async function executeE2ENativeMobileTool(
         code: 'permission_denied',
         permission: E2E_NATIVE_PERMISSION_STATES.denied.location,
       });
-    case 'contacts_search':
-      e2eNativeFixtureState.contacts.resultCount = E2E_CONTACTS.length;
-      e2eNativeFixtureState.contacts.lastQuery = typeof args.query === 'string' ? args.query : '';
-      return completedE2ENativeOutcome(E2E_CONTACTS);
+    case 'contacts_search': {
+      const query = typeof args.query === 'string' ? args.query : '';
+      const results = searchE2EContacts(query);
+      e2eNativeFixtureState.contacts.resultCount = results.length;
+      e2eNativeFixtureState.contacts.lastQuery = query;
+      return completedE2ENativeOutcome(results);
+    }
     case 'contacts_get':
-      return completedE2ENativeOutcome(
-        E2E_CONTACTS.find((contact) => contact.id === args.id) ?? null,
-      );
+      return completedE2ENativeOutcome(getE2EContact(args.id));
     case 'sms_compose': {
-      const rawRecipients = Array.isArray(args.recipients)
-        ? args.recipients.filter((recipient): recipient is string => typeof recipient === 'string')
-        : [];
-      let recipients: string[];
-      try {
-        recipients = normalizePhoneNumberList(
-          rawRecipients,
-          'recipients',
-          readOptionalStringArg(args, 'defaultCountry'),
-        );
-      } catch (error) {
-        return buildInvalidFixtureArgsError(
-          name,
-          error instanceof Error ? error.message : 'Invalid SMS recipients.',
-          typeof (error as { code?: unknown }).code === 'string'
-            ? (error as { code: string }).code
-            : undefined,
-        );
+      const built = buildE2ESmsDraft(args);
+      if ('error' in built) {
+        return buildInvalidFixtureArgsError(name, built.error, built.code);
       }
-      if (recipients.length === 0) {
-        return buildInvalidFixtureArgsError(
-          name,
-          'recipients must contain at least one phone number.',
-        );
-      }
+      const { recipients, message } = built.draft;
       e2eNativeFixtureState.sms.opened = true;
       e2eNativeFixtureState.sms.recipientCount = recipients.length;
-      e2eNativeFixtureState.sms.messageLength =
-        typeof args.message === 'string' ? args.message.length : 0;
+      e2eNativeFixtureState.sms.messageLength = message.length;
+      e2eNativeFixtureState.sms.recipients = recipients.join(',');
+      e2eNativeFixtureState.sms.message = message;
       return completedE2ENativeOutcome({
         status: 'sms_composer_opened',
         recipientCount: e2eNativeFixtureState.sms.recipientCount,

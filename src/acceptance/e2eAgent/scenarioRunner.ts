@@ -10,6 +10,7 @@ import {
 } from './e2ePrivateScenarioEvidence';
 import { installE2EScenarioEnvironment } from './e2eScenarioEnvironment';
 import { runForegroundScenario } from './foregroundScenarioDriver';
+import { seedE2ENativeMobileFixtures } from './e2eNativeMobileFixtures';
 import { resetAndVerifyE2EScenarioSandboxes } from './e2ePairedStateIsolation';
 import { buildE2EProviderWithDiscoveredCatalog, isE2EAgentEvalEnabled } from './providerConfig';
 import { seedE2EWorkspaceSandbox } from './sandboxWorkspace';
@@ -102,6 +103,7 @@ export async function runE2EScenario(
   );
   resetAndVerifyE2EScenarioSandboxes();
   seedE2EWorkspaceSandbox(conversationId, scenario.initialWorkspaceFiles ?? []);
+  if (scenario.initialNativeFixture) seedE2ENativeMobileFixtures(scenario.initialNativeFixture);
 
   const provider = options.provider ?? (await buildE2EProviderWithDiscoveredCatalog());
   const userTurns = resolveScenarioUserTurns(scenario);
