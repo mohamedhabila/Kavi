@@ -732,6 +732,13 @@ export const en: TranslationMap = {
       assistantHeldHint: 'Kavi opens in voice when you long-press the home or power button.',
       assistantNotHeldHint: 'Set Kavi as your digital assistant to open it with a long press of the home or power button.',
       assistantSettingsUnavailable: 'This phone has no assistant settings to open.',
+      notificationAccessTitle: 'Notification access',
+      notificationAccessHeldHint:
+        'Kavi can read your notifications back to you when you ask, from when you turned this on.',
+      notificationAccessNotHeldHint:
+        'Let Kavi read what your other apps notify you about, such as messages and deliveries, when you ask.',
+      notificationAccessSettingsUnavailable:
+        'This phone has no notification access settings to open.',
     },
     showAdvancedOptions: 'Show advanced options',
     hideAdvancedOptions: 'Hide advanced options',
@@ -1907,6 +1914,7 @@ export const en: TranslationMap = {
       memory_search: 'Search Memory',
       mobile_ui_action: 'Use App Screen',
       notification_send: 'Send Notification',
+      notifications_read: 'Read Notifications',
       open_url: 'Open Link',
       pdf_read: 'Read PDF',
       phone_call: 'Call',
@@ -2715,6 +2723,7 @@ export const en: TranslationMap = {
       contactsShareTitle: 'Share contact',
       contactsSearchFullTitle: 'Search contacts',
       contactsGetFullTitle: 'Read contact details',
+      notificationsReadTitle: 'Read your notifications',
       shareTextTitle: 'Share text',
       shareFileTitle: 'Share file',
       openUrlTitle: 'Open reviewed link',
@@ -2744,6 +2753,7 @@ export const en: TranslationMap = {
       coordinatesIncluded: 'coordinates included',
       labelIncluded: 'label included',
       limit: 'limit {count}',
+      lookBackMinutes: 'last {count} min',
       textLength: plural({
         one: '{count} character',
         other: '{count} characters',

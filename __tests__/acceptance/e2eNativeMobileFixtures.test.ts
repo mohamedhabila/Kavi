@@ -390,6 +390,34 @@ describe('E2E native mobile fixtures', () => {
     expect(parseCompletedToolOutcome(restored)).toHaveLength(1);
   });
 
+  it('reads back seeded notifications, newest first, and none by default', async () => {
+    const empty = await executeToolInner('notifications_read', '{}', 'c');
+    expect(parseCompletedToolOutcome(empty)).toEqual({
+      status: 'completed',
+      count: 0,
+      notifications: [],
+    });
+
+    seedE2ENativeMobileFixtures({
+      notifications: [
+        {
+          app: 'Messages',
+          title: 'Ana',
+          text: 'Leaving now',
+          postedAt: '2026-10-15T09:00:00.000Z',
+        },
+        { app: 'Post', title: 'Parcel', text: 'Delivered', postedAt: '2026-10-15T10:00:00.000Z' },
+      ],
+    });
+    const read = await executeToolInner('notifications_read', JSON.stringify({ limit: 1 }), 'c');
+
+    expect(parseCompletedToolOutcome(read)).toEqual({
+      status: 'completed',
+      count: 1,
+      notifications: [expect.objectContaining({ title: 'Parcel', showing: true })],
+    });
+  });
+
   it('records when a seeded event is moved', async () => {
     seedE2ENativeMobileFixtures({
       calendarEvents: [

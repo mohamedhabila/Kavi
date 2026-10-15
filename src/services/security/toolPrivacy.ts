@@ -115,6 +115,7 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'sms_compose' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
+    toolName === 'notifications_read' ||
     toolName === 'screen_record' ||
     toolName === 'open_url' ||
     toolName.startsWith('share_') ||
@@ -169,6 +170,8 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.contactsSearchFullTitle');
     case 'contacts_get':
       return i18n.t('toolApproval.actions.contactsGetFullTitle');
+    case 'notifications_read':
+      return i18n.t('toolApproval.actions.notificationsReadTitle');
     case 'share_text':
       return i18n.t('toolApproval.actions.shareTextTitle');
     case 'share_file':
@@ -391,6 +394,17 @@ function summarizeNativeTool(
     }
     case 'location_current': {
       redactedArguments = {};
+      break;
+    }
+    case 'notifications_read': {
+      if (typeof args.since_minutes === 'number')
+        pushDetail(details, 'toolApproval.details.lookBackMinutes', { count: args.since_minutes });
+      if (typeof args.limit === 'number')
+        pushDetail(details, 'toolApproval.details.limit', { count: args.limit });
+      redactedArguments = {
+        sinceMinutes: typeof args.since_minutes === 'number' ? args.since_minutes : undefined,
+        limit: typeof args.limit === 'number' ? args.limit : undefined,
+      };
       break;
     }
     case 'clipboard_read': {

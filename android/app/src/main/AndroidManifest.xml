@@ -56,6 +56,12 @@
       </intent-filter>
     </service>
     <service android:name=".localllm.LocalLlmForegroundService" android:exported="false" android:foregroundServiceType="shortService"/>
+    <!-- Reads other apps' notifications back to the person, once they turn on notification access. -->
+    <service android:name=".notifications.KaviNotificationListenerService" android:exported="true" android:label="@string/app_name" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService"/>
+      </intent-filter>
+    </service>
     <service android:name=".longhorizon.AndroidLongHorizonExecutionService" android:exported="false" android:foregroundServiceType="specialUse">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-initiated assistant workflows that must continue while the user switches apps; Kavi shows progress, offers a Stop action, and stops the service when the task finishes."/>
     </service>

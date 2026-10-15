@@ -5,7 +5,8 @@ import {
   getAssistantRoleState,
   openAssistantSettings,
 } from '../../src/services/assistant/assistantRole';
-import { SettingsAssistantRoleRow } from '../../src/screens/settings/SettingsAssistantRoleRow';
+import { SettingsSystemAccessRow } from '../../src/screens/settings/SettingsSystemAccessRow';
+import { ASSISTANT_ROLE_ACCESS } from '../../src/screens/settings/systemAccesses';
 
 const originalOS = Platform.OS;
 const mockGetAssistantRoleState = jest.fn();
@@ -49,13 +50,20 @@ describe('phone assistant role', () => {
   });
 });
 
-describe('SettingsAssistantRoleRow', () => {
+describe('assistant role settings row', () => {
   const t = (key: string) => key;
   const styles = {};
   const colors = { primary: '#0f0', textTertiary: '#777' } as never;
 
   it('offers to make Kavi the assistant and opens the system settings', async () => {
-    const view = render(<SettingsAssistantRoleRow colors={colors} styles={styles} t={t} />);
+    const view = render(
+      <SettingsSystemAccessRow
+        access={ASSISTANT_ROLE_ACCESS}
+        colors={colors}
+        styles={styles}
+        t={t}
+      />,
+    );
 
     await waitFor(() => expect(view.getByTestId('settings-assistant-role')).toBeTruthy());
     expect(view.getByText('settings.notificationsVoice.assistantNotHeldHint')).toBeTruthy();
@@ -69,7 +77,14 @@ describe('SettingsAssistantRoleRow', () => {
       onAppStateChange = handler;
       return { remove: jest.fn() };
     }) as never);
-    const view = render(<SettingsAssistantRoleRow colors={colors} styles={styles} t={t} />);
+    const view = render(
+      <SettingsSystemAccessRow
+        access={ASSISTANT_ROLE_ACCESS}
+        colors={colors}
+        styles={styles}
+        t={t}
+      />,
+    );
     await waitFor(() =>
       expect(view.getByText('settings.notificationsVoice.assistantNotHeldHint')).toBeTruthy(),
     );
@@ -85,7 +100,14 @@ describe('SettingsAssistantRoleRow', () => {
   it('says so when the phone has no assistant settings to open', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockOpenAssistantSettings.mockResolvedValueOnce(false);
-    const view = render(<SettingsAssistantRoleRow colors={colors} styles={styles} t={t} />);
+    const view = render(
+      <SettingsSystemAccessRow
+        access={ASSISTANT_ROLE_ACCESS}
+        colors={colors}
+        styles={styles}
+        t={t}
+      />,
+    );
 
     await waitFor(() => expect(view.getByTestId('settings-assistant-role')).toBeTruthy());
     fireEvent.press(view.getByTestId('settings-assistant-role'));
@@ -99,7 +121,14 @@ describe('SettingsAssistantRoleRow', () => {
 
   it('is hidden where there is no assistant role', async () => {
     mockGetAssistantRoleState.mockResolvedValue('unavailable');
-    const view = render(<SettingsAssistantRoleRow colors={colors} styles={styles} t={t} />);
+    const view = render(
+      <SettingsSystemAccessRow
+        access={ASSISTANT_ROLE_ACCESS}
+        colors={colors}
+        styles={styles}
+        t={t}
+      />,
+    );
     await act(async () => undefined);
 
     expect(view.queryByTestId('settings-assistant-role')).toBeNull();

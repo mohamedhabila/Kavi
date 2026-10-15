@@ -29,6 +29,7 @@ class MainApplication : Application(), ReactApplication {
           add(KaviScheduledJobsPackage())
           add(KaviHeadlessJsTaskSupportPackage())
           add(KaviAssistantPackage())
+          add(KaviNotificationReaderPackage())
         }
     )
   }

@@ -758,6 +758,13 @@ export const es: TranslationMap = mergeTranslations(en, {
       assistantHeldHint: 'Kavi se abre en modo voz cuando mantienes pulsado el botón de inicio o de encendido.',
       assistantNotHeldHint: 'Configura Kavi como tu asistente digital para abrirlo manteniendo pulsado el botón de inicio o de encendido.',
       assistantSettingsUnavailable: 'Este teléfono no tiene ajustes de asistente que abrir.',
+      notificationAccessTitle: 'Acceso a notificaciones',
+      notificationAccessHeldHint:
+        'Kavi puede leerte tus notificaciones cuando lo pidas, desde que activaste esta opción.',
+      notificationAccessNotHeldHint:
+        'Permite que Kavi lea, cuando lo pidas, lo que te notifican tus otras apps, como mensajes y entregas.',
+      notificationAccessSettingsUnavailable:
+        'Este teléfono no tiene ajustes de acceso a notificaciones.',
     },
     showAdvancedOptions: 'Mostrar opciones avanzadas',
     hideAdvancedOptions: 'Ocultar opciones avanzadas',
@@ -1942,6 +1949,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       memory_search: 'Buscar en la memoria',
       mobile_ui_action: 'Usar la pantalla',
       notification_send: 'Enviar notificación',
+      notifications_read: 'Leer notificaciones',
       open_url: 'Abrir enlace',
       pdf_read: 'Leer PDF',
       phone_call: 'Llamar',
@@ -2762,6 +2770,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       contactsShareTitle: 'Compartir contacto',
       contactsSearchFullTitle: 'Buscar contactos',
       contactsGetFullTitle: 'Leer datos del contacto',
+      notificationsReadTitle: 'Leer tus notificaciones',
       shareTextTitle: 'Compartir texto',
       shareFileTitle: 'Compartir archivo',
       openUrlTitle: 'Abrir enlace revisado',
@@ -2793,6 +2802,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       coordinatesIncluded: 'incluye coordenadas',
       labelIncluded: 'incluye etiqueta',
       limit: 'hasta {count}',
+      lookBackMinutes: 'últimos {count} min',
       textLength: plural({
         one: '{count} carácter',
         many: '{count} caracteres',

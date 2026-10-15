@@ -29,10 +29,13 @@ import {
 import {
   buildE2ESmsDraft,
   getE2EContact,
-  resetE2EContacts,
+  readE2ENotifications,
+  resetE2EMessagingFixtures,
   searchE2EContacts,
   seedE2EContacts,
+  seedE2ENotifications,
   type E2EFixtureContact,
+  type E2EFixtureNotification,
 } from './e2eNativeMessagingFixtures';
 
 export {
@@ -62,6 +65,7 @@ function applyE2EPermissionFixtureState(): void {
 export type E2ENativeFixtureSeed = Readonly<{
   contacts?: ReadonlyArray<E2EFixtureContact>;
   calendarEvents?: ReadonlyArray<E2ECalendarEvent>;
+  notifications?: ReadonlyArray<E2EFixtureNotification>;
 }>;
 
 export type E2ENativeMobileFixtureStateSnapshot = {
@@ -227,7 +231,7 @@ export function resetE2ENativeMobileFixtures(): void {
   e2eClipboardText = '';
   resetE2ECalendarEvents();
   e2eNativeFixtureState = createEmptyNativeFixtureState();
-  resetE2EContacts();
+  resetE2EMessagingFixtures();
   resetE2ENativeMobileInvocationEvidence();
 }
 
@@ -235,6 +239,7 @@ export function resetE2ENativeMobileFixtures(): void {
 export function seedE2ENativeMobileFixtures(seed: E2ENativeFixtureSeed): void {
   if (seed.contacts) seedE2EContacts(seed.contacts);
   if (seed.calendarEvents) seedE2ECalendarEvents(seed.calendarEvents);
+  if (seed.notifications) seedE2ENotifications(seed.notifications);
 }
 
 /** The operating system accepted a notification that fires `delaySeconds` from now. */
@@ -321,6 +326,8 @@ async function executeE2ENativeMobileTool(
     }
     case 'contacts_get':
       return completedE2ENativeOutcome(getE2EContact(args.id));
+    case 'notifications_read':
+      return completedE2ENativeOutcome(readE2ENotifications(args));
     case 'sms_compose': {
       const built = buildE2ESmsDraft(args);
       if ('error' in built) {

@@ -782,6 +782,12 @@ export const ar: TranslationMap = mergeTranslations(en, {
       assistantHeldHint: 'يفتح Kavi في وضع الصوت عند الضغط مطولًا على زر الشاشة الرئيسية أو زر التشغيل.',
       assistantNotHeldHint: 'عيّن Kavi مساعدًا رقميًا لفتحه بضغطة مطولة على زر الشاشة الرئيسية أو زر التشغيل.',
       assistantSettingsUnavailable: 'لا توجد في هذا الهاتف إعدادات مساعد يمكن فتحها.',
+      notificationAccessTitle: 'الوصول إلى الإشعارات',
+      notificationAccessHeldHint:
+        'يمكن لـ Kavi أن يقرأ لك إشعاراتك عندما تطلب، بدءًا من وقت تفعيل هذا الخيار.',
+      notificationAccessNotHeldHint:
+        'اسمح لـ Kavi بقراءة ما تُعلمك به تطبيقاتك الأخرى، مثل الرسائل والتوصيلات، عندما تطلب.',
+      notificationAccessSettingsUnavailable: 'لا تتوفر في هذا الهاتف إعدادات للوصول إلى الإشعارات.',
     },
     showAdvancedOptions: 'إظهار الخيارات المتقدمة',
     hideAdvancedOptions: 'إخفاء الخيارات المتقدمة',
@@ -1981,6 +1987,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       memory_search: 'البحث في الذاكرة',
       mobile_ui_action: 'استخدام الشاشة',
       notification_send: 'إرسال إشعار',
+      notifications_read: 'قراءة الإشعارات',
       open_url: 'فتح الرابط',
       pdf_read: 'قراءة ملف PDF',
       phone_call: 'اتصال',
@@ -2792,6 +2799,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       contactsShareTitle: 'مشاركة جهة الاتصال',
       contactsSearchFullTitle: 'البحث في جهات الاتصال',
       contactsGetFullTitle: 'قراءة تفاصيل جهة الاتصال',
+      notificationsReadTitle: 'قراءة إشعاراتك',
       shareTextTitle: 'مشاركة النص',
       shareFileTitle: 'مشاركة الملف',
       openUrlTitle: 'فتح الرابط الذي تمت مراجعته',
@@ -2829,6 +2837,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       coordinatesIncluded: 'يتضمن الإحداثيات',
       labelIncluded: 'يتضمن التسمية',
       limit: 'حتى {count}',
+      lookBackMinutes: 'آخر {count} دقيقة',
       textLength: plural({
         zero: 'لا أحرف',
         one: 'حرف واحد',

@@ -762,6 +762,13 @@ export const fr: TranslationMap = mergeTranslations(en, {
       assistantHeldHint: "Kavi s'ouvre en mode vocal quand vous appuyez longuement sur le bouton d'accueil ou marche/arrêt.",
       assistantNotHeldHint: "Définissez Kavi comme assistant numérique pour l'ouvrir d'un appui long sur le bouton d'accueil ou marche/arrêt.",
       assistantSettingsUnavailable: "Ce téléphone n'a pas de réglages d'assistant à ouvrir.",
+      notificationAccessTitle: 'Accès aux notifications',
+      notificationAccessHeldHint:
+        'Kavi peut vous lire vos notifications quand vous le demandez, depuis que vous avez activé cette option.',
+      notificationAccessNotHeldHint:
+        'Autorisez Kavi à lire, à votre demande, ce que vos autres apps vous notifient, comme les messages et les livraisons.',
+      notificationAccessSettingsUnavailable:
+        "Ce téléphone n'a pas de réglages d'accès aux notifications.",
     },
     showAdvancedOptions: 'Afficher les options avancées',
     hideAdvancedOptions: 'Masquer les options avancées',
@@ -1947,6 +1954,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       memory_search: 'Rechercher dans la mémoire',
       mobile_ui_action: "Agir sur l'écran",
       notification_send: 'Envoyer une notification',
+      notifications_read: 'Lire les notifications',
       open_url: 'Ouvrir le lien',
       pdf_read: 'Lire le PDF',
       phone_call: 'Appeler',
@@ -2773,6 +2781,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       contactsShareTitle: 'Partager le contact',
       contactsSearchFullTitle: 'Rechercher des contacts',
       contactsGetFullTitle: 'Lire les détails du contact',
+      notificationsReadTitle: 'Lire vos notifications',
       shareTextTitle: 'Partager le texte',
       shareFileTitle: 'Partager le fichier',
       openUrlTitle: 'Ouvrir le lien vérifié',
@@ -2804,6 +2813,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       coordinatesIncluded: 'coordonnées incluses',
       labelIncluded: 'libellé inclus',
       limit: "jusqu'à {count}",
+      lookBackMinutes: '{count} dernières min',
       textLength: plural({
         one: '{count} caractère',
         many: '{count} caractères',

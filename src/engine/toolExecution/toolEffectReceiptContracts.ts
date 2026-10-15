@@ -201,6 +201,7 @@ const READ_ONLY_NATIVE_TOOLS = [
   'contacts_get',
   'device_query',
   'location_current',
+  'notifications_read',
   'photos_pick',
   ...CODE_OWNED_EFFECT_FREE_SERVICE_TOOL_NAMES,
 ] as const;

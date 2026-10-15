@@ -71,6 +71,7 @@ export const NATIVE_TOOL_NAMES = new Set([
   'share_file',
   'open_url',
   'notification_send',
+  'notifications_read',
   'device_query',
   'photos_pick',
   'camera_clip',

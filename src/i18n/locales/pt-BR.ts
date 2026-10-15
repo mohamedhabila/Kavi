@@ -752,6 +752,13 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       assistantHeldHint: 'O Kavi abre no modo de voz quando você mantém pressionado o botão de início ou de ligar.',
       assistantNotHeldHint: 'Defina o Kavi como seu assistente digital para abri-lo mantendo pressionado o botão de início ou de ligar.',
       assistantSettingsUnavailable: 'Este telefone não tem configurações de assistente para abrir.',
+      notificationAccessTitle: 'Acesso às notificações',
+      notificationAccessHeldHint:
+        'O Kavi pode ler suas notificações para você quando pedir, a partir de quando você ativou isto.',
+      notificationAccessNotHeldHint:
+        'Permita que o Kavi leia, quando você pedir, o que seus outros apps notificam, como mensagens e entregas.',
+      notificationAccessSettingsUnavailable:
+        'Este telefone não tem configurações de acesso às notificações.',
     },
     showAdvancedOptions: 'Mostrar opções avançadas',
     hideAdvancedOptions: 'Ocultar opções avançadas',
@@ -1928,6 +1935,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       memory_search: 'Buscar na memória',
       mobile_ui_action: 'Usar a tela',
       notification_send: 'Enviar notificação',
+      notifications_read: 'Ler notificações',
       open_url: 'Abrir link',
       pdf_read: 'Ler PDF',
       phone_call: 'Ligar',
@@ -2744,6 +2752,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       contactsShareTitle: 'Compartilhar contato',
       contactsSearchFullTitle: 'Pesquisar contatos',
       contactsGetFullTitle: 'Ler detalhes do contato',
+      notificationsReadTitle: 'Ler suas notificações',
       shareTextTitle: 'Compartilhar texto',
       shareFileTitle: 'Compartilhar arquivo',
       openUrlTitle: 'Abrir link revisado',
@@ -2775,6 +2784,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       coordinatesIncluded: 'coordenadas incluídas',
       labelIncluded: 'rótulo incluído',
       limit: 'até {count}',
+      lookBackMinutes: 'últimos {count} min',
       textLength: plural({
         one: '{count} caractere',
         many: '{count} caracteres',

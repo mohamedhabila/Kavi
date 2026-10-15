@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Kavi — E2E fake phone: contacts and the SMS composer
+// Kavi — E2E fake phone: contacts, notifications and the SMS composer
 // ---------------------------------------------------------------------------
 // The address book the scenario's phone holds (one contact unless the scenario seeds its
-// own) and the recipients and text of the SMS draft the model opened.
+// own), the notifications other apps showed (none unless seeded), and the recipients and
+// text of the SMS draft the model opened.
 
 import { normalizePhoneNumberList } from '../../services/nativeActions/builders/phone';
 
@@ -11,6 +12,14 @@ export type E2EFixtureContact = Readonly<{
   name: string;
   phoneNumbers: ReadonlyArray<Readonly<{ label: string; number: string }>>;
   emails?: ReadonlyArray<Readonly<{ label: string; email: string }>>;
+}>;
+
+export type E2EFixtureNotification = Readonly<{
+  app: string;
+  title: string;
+  text: string;
+  /** ISO time it was posted. */
+  postedAt: string;
 }>;
 
 export type E2ESmsDraft = Readonly<{
@@ -29,9 +38,25 @@ const E2E_DEFAULT_CONTACTS: ReadonlyArray<E2EFixtureContact> = [
 ];
 
 let e2eContacts: ReadonlyArray<E2EFixtureContact> = E2E_DEFAULT_CONTACTS;
+let e2eNotifications: ReadonlyArray<E2EFixtureNotification> = [];
 
-export function resetE2EContacts(): void {
+export function resetE2EMessagingFixtures(): void {
   e2eContacts = E2E_DEFAULT_CONTACTS;
+  e2eNotifications = [];
+}
+
+export function seedE2ENotifications(notifications: ReadonlyArray<E2EFixtureNotification>): void {
+  e2eNotifications = notifications;
+}
+
+/** What notifications_read returns on the scenario phone: the seed, newest first. */
+export function readE2ENotifications(args: Record<string, unknown>): Record<string, unknown> {
+  const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : 30;
+  const notifications = [...e2eNotifications]
+    .sort((left, right) => Date.parse(right.postedAt) - Date.parse(left.postedAt))
+    .slice(0, limit)
+    .map((notification) => ({ ...notification, showing: true }));
+  return { status: 'completed', count: notifications.length, notifications };
 }
 
 export function seedE2EContacts(contacts: ReadonlyArray<E2EFixtureContact>): void {

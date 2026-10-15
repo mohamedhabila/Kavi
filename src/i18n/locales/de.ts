@@ -738,6 +738,13 @@ export const de: TranslationMap = mergeTranslations(en, {
       assistantHeldHint: 'Kavi öffnet sich im Sprachmodus, wenn du die Home- oder Ein/Aus-Taste lange drückst.',
       assistantNotHeldHint: 'Lege Kavi als digitalen Assistenten fest, um es mit langem Drücken der Home- oder Ein/Aus-Taste zu öffnen.',
       assistantSettingsUnavailable: 'Dieses Telefon hat keine Assistenten-Einstellungen, die geöffnet werden können.',
+      notificationAccessTitle: 'Benachrichtigungszugriff',
+      notificationAccessHeldHint:
+        'Kavi kann dir deine Benachrichtigungen vorlesen, wenn du fragst – ab dem Zeitpunkt, an dem du das eingeschaltet hast.',
+      notificationAccessNotHeldHint:
+        'Erlaube Kavi, auf Nachfrage zu lesen, worüber dich deine anderen Apps benachrichtigen, etwa Nachrichten und Lieferungen.',
+      notificationAccessSettingsUnavailable:
+        'Dieses Telefon hat keine Einstellungen für den Benachrichtigungszugriff.',
     },
     showAdvancedOptions: 'Erweiterte Optionen anzeigen',
     hideAdvancedOptions: 'Erweiterte Optionen ausblenden',
@@ -1912,6 +1919,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       memory_search: 'Gedächtnis durchsuchen',
       mobile_ui_action: 'Bildschirm bedienen',
       notification_send: 'Benachrichtigung senden',
+      notifications_read: 'Benachrichtigungen lesen',
       open_url: 'Link öffnen',
       pdf_read: 'PDF lesen',
       phone_call: 'Anrufen',
@@ -2736,6 +2744,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       contactsShareTitle: 'Kontakt teilen',
       contactsSearchFullTitle: 'Kontakte durchsuchen',
       contactsGetFullTitle: 'Kontaktdetails lesen',
+      notificationsReadTitle: 'Deine Benachrichtigungen lesen',
       shareTextTitle: 'Text teilen',
       shareFileTitle: 'Datei teilen',
       openUrlTitle: 'Geprüften Link öffnen',
@@ -2765,6 +2774,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       coordinatesIncluded: 'Koordinaten enthalten',
       labelIncluded: 'Beschriftung enthalten',
       limit: 'bis zu {count}',
+      lookBackMinutes: 'letzte {count} Min.',
       textLength: plural({
         one: '{count} Zeichen',
         other: '{count} Zeichen',

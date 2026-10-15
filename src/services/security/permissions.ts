@@ -48,6 +48,7 @@ const ALWAYS_CONFIRM = new Set<string>([
   'share_file',
   'open_url',
   'notification_send',
+  'notifications_read',
   'photos_pick',
   'camera_clip',
   'screen_record',
