@@ -71,11 +71,6 @@ export interface LocalLlmModelCatalogEntry {
   supportsSpeculativeDecoding?: boolean;
   taskTypes?: string[];
   bestForTaskTypes?: string[];
-  availableUpdates?: Array<{
-    fileName: string;
-    downloadRevision: string;
-  }>;
-  updateInfo?: string;
   summary?: string;
 }
 

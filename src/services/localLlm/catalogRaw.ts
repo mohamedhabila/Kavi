@@ -40,14 +40,6 @@ export const RAW_LOCAL_MODEL_CATALOG: LocalLlmRawCatalogEntry[] = [
     supportsFileInput: true,
     supportsThinking: true,
     supportsSpeculativeDecoding: true,
-    availableUpdates: [
-      {
-        fileName: 'gemma-4-E2B-it.litertlm',
-        downloadRevision: '7fa1d78473894f7e736a21d920c3aa80f950c0db',
-      },
-    ],
-    updateInfo:
-      'Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.',
     summary:
       'Balanced multimodal Gemma 4 model with the strongest agentic fit in the local catalog.',
   },
@@ -76,14 +68,6 @@ export const RAW_LOCAL_MODEL_CATALOG: LocalLlmRawCatalogEntry[] = [
     supportsFileInput: true,
     supportsThinking: true,
     supportsSpeculativeDecoding: true,
-    availableUpdates: [
-      {
-        fileName: 'gemma-4-E4B-it.litertlm',
-        downloadRevision: '9695417f248178c63a9f318c6e0c56cb917cb837',
-      },
-    ],
-    updateInfo:
-      'Updated Gemma 4 artifacts can enable built-in Multi Token Prediction for faster decode on supported workloads.',
     summary: 'Higher-quality multimodal Gemma 4 option for larger Android devices.',
   },
   {

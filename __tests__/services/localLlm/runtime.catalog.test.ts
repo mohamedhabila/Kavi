@@ -95,12 +95,9 @@ describe('localLlm runtime catalog and warmup', () => {
         fileInput: true,
       }),
     );
-    expect(catalogEntry?.availableUpdates).toEqual([
-      {
-        fileName: 'gemma-4-E2B-it.litertlm',
-        downloadRevision: '7fa1d78473894f7e736a21d920c3aa80f950c0db',
-      },
-    ]);
+    // The "available update" it listed was an older upload than the file it downloads.
+    expect(catalogEntry).not.toHaveProperty('availableUpdates');
+    expect(catalogEntry?.downloadRevision).toBe('6e5c4f1e395deb959c494953478fa5cec4b8008f');
   });
 
   it('installs a model and marks it as selectable', async () => {
