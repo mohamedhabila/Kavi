@@ -82,3 +82,41 @@ describe('tool calls attributed to the upstream that served the turn', () => {
     expect(getExcludedUpstreams(MODEL)).toEqual([]);
   });
 });
+
+describe('a turn attributed to the upstream that served it', () => {
+  async function emptyTurnServedBy(upstream: string): Promise<void> {
+    await executeAgentControlGraphModelTurnStreaming({
+      allowQueuedToolCalls: true,
+      applyGraphEvents: jest.fn(),
+      budgetTools: [],
+      callbacks: { onStateChange: jest.fn(), onToken: jest.fn() },
+      iteration: 1,
+      llm: {
+        streamMessage: jest.fn(() =>
+          streamOf([
+            {
+              type: 'usage',
+              usage: { inputTokens: 4_900, outputTokens: 105, upstreamProvider: upstream },
+            },
+            { type: 'done' },
+          ]),
+        ),
+      },
+      recordPerformanceMetrics: jest.fn(),
+      reportUsage: jest.fn(),
+      requestMessages: [{ role: 'user', content: 'Responde al último correo de mi casero.' }],
+      requestModel: MODEL,
+      signal: undefined,
+      streamOptions: {},
+    } as never);
+  }
+
+  it('routes around an upstream whose turns keep arriving empty', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await emptyTurnServedBy('OpenInference');
+    await emptyTurnServedBy('OpenInference');
+
+    expect(getExcludedUpstreams(MODEL)).toEqual(['OpenInference']);
+    warn.mockRestore();
+  });
+});

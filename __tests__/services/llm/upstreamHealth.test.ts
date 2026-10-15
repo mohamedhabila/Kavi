@@ -1,6 +1,7 @@
 import {
   _resetUpstreamToolCallHealthForTests,
   getExcludedUpstreams,
+  noteModelTurnServedBy,
   noteToolCallsServedBy,
   noteUpstreamCacheResult,
   settleToolCallOutcome,
@@ -151,5 +152,62 @@ describe('upstream prompt-cache health', () => {
     }
 
     expect(getExcludedUpstreams(MODEL, 50 * MINUTE)).toEqual([]);
+  });
+});
+
+// Over two GLM 5.3 Flash phone-world runs one upstream answered 22 of 89 calls with no text and
+// no tool call, and two others 0 of 205. The aggregator sent each recovery retry back to the
+// same upstream, so three empty turns in a row ended the run.
+describe('upstream delivery health', () => {
+  function turn(
+    upstream: string,
+    delivered: 'nothing' | 'text' | 'tool_call',
+    finishReason?: string,
+  ) {
+    sequence += 1;
+    noteModelTurnServedBy({
+      model: MODEL,
+      upstream,
+      toolCallIds: delivered === 'tool_call' ? [`turn-call-${sequence}`] : [],
+      content: delivered === 'text' ? 'Listo.' : '  ',
+      completion: finishReason ? { finishReason } : undefined,
+      now: 1_000,
+    });
+  }
+
+  it('routes around an upstream after two empty turns in a row', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    turn('OpenInference', 'nothing');
+    expect(getExcludedUpstreams(MODEL, 1_000)).toEqual([]);
+
+    turn('OpenInference', 'nothing');
+
+    expect(getExcludedUpstreams(MODEL, 1_000)).toEqual(['OpenInference']);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('forgives an empty turn followed by text or a tool call', () => {
+    turn('Relace', 'nothing');
+    turn('Relace', 'text');
+    turn('Relace', 'nothing');
+    turn('Relace', 'tool_call');
+    turn('Relace', 'nothing');
+
+    expect(getExcludedUpstreams(MODEL, 1_000)).toEqual([]);
+  });
+
+  it('does not judge a turn that ran out of output tokens', () => {
+    turn('StreamLake', 'nothing', 'length');
+    turn('StreamLake', 'nothing', 'max_tokens');
+
+    expect(getExcludedUpstreams(MODEL, 1_000)).toEqual([]);
+  });
+
+  it('judges each upstream on its own turns', () => {
+    turn('OpenInference', 'nothing');
+    turn('Relace', 'nothing');
+
+    expect(getExcludedUpstreams(MODEL, 1_000)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
-import type { ToolCall } from '../../../types/message';
+import type { AssistantCompletionMetadata, ToolCall } from '../../../types/message';
 import { createLogger } from '../../../utils/logger';
+import { isTokenBudgetExhaustedCompletion } from './completionRecovery';
 
 const logger = createLogger('UpstreamHealth');
 
@@ -12,7 +13,7 @@ const logger = createLogger('UpstreamHealth');
  * failures, asks the aggregator not to route this model there for a while. It is a circuit
  * breaker on a failing dependency, keyed by what was observed, never a list of names.
  *
- * Two failures trip it:
+ * Three failures trip it:
  * - Tool calls that arrive with their arguments stripped. Measured for GLM 5.3 Flash: one
  *   upstream did it in 5 of 8 forced calls and looped every run it served; six never did.
  * - A prompt cache that never hits. Every GLM 5.3 Flash upstream lists a cache-read price,
@@ -20,6 +21,10 @@ const logger = createLogger('UpstreamHealth');
  *   of the call before them, while another read 91%. The aggregator keeps a conversation on
  *   the upstream that served it first, so a conversation that lands there pays full price
  *   for its whole context on every call.
+ * - Responses that arrive empty: no visible text and no tool call, with output tokens left.
+ *   Over two GLM 5.3 Flash phone-world runs one upstream did it on 22 of 89 calls and two
+ *   others on 0 of 205; the aggregator sent each recovery retry back to the same upstream,
+ *   so three empty turns in a row ended the run.
  */
 
 /** Consecutive argument faults from one upstream, with no good call between, that trip it. */
@@ -44,10 +49,13 @@ const CACHE_EXPECTED_WITHIN_MS = 5 * 60 * 1000;
 const MIN_CACHEABLE_INPUT_TOKENS = 2_048;
 /** Bound on remembered prefixes. */
 const MAX_REMEMBERED_PREFIXES = 256;
+/** Consecutive empty turns from one upstream, with no delivered turn between, that trip it. */
+const TRIP_AFTER_CONSECUTIVE_EMPTY_TURNS = 2;
 
 type UpstreamHealth = {
   consecutiveFaults: number;
   consecutiveCacheMisses: number;
+  consecutiveEmptyTurns: number;
   excludedUntil?: number;
 };
 
@@ -62,7 +70,7 @@ function healthFor(model: string, upstream: string): UpstreamHealth {
   }
   let health = byUpstream.get(upstream);
   if (!health) {
-    health = { consecutiveFaults: 0, consecutiveCacheMisses: 0 };
+    health = { consecutiveFaults: 0, consecutiveCacheMisses: 0, consecutiveEmptyTurns: 0 };
     byUpstream.set(upstream, health);
   }
   return health;
@@ -137,7 +145,41 @@ function trip(
   health.excludedUntil = now + EXCLUSION_TTL_MS;
   health.consecutiveFaults = 0;
   health.consecutiveCacheMisses = 0;
+  health.consecutiveEmptyTurns = 0;
   logger.warn(reason, { model, upstream, excludedForMs: EXCLUSION_TTL_MS });
+}
+
+/**
+ * Note what the upstream that served a model turn sent back: its tool calls, credited or
+ * faulted once their outcome is known, and whether it delivered anything at all. A turn that
+ * ran out of output tokens is the request's budget, not the upstream, and is not judged.
+ */
+export function noteModelTurnServedBy(params: {
+  model: string;
+  upstream: string | undefined;
+  toolCallIds: ReadonlyArray<string>;
+  content: string;
+  completion: AssistantCompletionMetadata | undefined;
+  now?: number;
+}): void {
+  noteToolCallsServedBy(params);
+  const upstream = params.upstream?.trim();
+  if (!upstream || !params.model || isTokenBudgetExhaustedCompletion(params.completion)) return;
+  const health = healthFor(params.model, upstream);
+  if (params.toolCallIds.length > 0 || params.content.trim().length > 0) {
+    health.consecutiveEmptyTurns = 0;
+    return;
+  }
+  health.consecutiveEmptyTurns += 1;
+  if (health.consecutiveEmptyTurns >= TRIP_AFTER_CONSECUTIVE_EMPTY_TURNS) {
+    trip(
+      params.model,
+      upstream,
+      health,
+      params.now ?? Date.now(),
+      'Routing around an upstream whose responses arrive empty.',
+    );
+  }
 }
 
 /** When each prefix was last sent to each upstream, to know which calls should hit. */

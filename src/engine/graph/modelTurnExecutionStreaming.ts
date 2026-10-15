@@ -4,7 +4,7 @@ import type { AgentRunTurnLatency, AgentRunTurnLatencyStage } from '../../types/
 import { createAgentRunAbortError } from '../../services/runtimeError';
 import { upsertPendingToolCall } from '../orchestratorToolTranscript';
 import { createModelTurnUsageTracker, pickCalibrationInputs } from './modelTurnExecutionSupport';
-import { noteToolCallsServedBy } from '../../services/llm/support/upstreamHealth';
+import { noteModelTurnServedBy } from '../../services/llm/support/upstreamHealth';
 import { createModelProjectionPublisher } from './modelTurnProjectionPublisher';
 import type {
   ExecuteAgentControlGraphModelTurnParams,
@@ -295,10 +295,12 @@ export async function executeAgentControlGraphModelTurnStreaming(
       'model_turn_completed',
     );
 
-    noteToolCallsServedBy({
+    noteModelTurnServedBy({
       model: params.requestModel,
       upstream: usageTracker.upstreamProvider(),
       toolCallIds: pendingToolCalls.map((toolCall) => toolCall.id),
+      content: fullContent,
+      completion,
     });
 
     return {
