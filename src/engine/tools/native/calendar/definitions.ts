@@ -45,7 +45,11 @@ export const CALENDAR_EVENTS_TOOL: ToolDefinition = {
     properties: {
       startDate: { type: 'string', description: 'Start date (ISO 8601)' },
       endDate: { type: 'string', description: 'End date (ISO 8601)' },
-      calendarId: { type: 'string', description: 'Specific calendar ID (optional)' },
+      calendarId: {
+        type: 'string',
+        description:
+          'Calendar ID from calendar_list, to search one calendar. Omit to search every calendar.',
+      },
     },
     required: ['startDate', 'endDate'],
   },

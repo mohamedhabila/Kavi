@@ -418,6 +418,46 @@ describe('E2E native mobile fixtures', () => {
     });
   });
 
+  it('treats a calendar id the phone does not have as the device does', async () => {
+    seedE2ENativeMobileFixtures({
+      calendarEvents: [
+        {
+          id: 'e-1',
+          calendarId: 'e2e-cal-1',
+          title: 'Dentist',
+          startDate: '2026-10-20T10:00:00.000Z',
+          endDate: '2026-10-20T11:00:00.000Z',
+          allDay: false,
+        },
+      ],
+    });
+    const window = { startDate: '2026-10-19T00:00:00Z', endDate: '2026-10-26T00:00:00Z' };
+
+    const read = await executeToolInner(
+      'calendar_events',
+      JSON.stringify({ ...window, calendarId: 'primary' }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(read)).toEqual({
+      events: [expect.objectContaining({ id: 'e-1' })],
+      note: expect.stringContaining('"primary"'),
+    });
+    const created = await executeToolInner(
+      'calendar_create_event',
+      JSON.stringify({
+        title: 'Budget sync',
+        startDate: '2026-10-22T16:00:00Z',
+        endDate: '2026-10-22T17:00:00Z',
+        calendarId: 'primary',
+      }),
+      'c',
+    );
+    expect(parseCompletedToolOutcome(created)).toMatchObject({
+      calendarId: 'e2e-cal-1',
+      note: expect.stringContaining('default calendar'),
+    });
+  });
+
   it('records when a seeded event is moved', async () => {
     seedE2ENativeMobileFixtures({
       calendarEvents: [

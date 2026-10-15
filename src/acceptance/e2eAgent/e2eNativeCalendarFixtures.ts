@@ -4,6 +4,7 @@
 // The scenario phone's one calendar and its events (none unless the scenario seeds some),
 // and the calendar tools as the device answers them.
 
+import { unknownCalendarNote } from '../../engine/tools/native/calendar/executor';
 import {
   completedE2ENativeOutcome,
   failedE2ENativeOutcome,
@@ -165,12 +166,22 @@ function recordLastCreatedCalendarTiming(
   state.lastCreatedDurationMinutes = Math.max(0, Math.min(10_080, durationMinutes));
 }
 
-function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, unknown>[] {
+const E2E_CALENDAR_ID = 'e2e-cal-1';
+
+/** A calendarId the phone has, or undefined for none or one it does not have. */
+function knownCalendarId(args: Record<string, unknown>): string | undefined {
   const calendarId = readOptionalStringArg(args, 'calendarId');
+  return calendarId === E2E_CALENDAR_ID ? calendarId : undefined;
+}
+
+/** Like the device: an id the phone does not have searches every calendar, and says so. */
+function readE2ECalendarEvents(args: Record<string, unknown>): unknown {
+  const requested = readOptionalStringArg(args, 'calendarId');
+  const calendarId = knownCalendarId(args);
   const startMs = readDateMs(args.startDate);
   const endMs = readDateMs(args.endDate);
 
-  return e2eCalendarEvents
+  const events = e2eCalendarEvents
     .filter((event) => {
       if (calendarId && event.calendarId !== calendarId) {
         return false;
@@ -187,6 +198,9 @@ function readE2ECalendarEvents(args: Record<string, unknown>): Record<string, un
     })
     .slice(0, 50)
     .map(serializeE2ECalendarEvent);
+  return requested && !calendarId
+    ? { events, note: unknownCalendarNote(requested, 'every calendar was searched') }
+    : events;
 }
 
 /** The calendar tools on the scenario phone, or null for any other tool. */
@@ -209,7 +223,7 @@ export function executeE2ECalendarFixtureTool(
       const startDate = normalizeFixtureDate(args.startDate, '2026-06-12T10:00:00.000Z');
       const event: E2ECalendarEvent = {
         id: `e2e-event-${e2eCalendarEventId}`,
-        calendarId: readStringArg(args, 'calendarId', 'e2e-cal-1'),
+        calendarId: knownCalendarId(args) ?? E2E_CALENDAR_ID,
         title: readStringArg(args, 'title', `E2E Event ${e2eCalendarEventId}`),
         startDate,
         endDate: normalizeFixtureEndDate(startDate, args.endDate, '2026-06-12T11:00:00.000Z'),
@@ -224,11 +238,20 @@ export function executeE2ECalendarFixtureTool(
       e2eCalendarEvents.push(event);
       e2eLastCreatedCalendarEventId = event.id;
       recordLastCreatedCalendarTiming(state, event);
+      const requested = readOptionalStringArg(args, 'calendarId');
       return completedE2ENativeOutcome({
         status: 'created_verified',
         eventId: event.id,
         calendarId: event.calendarId,
         event: serializeE2ECalendarEvent(event),
+        ...(requested && !knownCalendarId(args)
+          ? {
+              note: unknownCalendarNote(
+                requested,
+                'the event went into the default calendar, E2E Calendar',
+              ),
+            }
+          : {}),
       });
     }
     case 'calendar_update_event': {

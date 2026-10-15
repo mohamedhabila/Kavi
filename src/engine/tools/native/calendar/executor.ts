@@ -138,33 +138,46 @@ export async function executeCalendarEvents(
     });
   }
 
-  let calendarIds = args.calendarId ? [args.calendarId] : [];
-  if (calendarIds.length === 0) {
-    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-    calendarIds = calendars
-      .map((calendar: { id?: unknown }) => calendar.id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  }
-  if (calendarIds.length === 0) {
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  const deviceCalendarIds = calendars
+    .map((calendar: { id?: unknown }) => calendar.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  if (deviceCalendarIds.length === 0) {
     return failedCalendarOutcome({
       status: 'not_found',
       error: 'No event calendars found on this device.',
     });
   }
+  // An id this phone does not have (a guessed "primary") would read as an empty calendar,
+  // so it searches every calendar and says so.
+  const unknownCalendarId =
+    args.calendarId && !deviceCalendarIds.includes(args.calendarId) ? args.calendarId : undefined;
+  const calendarIds = args.calendarId && !unknownCalendarId ? [args.calendarId] : deviceCalendarIds;
 
   const events = await Calendar.getEventsAsync(calendarIds, start, end);
+  const found = events.slice(0, 50).map((e: any) => ({
+    id: e.id,
+    title: e.title,
+    startDate: e.startDate,
+    endDate: e.endDate,
+    location: e.location,
+    notes: typeof e.notes === 'string' ? truncateGraphemesTo(e.notes, 200) : e.notes,
+    allDay: e.allDay,
+  }));
 
   return completedCalendarOutcome(
-    events.slice(0, 50).map((e: any) => ({
-      id: e.id,
-      title: e.title,
-      startDate: e.startDate,
-      endDate: e.endDate,
-      location: e.location,
-      notes: typeof e.notes === 'string' ? truncateGraphemesTo(e.notes, 200) : e.notes,
-      allDay: e.allDay,
-    })),
+    unknownCalendarId
+      ? {
+          events: found,
+          note: unknownCalendarNote(unknownCalendarId, 'every calendar was searched'),
+        }
+      : found,
   );
+}
+
+/** How a result says it did not use a calendar id the phone does not have. */
+export function unknownCalendarNote(calendarId: string, instead: string): string {
+  return `No calendar on this phone has the id "${calendarId}", so ${instead}. Ids come from calendar_list.`;
 }
 
 export async function executeCalendarCreate(
@@ -210,10 +223,12 @@ export async function executeCalendarCreate(
     end.setTime(start.getTime() + 60 * 60 * 1000);
   }
 
-  let calendarId = args.calendarId;
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+  let calendarId = calendars.find((c: any) => c.id === args.calendarId)?.id;
+  let note: string | undefined;
   if (!calendarId) {
-    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-    // Prefer the default calendar, then any writable one
+    // Prefer the default calendar, then any writable one. A calendarId the phone does not
+    // have (a guessed "primary") means the default too, and the result says so.
     const defaultCal = calendars.find((c: any) => c.isPrimary && c.allowsModifications);
     const writable = defaultCal || calendars.find((c: any) => c.allowsModifications);
     if (!writable)
@@ -222,6 +237,12 @@ export async function executeCalendarCreate(
         error: 'No writable calendar found on this device. Please create a calendar first.',
       });
     calendarId = writable.id;
+    if (args.calendarId) {
+      note = unknownCalendarNote(
+        args.calendarId,
+        `the event went into the default calendar, ${writable.title}`,
+      );
+    }
   }
 
   const isAllDay =
@@ -262,6 +283,7 @@ export async function executeCalendarCreate(
         eventId,
         calendarId,
         ...(verified ? {} : { verificationError: 'calendar_readback_mismatch' }),
+        ...(note ? { note } : {}),
       });
     } catch {
       return completedCalendarOutcome({
@@ -269,6 +291,7 @@ export async function executeCalendarCreate(
         eventId,
         calendarId,
         verificationError: 'calendar_readback_failed',
+        ...(note ? { note } : {}),
       });
     }
   } catch (err: unknown) {
