@@ -78,6 +78,8 @@ describe('request clarification contract', () => {
         extra: true,
       },
       error: 'request_clarification_arguments_invalid',
+      detail:
+        'request_clarification takes only missing_information and question (it also has extra).',
     },
     {
       name: 'invalid semantic key',
@@ -92,6 +94,8 @@ describe('request clarification contract', () => {
         question: 'Who?',
       },
       error: 'request_clarification_field_invalid',
+      detail:
+        'missing_information[0].key must be a lower-case semantic key such as recipient or date_time (got "Recipient Name").',
     },
     {
       name: 'duplicate semantic key',
@@ -111,6 +115,8 @@ describe('request clarification contract', () => {
         question: 'Who?',
       },
       error: 'request_clarification_field_duplicate',
+      detail:
+        'missing_information has the key "recipient" more than once; give each field its own key.',
     },
     {
       name: 'unknown semantic role',
@@ -125,6 +131,8 @@ describe('request clarification contract', () => {
         question: 'Who?',
       },
       error: 'request_clarification_field_invalid',
+      detail:
+        'missing_information[0].semantic_role must be one of authorization, constraint, content, identifier, location, other, preference, quantity, recipient, selection, time, title (got "person").',
     },
     {
       name: 'empty question',
@@ -139,9 +147,64 @@ describe('request clarification contract', () => {
         question: '   ',
       },
       error: 'request_clarification_arguments_invalid',
+      detail: 'question must be one non-empty question of at most 1200 characters.',
     },
-  ])('rejects $name', ({ args, error }) => {
-    expect(parseRequestClarificationArgs(args)).toEqual({ ok: false, error });
+    {
+      name: 'no fields',
+      args: { missing_information: [], question: 'Who?' },
+      error: 'request_clarification_arguments_invalid',
+      detail: 'missing_information must list 1 to 12 fields.',
+    },
+    {
+      name: 'an extra property on a field',
+      args: {
+        missing_information: [
+          { key: 'recipient', required_for: 'execution', semantic_role: 'recipient', why: 'x' },
+        ],
+        question: 'Who?',
+      },
+      error: 'request_clarification_field_invalid',
+      detail:
+        'missing_information[0] takes only key, required_for and semantic_role (it also has why).',
+    },
+  ])('rejects $name, saying what to correct', ({ args, error, detail }) => {
+    expect(parseRequestClarificationArgs(args)).toEqual({ ok: false, error, detail });
+  });
+
+  // GLM put a semantic role in required_for and was told only "Provide one question and one
+  // to twelve unique semantic missing_information fields": it renamed the keys three times,
+  // never touched required_for, and the run was stopped as a loop (pwglm2,
+  // pw-mail-checkin-to-calendar).
+  it('names the field and the values it takes when a field is wrong', () => {
+    const failed = executeRequestClarification({
+      missing_information: [
+        { key: 'check-in-date', required_for: 'execution', semantic_role: 'time' },
+        { key: 'hotel-name', required_for: 'content', semantic_role: 'content' },
+      ],
+      question: 'Which Porto hotel is it, and what day do you check in?',
+    });
+
+    expect(failed.status).toBe('failed');
+    expect(JSON.parse(failed.content)).toEqual({
+      status: 'error',
+      code: 'request_clarification_field_invalid',
+      error:
+        'missing_information[1].required_for must be "understanding" or "execution" (got "content").',
+    });
+  });
+
+  it('bounds a long wrong value it quotes back', () => {
+    const parsed = parseRequestClarificationArgs({
+      missing_information: [
+        { key: 'recipient', required_for: 'x'.repeat(500), semantic_role: 'recipient' },
+      ],
+      question: 'Who?',
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.detail.length).toBeLessThan(200);
+    expect(parsed.detail).toContain('…');
   });
 
   it('executes the bounded contract and fails closed on invalid input', () => {
