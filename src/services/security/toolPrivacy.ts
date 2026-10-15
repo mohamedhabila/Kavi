@@ -114,6 +114,7 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName === 'email_compose' ||
     toolName === 'sms_compose' ||
     toolName === 'sms_send' ||
+    toolName === 'chat_compose' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'notifications_read' ||
@@ -154,6 +155,8 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.smsComposeTitle');
     case 'sms_send':
       return i18n.t('toolApproval.actions.smsSendTitle');
+    case 'chat_compose':
+      return i18n.t('toolApproval.actions.chatComposeTitle');
     case 'phone_call':
       return i18n.t('toolApproval.actions.phoneCallTitle');
     case 'maps_open':
@@ -311,6 +314,16 @@ function summarizeNativeTool(
         defaultCountry: hasNonEmptyString(args.defaultCountry)
           ? String(args.defaultCountry).toUpperCase()
           : undefined,
+      };
+      break;
+    }
+    case 'chat_compose': {
+      if (hasNonEmptyString(args.message))
+        pushDetail(details, 'toolApproval.details.messageIncluded');
+      redactedArguments = {
+        app: typeof args.app === 'string' ? args.app : undefined,
+        hasNumber: hasNonEmptyString(args.phoneNumber),
+        hasMessage: hasNonEmptyString(args.message),
       };
       break;
     }

@@ -68,6 +68,7 @@ const NON_REUSABLE_TOOL_NAMES = new Set([
   'calendar_create_event',
   'calendar_update_event',
   'camera_clip',
+  'chat_compose',
   'clipboard_write',
   'contacts_form',
   'contacts_manage_access',

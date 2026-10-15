@@ -21,6 +21,12 @@ export async function executeSmsSend(args: Record<string, unknown>): Promise<Too
   return executeStructuredNativeAction('sms_send', args);
 }
 
+export async function executeChatCompose(
+  args: Record<string, unknown>,
+): Promise<ToolRuntimeOutcome> {
+  return executeStructuredNativeAction('chat_compose', args);
+}
+
 export async function executePhoneCall(args: {
   number: string;
   defaultCountry?: string;

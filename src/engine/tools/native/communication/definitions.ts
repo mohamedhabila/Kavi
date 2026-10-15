@@ -1,5 +1,8 @@
 import type { ToolDefinition } from '../../../../types/tool';
-import { SMS_SEND_MAX_MESSAGE_LENGTH } from '../../../../services/nativeActions/types';
+import {
+  CHAT_COMPOSE_APPS,
+  SMS_SEND_MAX_MESSAGE_LENGTH,
+} from '../../../../services/nativeActions/types';
 import { nativeContract, RECOVERABLE_EXTERNAL_ERRORS } from '../shared';
 
 export const EMAIL_COMPOSE_TOOL: ToolDefinition = {
@@ -144,6 +147,43 @@ export const SMS_SEND_TOOL: ToolDefinition = {
     sideEffects: ['external_run'],
     riskLevel: 'high',
     permissionPrerequisites: ['sms.compose.available'],
+    recoverableErrors: [...RECOVERABLE_EXTERNAL_ERRORS],
+    riskHints: ['requires_approval'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
+    consumes: [
+      { kind: 'phone_number', required: false },
+      { kind: 'contact_candidate', field: 'phoneNumbers', required: false },
+    ],
+  }),
+};
+
+export const CHAT_COMPOSE_TOOL: ToolDefinition = {
+  name: 'chat_compose',
+  description:
+    "Open a person's WhatsApp or Telegram chat by their phone number with the message already " +
+    'typed in; the person taps send in the app. To answer a message that arrived, prefer ' +
+    'notifications_reply; for a text message, use sms_send.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      app: { type: 'string', enum: [...CHAT_COMPOSE_APPS], description: 'Messaging app' },
+      phoneNumber: { type: 'string', description: "The person's phone number in that app" },
+      message: { type: 'string', minLength: 1, description: 'The message to type in' },
+      defaultCountry: {
+        type: 'string',
+        description: 'Optional two-letter ISO country code for local phone number parsing',
+      },
+    },
+    required: ['app', 'phoneNumber', 'message'],
+  },
+  contract: nativeContract({
+    category: 'communication',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['external_run'],
+    riskLevel: 'medium',
+    permissionPrerequisites: [],
     recoverableErrors: [...RECOVERABLE_EXTERNAL_ERRORS],
     riskHints: ['requires_approval'],
     providesEvidence: ['external_run'],

@@ -37,6 +37,10 @@ export interface SmsComposeArgs {
   defaultCountry?: string;
 }
 
+/** Messaging apps whose chat Kavi can open with a message typed in. */
+export const CHAT_COMPOSE_APPS = ['whatsapp', 'telegram'] as const;
+export type ChatComposeApp = (typeof CHAT_COMPOSE_APPS)[number];
+
 /** The longest text Kavi sends in one go: ten SMS parts. */
 export const SMS_SEND_MAX_MESSAGE_LENGTH = 1_600;
 

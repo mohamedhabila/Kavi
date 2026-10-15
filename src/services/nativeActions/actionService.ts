@@ -12,6 +12,7 @@ import {
 } from './adapters/contacts';
 import { openExternalUrl } from './adapters/linking';
 import { shareFile, shareText } from './adapters/share';
+import { composeChat } from './adapters/chat';
 import { composeSms } from './adapters/sms';
 import { placePhoneCall, sendSms } from './adapters/telephony';
 import {
@@ -34,6 +35,8 @@ export async function executeNativeAction(
         return composeSms(args as any);
       case 'sms_send':
         return sendSms(args as any);
+      case 'chat_compose':
+        return composeChat(args);
       case 'phone_call':
         return placePhoneCall({
           number: String(args.number || ''),

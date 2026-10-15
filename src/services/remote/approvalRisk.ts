@@ -226,6 +226,7 @@ export function getApprovalScope(toolName: string): ApprovalScope {
     toolName === 'email_compose' ||
     toolName === 'sms_compose' ||
     toolName === 'sms_send' ||
+    toolName === 'chat_compose' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'screen_record' ||

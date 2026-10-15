@@ -455,6 +455,7 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         sms_composer_opened: VERIFIED,
       }),
     ),
+    chat_compose: effectful('communication.draft_handoff', nativeOutcomes({ opened: HANDED_OFF })),
     sms_send: effectful(
       'communication.send',
       nativeOutcomes({

@@ -22,6 +22,7 @@ import {
   executePhoneCall,
   executeSmsCompose,
   executeSmsSend,
+  executeChatCompose,
 } from './communication/executor';
 import {
   executeDeviceHealth,
@@ -69,6 +70,8 @@ export async function executeNativeTool(
       return executeSmsCompose(args);
     case 'sms_send':
       return executeSmsSend(args);
+    case 'chat_compose':
+      return executeChatCompose(args);
     case 'phone_call':
       return executePhoneCall(args);
     case 'maps_open':
