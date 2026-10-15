@@ -3,6 +3,7 @@ import {
   type ToolCapabilityDescriptor,
   type ToolWorkflowStage,
 } from './capabilityRegistry';
+import { findLiveRuntimeExternalToolDeclaration } from './liveRuntimeExternalToolDeclaration';
 import { normalizeToolName } from './toolNameNormalization';
 
 const PRODUCER_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
@@ -14,12 +15,19 @@ const PRODUCER_WORKFLOW_STAGES = new Set<ToolWorkflowStage>([
   'guarded_resource_creation',
 ]);
 
+/**
+ * What a tool does, by name: a connected integration's or loaded skill's live declaration
+ * carries its contract (a trusted read-only MCP tool inspects, it does not mutate); any other
+ * name resolves to its built-in contract.
+ */
 export function descriptorForToolName(toolName: string): ToolCapabilityDescriptor {
   const normalizedName = normalizeToolName(toolName);
-  return inferToolCapabilityDescriptor({
-    name: normalizedName,
-    description: normalizedName,
-  });
+  return inferToolCapabilityDescriptor(
+    findLiveRuntimeExternalToolDeclaration(normalizedName) ?? {
+      name: normalizedName,
+      description: normalizedName,
+    },
+  );
 }
 
 export function descriptorContinuesExternalExecution(
