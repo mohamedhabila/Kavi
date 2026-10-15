@@ -1,12 +1,10 @@
 import React from 'react';
-import { Alert, AppState, Linking, NativeModules, Platform } from 'react-native';
-import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native';
+import { Alert, AppState, NativeModules, Platform } from 'react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   getAssistantRoleState,
-  isAssistLaunchUrl,
   openAssistantSettings,
 } from '../../src/services/assistant/assistantRole';
-import { useAssistLaunchRequests } from '../../src/navigation/useAssistLaunchRequests';
 import { SettingsAssistantRoleRow } from '../../src/screens/settings/SettingsAssistantRoleRow';
 
 const originalOS = Platform.OS;
@@ -35,16 +33,6 @@ afterEach(() => {
 });
 
 describe('phone assistant role', () => {
-  it.each([
-    ['kavi://assist', true],
-    ['KAVI://assist/', true],
-    ['kavi://expo-sharing', false],
-    ['kavi://assistant', false],
-    [null, false],
-  ])('treats %s as an assist launch: %s', (url, expected) => {
-    expect(isAssistLaunchUrl(url)).toBe(expected);
-  });
-
   it('reads the role and opens its settings through the native module', async () => {
     mockGetAssistantRoleState.mockResolvedValueOnce('held');
 
@@ -58,35 +46,6 @@ describe('phone assistant role', () => {
     await expect(getAssistantRoleState()).resolves.toBe('unavailable');
     await expect(openAssistantSettings()).resolves.toBe(false);
     expect(mockGetAssistantRoleState).not.toHaveBeenCalled();
-  });
-});
-
-describe('useAssistLaunchRequests', () => {
-  it('reports the assist launch that started the app and each one after it', async () => {
-    let emitUrl: ((event: { url: string }) => void) | undefined;
-    jest.spyOn(Linking, 'getInitialURL').mockResolvedValue('kavi://assist');
-    jest.spyOn(Linking, 'addEventListener').mockImplementation(((_type: string, handler: any) => {
-      emitUrl = handler;
-      return { remove: jest.fn() };
-    }) as never);
-    const onAssistLaunch = jest.fn();
-
-    renderHook(() => useAssistLaunchRequests(onAssistLaunch));
-    await waitFor(() => expect(onAssistLaunch).toHaveBeenCalledTimes(1));
-
-    act(() => emitUrl?.({ url: 'kavi://expo-sharing' }));
-    act(() => emitUrl?.({ url: 'kavi://assist' }));
-    expect(onAssistLaunch).toHaveBeenCalledTimes(2);
-  });
-
-  it('ignores a launch that was not an assist request', async () => {
-    jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(null);
-    const onAssistLaunch = jest.fn();
-
-    renderHook(() => useAssistLaunchRequests(onAssistLaunch));
-    await act(async () => undefined);
-
-    expect(onAssistLaunch).not.toHaveBeenCalled();
   });
 });
 

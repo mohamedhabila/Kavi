@@ -23,6 +23,13 @@ function emitChatHydrated(): void {
   }
 }
 
+let mockLaunchRequestHandler: ((request: unknown) => void) | undefined;
+jest.mock('../../src/navigation/useLaunchRequests', () => ({
+  useLaunchRequests: (handler: (request: unknown) => void) => {
+    mockLaunchRequestHandler = handler;
+  },
+}));
+
 // The container reports ready on mount so the navigator's pending routes can navigate.
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
@@ -344,6 +351,41 @@ describe('AppNavigator', () => {
     expect(mockRunJobNow).toHaveBeenCalledWith('job-1', {
       trigger: 'notification-tap',
       force: false,
+    });
+  });
+
+  describe('launch requests', () => {
+    async function renderAndSettle() {
+      render(<AppNavigator />);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+    }
+
+    it('opens voice, sends an "Ask Kavi" request, and shows the chat for a share', async () => {
+      mockAsyncStorage.getItem.mockResolvedValue('true');
+      const now = jest.spyOn(Date, 'now').mockReturnValueOnce(101).mockReturnValueOnce(102);
+      await renderAndSettle();
+
+      await act(async () => mockLaunchRequestHandler?.({ kind: 'voice' }));
+      await act(async () => mockLaunchRequestHandler?.({ kind: 'ask', text: 'Plan my day' }));
+      await act(async () => mockLaunchRequestHandler?.({ kind: 'share' }));
+
+      expect(mockNavigate.mock.calls).toEqual([
+        ['Voice', { autoStartRequestId: 101 }],
+        ['Chat', { incomingRequest: { requestId: 102, text: 'Plan my day' } }],
+        ['Chat'],
+      ]);
+      now.mockRestore();
+    });
+
+    it('waits until onboarding is finished', async () => {
+      mockAsyncStorage.getItem.mockResolvedValue(null);
+      await renderAndSettle();
+
+      await act(async () => mockLaunchRequestHandler?.({ kind: 'voice' }));
+
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 

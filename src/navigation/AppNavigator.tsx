@@ -54,7 +54,8 @@ import {
   getSchedulerNotificationTarget,
   type SchedulerNotificationTarget,
 } from './notificationNavigation';
-import { useAssistLaunchRequests } from './useAssistLaunchRequests';
+import { useLaunchRequests } from './useLaunchRequests';
+import type { LaunchRequest } from '../services/assistant/launchRequests';
 
 const Drawer = createDrawerNavigator();
 const ONBOARDING_KEY = 'kavi_onboarding_complete';
@@ -70,24 +71,43 @@ export const AppNavigator: React.FC = () => {
   const [pendingChatOpen, setPendingChatOpen] = useState(false);
   const [pendingSchedulerRoute, setPendingSchedulerRoute] =
     useState<SchedulerNotificationTarget | null>(null);
-  const [pendingVoiceStartId, setPendingVoiceStartId] = useState<number | null>(null);
+  const [pendingLaunchRequest, setPendingLaunchRequest] = useState<
+    (LaunchRequest & { requestId: number }) | null
+  >(null);
 
-  // Opened as the phone's assistant (long-press home or power): go straight to voice.
-  useAssistLaunchRequests(useCallback(() => setPendingVoiceStartId(Date.now()), []));
+  // Opened by the system for something specific: the phone's assistant gesture or "Talk to
+  // Kavi" goes straight to voice, listening; "Ask Kavi" sends its request in the chat; a
+  // share from another app shows the chat, whose composer takes the shared items.
+  useLaunchRequests(
+    useCallback((request: LaunchRequest) => {
+      setPendingLaunchRequest({ ...request, requestId: Date.now() });
+    }, []),
+  );
 
   useEffect(() => {
     if (
       !navReady ||
       showOnboarding !== false ||
-      pendingVoiceStartId === null ||
+      pendingLaunchRequest === null ||
       !navigationRef.isReady()
     ) {
       return;
     }
 
-    navigationRef.navigate('Voice', { autoStartRequestId: pendingVoiceStartId });
-    setPendingVoiceStartId(null);
-  }, [navReady, pendingVoiceStartId, showOnboarding]);
+    if (pendingLaunchRequest.kind === 'voice') {
+      navigationRef.navigate('Voice', { autoStartRequestId: pendingLaunchRequest.requestId });
+    } else if (pendingLaunchRequest.kind === 'share') {
+      navigationRef.navigate('Chat');
+    } else {
+      navigationRef.navigate('Chat', {
+        incomingRequest: {
+          requestId: pendingLaunchRequest.requestId,
+          text: pendingLaunchRequest.text,
+        },
+      });
+    }
+    setPendingLaunchRequest(null);
+  }, [navReady, pendingLaunchRequest, showOnboarding]);
 
   useEffect(() => {
     if (chatHydrated) {

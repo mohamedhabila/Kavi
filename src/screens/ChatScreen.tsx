@@ -44,10 +44,13 @@ import { ChatScreenHeader } from './chatScreen/ChatScreenHeader';
 import { useChatScreenPresentationState } from './chatScreen/useChatScreenPresentationState';
 import { useChatScreenRuntimeHelpers } from './chatScreen/useChatScreenRuntimeHelpers';
 import { useChatScreenUiCallbacks } from './chatScreen/useChatScreenUiCallbacks';
+import {
+  type ChatScreenExternalInputParams,
+  useChatScreenExternalInput,
+} from './chatScreen/useChatScreenExternalInput';
 import { useChatComposerState } from './useChatComposerState';
 import { useChatScrollController } from './useChatScrollController';
 import { useForegroundRequest } from './useForegroundRequest';
-import { useIncomingShareIntoComposer } from './useIncomingShareIntoComposer';
 import { useLocalModelRuntimeState } from './useLocalModelRuntimeState';
 import { useStreamingDrafts } from './useStreamingDrafts';
 import { useSubAgentRunBridge } from './useSubAgentRunBridge';
@@ -56,13 +59,11 @@ import { useTerminalBackgroundReviewQueue } from './useTerminalBackgroundReviewQ
 import { createAgentRunIdentityKey } from '../services/agents/agentRunIdentity';
 import { getRunningLiveSubAgentsForRun } from '../services/agents/subAgentRunTracking';
 import { resolveConversationStartSelection } from '../services/llm/support/providerSupport';
-import { useVoiceConversationBridge } from './chatScreen/useVoiceConversationBridge';
 import { useChatScreenNavigation } from './chatScreen/useChatScreenNavigation';
-import { usePreparedChatDraft } from './usePreparedChatDraft';
 
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<DrawerNavigationProp<any>>();
-  const route = useRoute<{ key: string; name: string; params?: { preparedDraft?: unknown } }>();
+  const route = useRoute<{ key: string; name: string; params?: ChatScreenExternalInputParams }>();
   const isFocused = useIsFocused();
   const flatListRef = useRef<FlatList<ResolvedDisplayMessageItem>>(null);
   const { colors } = useAppTheme();
@@ -304,24 +305,6 @@ export const ChatScreen: React.FC = () => {
     editingMessageId,
     setEditingContent,
   });
-  const handlePreparedDraftConsumed = useCallback(() => {
-    navigation.setParams({ preparedDraft: undefined });
-  }, [navigation]);
-  usePreparedChatDraft({
-    activeConversationId,
-    composerText,
-    editingMessageId,
-    onApplyText: handleComposerTextChange,
-    onConsumed: handlePreparedDraftConsumed,
-    preparedDraft: route.params?.preparedDraft,
-  });
-  useIncomingShareIntoComposer({
-    composerAttachments,
-    composerText,
-    onChangeAttachments: handleComposerAttachmentsChange,
-    onChangeText: handleComposerTextChange,
-  });
-
   // Clear error when switching conversations
   useEffect(() => {
     setChatError(null);
@@ -454,7 +437,17 @@ export const ChatScreen: React.FC = () => {
       updateAgentRunControlGraph,
     });
 
-  useVoiceConversationBridge(handleSendFromOutsideComposer);
+  useChatScreenExternalInput({
+    activeConversationId,
+    composerAttachments,
+    composerText,
+    editingMessageId,
+    onChangeAttachments: handleComposerAttachmentsChange,
+    onChangeText: handleComposerTextChange,
+    routeParams: route.params,
+    sendFromOutsideComposer: handleSendFromOutsideComposer,
+    setRouteParams: navigation.setParams,
+  });
   const handleContinueTask = useCallback(
     () => void handleSendFromOutsideComposer(t('chat.continueTaskMessage')),
     [handleSendFromOutsideComposer, t],

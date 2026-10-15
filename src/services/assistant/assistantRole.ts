@@ -14,16 +14,9 @@ type AssistantNativeModule = {
   openAssistantSettings(): Promise<boolean>;
 };
 
-/** The link the Android activity turns an assist request into (see MainActivity). */
-export const ASSIST_LAUNCH_URL = 'kavi://assist';
-
 function assistantNativeModule(): AssistantNativeModule | undefined {
   if (Platform.OS !== 'android') return undefined;
   return NativeModules.KaviAssistant as AssistantNativeModule | undefined;
-}
-
-export function isAssistLaunchUrl(url: string | null | undefined): boolean {
-  return url?.trim().toLowerCase().replace(/\/+$/u, '') === ASSIST_LAUNCH_URL;
 }
 
 /** Whether Kavi is the phone's assistant, or 'unavailable' where there is no such role. */
