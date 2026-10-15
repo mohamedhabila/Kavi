@@ -209,6 +209,14 @@ jest.mock('../../src/utils/id', () => ({
     .mockReturnValueOnce('generated-assistant-message')
     .mockReturnValue('generated-id'),
 }));
+// The first require compiles the whole startup graph (4.9 s cold against 0.8 s warm, alone);
+// on a loaded full run that alone outlasted the first test's 15 s. It is paid here, so each
+// test times only the startup behaviour it exercises.
+beforeAll(() => {
+  jest.isolateModules(() => {
+    require('../../src/services/startup');
+  });
+}, 120_000);
 beforeEach(() => {
   jest.clearAllMocks();
   (global as any).requestIdleCallback = jest.fn((callback: () => void) => {
