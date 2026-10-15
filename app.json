@@ -59,7 +59,9 @@
         "VIBRATE",
         "POST_NOTIFICATIONS",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_SPECIAL_USE"
+        "FOREGROUND_SERVICE_SPECIAL_USE",
+        "CALL_PHONE",
+        "SEND_SMS"
       ]
     },
     "web": {

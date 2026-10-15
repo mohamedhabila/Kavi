@@ -75,6 +75,7 @@ const SAFE_NATIVE_FIXTURE_PATHS = new Set([
   'sms.messageLength',
   'sms.recipients',
   'sms.message',
+  'sms.sent',
   'clipboard.text',
   'clipboard.readCount',
   'clipboard.writeCount',

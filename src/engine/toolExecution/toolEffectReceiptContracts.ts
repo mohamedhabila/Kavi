@@ -455,7 +455,23 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         sms_composer_opened: VERIFIED,
       }),
     ),
-    phone_call: effectful('communication.call_handoff', nativeOutcomes({ opened: HANDED_OFF })),
+    sms_send: effectful(
+      'communication.send',
+      nativeOutcomes({
+        sent: APPLIED,
+        sent_unconfirmed: outcome('applied', 'unverified'),
+        partially_sent: outcome('applied', 'unverified'),
+        composer_opened: outcome('handed_off', 'unverified', 'communication.draft_handoff'),
+      }),
+    ),
+    phone_call: effectful(
+      'communication.call_handoff',
+      nativeOutcomes({
+        opened: HANDED_OFF,
+        call_placed: outcome('applied', 'acknowledged', 'communication.call'),
+        call_notification_posted: HANDED_OFF,
+      }),
+    ),
     maps_open: effectful('navigation.open', nativeOutcomes({ opened: HANDED_OFF })),
     open_url: effectful('external.open', nativeOutcomes({ opened: HANDED_OFF })),
     contacts_manage_access: effectful(

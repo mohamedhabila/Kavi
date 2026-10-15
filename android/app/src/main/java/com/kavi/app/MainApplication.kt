@@ -30,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
           add(KaviHeadlessJsTaskSupportPackage())
           add(KaviAssistantPackage())
           add(KaviNotificationReaderPackage())
+          add(KaviPhonePackage())
         }
     )
   }

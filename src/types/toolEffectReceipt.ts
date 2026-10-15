@@ -44,6 +44,7 @@ export const TOOL_EFFECT_KINDS = [
   'communication.draft_save',
   'communication.send',
   'communication.call_handoff',
+  'communication.call',
   'navigation.open',
   'external.open',
   'share.handoff',

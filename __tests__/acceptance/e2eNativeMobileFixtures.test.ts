@@ -335,6 +335,7 @@ describe('E2E native mobile fixtures', () => {
       messageLength: 11,
       recipients: '+15550101001',
       message: 'Hello Avery',
+      sent: false,
     });
   });
 
@@ -462,6 +463,22 @@ describe('E2E native mobile fixtures', () => {
     });
   });
 
+  it('sends a text itself, as the default assistant the scenario phone has, apart from a draft', async () => {
+    const sent = await executeToolInner(
+      'sms_send',
+      JSON.stringify({ recipients: ['+15550101001'], message: 'Running late' }),
+      'c',
+    );
+
+    expect(parseCompletedToolOutcome(sent)).toMatchObject({ status: 'sent', recipientCount: 1 });
+    expect(getE2ENativeMobileFixtureStateSnapshot().sms).toMatchObject({
+      sent: true,
+      opened: false,
+      recipients: '+15550101001',
+      message: 'Running late',
+    });
+  });
+
   it('treats a calendar id the phone does not have as the device does', async () => {
     seedE2ENativeMobileFixtures({
       calendarEvents: [
@@ -578,6 +595,7 @@ describe('E2E native mobile fixtures', () => {
       messageLength: 0,
       recipients: '',
       message: '',
+      sent: false,
     });
   });
 

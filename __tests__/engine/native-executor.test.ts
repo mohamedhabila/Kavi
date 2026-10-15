@@ -42,6 +42,7 @@ jest.mock('react-native', () => ({
     sharedAction: 'sharedAction',
   },
   Platform: { OS: 'ios' },
+  NativeModules: {},
 }));
 
 jest.mock('expo-mail-composer', () => ({

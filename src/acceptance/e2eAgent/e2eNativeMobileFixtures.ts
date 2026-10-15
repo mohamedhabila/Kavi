@@ -94,6 +94,8 @@ export type E2ENativeMobileFixtureStateSnapshot = {
     /** The draft's E.164 recipients, comma-separated. */
     recipients: string;
     message: string;
+    /** Kavi sent it itself (sms_send) rather than leaving it in the composer. */
+    sent: boolean;
   };
   clipboard: {
     text: string;
@@ -157,6 +159,7 @@ function createEmptyNativeFixtureState(): E2ENativeMobileFixtureStateSnapshot {
       messageLength: 0,
       recipients: '',
       message: '',
+      sent: false,
     },
     clipboard: {
       text: '',
@@ -376,19 +379,23 @@ async function executeE2ENativeMobileTool(
       e2eNativeFixtureState.reply = { count: e2eNativeFixtureState.reply.count + 1, ...reply };
       return completedE2ENativeOutcome(result);
     }
-    case 'sms_compose': {
+    case 'sms_compose':
+    case 'sms_send': {
       const built = buildE2ESmsDraft(args);
       if ('error' in built) {
         return buildInvalidFixtureArgsError(name, built.error, built.code);
       }
       const { recipients, message } = built.draft;
-      e2eNativeFixtureState.sms.opened = true;
+      // The scenario phone has Kavi as its default assistant, so a text it sends goes out.
+      const sent = name === 'sms_send';
+      e2eNativeFixtureState.sms.opened = !sent;
+      e2eNativeFixtureState.sms.sent = sent;
       e2eNativeFixtureState.sms.recipientCount = recipients.length;
       e2eNativeFixtureState.sms.messageLength = message.length;
       e2eNativeFixtureState.sms.recipients = recipients.join(',');
       e2eNativeFixtureState.sms.message = message;
       return completedE2ENativeOutcome({
-        status: 'sms_composer_opened',
+        status: sent ? 'sent' : 'sms_composer_opened',
         recipientCount: e2eNativeFixtureState.sms.recipientCount,
         messageLength: e2eNativeFixtureState.sms.messageLength,
       });

@@ -1,5 +1,4 @@
 import { buildMapsUrl, summarizeMapsTarget } from './builders/maps';
-import { normalizePhoneNumber } from './builders/phone';
 import { composeEmail } from './adapters/mail';
 import {
   createContact,
@@ -14,6 +13,7 @@ import {
 import { openExternalUrl } from './adapters/linking';
 import { shareFile, shareText } from './adapters/share';
 import { composeSms } from './adapters/sms';
+import { placePhoneCall, sendSms } from './adapters/telephony';
 import {
   errorToNativeActionResult,
   makeActionResult,
@@ -32,17 +32,13 @@ export async function executeNativeAction(
         return composeEmail(args);
       case 'sms_compose':
         return composeSms(args as any);
-      case 'phone_call': {
-        const normalized = normalizePhoneNumber(
-          String(args.number || ''),
-          typeof args.defaultCountry === 'string' ? args.defaultCountry : undefined,
-        );
-        return openExternalUrl(normalized.telUri, {
-          summary: `Opened the dialer for ${normalized.displayNumber}.`,
-          successCode: 'phone_call_opened',
-          details: { number: normalized.e164 },
+      case 'sms_send':
+        return sendSms(args as any);
+      case 'phone_call':
+        return placePhoneCall({
+          number: String(args.number || ''),
+          defaultCountry: typeof args.defaultCountry === 'string' ? args.defaultCountry : undefined,
         });
-      }
       case 'maps_open': {
         const url = buildMapsUrl(args as any);
         return openExternalUrl(url, {

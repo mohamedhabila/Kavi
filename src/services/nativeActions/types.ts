@@ -37,6 +37,15 @@ export interface SmsComposeArgs {
   defaultCountry?: string;
 }
 
+/** The longest text Kavi sends in one go: ten SMS parts. */
+export const SMS_SEND_MAX_MESSAGE_LENGTH = 1_600;
+
+export interface SmsSendArgs {
+  recipients: string[];
+  message: string;
+  defaultCountry?: string;
+}
+
 export interface PhoneCallArgs {
   number: string;
   defaultCountry?: string;

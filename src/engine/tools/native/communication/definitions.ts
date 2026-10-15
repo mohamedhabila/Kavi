@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../../../types/tool';
+import { SMS_SEND_MAX_MESSAGE_LENGTH } from '../../../../services/nativeActions/types';
 import { nativeContract, RECOVERABLE_EXTERNAL_ERRORS } from '../shared';
 
 export const EMAIL_COMPOSE_TOOL: ToolDefinition = {
@@ -106,9 +107,60 @@ export const SMS_COMPOSE_TOOL: ToolDefinition = {
   }),
 };
 
+export const SMS_SEND_TOOL: ToolDefinition = {
+  name: 'sms_send',
+  description:
+    'Send a text message for the person; it goes out as soon as they approve. On Android Kavi ' +
+    'sends it itself while it is the default assistant; otherwise, and on iOS, the composer ' +
+    'opens with the message ready and the result says so. Use sms_compose instead for a draft ' +
+    'the person wants to edit or send themselves, or for attachments.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      recipients: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 10,
+        description: 'Recipient phone numbers',
+      },
+      message: {
+        type: 'string',
+        minLength: 1,
+        maxLength: SMS_SEND_MAX_MESSAGE_LENGTH,
+        description: 'The text, written as the person would send it',
+      },
+      defaultCountry: {
+        type: 'string',
+        description: 'Optional two-letter ISO country code for local phone number parsing',
+      },
+    },
+    required: ['recipients', 'message'],
+  },
+  contract: nativeContract({
+    category: 'communication',
+    capabilities: ['write'],
+    resourceKinds: ['device'],
+    sideEffects: ['external_run'],
+    riskLevel: 'high',
+    permissionPrerequisites: ['sms.compose.available'],
+    recoverableErrors: [...RECOVERABLE_EXTERNAL_ERRORS],
+    riskHints: ['requires_approval'],
+    providesEvidence: ['external_run'],
+    workflowStages: ['start_external_execution'],
+    consumes: [
+      { kind: 'phone_number', required: false },
+      { kind: 'contact_candidate', field: 'phoneNumbers', required: false },
+    ],
+  }),
+};
+
 export const PHONE_CALL_TOOL: ToolDefinition = {
   name: 'phone_call',
-  description: 'Open the native dialer for a phone number. Use this instead of open_url with tel:.',
+  description:
+    'Call a phone number for the person; use this instead of open_url with tel:. On Android ' +
+    'the call starts as soon as they approve (emergency numbers, and calls without the call ' +
+    'permission, open the dialer instead); on iOS the system asks them to confirm.',
   input_schema: {
     type: 'object',
     properties: {

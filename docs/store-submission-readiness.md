@@ -177,8 +177,22 @@ Current release manifest includes sensitive permissions for:
 - Foreground services.
 - Boot completed and wake lock.
 - Termux package visibility.
+- Phone calls (`CALL_PHONE`). Kavi places a call only after the person approves it; emergency
+  and service numbers always open the dialer instead.
+- SMS (`SEND_SMS`). This is granted by the default digital assistant role, and Kavi sends texts
+  only while it holds that role. Otherwise it opens the composer.
+- Notification access (`BIND_NOTIFICATION_LISTENER_SERVICE`). Kavi reads notifications back,
+  and replies through their apps' own reply actions, after the person approves each reply.
 
 Before submission:
+
+- Complete the Permissions Declaration Form for the SMS group under **Default Assistant handler**,
+  the permitted use for apps registered as the default assistant
+  ([SMS and Call Log policy](https://support.google.com/googleplay/android-developer/answer/10208820)).
+  Show that Kavi asks for the role before any SMS use, checks the role on every send, and stops
+  sending when the role is gone. Android revokes the role-granted permission then.
+- `CALL_PHONE` is not a restricted permission, but the Data safety form and in-app disclosure
+  must say that Kavi places calls the person approves.
 
 - Confirm each permission is core to a user-facing feature.
 - Confirm runtime prompts happen only after user intent.

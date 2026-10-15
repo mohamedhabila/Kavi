@@ -113,6 +113,7 @@ function getToolTelemetryCategory(toolName: string): ToolTelemetryCategory {
     toolName.startsWith('camera_') ||
     toolName === 'email_compose' ||
     toolName === 'sms_compose' ||
+    toolName === 'sms_send' ||
     toolName === 'phone_call' ||
     toolName === 'maps_open' ||
     toolName === 'notifications_read' ||
@@ -151,6 +152,8 @@ function getToolTitle(toolName: string): string {
       return i18n.t('toolApproval.actions.emailComposeTitle');
     case 'sms_compose':
       return i18n.t('toolApproval.actions.smsComposeTitle');
+    case 'sms_send':
+      return i18n.t('toolApproval.actions.smsSendTitle');
     case 'phone_call':
       return i18n.t('toolApproval.actions.phoneCallTitle');
     case 'maps_open':
@@ -285,7 +288,8 @@ function summarizeNativeTool(
       };
       break;
     }
-    case 'sms_compose': {
+    case 'sms_compose':
+    case 'sms_send': {
       const recipientCount = countArray(args.recipients);
       const attachmentCount = countArray(args.attachments);
       if (recipientCount > 0)

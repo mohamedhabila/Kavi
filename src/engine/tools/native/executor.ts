@@ -21,6 +21,7 @@ import {
   executeOpenUrl,
   executePhoneCall,
   executeSmsCompose,
+  executeSmsSend,
 } from './communication/executor';
 import {
   executeDeviceHealth,
@@ -66,6 +67,8 @@ export async function executeNativeTool(
       return executeEmailCompose(args);
     case 'sms_compose':
       return executeSmsCompose(args);
+    case 'sms_send':
+      return executeSmsSend(args);
     case 'phone_call':
       return executePhoneCall(args);
     case 'maps_open':

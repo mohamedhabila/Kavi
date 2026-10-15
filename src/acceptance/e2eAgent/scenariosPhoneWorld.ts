@@ -167,6 +167,14 @@ const firstTurnCalls = (toolName: string, expectedCount: number): E2ERubric => (
   expectedCount,
 });
 
+/** Texts sent or composed on the first turn: either tool counts. */
+const firstTurnTexts = (expectedCount: number): E2ERubric => ({
+  kind: 'turn_native_invocation_count',
+  turnIndex: 0,
+  toolNames: ['sms_compose', 'sms_send'],
+  expectedCount,
+});
+
 const createdOneEventAt = (startDate: string): E2ERubric[] => [
   { kind: 'native_fixture_state', path: 'calendar.createdEventCount', expectedValue: '1' },
   { kind: 'native_fixture_state', path: 'calendar.lastCreatedStartDate', expectedValue: startDate },
@@ -250,12 +258,12 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
   phoneWorldScenario({
     id: 'pw-ask-which-alex',
     turns: ["Text Alex that I'm running 10 minutes late.", 'Alex Rivera.'],
-    rubrics: [firstTurnCalls('sms_compose', 0), smsTo('+15550102002')],
+    rubrics: [firstTurnTexts(0), smsTo('+15550102002')],
   }),
   phoneWorldScenario({
     id: 'pw-no-ask-full-name',
     turns: ["Text Alex Rivera that I'm running 10 minutes late."],
-    rubrics: [firstTurnCalls('sms_compose', 1), smsTo('+15550102002')],
+    rubrics: [firstTurnTexts(1), smsTo('+15550102002')],
   }),
   phoneWorldScenario({
     id: 'pw-calendar-address-to-sms',
@@ -291,12 +299,12 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
   phoneWorldScenario({
     id: 'pw-ask-for-unknown-number',
     turns: ['Text my brother Omar happy birthday.', 'His number is +44 7700 900123.'],
-    rubrics: [firstTurnCalls('sms_compose', 0), smsTo('+447700900123')],
+    rubrics: [firstTurnTexts(0), smsTo('+447700900123')],
   }),
   phoneWorldScenario({
     id: 'pw-ar-ask-which-karim',
     turns: ['أرسل لكريم رسالة أنني سأتأخر عشر دقائق.', 'كريم حداد.'],
-    rubrics: [firstTurnCalls('sms_compose', 0), smsTo('+971501234005')],
+    rubrics: [firstTurnTexts(0), smsTo('+971501234005')],
   }),
   phoneWorldScenario({
     id: 'pw-ja-calendar-address-to-sms',
@@ -338,7 +346,7 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
   phoneWorldScenario({
     id: 'pw-es-no-ask-full-name',
     turns: ['Mándale a Alex Morgan un mensaje diciendo que llego en cinco minutos.'],
-    rubrics: [firstTurnCalls('sms_compose', 1), smsTo('+15550102001')],
+    rubrics: [firstTurnTexts(1), smsTo('+15550102001')],
   }),
   phoneWorldScenario({
     id: 'pw-reply-whatsapp-ana',

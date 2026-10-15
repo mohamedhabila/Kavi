@@ -33,6 +33,7 @@ export const RUN_OUTCOME_LABEL_KEYS: Readonly<Partial<Record<ToolEffectKind, str
   'communication.draft_save': 'runOutcome.savedDraft',
   'communication.send': 'runOutcome.sentMessage',
   'communication.call_handoff': 'runOutcome.startedCall',
+  'communication.call': 'runOutcome.startedCall',
   'calendar.create': 'runOutcome.addedEvent',
   'calendar.update': 'runOutcome.updatedEvent',
   'reminder.schedule': 'runOutcome.setReminder',

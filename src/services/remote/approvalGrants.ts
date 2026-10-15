@@ -83,6 +83,7 @@ const NON_REUSABLE_TOOL_NAMES = new Set([
   'share_file',
   'share_text',
   'sms_compose',
+  'sms_send',
   'ssh_fs',
 ]);
 

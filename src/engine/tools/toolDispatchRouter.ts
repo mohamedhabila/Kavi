@@ -56,6 +56,7 @@ export const NATIVE_TOOL_NAMES = new Set([
   'calendar_update_event',
   'email_compose',
   'sms_compose',
+  'sms_send',
   'phone_call',
   'maps_open',
   'contacts_pick',

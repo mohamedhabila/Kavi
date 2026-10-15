@@ -17,6 +17,10 @@ export async function executeSmsCompose(
   return executeStructuredNativeAction('sms_compose', args);
 }
 
+export async function executeSmsSend(args: Record<string, unknown>): Promise<ToolRuntimeOutcome> {
+  return executeStructuredNativeAction('sms_send', args);
+}
+
 export async function executePhoneCall(args: {
   number: string;
   defaultCountry?: string;

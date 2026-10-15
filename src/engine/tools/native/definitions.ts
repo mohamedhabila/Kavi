@@ -20,6 +20,7 @@ import {
   OPEN_URL_TOOL,
   PHONE_CALL_TOOL,
   SMS_COMPOSE_TOOL,
+  SMS_SEND_TOOL,
 } from './communication/definitions';
 import { DEVICE_QUERY_TOOL } from './device/definitions';
 import { LOCATION_CURRENT_TOOL } from './location/definitions';
@@ -38,6 +39,7 @@ export const ALL_NATIVE_TOOL_DEFINITIONS: ToolDefinition[] = [
   CALENDAR_UPDATE_TOOL,
   EMAIL_COMPOSE_TOOL,
   SMS_COMPOSE_TOOL,
+  SMS_SEND_TOOL,
   PHONE_CALL_TOOL,
   MAPS_OPEN_TOOL,
   CONTACTS_PICK_TOOL,
