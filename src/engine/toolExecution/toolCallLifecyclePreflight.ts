@@ -22,6 +22,8 @@ import {
   buildMemoryDisabledToolResult,
   isToolAllowedForMemoryPolicy,
 } from '../tools/memoryPolicyToolAuthority';
+import { findLiveRuntimeExternalToolDeclaration } from '../tools/liveRuntimeExternalToolDeclaration';
+import type { ToolDefinition } from '../../types/tool';
 
 function completePreflightFailure(params: {
   lifecycle: ToolExecutionLifecycleParams;
@@ -93,14 +95,21 @@ function isOnGroundedToolSurface(
   return tools.some((tool) => resolveRegisteredToolName(tool.name) === toolName);
 }
 
+/** A built-in's contract, or the live one of a connected integration or loaded skill. */
+function findRegisteredToolDefinition(toolName: string): ToolDefinition | undefined {
+  return (
+    TOOL_DEFINITIONS.find(
+      (tool) => tool?.name && resolveRegisteredToolName(tool.name) === toolName,
+    ) ?? findLiveRuntimeExternalToolDeclaration(toolName)
+  );
+}
+
 /** Supplies the registered contract so an unadvertised call is still schema-checked. */
 function withRegisteredToolDefinition(
   toolName: string,
   tools: ToolExecutionLifecycleParams['groundedRequestScopedTools'],
 ): ToolExecutionLifecycleParams['groundedRequestScopedTools'] {
-  const registered = TOOL_DEFINITIONS.find(
-    (tool) => tool?.name && resolveRegisteredToolName(tool.name) === toolName,
-  );
+  const registered = findRegisteredToolDefinition(toolName);
   return registered ? [...(tools ?? []), registered] : tools;
 }
 
@@ -115,11 +124,8 @@ function findGroundedToolDeclaration(
 export function findToolDeclaration(
   toolName: string,
   tools: ToolExecutionLifecycleParams['groundedRequestScopedTools'],
-) {
-  return (
-    findGroundedToolDeclaration(toolName, tools) ??
-    findGroundedToolDeclaration(toolName, withRegisteredToolDefinition(toolName, undefined))
-  );
+): ToolDefinition | undefined {
+  return findGroundedToolDeclaration(toolName, tools) ?? findRegisteredToolDefinition(toolName);
 }
 
 export function resolveToolCallPreflight(

@@ -237,3 +237,91 @@ describe('runtime-external effect authority', () => {
     ).toEqual({ run_status: 'succeeded', effect_status: 'returned' });
   });
 });
+
+// GLM called mcp__mail__mail_search, named in the capability index, before activating it: the
+// call was refused as "binding is unavailable or stale", the retry ran (the refused call had put
+// the tool on the surface), and the wasted round-trip fed a loop stop (pwglm2: 4 of 6 mail-reply
+// runs refused, 2 of them stopped).
+describe('a connected integration tool this turn has not advertised', () => {
+  const liveSearch: ToolDefinition = {
+    name: 'mcp__mail__mail_search',
+    description: '[Mail] Search the inbox',
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    contract: { sideEffects: ['none'] },
+  };
+
+  function connectMail(callTool: jest.Mock) {
+    return jest.spyOn(mcpManager, 'captureRuntimeToolBinding').mockReturnValue({
+      client: { isConnected: () => true, callTool } as never,
+      declaration: liveSearch,
+      provenance: {
+        source: 'mcp',
+        namespace: 'mail',
+        connectionGeneration: 3,
+        toolRegistryGeneration: 4,
+        runtimeProcessEpoch: 'process-epoch-a',
+        targetIdentity: 'https://mail.example/mcp',
+        transport: 'streamable-http',
+        toolAnnotationsTrusted: true,
+      },
+      isCurrent: () => true,
+    });
+  }
+
+  function unadvertisedCall(args: Record<string, unknown>, advertised: ToolDefinition[] = []) {
+    return executeToolCallLifecycle({
+      ...runtimeLifecycle(liveSearch),
+      tc: { id: 'tool-call-search', name: liveSearch.name, arguments: JSON.stringify(args) },
+      groundedRequestScopedTools: advertised,
+    });
+  }
+
+  it('runs against the declaration the live registry holds', async () => {
+    const callTool = jest.fn(async () => ({
+      content: [{ type: 'text' as const, text: '{"count":1}' }],
+      isError: false,
+    }));
+    const capture = connectMail(callTool);
+
+    const result = await unadvertisedCall({ query: 'rent' });
+
+    expect(result.toolMessage).toMatchObject({ content: '{"count":1}' });
+    expect(result.toolMessage.isError).toBeUndefined();
+    expect(capture).toHaveBeenCalledWith('mail', 'mail_search');
+    expect(callTool).toHaveBeenCalledTimes(1);
+    expect(result.effectReceipt).toMatchObject({
+      contractIdentity: { kind: 'runtime_external', source: 'mcp', effectClass: 'none' },
+    });
+  });
+
+  it("holds the call to that declaration's schema", async () => {
+    const callTool = jest.fn();
+    connectMail(callTool);
+
+    const result = await unadvertisedCall({ subject: 'rent' });
+
+    expect(result.toolMessage.isError).toBe(true);
+    expect(result.toolMessage.content).toContain('query');
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('still refuses a declaration the integration has since changed', async () => {
+    const callTool = jest.fn();
+    connectMail(callTool);
+
+    const result = await unadvertisedCall({ query: 'rent' }, [
+      { ...liveSearch, description: '[Mail] An older search' },
+    ]);
+
+    expect(result.toolMessage).toMatchObject({
+      content: expect.stringContaining('unavailable or stale'),
+      isError: true,
+    });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+});

@@ -40,12 +40,6 @@ import { failedToolOutcome, type ToolRuntimeOutcome } from '../../types/toolRunt
 import { classifyNativeTransportErrorIdentity } from '../../services/llm/support/providerErrorClassification';
 import { decodeToolArgumentsAgainstSchema } from '../../services/llm/core/schemaTransforms';
 
-function runtimeToolDeclaration(lifecycle: ToolExecutionLifecycleParams, toolName: string) {
-  return lifecycle.groundedRequestScopedTools?.find(
-    (tool) => resolveRegisteredToolName(tool.name) === toolName,
-  );
-}
-
 export type {
   ToolExecutionLifecycleCallbacks,
   ToolExecutionLifecycleIdPrefixes,
@@ -59,13 +53,13 @@ export async function executeToolCallLifecycle(
   params: ToolExecutionLifecycleParams,
 ): Promise<ToolExecutionLifecycleResult> {
   const name = resolveRegisteredToolName(params.tc.name);
+  // The declaration this turn advertised, else the registered one: a call the model makes to
+  // a real tool it has not activated yet runs against the same contract activation declares.
+  const declaration = findToolDeclaration(name, params.groundedRequestScopedTools);
   const effectiveToolCall = {
     ...params.tc,
     name,
-    arguments: decodeToolArgumentsAgainstSchema(
-      params.tc.arguments,
-      findToolDeclaration(name, params.groundedRequestScopedTools)?.input_schema,
-    ),
+    arguments: decodeToolArgumentsAgainstSchema(params.tc.arguments, declaration?.input_schema),
   };
   const effectFreeInvocation = isCodeOwnedEffectFreeInvocation(
     effectiveToolCall.name,
@@ -168,7 +162,7 @@ export async function executeToolCallLifecycle(
         executionRunId: params.executionRunId,
         toolCallId: effectiveToolCall.id,
         executionSignal: params.signal?.signal,
-        runtimeToolDeclaration: runtimeToolDeclaration(params, effectiveToolCall.name),
+        runtimeToolDeclaration: declaration,
         captureEffectReceipt: (receipt) => {
           authoritativeEffectReceipt = receipt;
         },
