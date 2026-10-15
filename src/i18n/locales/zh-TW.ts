@@ -2556,7 +2556,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       queryIncluded: '包含搜尋查詢',
       coordinatesIncluded: '包含座標',
       labelIncluded: '包含標籤',
-      limit: 'limit {count}',
+      limit: '最多 {count} 項',
       textLength: plural({
         other: '{count} 個字元',
       }),

@@ -2764,7 +2764,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       queryIncluded: 'Suchanfrage enthalten',
       coordinatesIncluded: 'Koordinaten enthalten',
       labelIncluded: 'Beschriftung enthalten',
-      limit: 'limit {count}',
+      limit: 'bis zu {count}',
       textLength: plural({
         one: '{count} Zeichen',
         other: '{count} Zeichen',

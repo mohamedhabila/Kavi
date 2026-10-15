@@ -2663,7 +2663,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       queryIncluded: '検索クエリを含む',
       coordinatesIncluded: '座標を含む',
       labelIncluded: 'ラベルを含む',
-      limit: 'limit {count}',
+      limit: '最大{count}件',
       textLength: plural({
         other: '{count} 文字',
       }),

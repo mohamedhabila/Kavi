@@ -68,7 +68,6 @@ const GLOBAL_IDENTICAL_ALLOWLIST = new Set([
   'settings.expoProjectsSyncedCount',
   'remoteWork.expoProjectsSyncedCount',
   'memory.diagnosticsBudgetEntry',
-  'toolApproval.details.limit',
   'toolApproval.details.scheme',
   'toolApproval.details.mimeType',
   'toolApproval.details.commandExecutable',

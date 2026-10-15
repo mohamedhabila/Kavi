@@ -2792,7 +2792,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       queryIncluded: 'incluye consulta de búsqueda',
       coordinatesIncluded: 'incluye coordenadas',
       labelIncluded: 'incluye etiqueta',
-      limit: 'limit {count}',
+      limit: 'hasta {count}',
       textLength: plural({
         one: '{count} carácter',
         many: '{count} caracteres',

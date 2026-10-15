@@ -2803,7 +2803,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       queryIncluded: 'requête de recherche incluse',
       coordinatesIncluded: 'coordonnées incluses',
       labelIncluded: 'libellé inclus',
-      limit: 'limit {count}',
+      limit: "jusqu'à {count}",
       textLength: plural({
         one: '{count} caractère',
         many: '{count} caractères',

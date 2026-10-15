@@ -2774,7 +2774,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       queryIncluded: 'consulta de pesquisa incluída',
       coordinatesIncluded: 'coordenadas incluídas',
       labelIncluded: 'rótulo incluído',
-      limit: 'limit {count}',
+      limit: 'até {count}',
       textLength: plural({
         one: '{count} caractere',
         many: '{count} caracteres',

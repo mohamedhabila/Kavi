@@ -2828,7 +2828,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       queryIncluded: 'يتضمن استعلام البحث',
       coordinatesIncluded: 'يتضمن الإحداثيات',
       labelIncluded: 'يتضمن التسمية',
-      limit: 'limit {count}',
+      limit: 'حتى {count}',
       textLength: plural({
         zero: 'لا أحرف',
         one: 'حرف واحد',

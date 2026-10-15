@@ -2561,7 +2561,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       queryIncluded: '包含搜索查询',
       coordinatesIncluded: '包含坐标',
       labelIncluded: '包含标签',
-      limit: 'limit {count}',
+      limit: '最多 {count} 项',
       textLength: plural({
         other: '{count} 个字符',
       }),
