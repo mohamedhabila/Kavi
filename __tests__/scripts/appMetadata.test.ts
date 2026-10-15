@@ -107,6 +107,9 @@ function createMetadataFixture(overrides: Record<string, string> = {}): string {
       'CURRENT_PROJECT_VERSION = 1;',
       `MARKETING_VERSION = ${expoVersion};`,
       `PRODUCT_BUNDLE_IDENTIFIER = ${iosBundleIdentifier};`,
+      ...(overrides.extensionBundleIdentifier
+        ? [`PRODUCT_BUNDLE_IDENTIFIER = ${overrides.extensionBundleIdentifier};`]
+        : []),
     ].join('\n'),
   );
   writeFixture(
@@ -216,6 +219,25 @@ describe('app metadata checks', () => {
       ]),
     );
   });
+
+  it('accepts an app extension identified by the app identifier and a suffix', () => {
+    const metadata = collectAppMetadata(
+      createMetadataFixture({ extensionBundleIdentifier: 'com.kavi.app.ShareExtension' }),
+    );
+
+    expect(findAppMetadataFailures(metadata)).toEqual([]);
+  });
+
+  it.each(['com.kavi.application', 'com.other.ShareExtension'])(
+    'flags a second bundle identifier, %s, that does not extend the app identifier',
+    (extensionBundleIdentifier) => {
+      const metadata = collectAppMetadata(createMetadataFixture({ extensionBundleIdentifier }));
+
+      expect(findAppMetadataFailures(metadata)).toEqual([
+        `Xcode product bundle identifiers is "com.kavi.app,${extensionBundleIdentifier}", expected "com.kavi.app"`,
+      ]);
+    },
+  );
 
   it('detects missing background task configuration required for scheduled work', () => {
     const metadata = collectAppMetadata(createMetadataFixture());

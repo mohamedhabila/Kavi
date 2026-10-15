@@ -196,10 +196,15 @@ function findAppMetadataFailures(metadata, expected = EXPECTED_APP_METADATA) {
     metadata.expo.iosBundleIdentifier,
     expected.iosBundleIdentifier,
   );
+  // An app extension (the share extension) is identified by the app's identifier and a
+  // suffix, as Apple requires, so only the other identifiers name the app itself.
+  const extensionBundleIdentifierPrefix = `${expected.iosBundleIdentifier}.`;
   addMismatch(
     failures,
     'Xcode product bundle identifiers',
-    metadata.ios.xcodeProject.productBundleIdentifiers.join(','),
+    metadata.ios.xcodeProject.productBundleIdentifiers
+      .filter((identifier) => !identifier.startsWith(extensionBundleIdentifierPrefix))
+      .join(','),
     expected.iosBundleIdentifier,
   );
   addMismatch(

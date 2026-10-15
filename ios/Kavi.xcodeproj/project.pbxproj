@@ -7,15 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		100CF799FDAF7DFC4B562D5D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 92AB15D8234AA1BC4B715886 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1B525B444B5BD77C6234BC25 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 931E8D43F86F3A8F8C303F58 /* PrivacyInfo.xcprivacy */; };
 		2C5C118566D5B93324270E14 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 69A4CD4187F1D6D01326B286 /* AppIntents.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		5EDC53FFDD905EE6BD5D9AC6 /* KaviAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6657F0175CCBB07C0DB90C32 /* KaviAppIntents.swift */; };
+		7B978FAD3CAEDF1030731366 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54CDA129FE314CF49CE8AF1 /* Constants.swift */; };
 		7FE75A06F6C1B9FCAA3ADD61 /* KaviLaunchRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D371304C7C47BD9E367DB2C /* KaviLaunchRequests.swift */; };
+		A98A61977D3B2C2BE693411B /* ShareIntoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9F0333D679B5DFA470AFBB /* ShareIntoViewController.swift */; };
 		AC6AA5895E7DF8662FA77F70 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF23EE3212FF1E0E52D0FF10 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		BF866E7BD32625EB8973DEBF /* KaviLaunchRequests.m in Sources */ = {isa = PBXBuildFile; fileRef = EC2099D973BC92906199AB8D /* KaviLaunchRequests.m */; };
+		D16AA2A06C9B4394F9981D00 /* ShareProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C48192D75D99718507713FB0 /* ShareProtocol.swift */; };
 		D4F410000000000000000001 /* KaviLocalLlm.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000011 /* KaviLocalLlm.swift */; };
 		D4F410000000000000000002 /* KaviLocalLlm.m in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000012 /* KaviLocalLlm.m */; };
 		D4F410000000000000000003 /* LocalLlmTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F410000000000000000013 /* LocalLlmTypes.swift */; };
@@ -37,6 +41,30 @@
 		F9326BBB3E2717BDA9337454 /* libPods-Kavi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A920E20845CBF419427F22DF /* libPods-Kavi.a */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		67B6CC8890614A28FFDA683E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9E10FA6F3EA73B0376380698;
+			remoteInfo = ShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DC9DB5E95236B3B1CA6F1B5B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				100CF799FDAF7DFC4B562D5D /* ShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		0D371304C7C47BD9E367DB2C /* KaviLaunchRequests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KaviLaunchRequests.swift; path = Kavi/KaviLaunchRequests.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Kavi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kavi.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -45,10 +73,15 @@
 		663BAB571ED4CAEDAD5AEA63 /* Pods-Kavi.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Kavi.debug.xcconfig"; path = "Target Support Files/Pods-Kavi/Pods-Kavi.debug.xcconfig"; sourceTree = "<group>"; };
 		6657F0175CCBB07C0DB90C32 /* KaviAppIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KaviAppIntents.swift; path = Kavi/KaviAppIntents.swift; sourceTree = "<group>"; };
 		69A4CD4187F1D6D01326B286 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		8A9F0333D679B5DFA470AFBB /* ShareIntoViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareIntoViewController.swift; sourceTree = "<group>"; };
+		92AB15D8234AA1BC4B715886 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		931E8D43F86F3A8F8C303F58 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Kavi/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A920E20845CBF419427F22DF /* libPods-Kavi.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Kavi.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Kavi/SplashScreen.storyboard; sourceTree = "<group>"; };
+		B54CDA129FE314CF49CE8AF1 /* Constants.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		B8F38EAAF866AEFD2AEA4A1E /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		C48192D75D99718507713FB0 /* ShareProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareProtocol.swift; sourceTree = "<group>"; };
 		CF23EE3212FF1E0E52D0FF10 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Kavi/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		D4F410000000000000000011 /* KaviLocalLlm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = KaviLocalLlm.swift; path = Kavi/KaviLocalLlm.swift; sourceTree = "<group>"; };
 		D4F410000000000000000012 /* KaviLocalLlm.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = KaviLocalLlm.m; path = Kavi/KaviLocalLlm.m; sourceTree = "<group>"; };
@@ -70,6 +103,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Kavi/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Kavi-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Kavi-Bridging-Header.h"; path = "Kavi/Kavi-Bridging-Header.h"; sourceTree = "<group>"; };
+		FE73C7CE34A6EB09B2274F19 /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,9 +118,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		761E519ECA0E70C807F23F3B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		09689A59BA7DF4A2BF541A26 /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				8A9F0333D679B5DFA470AFBB /* ShareIntoViewController.swift */,
+				B54CDA129FE314CF49CE8AF1 /* Constants.swift */,
+				C48192D75D99718507713FB0 /* ShareProtocol.swift */,
+				B8F38EAAF866AEFD2AEA4A1E /* Info.plist */,
+				FE73C7CE34A6EB09B2274F19 /* ShareExtension.entitlements */,
+			);
+			name = ShareExtension;
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
 		13B07FAE1A68108700A75B9A /* Kavi */ = {
 			isa = PBXGroup;
 			children = (
@@ -144,6 +198,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				D616C8D9AAF6D71DE2FC3D9F /* Pods */,
 				A11C0D42390B3AA899997DF9 /* ExpoModulesProviders */,
+				09689A59BA7DF4A2BF541A26 /* ShareExtension */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -154,6 +209,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* Kavi.app */,
+				92AB15D8234AA1BC4B715886 /* ShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -227,10 +283,12 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				7CEFA544D101F8108ED0BE5C /* [CP] Embed Pods Frameworks */,
+				DC9DB5E95236B3B1CA6F1B5B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B2BC13ABCC4A94B9D0112EF3 /* PBXTargetDependency */,
 			);
 			name = Kavi;
 			packageProductDependencies = (
@@ -240,6 +298,23 @@
 			productName = Kavi;
 			productReference = 13B07F961A680F5B00A75B9A /* Kavi.app */;
 			productType = "com.apple.product-type.application";
+		};
+		9E10FA6F3EA73B0376380698 /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A65E1EF8555C26923764939A /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				6B1A493724676353B2CEA54E /* Sources */,
+				761E519ECA0E70C807F23F3B /* Frameworks */,
+				E6B4BA16E1D04B79F2B8121A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShareExtension;
+			productName = ShareExtension;
+			productReference = 92AB15D8234AA1BC4B715886 /* ShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -272,6 +347,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* Kavi */,
+				9E10FA6F3EA73B0376380698 /* ShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -285,6 +361,13 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				1B525B444B5BD77C6234BC25 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6B4BA16E1D04B79F2B8121A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -450,9 +533,53 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6B1A493724676353B2CEA54E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A98A61977D3B2C2BE693411B /* ShareIntoViewController.swift in Sources */,
+				7B978FAD3CAEDF1030731366 /* Constants.swift in Sources */,
+				D16AA2A06C9B4394F9981D00 /* ShareProtocol.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		B2BC13ABCC4A94B9D0112EF3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShareExtension;
+			target = 9E10FA6F3EA73B0376380698 /* ShareExtension */;
+			targetProxy = 67B6CC8890614A28FFDA683E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		101B4F762BCC8588D89DE76E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kavi.app.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 663BAB571ED4CAEDAD5AEA63 /* Pods-Kavi.debug.xcconfig */;
@@ -633,6 +760,32 @@
 			};
 			name = Release;
 		};
+		97AA70DD49DDB2B1407B38DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kavi.app.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -650,6 +803,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A65E1EF8555C26923764939A /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				97AA70DD49DDB2B1407B38DF /* Release */,
+				101B4F762BCC8588D89DE76E /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

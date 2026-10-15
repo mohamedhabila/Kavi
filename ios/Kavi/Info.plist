@@ -22,6 +22,8 @@
 	<string>1.0.0</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>ExpoShareIntoAppGroupId</key>
+	<string>group.com.kavi.app</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
