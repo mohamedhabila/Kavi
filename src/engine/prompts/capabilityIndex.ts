@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ToolDefinition } from '../../types/tool';
+import { readMcpIntegrationName } from '../../services/mcp/bridge';
 import { inferToolCapabilityDescriptor } from '../tools/capabilityRegistry';
 import { normalizeToolName } from '../tools/toolNameNormalization';
 
@@ -52,8 +53,8 @@ function collectAvailableToolsByCategory(
       continue;
     }
 
-    const category = inferToolCapabilityDescriptor(tool).category;
-    if (!category || EXCLUDED_CATEGORIES.has(category)) {
+    const category = categoryOf(toolName, tool);
+    if (!category) {
       continue;
     }
 
@@ -67,6 +68,21 @@ function collectAvailableToolsByCategory(
   }
 
   return byCategory;
+}
+
+/**
+ * A connected integration's tools are listed under the name the person gave it. Under its
+ * transport they read "- mcp: mcp__mail__mail_search, …": asked to add a hotel check-in to
+ * the calendar, GLM 5.3 Flash searched memory and asked the person, never the mail that held
+ * the booking (0 of 3).
+ */
+function categoryOf(toolName: string, tool: ToolDefinition): string | undefined {
+  const integration = toolName.startsWith('mcp__')
+    ? readMcpIntegrationName(tool.description)
+    : undefined;
+  if (integration) return `${integration} (connected integration)`;
+  const category = inferToolCapabilityDescriptor(tool).category;
+  return category && !EXCLUDED_CATEGORIES.has(category) ? category : undefined;
 }
 
 /**

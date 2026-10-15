@@ -3,6 +3,7 @@ import {
   buildCapabilityIndexPromptSection,
 } from '../../src/engine/prompts/capabilityIndex';
 import { TOOL_DEFINITIONS } from '../../src/engine/tools/definitions';
+import { mcpToolToDefinition, readMcpIntegrationName } from '../../src/services/mcp/bridge';
 import { estimateTokens } from '../../src/services/context/tokenCounter';
 
 describe('buildCapabilityIndexPromptSection', () => {
@@ -115,5 +116,54 @@ describe('buildCapabilityIndexPromptSection', () => {
 
     expect(section).toContain('sms_compose(recipients, message)');
     expect(section).toContain('calendar_create_event(title, startDate, endDate)');
+  });
+});
+
+// Listed under their transport ("- mcp: mcp__mail__mail_search, …"), the tools of the mail
+// integration never said they were the person's mail: asked to add a hotel check-in to the
+// calendar, GLM 5.3 Flash searched memory and asked instead (0 of 3).
+describe('connected integrations in the capability index', () => {
+  function integrationTool(
+    serverId: string,
+    serverName: string,
+    name: string,
+    required: string[] = [],
+  ) {
+    return mcpToolToDefinition({
+      serverId,
+      serverName,
+      tool: {
+        name,
+        description: `${name} description`,
+        inputSchema: {
+          type: 'object',
+          properties: Object.fromEntries(required.map((key) => [key, { type: 'string' }])),
+          required,
+        },
+      },
+    });
+  }
+
+  it('lists each integration under the name the person gave it', () => {
+    const section = buildCapabilityIndexPromptSection({
+      allTools: [
+        integrationTool('mail', 'Mail', 'mail_search'),
+        integrationTool('mail', 'Mail', 'mail_read', ['id']),
+        integrationTool('notes', 'Team Notes', 'notes_find'),
+      ],
+    });
+
+    expect(section).toContain(
+      '- Mail (connected integration): mcp__mail__mail_search, mcp__mail__mail_read(id)',
+    );
+    expect(section).toContain('- Team Notes (connected integration): mcp__notes__notes_find');
+    expect(section).not.toContain('- mcp:');
+  });
+
+  it('keeps a long or multi-line integration name to one bounded line', () => {
+    expect(readMcpIntegrationName('[My  Work\tMail] Search')).toBe('My Work Mail');
+    expect(readMcpIntegrationName(`[${'x'.repeat(100)}] Search`)).toHaveLength(40);
+    expect(readMcpIntegrationName('[Two\nLines] Search')).toBeUndefined();
+    expect(readMcpIntegrationName('Search the inbox')).toBeUndefined();
   });
 });

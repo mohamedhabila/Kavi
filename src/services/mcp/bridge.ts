@@ -78,6 +78,15 @@ export function mcpToolToDefinition(entry: McpToolEntry): ToolDefinition {
   };
 }
 
+const MAX_INTEGRATION_NAME_GRAPHEMES = 40;
+const INTEGRATION_NAME_PREFIX = /^\[([^\]\n]+)\] /u;
+
+/** The integration's name, which mcpToolToDefinition puts at the head of every description. */
+export function readMcpIntegrationName(description: string): string | undefined {
+  const name = INTEGRATION_NAME_PREFIX.exec(description)?.[1]?.replace(/\s+/gu, ' ').trim();
+  return name ? truncateGraphemesTo(name, MAX_INTEGRATION_NAME_GRAPHEMES) : undefined;
+}
+
 /**
  * Parse an MCP tool name back to server ID and tool name
  */
