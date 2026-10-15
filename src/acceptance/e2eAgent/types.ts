@@ -264,6 +264,8 @@ export type E2ERubric =
       kind: 'turn_native_invocation_count';
       turnIndex: number;
       toolName?: string;
+      /** Count calls to any of these tools (e.g. a text sent or composed); not with toolName. */
+      toolNames?: ReadonlyArray<string>;
       expectedCount: number;
     }
   | {

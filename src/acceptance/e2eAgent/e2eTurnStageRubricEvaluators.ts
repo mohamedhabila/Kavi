@@ -57,7 +57,8 @@ function fixtureIdForRubric(result: E2EScenarioResult, rubric: E2ETurnStageRubri
     return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.kind}:${rubric.field}`;
   }
   if (rubric.kind === 'turn_native_invocation_count') {
-    return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.toolName ?? 'all'}:${rubric.kind}`;
+    const tools = rubric.toolNames?.join('+') ?? rubric.toolName ?? 'all';
+    return `${result.fixtureId}:turn-${rubric.turnIndex}:${tools}:${rubric.kind}`;
   }
   if (rubric.kind === 'turn_tool_call_count') {
     return `${result.fixtureId}:turn-${rubric.turnIndex}:${rubric.scope}:${rubric.kind}`;
@@ -240,13 +241,20 @@ export function evaluateE2ETurnStageRubric(
     }
 
     case 'turn_native_invocation_count': {
+      const toolNames =
+        rubric.toolNames ?? (rubric.toolName !== undefined ? [rubric.toolName] : undefined);
       if (
         !Number.isSafeInteger(rubric.expectedCount) ||
         rubric.expectedCount < 0 ||
-        (rubric.toolName !== undefined &&
-          (!rubric.toolName.trim() ||
-            rubric.toolName !== rubric.toolName.trim() ||
-            !NATIVE_TOOL_NAMES.has(rubric.toolName)))
+        (rubric.toolNames !== undefined && rubric.toolName !== undefined) ||
+        (toolNames !== undefined &&
+          (toolNames.length === 0 ||
+            toolNames.some(
+              (toolName) =>
+                !toolName.trim() ||
+                toolName !== toolName.trim() ||
+                !NATIVE_TOOL_NAMES.has(toolName),
+            )))
       ) {
         return {
           fixtureId,
@@ -254,8 +262,8 @@ export function evaluateE2ETurnStageRubric(
           detail: `turn ${rubric.turnIndex} native invocation expectation is invalid`,
         };
       }
-      const actualCount = rubric.toolName
-        ? turn.native.invocations.filter((invocation) => invocation.toolName === rubric.toolName)
+      const actualCount = toolNames
+        ? turn.native.invocations.filter((invocation) => toolNames.includes(invocation.toolName))
             .length
         : turn.native.invocations.length;
       if (actualCount !== rubric.expectedCount) {

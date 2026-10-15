@@ -317,6 +317,40 @@ describe('turn stage-attribution rubrics', () => {
     });
   });
 
+  it('counts calls to any of several tools, such as a message composed by text or email', () => {
+    const rubric = {
+      kind: 'turn_native_invocation_count',
+      turnIndex: 1,
+      toolNames: ['sms_compose', 'email_compose'],
+      expectedCount: 1,
+    } as const;
+    const composed = (toolName: string) =>
+      buildResult(
+        buildTurn({
+          native: {
+            ...buildTurn().native,
+            invocations: [{ toolName }] as TurnTrace['native']['invocations'],
+          },
+        }),
+      );
+
+    expect(evaluateE2ERubric(composed('email_compose'), rubric)).toMatchObject({
+      fixtureId: 'stage-attribution:turn-1:sms_compose+email_compose:turn_native_invocation_count',
+      passed: true,
+    });
+    expect(evaluateE2ERubric(composed('sms_compose'), rubric)).toMatchObject({ passed: true });
+    expect(evaluateE2ERubric(composed('phone_call'), rubric)).toMatchObject({ passed: false });
+    expect(
+      evaluateE2ERubric(composed('sms_compose'), {
+        ...rubric,
+        toolNames: ['sms_compose', 'not_a_tool'],
+      }),
+    ).toMatchObject({ passed: false, detail: 'turn 1 native invocation expectation is invalid' });
+    expect(
+      evaluateE2ERubric(composed('sms_compose'), { ...rubric, toolName: 'sms_compose' }),
+    ).toMatchObject({ passed: false, detail: 'turn 1 native invocation expectation is invalid' });
+  });
+
   it('counts model-requested tools on the exact turn and classifies producer effects fail-closed', () => {
     const passiveTurn = buildTurn({
       turnIndex: 0,
