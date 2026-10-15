@@ -28,7 +28,7 @@ export function useChatComposerState({
   handleComposerAttachmentsChange: (attachments: Attachment[]) => void;
   handleComposerExactTextChange: (exactText: boolean) => void;
   handleComposerTextChange: (value: string) => void;
-  returnTextToComposer: (conversationId: string, text: string) => void;
+  returnTextToComposer: (conversationId: string | null, text: string) => void;
 } {
   const [composerDrafts, setComposerDrafts] = useState<Record<string, ComposerDraftState>>({});
   const activeComposerDraftKey = useMemo(
@@ -72,7 +72,7 @@ export function useChatComposerState({
     });
   }, []);
 
-  const returnTextToComposer = useCallback((conversationId: string, text: string) => {
+  const returnTextToComposer = useCallback((conversationId: string | null, text: string) => {
     const draftKey = getComposerDraftKey(conversationId);
     setComposerDrafts((currentDrafts) => {
       const draft = normalizeComposerDraftState(currentDrafts[draftKey]);

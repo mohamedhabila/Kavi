@@ -1,14 +1,9 @@
 import { useEffect } from 'react';
-import type { Attachment } from '../../types/attachment';
 import type { RunChatOptions } from '../../engine/graph/foregroundRun/contracts';
 import { useChatStore } from '../../store/useChatStore';
 import { registerVoiceConversationHandler } from '../../services/voice/voiceConversationBridge';
 
-type CanonicalSend = (
-  text: string,
-  attachments?: Attachment[],
-  runOptions?: RunChatOptions,
-) => Promise<void>;
+type CanonicalSend = (text: string, runOptions?: RunChatOptions) => Promise<void>;
 
 export function useVoiceConversationBridge(handleSend: CanonicalSend): void {
   useEffect(
@@ -21,7 +16,7 @@ export function useVoiceConversationBridge(handleSend: CanonicalSend): void {
           ),
         );
 
-        await handleSend(input, undefined, options);
+        await handleSend(input, options);
 
         const afterState = useChatStore.getState();
         const conversationId = afterState.activeConversationId;

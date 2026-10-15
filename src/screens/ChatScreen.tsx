@@ -426,37 +426,38 @@ export const ChatScreen: React.FC = () => {
     updateStreamingDraft,
   });
 
-  const { handleEditSend, handleRetry, handleSend, handleStop } = useForegroundConversationActions({
-    activeConversation: activeConversation ?? undefined,
-    activeConversationId,
-    addMessage,
-    appendConversationLog,
-    attachmentWorkspaceImportFailedMessage: t('chat.attachmentWorkspaceImportFailed'),
-    abortForegroundRequestForConversation,
-    clearComposerDraft,
-    clearForegroundRequestForConversation,
-    completeAgentRun,
-    rewindUserMessageForResend,
-    editingMessageId,
-    ensureConversation,
-    forceNextScrollRef,
-    generateId,
-    pendingAgentRunAsyncResumesRef,
-    pendingAgentRunTerminalReviewsRef,
-    requestChatStorePersistenceCheckpoint,
-    returnTextToComposer,
-    runChat,
-    setChatError,
-    setEditingContent,
-    setEditingMessageId,
-    steeringQueueFullMessage: t('chat.steeringQueueFull'),
-    updateAgentRunControlGraph,
-  });
+  const { handleEditSend, handleRetry, handleSend, handleSendFromOutsideComposer, handleStop } =
+    useForegroundConversationActions({
+      activeConversation: activeConversation ?? undefined,
+      activeConversationId,
+      addMessage,
+      appendConversationLog,
+      attachmentWorkspaceImportFailedMessage: t('chat.attachmentWorkspaceImportFailed'),
+      abortForegroundRequestForConversation,
+      clearComposerDraft,
+      clearForegroundRequestForConversation,
+      completeAgentRun,
+      rewindUserMessageForResend,
+      editingMessageId,
+      ensureConversation,
+      forceNextScrollRef,
+      generateId,
+      pendingAgentRunAsyncResumesRef,
+      pendingAgentRunTerminalReviewsRef,
+      requestChatStorePersistenceCheckpoint,
+      returnTextToComposer,
+      runChat,
+      setChatError,
+      setEditingContent,
+      setEditingMessageId,
+      steeringQueueFullMessage: t('chat.steeringQueueFull'),
+      updateAgentRunControlGraph,
+    });
 
-  useVoiceConversationBridge(handleSend);
+  useVoiceConversationBridge(handleSendFromOutsideComposer);
   const handleContinueTask = useCallback(
-    () => void handleSend(t('chat.continueTaskMessage')),
-    [handleSend, t],
+    () => void handleSendFromOutsideComposer(t('chat.continueTaskMessage')),
+    [handleSendFromOutsideComposer, t],
   );
 
   const personaCustomList = usePersonaConfigStore((state) => state.customPersonas);

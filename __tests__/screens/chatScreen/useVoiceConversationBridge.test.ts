@@ -51,7 +51,7 @@ describe('useVoiceConversationBridge', () => {
     });
 
     expect(response).toBe('Persisted canonical reply');
-    expect(handleSend).toHaveBeenCalledWith('spoken request', undefined, {
+    expect(handleSend).toHaveBeenCalledWith('spoken request', {
       additionalSystemPrompt: 'Be concise.',
     });
   });

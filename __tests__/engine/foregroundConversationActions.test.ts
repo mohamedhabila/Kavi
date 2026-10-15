@@ -229,7 +229,7 @@ describe('useForegroundConversationActions', () => {
     );
 
     await act(async () => {
-      await result.current.handleSend('spoken request', undefined, {
+      await result.current.handleSendFromOutsideComposer('spoken request', {
         additionalSystemPrompt: 'Keep this spoken response concise.',
       });
     });
@@ -237,6 +237,71 @@ describe('useForegroundConversationActions', () => {
     expect(runChat).toHaveBeenCalledWith(conversationId, {
       additionalSystemPrompt: 'Keep this spoken response concise.',
       latencyTimeline: expect.objectContaining({ mark: expect.any(Function) }),
+    });
+  });
+
+  describe('text from outside the composer', () => {
+    it("is sent without emptying the person's draft", async () => {
+      const conversationId = addConversation('openai', 'system');
+      const addMessage = jest.fn();
+      const clearComposerDraft = jest.fn();
+      const returnTextToComposer = jest.fn();
+      const { result } = renderHook(() =>
+        useForegroundConversationActions(
+          createParams(conversationId, { addMessage, clearComposerDraft, returnTextToComposer }),
+        ),
+      );
+
+      await act(async () => {
+        await result.current.handleSendFromOutsideComposer("What's on my calendar today?");
+      });
+
+      expect(addMessage).toHaveBeenCalledWith(
+        conversationId,
+        expect.objectContaining({ content: "What's on my calendar today?", role: 'user' }),
+      );
+      expect(clearComposerDraft).not.toHaveBeenCalled();
+      expect(returnTextToComposer).not.toHaveBeenCalled();
+    });
+
+    it('waits in the composer when it could not be sent', async () => {
+      const conversationId = addConversation('openai', 'system');
+      const addMessage = jest.fn();
+      const returnTextToComposer = jest.fn();
+      const { result } = renderHook(() =>
+        useForegroundConversationActions(
+          createParams(conversationId, { addMessage, returnTextToComposer }),
+        ),
+      );
+
+      mockedWaitForProjection.mockRejectedValue(new Error('projection wait failed'));
+      await act(async () => {
+        await result.current.handleSendFromOutsideComposer("What's on my calendar today?");
+      });
+
+      expect(addMessage).not.toHaveBeenCalled();
+      expect(returnTextToComposer).toHaveBeenCalledWith(
+        conversationId,
+        "What's on my calendar today?",
+      );
+    });
+
+    it('waits in the new-conversation composer when no provider is set up', async () => {
+      const returnTextToComposer = jest.fn();
+      const ensureConversation = jest.fn(() => null);
+      const { result } = renderHook(() =>
+        useForegroundConversationActions({
+          ...createParams('', { ensureConversation, returnTextToComposer }),
+          activeConversationId: null,
+        }),
+      );
+
+      await act(async () => {
+        await result.current.handleSendFromOutsideComposer('Remind me at six.');
+      });
+
+      expect(ensureConversation).toHaveBeenCalledWith({ reportMissingProvider: true });
+      expect(returnTextToComposer).toHaveBeenCalledWith(null, 'Remind me at six.');
     });
   });
 

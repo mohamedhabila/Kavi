@@ -74,7 +74,7 @@ async function steerActiveRun(params: {
   context: ForegroundConversationSendContext;
   conversationId: string;
   text: string;
-}): Promise<{ kind: 'sent_to_run' } | { kind: 'send_turn'; text: string }> {
+}): Promise<{ kind: 'rejected' } | { kind: 'sent_to_run' } | { kind: 'send_turn'; text: string }> {
   const { context, conversationId } = params;
   const runId = context.steering.registry.getRequestId(conversationId);
   if (!runId || params.attachments?.length || isRegisteredSlashCommand(params.text)) {
@@ -89,7 +89,7 @@ async function steerActiveRun(params: {
   });
   if (queued.status === 'rejected') {
     if (queued.reason === 'queue_full') context.setChatError(context.steeringQueueFullMessage);
-    return { kind: 'sent_to_run' };
+    return { kind: 'rejected' };
   }
   context.clearComposerDraft(getComposerDraftKey(conversationId));
   const untaken = await settleSteering({
@@ -106,18 +106,19 @@ async function steerActiveRun(params: {
  * Submit a composer turn exactly as the chat screen does: resolve or create the
  * canonical conversation, steer a run that is already working, or import attachments
  * into the conversation workspace, gate on write availability, append the user message,
- * then run the turn.
+ * then run the turn. Resolves whether the message left: false when it never became a turn
+ * or reached a working run, so text the composer did not hold can be kept for the person.
  */
 export async function executeForegroundConversationSend(
   input: ForegroundConversationSendInput,
-): Promise<void> {
+): Promise<boolean> {
   const { attachments, context, runOptions } = input;
   context.setChatError(null);
 
   const resolvedConversationId =
     context.getLiveActiveConversationId() ??
     context.ensureConversation({ reportMissingProvider: true });
-  if (!resolvedConversationId) return;
+  if (!resolvedConversationId) return false;
 
   const conversationId = resolvedConversationId;
   const steering = await steerActiveRun({
@@ -126,11 +127,12 @@ export async function executeForegroundConversationSend(
     conversationId,
     text: input.text,
   });
-  if (steering.kind === 'sent_to_run') return;
+  if (steering.kind === 'rejected') return false;
+  if (steering.kind === 'sent_to_run') return true;
   const text = steering.text;
   // Timed from here: a message that waited for a run counts from when it became a turn.
   const latencyTimeline = createTurnLatencyTimeline();
-  if (!context.reserveConversationWrite(conversationId)) return;
+  if (!context.reserveConversationWrite(conversationId)) return false;
 
   let writeIntent: ReturnType<typeof beginModelProjectionIntent> | undefined;
   try {
@@ -146,14 +148,14 @@ export async function executeForegroundConversationSend(
       } catch (error) {
         console.warn('Failed to import chat attachments into the conversation workspace.', error);
         context.setChatError(context.attachmentWorkspaceImportFailedMessage);
-        return;
+        return false;
       }
     }
 
     if (
       !(await context.waitForConversationWriteAvailability(conversationId, SUPERSEDING_TURN_REASON))
     ) {
-      return;
+      return false;
     }
 
     writeIntent = beginModelProjectionIntent(conversationId, 'conversation-write');
@@ -173,6 +175,7 @@ export async function executeForegroundConversationSend(
     writeIntent = undefined;
     context.releaseConversationWrite(conversationId);
     await execution;
+    return true;
   } finally {
     writeIntent?.release();
     context.releaseConversationWrite(conversationId);

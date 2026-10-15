@@ -28,9 +28,9 @@ export function scheduleForegroundScenarioSteer(params: {
   /** The turn's own user message; tool results are counted from it on. */
   userMessageId: string;
   steer: ForegroundScenarioSteerDirective;
-  send: (text: string) => Promise<void>;
+  send: (text: string) => Promise<unknown>;
 }): ForegroundScenarioSteer {
-  let sending: Promise<void> | null = null;
+  let sending: Promise<unknown> | null = null;
   let unsubscribe: (() => void) | null = null;
   const stopWatching = () => {
     unsubscribe?.();
@@ -49,9 +49,9 @@ export function scheduleForegroundScenarioSteer(params: {
   unsubscribe = useChatStore.subscribe(check);
   check();
   return {
-    settle: () => {
+    settle: async () => {
       stopWatching();
-      return sending ?? Promise.resolve();
+      await sending;
     },
   };
 }

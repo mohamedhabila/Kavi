@@ -47,7 +47,7 @@ type UseForegroundConversationActionsParams = {
   pendingAgentRunTerminalReviewsRef: MutableRefObject<Map<string, Promise<void>>>;
   requestChatStorePersistenceCheckpoint: (delayMs?: number) => void;
   /** Put text back into the conversation's composer, ahead of any draft already there. */
-  returnTextToComposer: (conversationId: string, text: string) => void;
+  returnTextToComposer: (conversationId: string | null, text: string) => void;
   runChat: (conversationId: string, options?: RunChatOptions) => Promise<void>;
   setChatError: (message: string | null) => void;
   setEditingContent: (content: string | undefined) => void;
@@ -64,6 +64,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     attachments?: Attachment[],
     runOptions?: RunChatOptions,
   ) => Promise<void>;
+  handleSendFromOutsideComposer: (text: string, runOptions?: RunChatOptions) => Promise<void>;
   handleStop: () => void;
 } {
   const {
@@ -224,6 +225,21 @@ export function useForegroundConversationActions(params: UseForegroundConversati
       });
     },
     [],
+  );
+
+  // Text that did not come from the composer (a voice turn, "Ask Kavi", the continue
+  // button) leaves the person's draft alone, and waits in the composer when it could not
+  // be sent instead of being lost.
+  const handleSendFromOutsideComposer = useCallback(
+    async (text: string, runOptions?: RunChatOptions) => {
+      const sent = await executeForegroundConversationSend({
+        context: { ...sendContextRef.current, clearComposerDraft: () => undefined },
+        runOptions,
+        text,
+      });
+      if (!sent) returnTextToComposer(getLiveActiveConversationId(), text);
+    },
+    [getLiveActiveConversationId, returnTextToComposer],
   );
 
   const handleStop = useCallback(() => {
@@ -392,6 +408,7 @@ export function useForegroundConversationActions(params: UseForegroundConversati
     handleEditSend,
     handleRetry,
     handleSend,
+    handleSendFromOutsideComposer,
     handleStop,
   };
 }

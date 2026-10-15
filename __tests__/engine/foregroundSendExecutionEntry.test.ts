@@ -73,7 +73,7 @@ describe('executeForegroundConversationSend', () => {
   it('appends the user message only after the conversation write is gated', async () => {
     const { context, calls } = createContext();
 
-    await executeForegroundConversationSend({ context, text: 'hello' });
+    await expect(executeForegroundConversationSend({ context, text: 'hello' })).resolves.toBe(true);
 
     expect(calls).toEqual([
       'reserveConversationWrite',
@@ -126,10 +126,25 @@ describe('executeForegroundConversationSend', () => {
     });
   });
 
+  it('reports the message as not sent when there is no conversation to send it to', async () => {
+    const { context } = createContext({
+      ensureConversation: jest.fn(() => null),
+      getLiveActiveConversationId: () => null,
+    });
+
+    await expect(executeForegroundConversationSend({ context, text: 'hello' })).resolves.toBe(
+      false,
+    );
+    expect(context.addMessage).not.toHaveBeenCalled();
+    expect(context.clearComposerDraft).not.toHaveBeenCalled();
+  });
+
   it('does not send when the conversation write cannot be reserved', async () => {
     const { context } = createContext({ reserveConversationWrite: jest.fn(() => false) });
 
-    await executeForegroundConversationSend({ context, text: 'hello' });
+    await expect(executeForegroundConversationSend({ context, text: 'hello' })).resolves.toBe(
+      false,
+    );
 
     expect(context.addMessage).not.toHaveBeenCalled();
     expect(context.runChat).not.toHaveBeenCalled();
@@ -140,7 +155,9 @@ describe('executeForegroundConversationSend', () => {
       waitForConversationWriteAvailability: jest.fn(async () => false),
     });
 
-    await executeForegroundConversationSend({ context, text: 'hello' });
+    await expect(executeForegroundConversationSend({ context, text: 'hello' })).resolves.toBe(
+      false,
+    );
 
     expect(context.addMessage).not.toHaveBeenCalled();
     expect(context.runChat).not.toHaveBeenCalled();
@@ -248,7 +265,7 @@ describe('sending while a run works (steering)', () => {
     expect(calls).toEqual(['clearComposerDraft']);
     queue.take('active-conversation', 'run-1');
     run.end();
-    await sending;
+    await expect(sending).resolves.toBe(true);
 
     expect(context.runChat).not.toHaveBeenCalled();
     expect(context.addMessage).not.toHaveBeenCalled();
@@ -322,7 +339,9 @@ describe('sending while a run works (steering)', () => {
       });
     }
 
-    await executeForegroundConversationSend({ context, text: 'One more thing.' });
+    await expect(
+      executeForegroundConversationSend({ context, text: 'One more thing.' }),
+    ).resolves.toBe(false);
 
     expect(context.setChatError).toHaveBeenLastCalledWith('queue full');
     expect(context.clearComposerDraft).not.toHaveBeenCalled();
