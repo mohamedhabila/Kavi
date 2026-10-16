@@ -6,7 +6,7 @@ Usage (from the Claw-Anything virtualenv; arguments are Claw-Anything's own)::
         --agent loop --config <config.yaml> --model <model id> --trace-dir <dir>
 
 The only addition to Claw-Anything is ``CLAW_ANYTHING_EXTRA_HEADERS`` for an endpoint
-that needs a header (client_headers.py). Mock services start from Claw-Anything's
+that needs a header (client_options.py). Mock services start from Claw-Anything's
 checkout, so the CLI runs there.
 """
 
@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import client_headers  # noqa: E402
+import client_options  # noqa: E402
 
-client_headers.install()
+client_options.install()
 
 import claw_anything  # noqa: E402
 

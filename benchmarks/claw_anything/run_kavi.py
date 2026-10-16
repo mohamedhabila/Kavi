@@ -12,7 +12,7 @@ Claw-Anything's agent factory is closed to new backends, so this replaces it for
 the run with one that returns ``KaviAgent``; the task loading, mock services,
 tracing and grading are Claw-Anything's unchanged code. Mock services are
 started from Claw-Anything's checkout, so the CLI runs there. Headers the judge's
-endpoint needs come from ``CLAW_ANYTHING_EXTRA_HEADERS`` (see client_headers.py).
+endpoint needs come from ``CLAW_ANYTHING_EXTRA_HEADERS`` (see client_options.py).
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import client_headers  # noqa: E402
+import client_options  # noqa: E402
 
-client_headers.install()
+client_options.install()
 
 import claw_anything  # noqa: E402
 import claw_anything.agents as claw_agents  # noqa: E402

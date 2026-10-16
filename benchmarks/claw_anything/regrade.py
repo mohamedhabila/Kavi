@@ -9,7 +9,7 @@ is what ``claw-anything grade --write`` is meant to do, but at the pinned revisi
 write-back block sits inside ``_strip_grading_results`` rather than ``cmd_grade``: ``--write``
 prints the new grade and leaves the trace unchanged, and calling ``_strip_grading_results``
 raises NameError. This driver strips the old result itself. Headers the judge's
-endpoint needs come from ``CLAW_ANYTHING_EXTRA_HEADERS`` (client_headers.py).
+endpoint needs come from ``CLAW_ANYTHING_EXTRA_HEADERS`` (client_options.py).
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import client_headers  # noqa: E402
+import client_options  # noqa: E402
 
-client_headers.install()
+client_options.install()
 
 import claw_anything  # noqa: E402
 
