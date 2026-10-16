@@ -53,7 +53,12 @@ export const E2E_CORE_MULTI_TURN_SCENARIOS: ReadonlyArray<E2EScenario> = [
     contentClass: 'synthetic_public',
     threadTitle: 'weekend-planning-thread',
     prompt: 'weekend-planning-thread',
-    userTurns: [{ content: 'plan-weekend-trip-42' }, { content: 'confirm-weekend-plan-42' }],
+    // Chit-chat that asks for nothing: placeholder tokens such as "plan-weekend-trip-42" read
+    // as a trip-planning request without its details, which Kavi rightly asked about.
+    userTurns: [
+      { content: 'My sister and I are thinking about a weekend at the coast. Nothing booked yet.' },
+      { content: "We've settled on Saturday, leaving around nine in the morning." },
+    ],
     rubrics: [
       { kind: 'min_user_turns', min: 2 },
       { kind: 'memory_turns_indexed', min: 1 },

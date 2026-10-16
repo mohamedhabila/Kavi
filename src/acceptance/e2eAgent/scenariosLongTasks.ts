@@ -168,8 +168,8 @@ export const LONG_TASK_TRIP_ORGANIZER: E2EScenario = {
       path: 'calendar.lastCreatedEndDate',
       expectedValue: '2026-10-21T14:25:00.000Z',
     },
-    { kind: 'native_fixture_state', path: 'sms.opened', expectedValue: 'true' },
-    { kind: 'native_fixture_state', path: 'sms.recipientCount', expectedValue: '1' },
+    // "Text Avery" is done whether Kavi sends the text or leaves it ready in the composer.
+    { kind: 'native_fixture_state', path: 'sms.recipients', expectedValue: '+15550101001' },
     ...longTaskBudgetRubrics('long-task-trip-organizer', 12),
   ],
 };
