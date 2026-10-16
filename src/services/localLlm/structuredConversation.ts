@@ -8,11 +8,16 @@ import {
 import {
   LOCAL_LLM_HIGH_HISTORY_GROUPS,
   LOCAL_LLM_LOW_HISTORY_GROUPS,
+  LOCAL_LLM_MAX_IMAGES_PER_TURN,
   LOCAL_LLM_MID_HISTORY_GROUPS,
 } from './constants';
 import { estimateStructuredLocalConversationTokens } from './promptContent';
 import { fitStructuredLocalConversationToBudget } from './structuredBudget';
-import { buildStructuredLocalMessages, groupStructuredLocalMessages } from './structuredMessages';
+import {
+  buildStructuredLocalMessages,
+  groupStructuredLocalMessages,
+  keepLatestLocalImages,
+} from './structuredMessages';
 import { buildStructuredLocalToolDefinitions } from './toolAdapter';
 import type {
   LocalChatMessage,
@@ -51,7 +56,13 @@ export function buildStructuredLocalConversation(
   estimatedInputTokens: number;
   context: LocalLlmContextTelemetry;
 } {
-  const structuredConversation = buildStructuredLocalMessages(messages);
+  // A model whose engine loads a vision encoder takes images (Gemma 4).
+  const showImages = executionPolicy.defaultVisionAccelerator != null;
+  const builtConversation = buildStructuredLocalMessages(messages, showImages);
+  const structuredConversation = {
+    ...builtConversation,
+    messages: keepLatestLocalImages(builtConversation.messages, LOCAL_LLM_MAX_IMAGES_PER_TURN),
+  };
   const toolDefinitions = buildStructuredLocalToolDefinitions(tools);
   const contextWindowTokens = getNativeLocalLlmMaximumContextWindowTokens(executionPolicy);
   const inputBudget =

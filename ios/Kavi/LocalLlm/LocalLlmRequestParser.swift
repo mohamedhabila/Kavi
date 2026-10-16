@@ -33,7 +33,8 @@ final class LocalLlmRequestParser {
       topP: optionalFloat(dictionary, key: "topP"),
       temperature: optionalFloat(dictionary, key: "temperature"),
       enableConstrainedDecoding: optionalBool(dictionary, key: "enableConstrainedDecoding") ?? false,
-      minDeviceMemoryGb: optionalPositiveInt(dictionary, key: "minDeviceMemoryGb")
+      minDeviceMemoryGb: optionalPositiveInt(dictionary, key: "minDeviceMemoryGb"),
+      visualTokenBudget: optionalPositiveInt(dictionary, key: "visualTokenBudget")
     )
   }
 
@@ -130,12 +131,37 @@ final class LocalLlmRequestParser {
 
   private func parseMessage(_ dictionary: NSDictionary) throws -> LocalLlmHistoryEntry {
     let role = try requiredString(dictionary, key: "role")
+    let imagePaths = try self.imagePaths(dictionary["imagePaths"])
+    if !imagePaths.isEmpty && role != "user" {
+      throw LocalLlmBridgeError.invalidRequest("Only user messages carry images.")
+    }
     return LocalLlmHistoryEntry(
       role: role,
       content: optionalString(dictionary, key: "content"),
+      imagePaths: imagePaths,
       toolCalls: try toolCalls(dictionary["toolCalls"]),
       toolResponses: try toolResponses(dictionary["toolResponses"])
     )
+  }
+
+  /// Paths of image files the app wrote; each must exist when the message is parsed.
+  private func imagePaths(_ rawPaths: Any?) throws -> [String] {
+    guard let rawPaths, !(rawPaths is NSNull) else {
+      return []
+    }
+    guard let array = rawPaths as? NSArray else {
+      throw LocalLlmBridgeError.invalidRequest("imagePaths must be an array.")
+    }
+    return try array.map { value in
+      let path = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      var isDirectory: ObjCBool = false
+      guard !path.isEmpty, FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+        !isDirectory.boolValue
+      else {
+        throw LocalLlmBridgeError.invalidRequest("Image file not found: \(path)")
+      }
+      return path
+    }
   }
 
   private func tools(_ rawTools: Any?) throws -> [LocalLlmToolDefinitionEntry] {

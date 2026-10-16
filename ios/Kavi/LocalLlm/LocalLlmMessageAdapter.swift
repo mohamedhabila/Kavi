@@ -124,6 +124,11 @@ final class LocalLlmMessageAdapter {
     }
 
     let content = normalizedContent(for: entry)
+    if role == .user && !entry.imagePaths.isEmpty {
+      // Images first, then the words about them, as Gemma's prompt format expects.
+      let images = entry.imagePaths.map { Content.imageFile($0) }
+      return Message(contents: images + (content.isEmpty ? [] : [.text(content)]), role: .user)
+    }
     let toolCalls = entry.toolCalls.map { ToolCall(name: $0.name, arguments: $0.arguments) }
     guard !content.isEmpty || !toolCalls.isEmpty else {
       throw LocalLlmBridgeError.invalidRequest("On-device conversation messages require content or tool calls.")
@@ -167,6 +172,7 @@ final class LocalLlmMessageAdapter {
     [
       "role": entry.role,
       "content": entry.content ?? "",
+      "imagePaths": entry.imagePaths,
       "toolCalls": entry.toolCalls.map(callDictionary),
       "toolResponses": entry.toolResponses.map(responseDictionary),
     ]

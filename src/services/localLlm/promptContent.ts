@@ -2,10 +2,37 @@ import {
   LOCAL_LLM_APPROX_CHARS_PER_TOKEN,
   LOCAL_LLM_MESSAGE_OVERHEAD_TOKENS,
   LOCAL_LLM_SYSTEM_OVERHEAD_TOKENS,
+  LOCAL_LLM_VISUAL_TOKEN_BUDGET,
 } from './constants';
 import type { LocalStructuredMessage, LocalStructuredToolDefinition } from './types';
 
-export function flattenMessageContent(content: string | any[]): string {
+function imageDataUri(entry: any): string | undefined {
+  if (!entry || typeof entry !== 'object') return undefined;
+  const url =
+    entry.type === 'image_url'
+      ? entry.image_url?.url
+      : entry.type === 'input_image'
+        ? (entry.image_url ?? entry.url)
+        : undefined;
+  return typeof url === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/iu.test(url)
+    ? url
+    : undefined;
+}
+
+/** The images in a message's content parts, as data URIs. */
+export function extractLocalImageUris(content: string | any[]): string[] {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((entry) => {
+    const uri = imageDataUri(entry);
+    return uri ? [uri] : [];
+  });
+}
+
+/**
+ * A message's text. Images become a note for a model that cannot see them, and are left
+ * out when the model is shown them as images ([imagesShown]).
+ */
+export function flattenMessageContent(content: string | any[], imagesShown = false): string {
   if (typeof content === 'string') {
     return content.trim();
   }
@@ -23,11 +50,8 @@ export function flattenMessageContent(content: string | any[]): string {
         if (typeof entry.text === 'string') {
           return entry.text;
         }
-        if (entry.type === 'image_url') {
-          return '[Image omitted for local text model]';
-        }
-        if (entry.type === 'input_image') {
-          return '[Image omitted for local text model]';
+        if (entry.type === 'image_url' || entry.type === 'input_image') {
+          return imagesShown && imageDataUri(entry) ? '' : '[Image omitted for local text model]';
         }
         if (entry.type === 'input_file' || entry.type === 'file') {
           return '[File omitted for local text model]';
@@ -139,6 +163,7 @@ export function estimateStructuredLocalConversationTokens(params: {
     (total, message) =>
       total +
       estimateLocalLlmTextTokens(flattenLocalStructuredMessage(message)) +
+      (message.imageUris?.length ?? 0) * LOCAL_LLM_VISUAL_TOKEN_BUDGET +
       LOCAL_LLM_MESSAGE_OVERHEAD_TOKENS,
     0,
   );

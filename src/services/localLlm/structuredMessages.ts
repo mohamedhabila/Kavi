@@ -1,4 +1,8 @@
-import { flattenMessageContent, parseJsonLikeLocalValue } from './promptContent';
+import {
+  extractLocalImageUris,
+  flattenMessageContent,
+  parseJsonLikeLocalValue,
+} from './promptContent';
 import type {
   LocalChatMessage,
   LocalStructuredMessage,
@@ -53,7 +57,36 @@ export function extractLocalStructuredToolCalls(
     .filter((toolCall): toolCall is LocalStructuredToolCall => Boolean(toolCall));
 }
 
-export function buildStructuredLocalMessages(messages: LocalChatMessage[]): {
+/**
+ * Only the latest user message keeps its images (the last [max] of them): it is what the
+ * turn is about, and the conversation cache holds what came before. Earlier images leave
+ * a note so the model knows something was shown.
+ */
+export function keepLatestLocalImages(
+  messages: LocalStructuredMessage[],
+  max: number,
+): LocalStructuredMessage[] {
+  let latestUser = -1;
+  messages.forEach((message, index) => {
+    if (message.role === 'user') latestUser = index;
+  });
+  return messages.map((message, index) => {
+    if (!message.imageUris?.length) return message;
+    if (index === latestUser) return { ...message, imageUris: message.imageUris.slice(-max) };
+    const { imageUris, ...rest } = message;
+    const note =
+      imageUris.length === 1
+        ? '[An image shared earlier]'
+        : `[${imageUris.length} images shared earlier]`;
+    return { ...rest, content: rest.content ? `${note}\n${rest.content}` : note };
+  });
+}
+
+/** [showImages]: the model takes images, so a user message's images go to it as images. */
+export function buildStructuredLocalMessages(
+  messages: LocalChatMessage[],
+  showImages = false,
+): {
   systemPrompt?: string;
   messages: LocalStructuredMessage[];
 } {
@@ -121,14 +154,16 @@ export function buildStructuredLocalMessages(messages: LocalChatMessage[]): {
       continue;
     }
 
-    const content = flattenMessageContent(message.content);
-    if (!content) {
+    const imageUris = showImages ? extractLocalImageUris(message.content) : [];
+    const content = flattenMessageContent(message.content, imageUris.length > 0);
+    if (!content && imageUris.length === 0) {
       continue;
     }
 
     structuredMessages.push({
       role: 'user',
-      content,
+      ...(content ? { content } : {}),
+      ...(imageUris.length > 0 ? { imageUris } : {}),
     });
   }
 

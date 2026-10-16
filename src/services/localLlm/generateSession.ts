@@ -16,6 +16,8 @@ import {
   getNativeLocalLlmRequestSamplingConfig,
   shouldEnableNativeLocalLlmConstrainedDecoding,
 } from './samplingPolicy';
+import { LOCAL_LLM_VISUAL_TOKEN_BUDGET } from './constants';
+import { withLocalImageFiles } from './imageInputs';
 import { buildStructuredLocalConversation } from './structuredConversation';
 import { buildLocalChatCompletionToolCalls } from './toolAdapter';
 import type { LocalChatMessage, LocalLlmRequestOptions } from './types';
@@ -40,6 +42,10 @@ export async function sendLocalLlmMessage(
       request.executionPolicy,
       conversation.tools,
     );
+    const [history, currentMessage] = await Promise.all([
+      Promise.all(conversation.history.map(withLocalImageFiles)),
+      withLocalImageFiles(conversation.currentMessage),
+    ]);
     rememberLocalLlmRuntimeActivity(request.modelPath, 'running');
     const result = await generateWithNativeLocalLlm(
       {
@@ -48,8 +54,8 @@ export async function sendLocalLlmMessage(
         modelPath: request.nativeModelPath,
         runtime: request.runtime,
         systemPrompt: conversation.systemPrompt,
-        history: conversation.history,
-        currentMessage: conversation.currentMessage,
+        history,
+        currentMessage,
         tools: conversation.tools,
         backend: request.backend,
         ...(request.visionBackend ? { visionBackend: request.visionBackend } : {}),
@@ -60,6 +66,9 @@ export async function sendLocalLlmMessage(
         ...samplingConfig,
         ...(enableConstrainedDecoding ? { enableConstrainedDecoding: true } : {}),
         minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
+        ...([...history, currentMessage].some((message) => message.imagePaths?.length)
+          ? { visualTokenBudget: LOCAL_LLM_VISUAL_TOKEN_BUDGET }
+          : {}),
       },
       options?.signal,
     ).finally(() => {

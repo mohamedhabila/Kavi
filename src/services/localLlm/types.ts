@@ -29,6 +29,8 @@ export type LocalStructuredToolResponse = {
 export type LocalStructuredMessage = {
   role: 'user' | 'assistant' | 'tool';
   content?: string;
+  /** Images a user message shows the model, as data URIs (models that take images only). */
+  imageUris?: string[];
   toolCalls?: LocalStructuredToolCall[];
   toolResponses?: LocalStructuredToolResponse[];
 };

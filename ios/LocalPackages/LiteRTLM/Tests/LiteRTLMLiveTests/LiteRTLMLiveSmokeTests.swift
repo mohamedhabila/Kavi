@@ -31,6 +31,42 @@ final class LiteRTLMLiveSmokeTests: XCTestCase {
     XCTAssertLessThanOrEqual(numbers, 20, "A 16-token reply listed \(numbers) numbers.")
   }
 
+  func testDescribesAnImage() async throws {
+    let env = ProcessInfo.processInfo.environment
+    guard let modelPath = nonEmpty(env["LITERTLM_LIVE_MODEL_PATH"]),
+      let imagePath = nonEmpty(env["LITERTLM_LIVE_IMAGE_PATH"])
+    else {
+      throw XCTSkip("Set LITERTLM_LIVE_MODEL_PATH and LITERTLM_LIVE_IMAGE_PATH to run the image test.")
+    }
+    let backendName = nonEmpty(env["LITERTLM_LIVE_BACKEND"]) ?? "cpu"
+    // The app runs the vision encoder on CPU (LocalLlmTypes), so the test does too.
+    let engine = Engine(
+      engineConfig: try EngineConfig(
+        modelPath: modelPath,
+        backend: try backend(named: backendName),
+        visionBackend: .cpu(),
+        maxNumTokens: 4096,
+        cacheDir: NSTemporaryDirectory()
+      )
+    )
+    try await withTimeout(seconds: 180) { try await engine.initialize() }
+    let conversation = try await engine.createConversation()
+    ExperimentalFlags.visualTokenBudget = 280
+
+    let response = try await withTimeout(seconds: 180) {
+      try await conversation.sendMessage(
+        Message(
+          contents: [.imageFile(imagePath), .text("What colour fills this image? Answer with one word.")],
+          role: .user
+        ),
+        maxOutputTokens: 32
+      )
+    }
+    let answer = response.toString.lowercased()
+    let expected = nonEmpty(env["LITERTLM_LIVE_IMAGE_COLOUR"]) ?? "red"
+    XCTAssertTrue(answer.contains(expected), "Expected \(expected); the model answered: \(answer)")
+  }
+
   func testGenerateWithConfiguredModel() async throws {
     let env = ProcessInfo.processInfo.environment
     guard let modelPath = nonEmpty(env["LITERTLM_LIVE_MODEL_PATH"]) else {
@@ -59,10 +95,17 @@ final class LiteRTLMLiveSmokeTests: XCTestCase {
     }
 
     do {
+      // Optional encoders, to measure what loading one costs.
+      let visionBackend = try nonEmpty(env["LITERTLM_LIVE_VISION_BACKEND"]).map { try backend(named: $0) }
+      let audioBackend = try nonEmpty(env["LITERTLM_LIVE_AUDIO_BACKEND"]).map { try backend(named: $0) }
+      report["visionBackend"] = visionBackend?.rawValue ?? ""
+      report["audioBackend"] = audioBackend?.rawValue ?? ""
       let engine = Engine(
         engineConfig: try EngineConfig(
           modelPath: modelPath,
           backend: try backend(named: backendName),
+          visionBackend: visionBackend,
+          audioBackend: audioBackend,
           maxNumTokens: maxNumTokens,
           cacheDir: NSTemporaryDirectory()
         )

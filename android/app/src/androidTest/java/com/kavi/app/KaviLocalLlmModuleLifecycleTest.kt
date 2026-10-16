@@ -5,6 +5,7 @@ package com.kavi.mobile
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.facebook.react.bridge.BridgeReactContext
+import com.facebook.react.bridge.JavaOnlyArray
 import com.facebook.react.bridge.JavaOnlyMap
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableMap
@@ -15,6 +16,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -66,6 +68,54 @@ class KaviLocalLlmModuleLifecycleTest {
         val numbers = Regex("\\d+").findAll(text).count()
         // 16 tokens hold well under 20 numbers; without the cap the model counts on to 300.
         assertTrue("A 16-token reply listed $numbers numbers: $text", numbers <= 20)
+      } finally {
+        module.invalidate()
+      }
+    }
+  }
+
+  @Test
+  fun showsTheModelAnImage() {
+    val imagePath = arguments.getString("benchmarkImagePath")
+    assumeTrue("Pass benchmarkImagePath to run the image test.", !imagePath.isNullOrBlank())
+    runBlocking {
+      val config = readOnDeviceBenchmarkConfig(arguments)
+      val module = KaviLocalLlmModule(BridgeReactContext(targetContext))
+      try {
+        val reply = CapturingPromise()
+        module.generate(
+          JavaOnlyMap.of(
+            "requestId",
+            "phase1-image",
+            "conversationKey",
+            "phase1-image",
+            "modelPath",
+            config.modelPath,
+            "currentMessage",
+            JavaOnlyMap.of(
+              "role",
+              "user",
+              "content",
+              "What colour fills this image? Answer with one word.",
+              "imagePaths",
+              JavaOnlyArray.of(imagePath),
+            ),
+            "backend",
+            config.backend,
+            "visionBackend",
+            "cpu",
+            "visualTokenBudget",
+            280,
+            "maxTokens",
+            32,
+            "contextWindowTokens",
+            4096,
+          ),
+          reply,
+        )
+        val answer = (reply.awaitResolved() as ReadableMap).getString("text").orEmpty().lowercase()
+        val expected = arguments.getString("benchmarkImageColour") ?: "red"
+        assertTrue("Expected $expected; the model answered: $answer", expected in answer)
       } finally {
         module.invalidate()
       }

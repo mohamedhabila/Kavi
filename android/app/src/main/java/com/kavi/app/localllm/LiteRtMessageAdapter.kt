@@ -162,7 +162,17 @@ internal class LiteRtMessageAdapter(
           },
         ),
       )
-      else -> Message.user(entry.content.orEmpty())
+      else -> if (entry.imagePaths.isEmpty()) {
+        Message.user(entry.content.orEmpty())
+      } else {
+        // Images first, then the words about them, as Gemma's prompt format expects.
+        Message.user(
+          Contents.of(
+            entry.imagePaths.map { path -> Content.ImageFile(path) } +
+              listOfNotNull(entry.content?.let { text -> Content.Text(text) }),
+          ),
+        )
+      }
     }
   }
 

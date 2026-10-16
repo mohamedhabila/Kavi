@@ -44,6 +44,8 @@ struct LocalLlmToolDefinitionEntry {
 struct LocalLlmHistoryEntry {
   let role: String
   let content: String?
+  /// Image files a user message shows the model.
+  var imagePaths: [String] = []
   let toolCalls: [LocalLlmToolCallEntry]
   let toolResponses: [LocalLlmToolResponseEntry]
 }
@@ -80,6 +82,8 @@ struct LocalLlmRequest: LocalLlmEngineRequest {
   let temperature: Float?
   let enableConstrainedDecoding: Bool
   let minDeviceMemoryGb: Int?
+  /// Tokens per image the request's images are encoded to; nil keeps the model's own.
+  var visualTokenBudget: Int? = nil
 }
 
 struct LocalLlmWarmupRequest: LocalLlmEngineRequest {

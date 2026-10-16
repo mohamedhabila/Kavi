@@ -16,6 +16,8 @@ internal const val MEMORY_EPSILON_GB = 0.01
 internal data class HistoryEntry(
   val role: String,
   val content: String? = null,
+  /** Image files a user message shows the model. */
+  val imagePaths: List<String> = emptyList(),
   val toolCalls: List<HistoryToolCallEntry> = emptyList(),
   val toolResponses: List<HistoryToolResponseEntry> = emptyList(),
 )
@@ -116,6 +118,8 @@ internal data class LocalRequest(
   override val temperature: Float?,
   val enableConstrainedDecoding: Boolean,
   override val minDeviceMemoryGb: Int?,
+  /** Tokens per image the request's images are encoded to; null keeps the model's own. */
+  val visualTokenBudget: Int? = null,
 ) : EngineRequest
 
 internal data class WarmupRequest(

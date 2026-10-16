@@ -17,6 +17,14 @@ export const LOCAL_LLM_ANDROID_PRECISE_MEMORY_API_LEVEL = 34;
 export const LOCAL_LLM_NEAR_MINIMUM_MEMORY_HEADROOM_GB = 0.5;
 export const LOCAL_LLM_APPROX_CHARS_PER_TOKEN = 4;
 export const LOCAL_LLM_MESSAGE_OVERHEAD_TOKENS = 12;
+/**
+ * Tokens one image costs an on-device model: Kavi fixes the runtime's visual token budget
+ * at this (one of Gemma 4's budgets, 70 to 1,120) so prefill stays quick on a phone and the
+ * context estimate is exact.
+ */
+export const LOCAL_LLM_VISUAL_TOKEN_BUDGET = 280;
+/** Images a single on-device turn shows the model; more would crowd a phone's context. */
+export const LOCAL_LLM_MAX_IMAGES_PER_TURN = 4;
 export const LOCAL_LLM_SYSTEM_OVERHEAD_TOKENS = 8;
 export const LOCAL_LLM_ENGINE_INIT_INPUT_RESERVE_TOKENS = 1_024;
 export const LOCAL_LLM_CONTEXT_WINDOW_BUCKET_TOKENS = 1_024;

@@ -32,6 +32,7 @@ actor LocalLlmRuntime {
     let state = try await engine(for: request)
     let conversation = try await conversationState(for: request, engineState: state)
     let message = try adapter.currentMessage(for: request)
+    applyVisualTokenBudget(request.visualTokenBudget)
     markActive(request.requestId, conversation)
     defer { clearActive(request.requestId) }
 
@@ -54,6 +55,7 @@ actor LocalLlmRuntime {
     let state = try await engine(for: request)
     let conversation = try await conversationState(for: request, engineState: state)
     let message = try adapter.currentMessage(for: request)
+    applyVisualTokenBudget(request.visualTokenBudget)
     var output = ""
     var toolCalls: [ToolCall] = []
     var emittedToolCallOccurrences: [String: Int] = [:]
@@ -283,5 +285,13 @@ actor LocalLlmRuntime {
     }
     let next = runtimeWaiters.removeFirst()
     next.resume()
+  }
+}
+
+/// LiteRT-LM reads how many tokens to encode an image to from a process-wide flag when a
+/// message is sent; every request asks for the same budget, so setting it per request is safe.
+private func applyVisualTokenBudget(_ budget: Int?) {
+  if let budget {
+    ExperimentalFlags.visualTokenBudget = Int32(budget)
   }
 }

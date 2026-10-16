@@ -159,6 +159,7 @@ internal class LocalLlmRuntime(
   }
 
   private suspend fun runInference(request: LocalRequest, activeRequest: ActiveRequest): InferenceResult {
+    applyVisualTokenBudget(request.visualTokenBudget)
     val currentMessage = messageAdapter.resolveCurrentMessage(request)
     return engineStore.withEngine(request) { engineState, resolvedBackend, _ ->
       val acquiredConversation = engineStore.acquireConversationOrResetEngine(engineState, request)
@@ -178,6 +179,7 @@ internal class LocalLlmRuntime(
   }
 
   private suspend fun runStreamingInference(request: LocalRequest, activeRequest: ActiveRequest): String {
+    applyVisualTokenBudget(request.visualTokenBudget)
     val currentMessage = messageAdapter.resolveCurrentMessage(request)
     return engineStore.withEngine(request) { engineState, resolvedBackend, _ ->
       val acquiredConversation = engineStore.acquireConversationOrResetEngine(engineState, request)

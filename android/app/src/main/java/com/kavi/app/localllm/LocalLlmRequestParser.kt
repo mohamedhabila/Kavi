@@ -39,6 +39,9 @@ internal class LocalLlmRequestParser {
       temperature = sampling.temperature,
       enableConstrainedDecoding = readBoolean(request, "enableConstrainedDecoding", false),
       minDeviceMemoryGb = readInt(request, "minDeviceMemoryGb"),
+      visualTokenBudget = readInt(request, "visualTokenBudget")?.also { budget ->
+        require(budget > 0) { "visualTokenBudget must be greater than 0." }
+      },
     )
   }
 
@@ -85,18 +88,35 @@ internal class LocalLlmRequestParser {
     val content = item.getString("content")?.trim()?.takeIf { it.isNotEmpty() }
     val toolCalls = parseToolCalls(item.getArray("toolCalls"))
     val toolResponses = parseToolResponses(item.getArray("toolResponses"))
+    val imagePaths = parseImagePaths(item.getArray("imagePaths"))
 
     require(role == "user" || role == "assistant" || role == "tool") {
       "Unsupported conversation message role: $role"
     }
     when (role) {
       "tool" -> require(toolResponses.isNotEmpty()) { "tool messages require toolResponses." }
+      "user" -> require(content != null || imagePaths.isNotEmpty()) {
+        "user messages require content or images."
+      }
       else -> require(content != null || toolCalls.isNotEmpty()) {
         "$role messages require content or toolCalls."
       }
     }
+    require(imagePaths.isEmpty() || role == "user") { "Only user messages carry images." }
 
-    return HistoryEntry(role, content, toolCalls, toolResponses)
+    return HistoryEntry(role, content, imagePaths, toolCalls, toolResponses)
+  }
+
+  /** Paths of image files the app wrote; each must exist when the message is parsed. */
+  private fun parseImagePaths(pathsArray: ReadableArray?): List<String> {
+    if (pathsArray == null) {
+      return emptyList()
+    }
+    return (0 until pathsArray.size()).map { index ->
+      val path = pathsArray.getString(index)?.trim().orEmpty()
+      require(path.isNotEmpty() && java.io.File(path).isFile) { "Image file not found: $path" }
+      path
+    }
   }
 
   private fun parseToolCalls(toolCallsArray: ReadableArray?): List<HistoryToolCallEntry> {

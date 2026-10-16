@@ -70,6 +70,8 @@ export interface NativeLocalLlmConversationToolResponse {
 export interface NativeLocalLlmConversationMessage {
   role: 'user' | 'assistant' | 'tool';
   content?: string;
+  /** Image files a user message shows the model (paths without a scheme). */
+  imagePaths?: string[];
   toolCalls?: NativeLocalLlmConversationToolCall[];
   toolResponses?: NativeLocalLlmConversationToolResponse[];
 }
@@ -112,6 +114,8 @@ export interface NativeLocalLlmRequest {
   temperature?: number;
   enableConstrainedDecoding?: boolean;
   minDeviceMemoryGb?: number;
+  /** Tokens each image is encoded to, sent with the images it applies to. */
+  visualTokenBudget?: number;
 }
 
 export interface NativeLocalLlmWarmupRequest {
