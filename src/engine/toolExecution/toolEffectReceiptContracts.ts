@@ -456,12 +456,15 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
       }),
     ),
     chat_compose: effectful('communication.draft_handoff', nativeOutcomes({ opened: HANDED_OFF })),
+    // Every status but the composer means the text left the phone: the radio confirmed it,
+    // or it has not yet confirmed every part, or some recipients got it. Each settles as
+    // applied, acknowledged by the phone, so the same send is never repeated.
     sms_send: effectful(
       'communication.send',
       nativeOutcomes({
         sent: APPLIED,
-        sent_unconfirmed: outcome('applied', 'unverified'),
-        partially_sent: outcome('applied', 'unverified'),
+        sent_unconfirmed: APPLIED,
+        partially_sent: APPLIED,
         composer_opened: outcome('handed_off', 'unverified', 'communication.draft_handoff'),
       }),
     ),
