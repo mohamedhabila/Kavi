@@ -18,7 +18,10 @@ export const LOCAL_LLM_HOT_MAX_TOKENS: Readonly<Record<'serious' | 'critical', n
   serious: 1_024,
   critical: 512,
 };
-/** The context a critically hot phone prefills. */
+/**
+ * The context a critically hot phone prefills. Both runtimes reuse an engine whose window is
+ * at least the one asked for, so this never starts a new engine; it only prefills less.
+ */
 export const LOCAL_LLM_CRITICAL_CONTEXT_TOKENS = 4_096;
 
 const log = createLogger('local-llm-thermal');
