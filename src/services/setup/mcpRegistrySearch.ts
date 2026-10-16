@@ -55,13 +55,10 @@ function remoteMatches(entry: unknown): RegistryServerMatch[] {
   });
 }
 
-/** The registry's remote servers whose names match [query], newest version of each. */
-export async function searchMcpRegistry(
-  query: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<RegistrySearchResult> {
-  const search = query.trim();
-  if (!search) return { status: 'found', matches: [] };
+async function queryRegistry(
+  search: string,
+  fetchImpl: typeof fetch,
+): Promise<{ status: 'found'; servers: unknown[] } | { status: 'unavailable'; reason: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
   try {
@@ -71,8 +68,10 @@ export async function searchMcpRegistry(
       return { status: 'unavailable', reason: `The MCP Registry answered ${response.status}.` };
     }
     const body: unknown = await response.json();
-    const servers = isRecord(body) && Array.isArray(body.servers) ? body.servers : [];
-    return { status: 'found', matches: servers.flatMap(remoteMatches).slice(0, MAX_MATCHES) };
+    return {
+      status: 'found',
+      servers: isRecord(body) && Array.isArray(body.servers) ? body.servers : [],
+    };
   } catch (error) {
     return {
       status: 'unavailable',
@@ -83,4 +82,36 @@ export async function searchMcpRegistry(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** The registry's remote servers whose names match [query], newest version of each. */
+export async function searchMcpRegistry(
+  query: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RegistrySearchResult> {
+  const search = query.trim();
+  if (!search) return { status: 'found', matches: [] };
+  const result = await queryRegistry(search, fetchImpl);
+  return result.status === 'found'
+    ? { status: 'found', matches: result.servers.flatMap(remoteMatches).slice(0, MAX_MATCHES) }
+    : result;
+}
+
+/**
+ * Every network address the registry lists under exactly [registryName] (a vendor's own
+ * entry, such as com.notion/mcp); searching by the full name returns that entry alone.
+ */
+export async function findRegistryServer(
+  registryName: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RegistrySearchResult> {
+  const result = await queryRegistry(registryName, fetchImpl);
+  return result.status === 'found'
+    ? {
+        status: 'found',
+        matches: result.servers
+          .flatMap(remoteMatches)
+          .filter((match) => match.name === registryName),
+      }
+    : result;
 }

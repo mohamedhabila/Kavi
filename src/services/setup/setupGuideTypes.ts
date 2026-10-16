@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // Kavi — Guided setup: what a guide says
 // ---------------------------------------------------------------------------
-// A guide is code-owned fact, in English for the model, which walks the person through it
-// in their own language and at their pace. Secrets are never typed into the chat: every
-// guide ends at the Kavi form where the person enters them. Each guide records when its
-// facts (prices, limits, page paths) were last checked against the vendors' own pages.
+// A guide holds only what cannot go stale because it is about Kavi: what setting it up
+// unlocks, the Kavi form it ends at and what goes in it, the steps inside Kavi, and the
+// safety rules. Everything about the vendor (plans, prices, limits, the steps on its site)
+// comes from the vendor's own pages, read when the guide is asked for, so the person is
+// walked through what the vendor offers today. Secrets are never typed into the chat: the
+// person enters them in the Kavi form.
 
 export const SETUP_TOPICS = [
   'app_building',
@@ -37,14 +39,22 @@ export type SetupForm =
     }>
   | Readonly<{ kind: 'system'; access: SetupSystemAccess }>;
 
+/** A vendor page a guide's facts come from, read when the guide is asked for. */
+export type SetupPage = Readonly<{
+  url: string;
+  /** What the page is read for, e.g. "current plans and prices". */
+  about: string;
+  /** How much of the page to read; defaults to the first 5,000 characters. */
+  maxChars?: number;
+}>;
+
 export type SetupOption = Readonly<{
   id: string;
   name: string;
-  /** What it costs, in the vendor's own terms. */
-  cost: string;
-  /** Honest trade-offs a beginner should know before choosing. */
-  notes: string;
-  url?: string;
+  /** Why someone would pick it, in terms that do not change with a price list. */
+  why: string;
+  /** The pages with this option's current terms and steps. */
+  pages?: ReadonlyArray<SetupPage>;
 }>;
 
 export type SetupGuide = Readonly<{
@@ -53,10 +63,12 @@ export type SetupGuide = Readonly<{
   /** What Kavi can do for the person once this is set up. */
   unlocks: string;
   options?: ReadonlyArray<SetupOption>;
-  /** The option these steps follow, when the guide has several. */
+  /** The option the person chose, when they have. */
   optionId?: string;
-  /** Plain-language steps a person can follow on a phone, one action each. */
-  steps: ReadonlyArray<string>;
+  /** Read live: the options' pages to compare them, or the chosen option's pages. */
+  pages: ReadonlyArray<SetupPage>;
+  /** The steps inside Kavi, exactly; the steps on the vendor's site come from its pages. */
+  kaviSteps: ReadonlyArray<string>;
   /** What to enter in Kavi's form, field by field. */
   enterInKavi?: ReadonlyArray<Readonly<{ field: string; value: string }>>;
   form?: SetupForm;
@@ -64,7 +76,14 @@ export type SetupGuide = Readonly<{
   afterSetup: string;
   /** Things Kavi must or should do for the person's safety, in order. */
   safety?: ReadonlyArray<string>;
-  sources: ReadonlyArray<string>;
-  /** When these facts were last checked against the vendors' pages (YYYY-MM-DD). */
-  verifiedOn: string;
 }>;
+
+/** The pages a guide reads: the chosen option's own, else the overview of every option. */
+export function guidePages(
+  options: ReadonlyArray<SetupOption> | undefined,
+  optionId: string | undefined,
+  overview: ReadonlyArray<SetupPage>,
+): ReadonlyArray<SetupPage> {
+  const chosen = options?.find((option) => option.id === optionId);
+  return chosen?.pages?.length ? chosen.pages : overview;
+}

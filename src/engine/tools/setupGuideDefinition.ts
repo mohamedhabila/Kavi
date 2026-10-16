@@ -17,10 +17,17 @@ export const SETUP_GUIDE_TOOL: ToolDefinition = {
     'model key; option = gemini, openrouter, openai or anthropic), service_key (web search, ' +
     'GitHub, weather and other service keys), phone_access (Android: option assistant_role to ' +
     'send texts itself, notification_access to read and answer notifications), phone_calls ' +
-    '(Kavi talks on calls for the person). Returns whether it is already set up, the options ' +
-    'with what they cost, plain steps and what to enter where; the person also sees a card ' +
-    'that opens the right Kavi form. Walk them through it in their language, one step at a ' +
-    'time, and never ask for a key or password in the chat: they enter it in the form.',
+    '(Kavi talks on calls for the person). Returns whether it is already set up, the options, ' +
+    "the steps inside Kavi and what to enter where, and research: the vendors' own pages as " +
+    'they read right now (call again with option once the person picks one, for its steps). ' +
+    "Take prices, limits and the steps on the vendor's site from research and name the page; " +
+    'quote prices as the page states them and work out any estimate from them exactly (3 ' +
+    'minutes at $0.14 a minute is $0.42). ' +
+    'A price research does not show (a page that failed, a domain name, another vendor) comes ' +
+    'from web_fetch or web_search, or is left out: never from memory. The person also sees ' +
+    'a card that opens the right Kavi form. Walk them through it in their language, one ' +
+    'step at a time, and never ask for a key or password in the chat: they enter it in ' +
+    'the form.',
   input_schema: {
     type: 'object',
     properties: {
@@ -34,10 +41,11 @@ export const SETUP_GUIDE_TOOL: ToolDefinition = {
   },
   contract: {
     category: 'interaction',
-    capabilities: ['discover', 'read'],
+    capabilities: ['discover', 'read', 'verify'],
     resourceKinds: ['unknown'],
     sideEffects: ['none'],
-    riskHints: ['read_only', 'idempotent'],
+    boundedOutput: true,
+    riskHints: ['read_only', 'idempotent', 'open_world'],
     providesEvidence: [],
     workflowStages: ['discover_resource'],
   },

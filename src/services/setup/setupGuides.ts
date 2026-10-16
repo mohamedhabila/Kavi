@@ -16,10 +16,15 @@ import {
   phoneAccessGuide,
   serviceKeyGuide,
 } from './guides/accountsAndPhone';
-import { APP_BUILDING_GUIDE, SERVER_GUIDE } from './guides/appsAndServers';
+import { appBuildingGuide, serverGuide } from './guides/appsAndServers';
 import { connectAppGuide, MCP_DIRECTORY, type DirectoryServer } from './guides/connectedApps';
-import { searchMcpRegistry, type RegistrySearchResult } from './mcpRegistrySearch';
+import {
+  findRegistryServer,
+  searchMcpRegistry,
+  type RegistrySearchResult,
+} from './mcpRegistrySearch';
 import type { SetupGuide, SetupTopic } from './setupGuideTypes';
+import { readSetupPages, type SetupResearch } from './setupResearch';
 
 export type SetupState = Readonly<{
   /** Already set up for what the guide unlocks; null when the phone cannot tell. */
@@ -29,9 +34,21 @@ export type SetupState = Readonly<{
   detail: string;
 }>;
 
+/** Where a directory service's address came from. */
+export type ServerAddress = Readonly<{
+  url: string;
+  /** registry: read from the vendor's registry entry just now; directory: last seen there. */
+  checked: 'registry' | 'directory';
+  note?: string;
+}>;
+
 export type ResolvedSetupGuide = Readonly<{
   guide: SetupGuide;
   state: SetupState;
+  /** The vendors' pages as they read now; absent for guides with no vendor pages. */
+  research?: SetupResearch;
+  /** For a directory service: its address, as the MCP Registry lists it now. */
+  address?: ServerAddress;
   /** For a service the directory does not list: what the MCP Registry has. */
   registry?: RegistrySearchResult;
 }>;
@@ -61,7 +78,12 @@ function connectedServerUrls(): Set<string> {
   return connected;
 }
 
-async function readState(topic: SetupTopic, option: string | undefined): Promise<SetupState> {
+async function readState(
+  topic: SetupTopic,
+  option: string | undefined,
+  /** For connect_app: every address the chosen service is known by. */
+  serverUrls: ReadonlyArray<string>,
+): Promise<SetupState> {
   const availability = getRuntimeToolAvailabilityContext();
   switch (topic) {
     case 'app_building':
@@ -76,7 +98,7 @@ async function readState(topic: SetupTopic, option: string | undefined): Promise
       const server = findDirectoryServer(option);
       const connected = connectedServerUrls();
       if (server) {
-        return connected.has(server.url)
+        return serverUrls.some((url) => connected.has(url))
           ? { configured: true, detail: `${server.name} is connected.` }
           : { configured: false, detail: `${server.name} is not connected yet.` };
       }
@@ -132,12 +154,13 @@ async function readState(topic: SetupTopic, option: string | undefined): Promise
   }
 }
 
-function guideFor(topic: SetupTopic, option: string | undefined): SetupGuide {
+/** The guide for [topic] (and the option the person chose), before anything is read. */
+export function setupGuideFor(topic: SetupTopic, option: string | undefined): SetupGuide {
   switch (topic) {
     case 'app_building':
-      return APP_BUILDING_GUIDE;
+      return appBuildingGuide(option);
     case 'server':
-      return SERVER_GUIDE;
+      return serverGuide(option);
     case 'connect_app':
       return connectAppGuide(findDirectoryServer(option));
     case 'ai_provider':
@@ -152,21 +175,63 @@ function guideFor(topic: SetupTopic, option: string | undefined): SetupGuide {
 }
 
 /**
- * The guide for [topic], whether it is already set up, and, for a service the directory
- * does not list, what the MCP Registry has under that name. A guide this phone cannot
- * follow opens no form.
+ * The address the vendor's registry entry lists now: the directory's own when the entry
+ * still has it, else the entry's current one (streamable HTTP first). The directory's
+ * address stands in only when the registry cannot say.
+ */
+async function currentServerAddress(server: DirectoryServer): Promise<ServerAddress> {
+  const lookup = await findRegistryServer(server.registryName);
+  if (lookup.status === 'unavailable') {
+    return {
+      url: server.url,
+      checked: 'directory',
+      note: `${lookup.reason} This is the address the registry last listed.`,
+    };
+  }
+  if (lookup.matches.some((match) => match.url === server.url)) {
+    return { url: server.url, checked: 'registry' };
+  }
+  const current =
+    lookup.matches.find((match) => match.transport === 'streamable-http') ?? lookup.matches[0];
+  return current
+    ? { url: current.url, checked: 'registry' }
+    : {
+        url: server.url,
+        checked: 'directory',
+        note: `The MCP Registry no longer lists ${server.registryName}; check the vendor's site before connecting.`,
+      };
+}
+
+/**
+ * The guide for [topic], whether it is already set up, the vendors' pages as they read
+ * now, and for a service: its current address in the MCP Registry, or what the registry
+ * has under that name when the directory does not list it. Everything is read at once and
+ * bounded; a page or registry that does not answer leaves the guide answering without it.
+ * A guide this phone cannot follow opens no form.
  */
 export async function resolveSetupGuide(
   topic: SetupTopic,
   option?: string,
 ): Promise<ResolvedSetupGuide> {
-  const state = await readState(topic, option);
-  const fullGuide = guideFor(topic, option);
+  const server = topic === 'connect_app' ? findDirectoryServer(option) : undefined;
+  const baseGuide = setupGuideFor(topic, option);
+  const [address, registry, research] = await Promise.all([
+    server ? currentServerAddress(server) : undefined,
+    topic === 'connect_app' && option?.trim() && !server ? searchMcpRegistry(option) : undefined,
+    baseGuide.pages.length > 0 ? readSetupPages(baseGuide.pages) : undefined,
+  ]);
+  const state = await readState(
+    topic,
+    option,
+    server ? [...new Set([server.url, address?.url ?? server.url])] : [],
+  );
+  const fullGuide = server && address ? connectAppGuide(server, address.url) : baseGuide;
   const { form: _form, ...formless } = fullGuide;
-  const guide = state.unavailable ? formless : fullGuide;
-  const registry =
-    topic === 'connect_app' && option?.trim() && !findDirectoryServer(option)
-      ? await searchMcpRegistry(option)
-      : undefined;
-  return { guide, state, ...(registry ? { registry } : {}) };
+  return {
+    guide: state.unavailable ? formless : fullGuide,
+    state,
+    ...(research ? { research } : {}),
+    ...(address ? { address } : {}),
+    ...(registry ? { registry } : {}),
+  };
 }

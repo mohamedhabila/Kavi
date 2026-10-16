@@ -78,6 +78,7 @@
     "test:live:anthropic": "cross-env RUN_LIVE_ANTHROPIC=1 jest --runInBand __tests__/services/LlmService.anthropic.live.test.ts",
     "test:live:native-providers": "cross-env RUN_LIVE_NATIVE_PROVIDER_CHECKS=1 jest --runInBand __tests__/services/LlmService.nativeProviders.live.test.ts",
     "test:live:mcp-registry": "cross-env RUN_LIVE_MCP_REGISTRY=1 jest --runInBand __tests__/integration/real-world-scenarios.mcp.test.ts",
+    "test:live:setup-pages": "cross-env RUN_LIVE_SETUP_PAGES=1 jest --runInBand __tests__/integration/setupGuidePages.live.test.ts",
     "eval:memory": "node ./scripts/memory-eval-harness.js",
     "eval:longmemeval": "node ./scripts/longmemeval-harness.js",
     "test:amemgym-adapter": "cross-env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s benchmarks/amemgym -p 'test_*.py'",

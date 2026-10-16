@@ -28,6 +28,8 @@ export async function executeSetupGuide(args: unknown) {
       ...(option ? { option } : {}),
       state: resolved.state,
       guide: resolved.guide,
+      ...(resolved.research ? { research: resolved.research } : {}),
+      ...(resolved.address ? { address: resolved.address } : {}),
       ...(resolved.registry ? { registry: resolved.registry } : {}),
     }),
   );

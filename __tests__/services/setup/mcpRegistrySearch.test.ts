@@ -1,4 +1,7 @@
-import { searchMcpRegistry } from '../../../src/services/setup/mcpRegistrySearch';
+import {
+  findRegistryServer,
+  searchMcpRegistry,
+} from '../../../src/services/setup/mcpRegistrySearch';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
@@ -159,5 +162,41 @@ describe('searchMcpRegistry', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('findRegistryServer', () => {
+  it("returns every address under exactly the vendor's name, however many it has", async () => {
+    const remotes = Array.from({ length: 12 }, (_, index) => ({
+      type: 'streamable-http',
+      url: `https://p${index}.mcp.cloudflare.com/mcp`,
+    }));
+    const fetchImpl = jest.fn(async () =>
+      jsonResponse({
+        servers: [
+          { server: { name: 'com.cloudflare.mcp/mcp', remotes } },
+          { server: { name: 'com.cloudflare.mcp/mcp-fork', remotes: [remotes[0]] } },
+        ],
+      }),
+    );
+
+    const result = await findRegistryServer(
+      'com.cloudflare.mcp/mcp',
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    expect(fetchImpl.mock.calls[0]![0]).toContain('search=com.cloudflare.mcp%2Fmcp');
+    expect(result.status === 'found' && result.matches).toHaveLength(12);
+    expect(
+      result.status === 'found' &&
+        result.matches.every((match) => match.name === 'com.cloudflare.mcp/mcp'),
+    ).toBe(true);
+  });
+
+  it('says when the registry cannot be asked', async () => {
+    await expect(
+      findRegistryServer('com.notion/mcp', (async () =>
+        jsonResponse({}, 500)) as unknown as typeof fetch),
+    ).resolves.toEqual({ status: 'unavailable', reason: 'The MCP Registry answered 500.' });
   });
 });

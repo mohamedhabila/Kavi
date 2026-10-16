@@ -1,58 +1,71 @@
 // ---------------------------------------------------------------------------
 // Kavi — Guided setup: AI providers, service keys, phone access, calls Kavi handles
 // ---------------------------------------------------------------------------
-// Facts checked against the vendors' own pages on 2026-10-15 and 2026-10-16. Menu labels
-// that could not be confirmed are described by the page and what to look for.
+// Vendor pages chosen by what Kavi's own web_fetch extracts (probed 2026-10-16). Gemini's
+// rate-limit page carries its free tier further down, so more of it is read. Phone access
+// is Android's own settings: no vendor page.
 
 import { SERVICE_SETUP_FIELDS } from '../catalog';
-import type { SetupGuide, SetupOption } from '../setupGuideTypes';
+import { guidePages, type SetupGuide, type SetupOption, type SetupPage } from '../setupGuideTypes';
 
-const AI_PROVIDER_OPTIONS: ReadonlyArray<SetupOption & { steps: ReadonlyArray<string> }> = [
+const GEMINI_LIMITS: SetupPage = {
+  url: 'https://ai.google.dev/gemini-api/docs/rate-limits',
+  about: "Gemini's free tier: which models and how many requests",
+  maxChars: 10_000,
+};
+const OPENROUTER_FAQ: SetupPage = {
+  url: 'https://openrouter.ai/docs/faq',
+  about: "OpenRouter's free models, credits and limits",
+};
+const OPENAI_BILLING: SetupPage = {
+  url: 'https://help.openai.com/en/articles/8264644',
+  about: "OpenAI's prepaid credit: the minimum and how it is bought",
+};
+
+const AI_PROVIDER_OPTIONS: ReadonlyArray<SetupOption> = [
   {
     id: 'gemini',
     name: 'Google AI Studio (Gemini)',
-    cost: 'Free tier with Flash and Flash-Lite models and per-model daily limits; no card needed.',
-    notes:
-      'Prompts sent on the free tier may be used to improve Google products. The quickest way to start.',
-    url: 'https://aistudio.google.com',
-    steps: [
-      'Open aistudio.google.com and sign in with a Google account.',
-      'Find the API keys page ("Get API key"), create a key and copy it.',
+    why: 'Free to start with a Google account, no card; the quickest way to begin.',
+    pages: [
+      {
+        url: 'https://ai.google.dev/gemini-api/docs/api-key',
+        about: 'how to create a Gemini API key in Google AI Studio',
+      },
+      GEMINI_LIMITS,
     ],
   },
   {
     id: 'openrouter',
     name: 'OpenRouter',
-    cost: 'Free models: 50 requests a day, or 1,000 a day after buying 10 credits; paid models charge per use.',
-    notes: 'One key for models from many companies.',
-    url: 'https://openrouter.ai',
-    steps: [
-      'Open openrouter.ai and sign in with Google, GitHub or an email.',
-      'Open Keys, create a key (a spending limit is optional) and copy it.',
+    why: 'One key for models from many companies, including some free ones.',
+    pages: [
+      OPENROUTER_FAQ,
+      {
+        url: 'https://openrouter.ai/docs/api/reference/authentication',
+        about: 'how to create an OpenRouter API key',
+      },
     ],
   },
   {
     id: 'openai',
     name: 'OpenAI',
-    cost: 'Pay as you go: buy at least $5 of credit (it expires after a year).',
-    notes: 'A ChatGPT login works, but a ChatGPT subscription does not include API credit.',
-    url: 'https://platform.openai.com',
-    steps: [
-      'Open platform.openai.com and sign in.',
-      'In Settings, Billing, add a card and buy credit ($5 minimum); turning off auto-recharge is safer.',
-      'Open API keys, create a secret key named "Kavi" and copy it.',
+    why: 'Pay as you go; a ChatGPT subscription does not include API use.',
+    pages: [
+      OPENAI_BILLING,
+      { url: 'https://platform.openai.com/docs/quickstart', about: 'how to create an API key' },
     ],
   },
   {
     id: 'anthropic',
     name: 'Anthropic (Claude)',
-    cost: 'Pay as you go: buy at least $5 of credit.',
-    notes: 'The models Kavi is measured on.',
-    url: 'https://platform.claude.com',
-    steps: [
-      'Open platform.claude.com and sign up.',
-      'Open Billing and buy credit ($5 minimum).',
-      'Open API keys, create a key and copy it.',
+    why: 'Pay as you go; the models Kavi is measured on.',
+    pages: [
+      {
+        url: 'https://docs.claude.com/en/api/overview',
+        about: 'how to get a Claude API key in the Console',
+      },
+      { url: 'https://docs.claude.com/en/docs/get-started', about: 'getting started with the API' },
     ],
   },
 ];
@@ -63,12 +76,14 @@ export function aiProviderGuide(optionId?: string): SetupGuide {
     topic: 'ai_provider',
     title: chosen ? `Connect ${chosen.name}` : 'Connect an AI provider',
     unlocks: 'Kavi answers and acts with the AI models of the provider the key belongs to.',
-    options: AI_PROVIDER_OPTIONS.map(({ steps: _steps, ...option }) => option),
+    options: AI_PROVIDER_OPTIONS,
     ...(chosen ? { optionId: chosen.id } : {}),
-    steps: [
-      ...(chosen
-        ? chosen.steps
-        : ['Pick a provider from the options; Google AI Studio is free to start.']),
+    pages: guidePages(AI_PROVIDER_OPTIONS, optionId, [
+      GEMINI_LIMITS,
+      OPENROUTER_FAQ,
+      OPENAI_BILLING,
+    ]),
+    kaviSteps: [
       'In Kavi, open the AI provider form (Kavi can open it), pick the provider and paste the key. Never paste a key into the chat.',
     ],
     form: {
@@ -77,23 +92,20 @@ export function aiProviderGuide(optionId?: string): SetupGuide {
       ...(chosen ? { draft: { provider: chosen.id } } : {}),
     },
     afterSetup: 'Kavi can use the new provider right away; carry on with what the person asked.',
-    sources: [
-      'https://ai.google.dev/gemini-api/docs/pricing',
-      'https://openrouter.ai/docs/api/reference/limits',
-      'https://help.openai.com/en/articles/8264644',
-    ],
-    verifiedOn: '2026-10-15',
   };
 }
 
 /** A service that needs an API key (web search, GitHub, weather, finance, …). */
 export function serviceKeyGuide(optionId?: string): SetupGuide {
-  const options = SERVICE_SETUP_FIELDS.map((field) => ({
+  const options: SetupOption[] = SERVICE_SETUP_FIELDS.map((field) => ({
     id: field.storageKey,
     name: field.label,
-    cost: field.freeAccess,
-    notes: field.unlocks,
-    ...(field.docsUrl ? { url: field.docsUrl } : {}),
+    why: field.unlocks,
+    ...(field.docsUrl
+      ? {
+          pages: [{ url: field.docsUrl, about: `how to get the ${field.label} and what it costs` }],
+        }
+      : {}),
   }));
   const chosen = SERVICE_SETUP_FIELDS.find((field) => field.storageKey === optionId);
   return {
@@ -104,16 +116,14 @@ export function serviceKeyGuide(optionId?: string): SetupGuide {
       : 'Kavi gains web search, GitHub, weather, finance and other services, each with its own key.',
     options,
     ...(chosen ? { optionId: chosen.storageKey } : {}),
-    steps: chosen
-      ? [
-          chosen.setup,
-          `In Kavi, open the service keys (Kavi can open them) and paste it as ${chosen.label}.`,
-        ]
-      : ['Pick the service from the options.'],
+    pages: guidePages(options, optionId, []),
+    kaviSteps: [
+      chosen
+        ? `In Kavi, open the service keys (Kavi can open them) and paste it as the ${chosen.label}. Never paste it into the chat.`
+        : 'Pick the service from the options; its page says how to get the key.',
+    ],
     form: { kind: 'settings', section: 'service-keys' },
     afterSetup: 'Use the service for what the person asked.',
-    sources: options.flatMap((option) => (option.url ? [option.url] : [])),
-    verifiedOn: '2026-10-15',
   };
 }
 
@@ -131,18 +141,17 @@ export function phoneAccessGuide(optionId?: string): SetupGuide {
       {
         id: 'assistant_role',
         name: 'Default digital assistant',
-        cost: 'Free',
-        notes: 'Replaces the current assistant (often Google).',
+        why: 'Replaces the current assistant (often Google).',
       },
       {
         id: 'notification_access',
         name: 'Notification access',
-        cost: 'Free',
-        notes: 'Kavi only reads notifications when asked, and keeps them on the phone.',
+        why: 'Kavi only reads notifications when asked, and keeps them on the phone.',
       },
     ],
     optionId: notificationAccess ? 'notification_access' : 'assistant_role',
-    steps: notificationAccess
+    pages: [],
+    kaviSteps: notificationAccess
       ? [
           'Open the notification access page (Kavi can open it).',
           'Turn on access for Kavi and confirm.',
@@ -153,13 +162,13 @@ export function phoneAccessGuide(optionId?: string): SetupGuide {
         ],
     form: { kind: 'system', access: notificationAccess ? 'notification_access' : 'assistant_role' },
     afterSetup: 'Carry on with what the person asked.',
-    sources: [
-      'https://support.google.com/googleplay/android-developer/answer/10208820',
-      'https://developer.android.com/reference/android/service/notification/NotificationListenerService',
-    ],
-    verifiedOn: '2026-10-15',
   };
 }
+
+const BLAND_PAGES: ReadonlyArray<SetupPage> = [
+  { url: 'https://www.bland.ai/pricing', about: "Bland's plans and per-minute prices" },
+  { url: 'https://docs.bland.ai/platform/billing', about: 'how Bland credit and billing work' },
+];
 
 export const PHONE_CALLS_GUIDE: SetupGuide = {
   topic: 'phone_calls',
@@ -170,16 +179,14 @@ export const PHONE_CALLS_GUIDE: SetupGuide = {
     {
       id: 'bland',
       name: 'Bland',
-      cost: 'About $0.14 a minute plus the phone line, up to 100 calls a day on the Start plan; calls abroad need at least $5 of credit.',
-      notes: 'One key, no phone number to buy; calls show a Bland number, not the person’s.',
-      url: 'https://www.bland.ai/pricing',
+      why: 'One key and no phone number to buy; calls show a Bland number, not the person’s.',
+      pages: BLAND_PAGES,
     },
   ],
   optionId: 'bland',
-  steps: [
-    'Open app.bland.ai on the phone and create an account.',
-    'Add credit (at least $5, which also enables calls to other countries).',
-    'Find the API key in the account settings and copy it.',
+  pages: BLAND_PAGES,
+  kaviSteps: [
+    'At app.bland.ai, create an account and add credit; the API key is in the account settings (search the web if the person cannot find it).',
     'In Kavi, open the service keys (Kavi can open them) and paste it as the Bland API key. Never paste it into the chat.',
   ],
   form: { kind: 'settings', section: 'service-keys' },
@@ -190,11 +197,4 @@ export const PHONE_CALLS_GUIDE: SetupGuide = {
     'Call businesses freely; call a private person only when the person says that contact agreed to a call from an AI (in the US the law requires it for mobile numbers).',
     'Never call emergency numbers, sell anything, or give payment details, ID numbers or health information on a call.',
   ],
-  sources: [
-    'https://docs.bland.ai/api-v1/post/calls',
-    'https://www.bland.ai/pricing',
-    'https://www.fcc.gov/document/fcc-makes-ai-generated-voices-robocalls-illegal',
-    'https://artificialintelligenceact.eu/article/50/',
-  ],
-  verifiedOn: '2026-10-16',
 };
