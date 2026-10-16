@@ -2079,6 +2079,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       'El PDF “{name}” supera el límite de {limit} de este proveedor; solo se compartieron su nombre y tamaño con el modelo.',
   },
   localModels: {
+    notEnoughStorage: 'Para descargar {model} hacen falta {needed} GB libres y este teléfono tiene {available} GB. Libera espacio o elige un modelo más pequeño.',
     downloadRequiredTitle: 'Descarga el modelo seleccionado',
     downloadRequiredBody:
       '{name} todavía no está en este dispositivo. Descárgalo antes de guardar este proveedor.',

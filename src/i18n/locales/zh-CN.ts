@@ -1912,6 +1912,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
     documentExceedsSizeLimit: 'PDF“{name}”超过了此提供商 {limit} 的限制；仅将文件名和大小分享给了模型。',
   },
   localModels: {
+    notEnoughStorage: '下载 {model} 需要 {needed} GB 可用空间，这部手机只有 {available} GB。请释放一些空间，或选择更小的模型。',
     downloadRequiredTitle: '下载所选模型',
     downloadRequiredBody: '{name} 还不在此设备上。请先下载，再保存此提供商。',
     downloadingTitle: '正在下载 {name}',

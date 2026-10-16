@@ -1910,6 +1910,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
     documentExceedsSizeLimit: 'PDF「{name}」超過此供應商 {limit} 的限制；僅將檔名和大小分享給模型。',
   },
   localModels: {
+    notEnoughStorage: '下載 {model} 需要 {needed} GB 可用空間，這支手機只有 {available} GB。請釋出一些空間，或選擇較小的模型。',
     downloadRequiredTitle: '下載所選模型',
     downloadRequiredBody: '{name} 尚未存在於此裝置。請先下載，再儲存此供應商。',
     downloadingTitle: '正在下載 {name}',

@@ -2048,6 +2048,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       'Das PDF „{name}“ überschreitet das {limit}-Limit dieses Anbieters; dem Modell wurden nur Name und Größe übermittelt.',
   },
   localModels: {
+    notEnoughStorage: 'Für den Download von {model} werden {needed} GB freier Speicher benötigt, dieses Telefon hat {available} GB. Gib etwas Speicher frei oder wähle ein kleineres Modell.',
     downloadRequiredTitle: 'Ausgewähltes Modell herunterladen',
     downloadRequiredBody:
       '{name} ist noch nicht auf diesem Gerät vorhanden. Laden Sie es herunter, bevor Sie diesen Anbieter speichern.',

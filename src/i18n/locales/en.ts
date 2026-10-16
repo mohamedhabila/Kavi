@@ -2066,6 +2066,7 @@ export const en: TranslationMap = {
     downloadedBody: 'Download complete. You can save this provider now.',
     downloadFailedTitle: 'Download failed',
     downloadFailedBody: 'The model could not be downloaded. Check your connection and try again.',
+    notEnoughStorage: 'Downloading {model} needs {needed} GB free and this phone has {available} GB. Free up some space, or choose a smaller model.',
     retryDownloadButton: 'Retry download',
     downloadAccessibilityLabel: 'Download model {name}',
     validatingTitle: 'Checking {name}',

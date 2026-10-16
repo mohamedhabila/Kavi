@@ -1973,6 +1973,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       'PDF「{name}」はこのプロバイダーの上限（{limit}）を超えています。ファイル名とサイズのみがモデルに共有されました。',
   },
   localModels: {
+    notEnoughStorage: '{model} のダウンロードには {needed} GB の空き容量が必要ですが、この端末の空きは {available} GB です。容量を空けるか、より小さいモデルを選んでください。',
     downloadRequiredTitle: '選択したモデルをダウンロード',
     downloadRequiredBody:
       '{name} はまだこの端末にありません。このプロバイダーを保存する前にダウンロードしてください。',

@@ -12,6 +12,7 @@ import {
   normalizeInstalledModels,
 } from './modelArtifacts';
 import { getLocalLlmProviderModelIds, normalizeLocalLlmProvider } from './provider';
+import { assertLocalLlmDownloadFits } from './storageCheck';
 import type { InstallLocalLlmModelOptions } from './types';
 
 export async function installLocalLlmModel(
@@ -38,6 +39,14 @@ export async function installLocalLlmModel(
 
   if ((!existingInstallEntry || existingInstallIssue) && destination.exists) {
     destination.delete();
+  }
+
+  if (!destination.exists) {
+    assertLocalLlmDownloadFits({
+      modelName: catalogEntry.name,
+      expectedSizeBytes: catalogEntry.sizeBytes,
+      partialFile: tempDestination,
+    });
   }
 
   await ensureLocalLlmModelArtifactReady({

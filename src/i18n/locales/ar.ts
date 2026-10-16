@@ -2136,6 +2136,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
     downloadedBody: 'اكتمل التنزيل. يمكنك الآن حفظ هذا المزود.',
     downloadFailedTitle: 'فشل التنزيل',
     downloadFailedBody: 'تعذّر تنزيل النموذج. تحقّق من اتصالك وحاول مرة أخرى.',
+    notEnoughStorage: 'يحتاج تنزيل {model} إلى {needed} غيغابايت من المساحة الفارغة، وفي هذا الهاتف {available} غيغابايت. أفرغ بعض المساحة أو اختر نموذجًا أصغر.',
     retryDownloadButton: 'إعادة محاولة التنزيل',
     downloadAccessibilityLabel: 'تنزيل النموذج {name}',
     validatingTitle: 'جارٍ فحص {name}',

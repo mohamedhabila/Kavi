@@ -2065,6 +2065,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       'O PDF “{name}” é maior que o limite de {limit} deste provedor; apenas o nome e o tamanho foram compartilhados com o modelo.',
   },
   localModels: {
+    notEnoughStorage: 'Para baixar {model}, são necessários {needed} GB livres, e este telefone tem {available} GB. Libere espaço ou escolha um modelo menor.',
     downloadRequiredTitle: 'Baixe o modelo selecionado',
     downloadRequiredBody:
       '{name} ainda não está neste dispositivo. Baixe-o antes de salvar este provedor.',
