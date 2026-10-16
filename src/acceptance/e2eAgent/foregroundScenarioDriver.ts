@@ -124,7 +124,8 @@ async function runScenarioIsolated(
       activeProviderId: input.provider.id,
       activeModel: input.provider.model,
       systemPrompt: input.systemPrompt,
-      thinkingLevel: 'medium',
+      // The app's default: each model thinks at its own default level.
+      thinkingLevel: undefined,
       disableLongTermMemory: input.disableLongTermMemory ?? false,
       memoryConsolidationMode: 'active_provider',
       consolidationProvider: null,

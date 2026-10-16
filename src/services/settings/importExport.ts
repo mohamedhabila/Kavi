@@ -232,7 +232,7 @@ export function exportSettings(): ExportedSettings {
       theme: state.theme,
       systemPrompt: state.systemPrompt,
       lastUsedModel: state.lastUsedModel,
-      thinkingLevel: state.thinkingLevel,
+      thinkingLevel: state.thinkingLevel ?? null,
       locale: state.locale,
       webSearchProvider: state.webSearchProvider,
       linkUnderstandingEnabled: state.linkUnderstandingEnabled,
@@ -355,7 +355,7 @@ export function importSettings(data: string | ExportedSettings): ImportResult {
           ? settings.lastUsedModel
           : null;
       }
-      if (isOneOf(settings.thinkingLevel, THINKING_LEVELS))
+      if (settings.thinkingLevel === null || isOneOf(settings.thinkingLevel, THINKING_LEVELS))
         settingsUpdate.thinkingLevel = settings.thinkingLevel;
       if (isOneOf(settings.locale, LOCALES)) settingsUpdate.locale = settings.locale;
       if (isOneOf(settings.webSearchProvider, WEB_SEARCH_PROVIDERS))

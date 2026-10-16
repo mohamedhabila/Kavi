@@ -917,6 +917,10 @@ export const es: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'Predeterminado del modelo',
+        hint: 'Cada modelo razona como lo ajustó su fabricante. Recomendado.',
+      },
       off: {
         label: 'Desactivado',
         hint: 'Respuestas más rápidas sin presupuesto extra de razonamiento.',
@@ -931,7 +935,7 @@ export const es: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: 'Medio',
-        hint: 'Equilibrio predeterminado para uso mixto de herramientas y razonamiento.',
+        hint: 'Razonamiento equilibrado para uso mixto de herramientas.',
       },
       high: {
         label: 'Alto',

@@ -6,6 +6,7 @@ import { triggerInternalHook, createInternalHookEvent } from '../events/bus';
 import { formatUsageReport } from '../usage/tracker';
 import { getLoadedHooks as getRegisteredHooks } from '../hooks/loader';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import type { ThinkingLevelPreference } from '../../types/provider';
 import { listScheduledJobs } from '../scheduler/commands';
 import { useSkillsStore } from '../skills/manager';
 import { listMemoryItems, searchMemoryItems } from '../memory/core/memoryItemsStore';
@@ -143,19 +144,28 @@ registerCommand('model', 'Switch model', (ctx) => {
   return { response: `Model switched to: **${ctx.args.trim()}**`, shouldDisplay: true };
 });
 
-registerCommand('think', 'Set thinking level (off/minimal/low/medium/high/xhigh)', (ctx) => {
-  const levels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
-  const level = ctx.args.toLowerCase();
-  if (!levels.includes(level)) {
-    const current = useSettingsStore.getState().thinkingLevel || 'medium';
-    return {
-      response: `Current thinking level: **${current}**\n\nUse \`/think <level>\` where level is: ${levels.join(', ')}`,
-      shouldDisplay: true,
-    };
-  }
-  useSettingsStore.getState().setThinkingLevel(level as any);
-  return { response: `Thinking level set to: **${level}**`, shouldDisplay: true };
-});
+registerCommand(
+  'think',
+  'Set thinking level (default/off/minimal/low/medium/high/xhigh)',
+  (ctx) => {
+    const levels: ThinkingLevelPreference[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+    const level = ctx.args.trim().toLowerCase();
+    if (level === 'default') {
+      useSettingsStore.getState().setThinkingLevel(undefined);
+      return { response: "Thinking level set to: **the model's default**", shouldDisplay: true };
+    }
+    const chosen = levels.find((candidate) => candidate === level);
+    if (!chosen) {
+      const current = useSettingsStore.getState().thinkingLevel ?? 'default';
+      return {
+        response: `Current thinking level: **${current}**\n\nUse \`/think <level>\` where level is: default, ${levels.join(', ')}`,
+        shouldDisplay: true,
+      };
+    }
+    useSettingsStore.getState().setThinkingLevel(chosen);
+    return { response: `Thinking level set to: **${chosen}**`, shouldDisplay: true };
+  },
+);
 
 registerCommand('verbose', 'Toggle verbose mode', () => {
   return { response: 'Verbose mode toggled.', shouldDisplay: true };

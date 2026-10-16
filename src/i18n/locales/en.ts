@@ -888,6 +888,10 @@ export const en: TranslationMap = {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'Model default',
+        hint: 'Each model reasons as its maker tuned it. Recommended.',
+      },
       off: {
         label: 'Off',
         hint: 'Fastest responses with no extra reasoning budget.',
@@ -902,7 +906,7 @@ export const en: TranslationMap = {
       },
       medium: {
         label: 'Medium',
-        hint: 'Default balance for mixed tool use and reasoning.',
+        hint: 'Balanced reasoning for mixed tool use.',
       },
       high: {
         label: 'High',

@@ -573,6 +573,26 @@ describe('Settings Import/Export', () => {
       expect(arg).toHaveProperty('lastUsedModel', null);
     });
 
+    it('round-trips the model-default thinking level as null', () => {
+      const state: { thinkingLevel?: string } = mockSettingsState;
+      const chosen = state.thinkingLevel;
+      state.thinkingLevel = undefined;
+      try {
+        expect((exportSettings().settings as any).thinkingLevel).toBeNull();
+      } finally {
+        state.thinkingLevel = chosen;
+      }
+
+      const result = importSettings({
+        version: 1,
+        exportedAt: Date.now(),
+        settings: { thinkingLevel: null },
+      } as any);
+      expect(result.success).toBe(true);
+      const arg = mockReplaceAllSettings.mock.calls[0][0];
+      expect(arg).toHaveProperty('thinkingLevel', null);
+    });
+
     it('importSettings omits undefined preference fields', () => {
       const result = importSettings({
         version: 1,

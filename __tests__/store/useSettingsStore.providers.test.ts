@@ -178,13 +178,15 @@ describe('useSettingsStore preference settings', () => {
     expect(useSettingsStore.getState().systemPrompt).toBe('Custom prompt');
   });
 
-  it('defaults thinking level to medium', () => {
-    expect(useSettingsStore.getState().thinkingLevel).toBe('medium');
+  it('leaves the thinking level to each model by default', () => {
+    expect(useSettingsStore.getState().thinkingLevel).toBeUndefined();
   });
 
-  it('updates thinking level', () => {
+  it('updates thinking level, and returns it to the model default', () => {
     useSettingsStore.getState().setThinkingLevel('high');
     expect(useSettingsStore.getState().thinkingLevel).toBe('high');
+    useSettingsStore.getState().setThinkingLevel(undefined);
+    expect(useSettingsStore.getState().thinkingLevel).toBeUndefined();
   });
 
   it('tracks last used model', () => {

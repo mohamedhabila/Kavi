@@ -37,6 +37,10 @@ describe('a model step keeps the run thinking level', () => {
     expect(request({ personaThinkingLevel: 'high' }).iterationThinkingLevel).toBe('high');
   });
 
+  it('leaves the level to the model when neither the persona nor the person chose one', () => {
+    expect(request({ thinkingLevel: undefined }).iterationThinkingLevel).toBeUndefined();
+  });
+
   it('sends a forced final answer at the same level, with its larger budget', () => {
     const forced = request({
       maxTokens: 1024,

@@ -74,7 +74,7 @@ export interface ExecuteAgentControlGraphModelTurnParams {
   requestModel: string;
   signal?: AbortController;
   temperature?: number;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   warn: (message: string, error: unknown) => void;
   workingMessages: Message[];
   yieldToUiFrame: () => Promise<void>;

@@ -529,4 +529,10 @@ describe('planIterationMaxTokens', () => {
       }),
     ).toBe(10240);
   });
+
+  it('reserves room for Gemini 3 thinking at its default level when none is chosen', () => {
+    expect(planIterationMaxTokens({ primaryModel: 'gemini-3.8-flash', maxTokens: 2048 })).toBe(
+      2048 + 24576,
+    );
+  });
 });

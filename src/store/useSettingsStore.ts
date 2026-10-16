@@ -383,7 +383,9 @@ export const useSettingsStore = create<SettingsState>()(
             lastUsedModel: hasOwnSetting(settings, 'lastUsedModel')
               ? (settings.lastUsedModel ?? null)
               : state.lastUsedModel,
-            thinkingLevel: settings.thinkingLevel ?? state.thinkingLevel,
+            thinkingLevel: hasOwnSetting(settings, 'thinkingLevel')
+              ? (settings.thinkingLevel ?? undefined)
+              : state.thinkingLevel,
             locale: settings.locale ?? state.locale,
             webSearchProvider:
               settings.webSearchProvider !== undefined

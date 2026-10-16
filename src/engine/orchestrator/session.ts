@@ -60,7 +60,7 @@ export async function runOrchestratorGraphSession(params: {
     internalUserMessageCount = 0,
     maxTokens = 32_000,
     temperature,
-    thinkingLevel = 'off',
+    thinkingLevel,
     signal,
     allProviders,
   } = options;

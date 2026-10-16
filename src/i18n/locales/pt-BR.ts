@@ -912,6 +912,10 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'Padrão do modelo',
+        hint: 'Cada modelo raciocina como o fabricante o ajustou. Recomendado.',
+      },
       off: {
         label: 'Desativado',
         hint: 'Respostas mais rápidas sem orçamento extra de raciocínio.',
@@ -926,7 +930,7 @@ export const ptBR: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: 'Médio',
-        hint: 'Equilíbrio padrão para uso misto de ferramentas e raciocínio.',
+        hint: 'Raciocínio equilibrado para uso misto de ferramentas.',
       },
       high: {
         label: 'Alto',

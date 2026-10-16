@@ -36,7 +36,8 @@ function isGeminiModel(model: string): boolean {
 export interface IterationTokenPlanArgs {
   primaryModel: string;
   maxTokens: number;
-  thinkingLevel: ThinkingLevel;
+  /** The run's chosen level; absent, the model thinks at its own default. */
+  thinkingLevel?: ThinkingLevel;
 }
 
 export interface PromptCachingPlan {
@@ -132,7 +133,11 @@ export function planIterationMaxTokens(args: IterationTokenPlanArgs): number {
   let plannedMaxTokens = Math.max(512, Math.min(maxTokens, outputCeiling));
 
   if (isGeminiModel(primaryModel)) {
-    const effectiveThinking = isGemini3OrLaterModel(primaryModel) ? thinkingLevel : 'off';
+    // Unchosen, Gemini 3+ thinks at its own default (high on most, medium on 3.8 Flash):
+    // room for high covers either.
+    const effectiveThinking = isGemini3OrLaterModel(primaryModel)
+      ? (thinkingLevel ?? 'high')
+      : 'off';
     const overhead = GEMINI_THINKING_OVERHEAD[effectiveThinking] ?? 0;
     plannedMaxTokens =
       overhead > 0

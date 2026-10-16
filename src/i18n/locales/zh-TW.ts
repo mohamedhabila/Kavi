@@ -836,6 +836,10 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: '模型預設',
+        hint: '依各模型廠商調校的方式推理。建議使用。',
+      },
       off: {
         label: '關閉',
         hint: '沒有額外推理預算，回應最快。',
@@ -850,7 +854,7 @@ export const zhTW: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: '中',
-        hint: '兼顧工具使用與推理的預設平衡。',
+        hint: '兼顧工具使用與推理的平衡設定。',
       },
       high: {
         label: '高',

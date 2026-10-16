@@ -192,7 +192,7 @@ export interface ExecuteAgentControlGraphIterationParams {
   runtime: AgentControlGraphIterationRuntimeState;
   signal?: AbortController;
   temperature?: number;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   toolRuntime: ToolRuntimeBindings;
   trackedAsyncOperations: Map<string, TrackedAsyncOperation>;
   warn: (message: string, error: unknown) => void;

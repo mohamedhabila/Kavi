@@ -83,7 +83,7 @@ export function buildSpawnSubAgentConfig(args: {
   workerTools?: string[];
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
-  thinkingLevel: ThinkingLevelPreference;
+  thinkingLevel?: ThinkingLevelPreference;
 }): SubAgentConfig {
   return {
     parentConversationId: args.parentConversationId,
@@ -166,7 +166,7 @@ export function buildFollowUpSubAgentConfig(args: {
   sandboxPolicy?: 'full' | 'safe-only' | 'inherit';
   linkUnderstandingEnabled: boolean;
   mediaUnderstandingEnabled: boolean;
-  thinkingLevel: ThinkingLevelPreference;
+  thinkingLevel?: ThinkingLevelPreference;
 }): SubAgentConfig {
   return {
     parentConversationId: args.parentConversationId || args.sessionId,

@@ -47,7 +47,7 @@ describe('getThinkingParams', () => {
       },
     };
     const params = (
-      level: ThinkingLevel,
+      level: ThinkingLevel | undefined,
       capability: (typeof declared)[keyof typeof declared],
       maxTokens?: number,
     ) =>
@@ -75,6 +75,13 @@ describe('getThinkingParams', () => {
         thinking: { type: 'adaptive' },
         output_config: { effort: 'max' },
       });
+    });
+
+    it('leaves the effort to the model when no level is chosen', () => {
+      // Sonnet 5.5 defaults to high; a fixed medium held it a level below.
+      expect(params(undefined, declared.adaptiveOnly)).toEqual({ thinking: { type: 'adaptive' } });
+      expect(params(undefined, declared.adaptiveOrOff)).toEqual({ thinking: { type: 'adaptive' } });
+      expect(params(undefined, declared.manualOnly)).toEqual({});
     });
 
     it('turns thinking off where the model can, and runs a model that cannot at its least', () => {
@@ -179,6 +186,32 @@ describe('getThinkingParams', () => {
       expect(getThinkingParams('medium', 'google/gemini-3.1-pro-preview')).toEqual({
         thinking: { thinkingLevel: 'medium' },
       });
+    });
+  });
+
+  describe('no level chosen', () => {
+    it('sends no effort, budget or temperature: each model thinks at its own default', () => {
+      expect(
+        getThinkingParams(undefined, 'gpt-6-astra', {
+          reasoningCapability: inferOpenAIReasoningCapability('gpt-6-astra'),
+        }),
+      ).toEqual({});
+      expect(
+        getThinkingParams(undefined, 'z-ai/glm-5.3-flash', {
+          reasoningCapability: { mandatory: true, supportedEfforts: ['max', 'high', 'low'] },
+        }),
+      ).toEqual({});
+      expect(getThinkingParams(undefined, 'gemini-2.5-pro')).toEqual({});
+      expect(getThinkingParams(undefined, 'claude-sonnet-5-5')).toEqual({});
+      expect(getThinkingParams(undefined, 'llama3.2')).toEqual({});
+    });
+
+    it('asks Gemini 3+ only for its thought summaries', () => {
+      for (const model of ['gemini-3-flash-preview', 'gemini-4-argon']) {
+        expect(getThinkingParams(undefined, model)).toEqual({
+          thinking: { includeThoughts: true },
+        });
+      }
     });
   });
 

@@ -137,7 +137,7 @@ export interface ForegroundConversationRunState {
   streamStoreCheckpointIntervalMs: number;
   streamUiDraftPublishIntervalMs: number;
   systemPrompt: string;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   toolResultPersistenceCheckpointDelayMs: number;
 }
 

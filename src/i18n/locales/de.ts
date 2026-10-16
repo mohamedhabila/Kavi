@@ -899,6 +899,10 @@ export const de: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'Modellstandard',
+        hint: 'Jedes Modell denkt so, wie sein Hersteller es abgestimmt hat. Empfohlen.',
+      },
       off: {
         label: 'Aus',
         hint: 'Schnellste Antworten ohne zusaetzliches Denkbudget.',
@@ -913,7 +917,7 @@ export const de: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: 'Mittel',
-        hint: 'Standardausgleich fuer gemischte Tool-Nutzung und Schlussfolgern.',
+        hint: 'Ausgewogenes Schlussfolgern fuer gemischte Tool-Nutzung.',
       },
       high: {
         label: 'Hoch',

@@ -921,6 +921,10 @@ export const fr: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'Par defaut du modele',
+        hint: "Chaque modele raisonne comme son createur l'a regle. Recommande.",
+      },
       off: {
         label: 'Desactive',
         hint: 'Reponses les plus rapides sans budget de raisonnement supplementaire.',
@@ -935,7 +939,7 @@ export const fr: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: 'Moyen',
-        hint: 'Equilibre par defaut pour un usage mixte des outils et du raisonnement.',
+        hint: 'Raisonnement equilibre pour un usage mixte des outils.',
       },
       high: {
         label: 'Eleve',

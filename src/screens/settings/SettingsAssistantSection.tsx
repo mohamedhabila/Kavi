@@ -3,12 +3,13 @@ import { Text, View } from 'react-native';
 
 import type { Locale } from '../../i18n/types';
 import type { AppPalette, ThemePreference } from '../../theme/useAppTheme';
+import type { ThinkingLevelPreference } from '../../types/provider';
 import { SettingsAppearanceControls } from './SettingsAppearanceControls';
 import { SettingsAssistantBehaviorControls } from './SettingsAssistantBehaviorControls';
+import type { ThinkingLevelOption } from './useSettingsThinkingAndLocale';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
-type ThinkingOption = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 type SettingsAssistantSectionProps = {
   colors: AppPalette;
@@ -26,15 +27,15 @@ type SettingsAssistantSectionProps = {
   setShowLanguagePicker: (value: boolean) => void;
   setSystemPrompt: (value: string) => void;
   setTheme: (value: ThemePreference) => void;
-  setThinkingLevel: (value: ThinkingOption) => void;
+  setThinkingLevel: (value: ThinkingLevelPreference | undefined) => void;
   showLanguagePicker: boolean;
   styles: StyleMap;
   supportedLocales: readonly Locale[];
   systemPrompt: string;
   t: TranslationFn;
   theme: ThemePreference;
-  thinkingLevel: ThinkingOption;
-  thinkingLevelOptions: Array<{ value: ThinkingOption; label: string; hint: string }>;
+  thinkingLevel: ThinkingLevelPreference | undefined;
+  thinkingLevelOptions: ThinkingLevelOption[];
 };
 
 export const SettingsAssistantSection: React.FC<SettingsAssistantSectionProps> = ({

@@ -937,6 +937,10 @@ export const ar: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'افتراضي النموذج',
+        hint: 'يستدل كل نموذج كما ضبطته الجهة المطوّرة له. موصى به.',
+      },
       off: {
         label: 'إيقاف',
         hint: 'أسرع استجابات دون ميزانية استدلال إضافية.',
@@ -951,7 +955,7 @@ export const ar: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: 'متوسط',
-        hint: 'التوازن الافتراضي بين استخدام الأدوات والاستدلال.',
+        hint: 'استدلال متوازن لاستخدام مختلط للأدوات.',
       },
       high: {
         label: 'عالٍ',

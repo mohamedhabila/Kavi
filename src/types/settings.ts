@@ -30,7 +30,8 @@ export interface AppSettings {
   activeProviderId: string | null;
   activeModel: string | null;
   lastUsedModel?: LastUsedModelSelection | null;
-  thinkingLevel?: ThinkingLevelPreference;
+  /** The person's thinking level; null in an exported file: none chosen, each model's own default. */
+  thinkingLevel?: ThinkingLevelPreference | null;
   locale?: Locale;
   webSearchProvider?: WebSearchProvider;
   linkUnderstandingEnabled?: boolean;

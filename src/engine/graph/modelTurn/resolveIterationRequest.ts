@@ -7,19 +7,22 @@ import type { LlmProviderConfig } from '../../../types/provider';
 import type { ThinkingLevel } from '../../thinking';
 import type { AgentControlTurnDirectives } from '../agentControlGraph';
 
-/** The step's request: the run's model and thinking level, and its output budget. */
+/**
+ * The step's request: the run's model and thinking level (the persona's, else the person's;
+ * neither chosen, the model's own default), and its output budget.
+ */
 export function resolveModelTurnIterationRequest(params: {
   activeModel: string;
   activeProvider: LlmProviderConfig;
   disableTooling?: boolean;
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   turnDirectives: AgentControlTurnDirectives;
 }): {
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
-  iterationThinkingLevel: ThinkingLevel;
+  iterationThinkingLevel?: ThinkingLevel;
   requestMaxTokens: number;
   requestModel: string;
   toolingEnabledForProvider: boolean;

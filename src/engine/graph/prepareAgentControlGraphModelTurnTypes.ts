@@ -24,7 +24,7 @@ export type PromptContextSupport = {
 export type PreparedAgentControlGraphModelTurnReady = {
   effectiveForceTextThisTurn: boolean;
   effectiveForceTextReasonThisTurn?: AgentControlTurnDirectives['forcedTextReason'];
-  iterationThinkingLevel: ThinkingLevel;
+  iterationThinkingLevel?: ThinkingLevel;
   pendingAsyncMonitorToolNames: ReadonlySet<string>;
   preparedTurn: PreparedAgentTurn;
   requestMaxTokens: number;
@@ -47,7 +47,7 @@ export interface PrepareAgentControlGraphModelTurnParams {
   maxTokens: number;
   personaThinkingLevel?: ThinkingLevel;
   promptContextSupport: PromptContextSupport;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   turnDirectives: AgentControlTurnDirectives;
   sessionActivatedToolNames?: ReadonlyArray<string>;

@@ -28,7 +28,8 @@ export interface SettingsDataState extends AppSettings {
   activeProviderId: string | null;
   activeModel: string | null;
   lastUsedModel: LastUsedModelSelection | null;
-  thinkingLevel: ThinkingLevelPreference;
+  /** The person's thinking level; unset, each model thinks at its vendor's default (thinking.ts). */
+  thinkingLevel?: ThinkingLevelPreference;
   locale: Locale;
   webSearchProvider: WebSearchProvider;
   linkUnderstandingEnabled: boolean;
@@ -76,7 +77,7 @@ export interface SettingsState extends SettingsDataState {
 
   setTheme: (theme: AppSettings['theme']) => void;
   setSystemPrompt: (prompt: string) => void;
-  setThinkingLevel: (level: ThinkingLevelPreference) => void;
+  setThinkingLevel: (level: ThinkingLevelPreference | undefined) => void;
   setLocale: (locale: Locale) => void;
   setWebSearchProvider: (provider: WebSearchProvider) => void;
   setLinkUnderstandingEnabled: (enabled: boolean) => void;
@@ -108,7 +109,6 @@ export function createDefaultSettingsDataState(): SettingsDataState {
     // instructions and this value is appended only when the user writes one.
     systemPrompt: '',
     lastUsedModel: null,
-    thinkingLevel: 'medium',
     locale: 'en',
     webSearchProvider: 'auto',
     linkUnderstandingEnabled: true,

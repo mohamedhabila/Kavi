@@ -69,6 +69,7 @@ jest.mock('../../src/services/memory/core/memoryItemsStore', () => ({
 
 import { getCommand, getAllCommands, registerCommand } from '../../src/services/commands/builtins';
 import { createInternalHookEvent } from '../../src/services/events/bus';
+import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 describe('Built-in Commands', () => {
   it('should have core commands registered', () => {
@@ -188,6 +189,15 @@ describe('Built-in Commands', () => {
       const result = cmd!.handler({ conversationId: null, args: level });
       expect((result as any).response).toContain(level);
     }
+  });
+
+  it('/think default returns the level to the model', () => {
+    const cmd = getCommand('think');
+    const settings = (useSettingsStore.getState as jest.Mock)();
+    settings.setThinkingLevel.mockClear();
+    const result = cmd!.handler({ conversationId: null, args: 'default' });
+    expect(settings.setThinkingLevel).toHaveBeenCalledWith(undefined);
+    expect((result as any).response).toContain("model's default");
   });
 
   it('/think with invalid level', () => {

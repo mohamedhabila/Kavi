@@ -837,6 +837,10 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: '模型默认',
+        hint: '按各模型厂商调校的方式推理。推荐。',
+      },
       off: {
         label: '关闭',
         hint: '无额外推理预算，响应最快。',
@@ -851,7 +855,7 @@ export const zhCN: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: '中',
-        hint: '兼顾工具使用与推理的默认平衡。',
+        hint: '兼顾工具使用与推理的平衡设置。',
       },
       high: {
         label: '高',

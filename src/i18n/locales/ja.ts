@@ -866,6 +866,10 @@ export const ja: TranslationMap = mergeTranslations(en, {
       },
     },
     thinkingOptions: {
+      default: {
+        label: 'モデルの既定',
+        hint: '各モデルが提供元の調整どおりに推論します。おすすめ。',
+      },
       off: {
         label: 'オフ',
         hint: '追加の推論予算なしで最速の応答。',
@@ -880,7 +884,7 @@ export const ja: TranslationMap = mergeTranslations(en, {
       },
       medium: {
         label: '中',
-        hint: 'ツール利用と推論のバランスが取れた標準設定。',
+        hint: 'ツール利用と推論のバランスを取った設定。',
       },
       high: {
         label: '高',

@@ -4,10 +4,11 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 
 import { ExpandCollapseChevronIcon } from '../../components/navigation/DirectionalIcons';
 import type { AppPalette } from '../../theme/useAppTheme';
+import type { ThinkingLevelPreference } from '../../types/provider';
+import type { ThinkingLevelOption } from './useSettingsThinkingAndLocale';
 
 type TranslationFn = (key: string, params?: any) => string;
 type StyleMap = Record<string, any>;
-type ThinkingOption = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 type SettingsAssistantBehaviorControlsProps = {
   colors: AppPalette;
@@ -18,12 +19,12 @@ type SettingsAssistantBehaviorControlsProps = {
   setMaxLinks: (value: number) => void;
   setMediaUnderstandingEnabled: (value: boolean) => void;
   setSystemPrompt: (value: string) => void;
-  setThinkingLevel: (value: ThinkingOption) => void;
+  setThinkingLevel: (value: ThinkingLevelPreference | undefined) => void;
   styles: StyleMap;
   systemPrompt: string;
   t: TranslationFn;
-  thinkingLevel: ThinkingOption;
-  thinkingLevelOptions: Array<{ value: ThinkingOption; label: string; hint: string }>;
+  thinkingLevel: ThinkingLevelPreference | undefined;
+  thinkingLevelOptions: ThinkingLevelOption[];
 };
 
 export const SettingsAssistantBehaviorControls: React.FC<
@@ -139,7 +140,7 @@ export const SettingsAssistantBehaviorControls: React.FC<
               accessibilityLabel={t('settings.useThinkingLevel', { name: option.label })}
               accessibilityRole="button"
               accessibilityState={{ selected: thinkingLevel === option.value }}
-              key={option.value}
+              key={option.key}
               onPress={() => setThinkingLevel(option.value)}
               style={[
                 styles.presetChip,

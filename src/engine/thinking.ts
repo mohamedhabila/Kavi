@@ -9,10 +9,6 @@ import { resolveThinkingLevelReasoningEffort } from '../services/llm/support/rea
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
-export interface ThinkingConfig {
-  level: ThinkingLevel;
-}
-
 export interface ThinkingParamsOptions {
   maxTokens?: number;
   /** Reasoning efforts the provider declares for this model, when discovery recorded them. */
@@ -120,14 +116,18 @@ function resolveGeminiThinkingBudget(level: ThinkingLevel, model: string): numbe
  * Claude's thinking for a level, from the modes and efforts the model's models API declares:
  * adaptive thinking at the nearest declared effort, manual thinking with a budget where that
  * is the only mode, and thinking off where the model can turn it off. A model that always
- * thinks runs at its least effort when the level is off.
+ * thinks runs at its least effort when the level is off. With no level chosen, adaptive
+ * thinking runs at the model's own default effort.
  */
 function declaredClaudeThinking(
   capability: ModelReasoningCapability,
-  level: ThinkingLevel,
+  level: ThinkingLevel | undefined,
   maxTokens: number | undefined,
 ): Record<string, unknown> {
   const modes = capability.thinkingModes ?? [];
+  if (level === undefined) {
+    return modes.includes('adaptive') ? { thinking: { type: 'adaptive' } } : {};
+  }
   if (level === 'off' && !capability.mandatory) {
     return modes.includes('disabled') ? { thinking: { type: 'disabled' } } : {};
   }
@@ -146,10 +146,15 @@ function declaredClaudeThinking(
 }
 
 /**
- * Map thinking level to provider-specific parameters
+ * A thinking level as the provider's request parameters. With no level chosen the request
+ * carries no effort or budget, so the model thinks as its vendor calibrated it by default:
+ * Claude Sonnet 5.5 at high effort, Claude Opus 5.5 and Haiku 5.5 at medium. A fixed
+ * medium sent for every model held Sonnet 5.5 a level below that, and lower effort means
+ * fewer tool calls: on frozen final steps of Claw-Anything tasks, Sonnet 5.5 at medium read
+ * on in the person's apps 4 times in 40, at its default 22.
  */
 export function getThinkingParams(
-  level: ThinkingLevel,
+  level: ThinkingLevel | undefined,
   model: string,
   options: ThinkingParamsOptions = {},
 ): Record<string, unknown> {
@@ -158,11 +163,16 @@ export function getThinkingParams(
 
   // A model whose reasoning controls are known (declared by its provider, or for OpenAI read
   // from its generation: getModelReasoningCapability) is driven by them.
-  // The level maps to the nearest effort the model accepts, so `off` turns reasoning off
-  // where the model allows it and asks for its least deliberation where it does not —
-  // instead of leaving the model at its own default, which is often its highest.
+  // A chosen level maps to the nearest effort the model accepts, so `off` turns reasoning
+  // off where the model allows it and asks for its least deliberation where it does not.
   if (options.reasoningCapability?.thinkingModes) {
     return declaredClaudeThinking(options.reasoningCapability, level, options.maxTokens);
+  }
+  if (level === undefined) {
+    // Gemini 3+ always thinks; asking only for its thought summaries keeps them shown.
+    return hostedFamily === 'gemini' && isGemini3OrLaterModel(model)
+      ? { thinking: { includeThoughts: true } }
+      : {};
   }
   if (options.reasoningCapability) {
     const effort = resolveThinkingLevelReasoningEffort(options.reasoningCapability, level);
