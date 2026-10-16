@@ -16,6 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kavi.app",
       "buildNumber": "1",
+      "entitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true
+      },
       "infoPlist": {
         "NSCalendarsFullAccessUsageDescription": "Kavi accesses your calendars only when you ask it to read events or create, update, or delete a calendar entry on your behalf.",
         "NSRemindersFullAccessUsageDescription": "Kavi accesses your reminders only when you ask it to read, create, update, or delete a reminder on your behalf.",

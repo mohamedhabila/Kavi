@@ -64,9 +64,12 @@ describe('localLlm runtime catalog and warmup', () => {
     const provider = createDefaultLocalLlmProvider('local-provider');
     const catalogEntries = getLocalLlmCatalogEntriesForProvider(provider);
 
+    // Gemma 4 runs on iOS through the same LiteRT-LM runtime (Metal), smallest first.
     expect(catalogEntries.map((entry) => entry.id)).toEqual([
       'qwen-2.5-1.5b-instruct',
       'deepseek-r1-distill-qwen-1.5b',
+      'gemma-4-E2B-it',
+      'gemma-4-E4B-it',
     ]);
     expect(provider.model).toBe('qwen-2.5-1.5b-instruct');
     expect(provider.local?.runtime).toBe('litert-lm');
