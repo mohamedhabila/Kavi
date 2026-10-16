@@ -142,6 +142,20 @@ describe('setup guides', () => {
     });
   });
 
+  it('knows when Kavi can make calls for the person', async () => {
+    await expect(guide({ topic: 'phone_calls' })).resolves.toMatchObject({
+      body: { status: 'setup_needed', guide: { form: { section: 'service-keys' } } },
+    });
+
+    mockGetSecure.mockImplementation(async (key: string) =>
+      key === 'BLAND_API_KEY' ? 'key' : null,
+    );
+
+    await expect(guide({ topic: 'phone_calls' })).resolves.toMatchObject({
+      body: { status: 'already_set_up' },
+    });
+  });
+
   it('opens no phone setting a phone cannot change', async () => {
     const { getAssistantRoleState } = jest.requireMock(
       '../../../src/services/assistant/assistantRole',

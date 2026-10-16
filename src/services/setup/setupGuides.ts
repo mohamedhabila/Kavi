@@ -8,8 +8,14 @@ import { getNotificationAccessState } from '../notifications/notificationReader'
 import { getSecure } from '../storage/SecureStorage';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { getRuntimeToolAvailabilityContext } from '../../engine/tools/runtimeAvailability';
+import { BLAND_API_KEY_SECRET } from '../integrations/communication/blandClient';
 import { SERVICE_SETUP_FIELDS } from './catalog';
-import { aiProviderGuide, phoneAccessGuide, serviceKeyGuide } from './guides/accountsAndPhone';
+import {
+  aiProviderGuide,
+  PHONE_CALLS_GUIDE,
+  phoneAccessGuide,
+  serviceKeyGuide,
+} from './guides/accountsAndPhone';
 import { APP_BUILDING_GUIDE, SERVER_GUIDE } from './guides/appsAndServers';
 import { connectAppGuide, MCP_DIRECTORY, type DirectoryServer } from './guides/connectedApps';
 import { searchMcpRegistry, type RegistrySearchResult } from './mcpRegistrySearch';
@@ -119,6 +125,10 @@ async function readState(topic: SetupTopic, option: string | undefined): Promise
               role === 'held' ? 'Kavi is the phone assistant.' : 'Kavi is not the phone assistant.',
           };
     }
+    case 'phone_calls':
+      return (await hasSecret(BLAND_API_KEY_SECRET))
+        ? { configured: true, detail: 'The Bland API key is set.' }
+        : { configured: false, detail: 'The Bland API key is not set yet.' };
   }
 }
 
@@ -136,6 +146,8 @@ function guideFor(topic: SetupTopic, option: string | undefined): SetupGuide {
       return serviceKeyGuide(option);
     case 'phone_access':
       return phoneAccessGuide(option);
+    case 'phone_calls':
+      return PHONE_CALLS_GUIDE;
   }
 }
 

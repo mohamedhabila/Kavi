@@ -13,6 +13,7 @@ export const SETUP_TOPICS = [
   'ai_provider',
   'service_key',
   'phone_access',
+  'phone_calls',
 ] as const;
 export type SetupTopic = (typeof SETUP_TOPICS)[number];
 

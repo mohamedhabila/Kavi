@@ -200,7 +200,9 @@ export const PHONE_CALL_TOOL: ToolDefinition = {
   description:
     'Call a phone number for the person; use this instead of open_url with tel:. On Android ' +
     'the call starts as soon as they approve (emergency numbers, and calls without the call ' +
-    'permission, open the dialer instead); on iOS the system asks them to confirm.',
+    'permission, open the dialer instead); on iOS the system asks them to confirm. The person ' +
+    'talks on this call; for Kavi to talk on a call itself, use skill__communication__agent_call ' +
+    '(setup_guide topic phone_calls when it is not set up).',
   input_schema: {
     type: 'object',
     properties: {

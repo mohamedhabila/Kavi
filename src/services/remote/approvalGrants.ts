@@ -83,6 +83,7 @@ const NON_REUSABLE_TOOL_NAMES = new Set([
   'screen_record',
   'share_file',
   'share_text',
+  'skill__communication__agent_call',
   'sms_compose',
   'sms_send',
   'ssh_fs',

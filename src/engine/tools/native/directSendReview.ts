@@ -13,6 +13,7 @@ import { i18n } from '../../../i18n/manager';
 import { normalizePhoneNumber } from '../../../services/nativeActions/builders/phone';
 import { getSmsAccess } from '../../../services/nativeActions/adapters/telephony';
 import { describeNotification } from '../../../services/notifications/notificationReader';
+import { clampCallMinutes } from '../../../services/integrations/communication/agentCallRequest';
 import { truncateGraphemesWithSuffix } from '../../../utils/graphemeBoundary';
 
 export type DirectSendReview = Readonly<{ title: string; description: string }>;
@@ -107,6 +108,37 @@ function phoneCallReview(args: Record<string, unknown>): DirectSendReview | unde
   };
 }
 
+/** Each part's share of the card, so the cost line always fits. */
+const AGENT_CALL_PART_CODE_POINTS = Object.freeze({ opening: 140, goal: 160, shares: 90 });
+
+/**
+ * A call Kavi talks on itself, through Bland, on either platform: the card is the person's
+ * only look at what Kavi will say, aim for and share, and what it may cost.
+ */
+function agentCallReview(args: Record<string, unknown>): DirectSendReview | undefined {
+  const number = displayNumber(args.phoneNumber, args.defaultCountry);
+  const part = (value: unknown, max: number) =>
+    typeof value === 'string' && value.trim() ? displayLine(value, max) : '';
+  const opening = part(args.opening, AGENT_CALL_PART_CODE_POINTS.opening);
+  const goal = part(args.goal, AGENT_CALL_PART_CODE_POINTS.goal);
+  if (!number || !opening || !goal) return undefined;
+  const shares = part(args.mayShare, AGENT_CALL_PART_CODE_POINTS.shares);
+  const minutes = clampCallMinutes(args.maxMinutes);
+  const description = [
+    i18n.t('toolApproval.details.agentCallSays', { opening }),
+    i18n.t('toolApproval.details.agentCallGoal', { goal }),
+    ...(shares ? [i18n.t('toolApproval.details.agentCallShares', { shares })] : []),
+    i18n.t('toolApproval.details.agentCallLimit', { minutes }),
+  ].join(' · ');
+  return {
+    title: displayLine(
+      i18n.t('toolApproval.actions.agentCallTo', { number }),
+      MAX_TITLE_CODE_POINTS,
+    ),
+    description: displayLine(description, MAX_DESCRIPTION_CODE_POINTS),
+  };
+}
+
 /**
  * The card for a tool that sends on the person's behalf with nothing to confirm afterwards;
  * undefined for every other tool, which keeps its redacted summary.
@@ -122,6 +154,8 @@ export async function resolveDirectSendReview(
       return smsSendReview(args);
     case 'phone_call':
       return phoneCallReview(args);
+    case 'skill__communication__agent_call':
+      return agentCallReview(args);
     default:
       return undefined;
   }

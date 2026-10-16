@@ -16,8 +16,8 @@ export const SETUP_GUIDE_TOOL: ToolDefinition = {
     'Stripe, Canva, Zapier and other services; option = the service), ai_provider (an AI ' +
     'model key; option = gemini, openrouter, openai or anthropic), service_key (web search, ' +
     'GitHub, weather and other service keys), phone_access (Android: option assistant_role to ' +
-    'send texts itself, notification_access to read and answer notifications). Returns ' +
-    'whether it is already set up, the options ' +
+    'send texts itself, notification_access to read and answer notifications), phone_calls ' +
+    '(Kavi talks on calls for the person). Returns whether it is already set up, the options ' +
     'with what they cost, plain steps and what to enter where; the person also sees a card ' +
     'that opens the right Kavi form. Walk them through it in their language, one step at a ' +
     'time, and never ask for a key or password in the chat: they enter it in the form.',

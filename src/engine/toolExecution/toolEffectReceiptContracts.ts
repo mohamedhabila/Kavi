@@ -473,6 +473,27 @@ const CODE_OWNED_TOOL_EFFECT_CONTRACTS: Readonly<Record<string, CodeOwnedToolEff
         call_notification_posted: HANDED_OFF,
       }),
     ),
+    // Bland queues the call: it is accepted, and agent_call_status follows it to its end.
+    skill__communication__agent_call: effectful(
+      'communication.call',
+      {
+        call_started: outcome('accepted', 'acknowledged'),
+        unknown: UNKNOWN,
+        invalid_request: FAILED,
+        not_configured: FAILED,
+        auth_failed: FAILED,
+        needs_credit: FAILED,
+        rate_limited: FAILED,
+        blocked: FAILED,
+        provider_error: FAILED,
+      },
+      { operationHandle: selector('bland_call', 'result', ['callId']) },
+    ),
+    skill__communication__agent_call_stop: effectful('remote.mutate', {
+      stopped: APPLIED,
+      invalid_request: FAILED,
+      not_found: FAILED,
+    }),
     maps_open: effectful('navigation.open', nativeOutcomes({ opened: HANDED_OFF })),
     open_url: effectful('external.open', nativeOutcomes({ opened: HANDED_OFF })),
     contacts_manage_access: effectful(

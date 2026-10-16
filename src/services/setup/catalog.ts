@@ -149,6 +149,24 @@ export const SERVICE_SETUP_FIELDS: ServiceSetupField[] = [
     docsUrl: 'https://www.alphavantage.co/support/#api-key',
     tools: ['skill__finance__stock_quote', 'skill__finance__exchange_rate'],
   },
+  {
+    storageKey: 'BLAND_API_KEY',
+    label: 'Bland API Key',
+    placeholder: 'Bland API key',
+    hint: 'Lets Kavi make calls for you, with an AI voice that says it is an AI.',
+    category: 'Phone calls',
+    unlocks: 'Calls Kavi makes and handles for you: booking, asking, rescheduling, then a report.',
+    setup:
+      'Create an account at app.bland.ai, add credit (at least $5, which also allows calls abroad), then copy the API key from the account settings and paste it here.',
+    freeAccess:
+      'Bland charges about $0.14 a minute plus the phone line on its Start plan, with up to 100 calls a day.',
+    docsUrl: 'https://docs.bland.ai/api-v1/post/calls',
+    tools: [
+      'skill__communication__agent_call',
+      'skill__communication__agent_call_status',
+      'skill__communication__agent_call_stop',
+    ],
+  },
 ];
 
 export function getServiceSetupField(storageKey: string): ServiceSetupField | undefined {

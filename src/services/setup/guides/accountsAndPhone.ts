@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// Kavi — Guided setup: AI providers, service keys, phone access
+// Kavi — Guided setup: AI providers, service keys, phone access, calls Kavi handles
 // ---------------------------------------------------------------------------
-// Facts checked against the vendors' own pages on 2026-10-15. Menu labels
+// Facts checked against the vendors' own pages on 2026-10-15 and 2026-10-16. Menu labels
 // that could not be confirmed are described by the page and what to look for.
 
 import { SERVICE_SETUP_FIELDS } from '../catalog';
@@ -160,3 +160,41 @@ export function phoneAccessGuide(optionId?: string): SetupGuide {
     verifiedOn: '2026-10-15',
   };
 }
+
+export const PHONE_CALLS_GUIDE: SetupGuide = {
+  topic: 'phone_calls',
+  title: 'Let Kavi make calls for you',
+  unlocks:
+    "Kavi calls a business (or a person who agreed to it) and talks for the person: booking a table, asking about opening hours or prices, rescheduling. Kavi's voice says it is an AI assistant calling on their behalf, and Kavi reports back what was said and agreed. Phones do not let apps speak into a normal call, so these calls go out through Bland, a calling service, from one of its numbers.",
+  options: [
+    {
+      id: 'bland',
+      name: 'Bland',
+      cost: 'About $0.14 a minute plus the phone line, up to 100 calls a day on the Start plan; calls abroad need at least $5 of credit.',
+      notes: 'One key, no phone number to buy; calls show a Bland number, not the person’s.',
+      url: 'https://www.bland.ai/pricing',
+    },
+  ],
+  optionId: 'bland',
+  steps: [
+    'Open app.bland.ai on the phone and create an account.',
+    'Add credit (at least $5, which also enables calls to other countries).',
+    'Find the API key in the account settings and copy it.',
+    'In Kavi, open the service keys (Kavi can open them) and paste it as the Bland API key. Never paste it into the chat.',
+  ],
+  form: { kind: 'settings', section: 'service-keys' },
+  afterSetup: 'Carry on with the call the person asked for.',
+  safety: [
+    'Every call starts by saying it is an AI assistant calling for the person and that it is recorded.',
+    'Before calling, show the person the number and exactly what Kavi will say and share, and call only after they approve.',
+    'Call businesses freely; call a private person only when the person says that contact agreed to a call from an AI (in the US the law requires it for mobile numbers).',
+    'Never call emergency numbers, sell anything, or give payment details, ID numbers or health information on a call.',
+  ],
+  sources: [
+    'https://docs.bland.ai/api-v1/post/calls',
+    'https://www.bland.ai/pricing',
+    'https://www.fcc.gov/document/fcc-makes-ai-generated-voices-robocalls-illegal',
+    'https://artificialintelligenceact.eu/article/50/',
+  ],
+  verifiedOn: '2026-10-16',
+};

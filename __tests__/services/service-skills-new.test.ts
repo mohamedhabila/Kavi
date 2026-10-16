@@ -103,9 +103,14 @@ describe('Productivity Skill', () => {
 describe('Communication Skill', () => {
   const skill = createCommunicationSkill();
 
-  it('has correct id and no legacy stub tools', () => {
+  it('has correct id and only the Bland calling tools, each with a real handler', () => {
     expect(skill.id).toBe('communication');
-    expect(skill.tools).toHaveLength(0);
+    expect(skill.tools.map((tool) => tool.name)).toEqual([
+      'agent_call',
+      'agent_call_status',
+      'agent_call_stop',
+    ]);
+    expect(skill.tools.every((tool) => typeof tool.handler === 'function')).toBe(true);
   });
 });
 

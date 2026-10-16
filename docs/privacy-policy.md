@@ -66,6 +66,13 @@ third-party service and ask Kavi to use it. Depending on your configuration,
 this can include AI model providers, remote hosts, remote workspaces, browser
 automation workers, MCP servers, and other integrations you explicitly add.
 
+If you add a calling service key (Bland) and approve a call, Kavi sends that
+service the number, the opening line, the goal and only the details you approved
+to share. The service places the call from its own number, records and
+transcribes it, and returns the transcript, a summary and the cost to Kavi. The
+person called is told first that the call comes from an AI assistant acting for
+you and that it is recorded.
+
 Kavi does not use your information for third-party advertising or cross-app
 tracking. Third-party services that you choose to connect may process data under
 their own privacy terms.
