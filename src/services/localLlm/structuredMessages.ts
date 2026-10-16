@@ -1,3 +1,4 @@
+import { LOCAL_LLM_MAX_IMAGES_PER_TURN } from './constants';
 import {
   extractLocalImageUris,
   flattenMessageContent,
@@ -55,31 +56,6 @@ export function extractLocalStructuredToolCalls(
       };
     })
     .filter((toolCall): toolCall is LocalStructuredToolCall => Boolean(toolCall));
-}
-
-/**
- * Only the latest user message keeps its images (the last [max] of them): it is what the
- * turn is about, and the conversation cache holds what came before. Earlier images leave
- * a note so the model knows something was shown.
- */
-export function keepLatestLocalImages(
-  messages: LocalStructuredMessage[],
-  max: number,
-): LocalStructuredMessage[] {
-  let latestUser = -1;
-  messages.forEach((message, index) => {
-    if (message.role === 'user') latestUser = index;
-  });
-  return messages.map((message, index) => {
-    if (!message.imageUris?.length) return message;
-    if (index === latestUser) return { ...message, imageUris: message.imageUris.slice(-max) };
-    const { imageUris, ...rest } = message;
-    const note =
-      imageUris.length === 1
-        ? '[An image shared earlier]'
-        : `[${imageUris.length} images shared earlier]`;
-    return { ...rest, content: rest.content ? `${note}\n${rest.content}` : note };
-  });
 }
 
 /** [showImages]: the model takes images, so a user message's images go to it as images. */
@@ -154,7 +130,11 @@ export function buildStructuredLocalMessages(
       continue;
     }
 
-    const imageUris = showImages ? extractLocalImageUris(message.content) : [];
+    // The last few images of each message; history keeps them too, so the next turn's
+    // history matches the transcript the native conversation cache committed.
+    const imageUris = showImages
+      ? extractLocalImageUris(message.content).slice(-LOCAL_LLM_MAX_IMAGES_PER_TURN)
+      : [];
     const content = flattenMessageContent(message.content, imageUris.length > 0);
     if (!content && imageUris.length === 0) {
       continue;

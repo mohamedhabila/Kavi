@@ -6,7 +6,6 @@ import {
 } from '../../../src/services/localLlm/constants';
 import { withLocalImageFiles } from '../../../src/services/localLlm/imageInputs';
 import { buildStructuredLocalConversation } from '../../../src/services/localLlm/structuredConversation';
-import { keepLatestLocalImages } from '../../../src/services/localLlm/structuredMessages';
 import type {
   LocalChatMessage,
   LocalLlmExecutionPolicy,
@@ -87,40 +86,32 @@ describe('on-device images', () => {
     });
   });
 
-  it('keeps images on the latest user message only, the last few of them', () => {
-    const many = Array.from({ length: 6 }, (_, index) => `${PHOTO}${index}`);
-    const messages = keepLatestLocalImages(
+  it('keeps a photo in the history of the next turn, as the turn that sent it committed it', () => {
+    const photoTurn = buildStructuredLocalConversation(
+      [userWith('What is this?', PHOTO)],
+      policy(),
+    );
+    const followUp = buildStructuredLocalConversation(
       [
-        { role: 'user', content: 'Look at this', imageUris: [PHOTO] },
-        { role: 'assistant', content: 'A cat.' },
-        { role: 'user', content: 'And these?', imageUris: many },
-        { role: 'assistant', toolCalls: [{ name: 'web_search', arguments: {} }] },
-        { role: 'tool', toolResponses: [{ name: 'web_search', response: 'ok' }] },
+        userWith('What is this?', PHOTO),
+        { role: 'assistant', content: 'A red car.' },
+        { role: 'user', content: 'What colour are its wheels?' },
       ],
-      LOCAL_LLM_MAX_IMAGES_PER_TURN,
+      policy(),
     );
 
-    expect(messages[0]).toEqual({
-      role: 'user',
-      content: '[An image shared earlier]\nLook at this',
-    });
-    expect(messages[2]?.imageUris).toEqual(many.slice(-LOCAL_LLM_MAX_IMAGES_PER_TURN));
-    expect(messages[4]).toEqual({
-      role: 'tool',
-      toolResponses: [{ name: 'web_search', response: 'ok' }],
-    });
+    // The native conversation cache is reused only when this history entry is the message
+    // the photo turn sent; it still carries the photo for a fresh prefill.
+    expect(followUp.history[0]).toEqual(photoTurn.currentMessage);
   });
 
-  it('notes how many earlier images there were', () => {
-    expect(
-      keepLatestLocalImages(
-        [
-          { role: 'user', imageUris: [PHOTO, RECEIPT] },
-          { role: 'user', content: 'Thanks' },
-        ],
-        LOCAL_LLM_MAX_IMAGES_PER_TURN,
-      )[0],
-    ).toEqual({ role: 'user', content: '[2 images shared earlier]' });
+  it('shows the model the last few images of a message', () => {
+    const many = Array.from({ length: 6 }, (_, index) => `${PHOTO}${index}`);
+    const conversation = buildStructuredLocalConversation([userWith('These?', ...many)], policy());
+
+    expect(conversation.currentMessage.imageUris).toEqual(
+      many.slice(-LOCAL_LLM_MAX_IMAGES_PER_TURN),
+    );
   });
 });
 

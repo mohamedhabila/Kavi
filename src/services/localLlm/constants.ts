@@ -23,7 +23,7 @@ export const LOCAL_LLM_MESSAGE_OVERHEAD_TOKENS = 12;
  * context estimate is exact.
  */
 export const LOCAL_LLM_VISUAL_TOKEN_BUDGET = 280;
-/** Images a single on-device turn shows the model; more would crowd a phone's context. */
+/** Images one on-device message shows the model; more would crowd a phone's context. */
 export const LOCAL_LLM_MAX_IMAGES_PER_TURN = 4;
 export const LOCAL_LLM_SYSTEM_OVERHEAD_TOKENS = 8;
 export const LOCAL_LLM_ENGINE_INIT_INPUT_RESERVE_TOKENS = 1_024;
