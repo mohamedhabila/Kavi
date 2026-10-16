@@ -7,41 +7,22 @@
 
 import { writeConversationWorkspaceTextFile } from '../../services/conversationWorkspace/files';
 import { normalizeToolName } from './toolNameNormalization';
-import { TOOL_DEFINITIONS } from './definitions';
+import { getToolResultCharBudget } from '../toolResultGuard';
 import { extractToolOutputStructuralMetadata } from './toolOutputStructuralMetadata';
 import { truncateGraphemesWithSuffix } from '../../utils/graphemeBoundary';
 
-export const TOOL_OUTPUT_SPILL_BYTE_THRESHOLD = 8 * 1024;
-export const TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD = 64 * 1024;
 /**
- * Applies to tools whose result size the caller already bounded.
- *
- * Spilling exists to keep an unbounded result out of the context window. When the
- * caller has already capped the size, spilling buys nothing: the model still needs the
- * content, so it reads the file straight back and the run pays an extra tool call and
- * an extra model turn for bytes it had asked for and would have received anyway.
- *
- * `web_fetch` defaults to a 20,000-character window, well above the general 8 KB
- * threshold, so every substantial page fetch was guaranteed to spill and hand back a
- * 1,200-character preview. Traced on device as two spill files and two `read_file`
- * calls in a run that fetched twice. The ceiling stays finite so a genuinely oversized
- * multi-page fetch still spills.
+ * Results up to this many characters reach the model whole; past it a result is saved to
+ * the workspace and the model gets a preview and the path. It is Claude Code's documented
+ * persist-to-disk threshold for tool results (code.claude.com/docs/en/mcp). An 8 KB
+ * threshold used to spill a list of the person's mail or notes and answer from its first
+ * 1,200 characters (41 of 474 integration results in 29 of 50 Claw-Anything tasks).
  */
-export const TOOL_OUTPUT_BOUNDED_CONTENT_SPILL_BYTE_THRESHOLD = 32 * 1024;
+export const TOOL_OUTPUT_SPILL_CHAR_THRESHOLD = 50_000;
+export const TOOL_OUTPUT_DISCOVERY_SPILL_CHAR_THRESHOLD = 64 * 1024;
 export const TOOL_OUTPUT_SPILL_PREVIEW_CHARS = 1_200;
 
 const INLINE_DISCOVERY_TOOL_NAMES = new Set(['tool_catalog', 'tool_describe']);
-
-/**
- * Resolved from each tool's own `contract.boundedOutput` declaration rather than a
- * hand-maintained name list, so a new tool that bounds its output is handled by
- * declaring it — no edit here, and no way for the two to drift apart.
- */
-const CALLER_BOUNDED_CONTENT_TOOL_NAMES: ReadonlySet<string> = new Set(
-  TOOL_DEFINITIONS.filter((tool) => tool.contract?.boundedOutput === true).map((tool) =>
-    normalizeToolName(tool.name),
-  ),
-);
 
 export type ToolOutputSpillResult = {
   spilled: boolean;
@@ -104,29 +85,40 @@ function buildSpillPath(toolName: string, timestamp: number): string {
   return `.kavi/spill/${normalized || 'tool'}-${timestamp}.txt`;
 }
 
-export function resolveToolOutputSpillByteThreshold(toolName: string): number {
-  const normalized = normalizeToolName(toolName);
-  if (INLINE_DISCOVERY_TOOL_NAMES.has(normalized)) {
-    return TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD;
-  }
-  if (CALLER_BOUNDED_CONTENT_TOOL_NAMES.has(normalized)) {
-    return TOOL_OUTPUT_BOUNDED_CONTENT_SPILL_BYTE_THRESHOLD;
-  }
-  return TOOL_OUTPUT_SPILL_BYTE_THRESHOLD;
+/**
+ * The characters a result of [toolName] may hold before it spills, never more than one
+ * result may take of the model's working window ([contextWindowTokens]), so a small
+ * on-device window spills sooner than a large hosted one.
+ */
+export function resolveToolOutputSpillThreshold(
+  toolName: string,
+  contextWindowTokens?: number,
+): number {
+  const threshold = INLINE_DISCOVERY_TOOL_NAMES.has(normalizeToolName(toolName))
+    ? TOOL_OUTPUT_DISCOVERY_SPILL_CHAR_THRESHOLD
+    : TOOL_OUTPUT_SPILL_CHAR_THRESHOLD;
+  return contextWindowTokens === undefined
+    ? threshold
+    : Math.min(threshold, getToolResultCharBudget(contextWindowTokens));
 }
 
 export async function maybeSpillToolOutput(params: {
   result: string;
   conversationId: string;
   toolName: string;
+  /** The model's working window, which bounds the threshold; the standard alone without it. */
+  contextWindowTokens?: number;
   timestamp?: number;
 }): Promise<ToolOutputSpillResult> {
   const byteLength = new TextEncoder().encode(params.result).length;
-  const spillByteThreshold = resolveToolOutputSpillByteThreshold(params.toolName);
+  const spillThreshold = resolveToolOutputSpillThreshold(
+    params.toolName,
+    params.contextWindowTokens,
+  );
   const previewSource = selectPreviewSource(params.result);
   const preview = truncateGraphemesWithSuffix(previewSource, TOOL_OUTPUT_SPILL_PREVIEW_CHARS, '…');
 
-  if (byteLength <= spillByteThreshold) {
+  if (params.result.length <= spillThreshold) {
     return {
       spilled: false,
       byteLength,

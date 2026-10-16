@@ -8,6 +8,8 @@ import { executeFileEdit, executeGlobSearch, executeTextSearch } from './extende
 import { executeNativeTool } from './native/executor';
 import { tryExecuteNativeToolInEnvironment } from './native/executionEnvironment';
 import { parseMcpToolName, executeMcpTool } from '../../services/mcp/bridge';
+import { getWorkingContextWindow } from '../../services/context/tokenCounter';
+import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
 import { mcpManager } from '../../services/mcp/manager';
 import { parseSkillToolName, executeSkillTool } from '../../services/skills/manager';
 import { runJobNow } from '../../services/scheduler/engine';
@@ -212,7 +214,16 @@ export async function executeToolInner(
   // ── Core + extended tools ──────────────────────────────────────────
   switch (name) {
     case 'read_file':
-      return executeReadFile(args, workspaceConversationId, workspaceReadFallbackConversationId);
+      return executeReadFile(
+        args,
+        workspaceConversationId,
+        workspaceReadFallbackConversationId,
+        context?.model
+          ? getWorkingContextWindow(context.model, {
+              onDeviceProvider: context.provider ? isOnDeviceLlmProvider(context.provider) : false,
+            })
+          : undefined,
+      );
     case 'write_file':
       return executeWriteFile(args, workspaceConversationId);
     case 'list_files':

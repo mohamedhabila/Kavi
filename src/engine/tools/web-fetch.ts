@@ -251,7 +251,6 @@ export const WEB_FETCH_TOOL: ToolDefinition = {
   contract: {
     category: 'web',
     capabilities: ['read', 'verify'],
-    boundedOutput: true,
     resourceKinds: ['unknown'],
     sideEffects: ['none'],
     riskHints: ['read_only', 'open_world'],

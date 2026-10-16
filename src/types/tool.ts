@@ -66,14 +66,6 @@ export interface ToolDefinition {
   contract?: {
     category?: string;
     capabilities?: string[];
-    /**
-     * Declares that the caller can bound this tool's result size through its own
-     * arguments, so the result never grows unbounded. Spilling such a result to the
-     * workspace does not save context — the model still needs the content and reads
-     * the file straight back, paying an extra tool call and an extra prompt re-send
-     * for bytes it explicitly asked for.
-     */
-    boundedOutput?: boolean;
     resourceKinds?: string[];
     sideEffects?: string[];
     riskHints?: string[];

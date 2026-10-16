@@ -44,7 +44,6 @@ export const SETUP_GUIDE_TOOL: ToolDefinition = {
     capabilities: ['discover', 'read', 'verify'],
     resourceKinds: ['unknown'],
     sideEffects: ['none'],
-    boundedOutput: true,
     riskHints: ['read_only', 'idempotent', 'open_world'],
     providesEvidence: [],
     workflowStages: ['discover_resource'],

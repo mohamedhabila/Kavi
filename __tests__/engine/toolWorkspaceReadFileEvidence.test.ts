@@ -5,7 +5,7 @@ import {
   resolveExactToolResultEvidence,
 } from '../../src/types/toolRuntimeOutcome';
 import { sha256HexUtf8 } from '../../src/utils/sha256';
-import { TOOL_OUTPUT_SPILL_BYTE_THRESHOLD } from '../../src/engine/tools/toolOutputSpill';
+import { TOOL_OUTPUT_SPILL_CHAR_THRESHOLD } from '../../src/engine/tools/toolOutputSpill';
 
 jest.mock('../../src/services/workspaces/source', () => ({
   resolveConversationWorkspaceSource: jest.fn(() => ({
@@ -59,8 +59,48 @@ describe('read_file exact-result evidence', () => {
     expect(resolveExactToolResultEvidence({ ...outcome }, content)).toBeUndefined();
   });
 
+  // Traced on Sonnet 5.5 (Claw-Anything): a week of the person's activity log (about 30 KB)
+  // came back in 7.5 KB chunks, and the model answered from the first.
+  it('returns a 30 KB log whole', async () => {
+    const content = 'activity row\n'.repeat(2_400);
+    mockedReadWorkspaceSourceTextFile.mockResolvedValue({
+      path: 'logs/week.md',
+      content,
+      size: content.length,
+    });
+
+    const outcome = await executeReadFile(
+      { path: 'logs/week.md' },
+      'conversation-1',
+      undefined,
+      400_000,
+    );
+
+    expect(outcome).toMatchObject({ status: 'completed', content });
+  });
+
+  it('reads in smaller chunks for a model whose window holds less', async () => {
+    const content = 'activity row\n'.repeat(2_400);
+    mockedReadWorkspaceSourceTextFile.mockResolvedValue({
+      path: 'logs/week.md',
+      content,
+      size: content.length,
+    });
+
+    const outcome = await executeReadFile(
+      { path: 'logs/week.md' },
+      'conversation-1',
+      undefined,
+      8_192,
+    );
+
+    expect(outcome.status).toBe('completed');
+    expect(outcome.content.length).toBeLessThanOrEqual(4_096);
+    expect(JSON.parse(outcome.content)).toMatchObject({ status: 'read_chunk', complete: false });
+  });
+
   it('returns bounded chunks that reconstruct a large file from the original path', async () => {
-    const content = `${'quote: \\" and emoji 🌍\n'.repeat(700)}final line`;
+    const content = `${'quote: \\" and emoji 🌍\n'.repeat(2_600)}final line`;
     mockedReadWorkspaceSourceTextFile.mockResolvedValue({
       path: 'large.txt',
       content,
@@ -78,9 +118,7 @@ describe('read_file exact-result evidence', () => {
       );
       expect(outcome.status).toBe('completed');
       if (outcome.status !== 'completed') throw new Error(outcome.content);
-      expect(new TextEncoder().encode(outcome.content).byteLength).toBeLessThan(
-        TOOL_OUTPUT_SPILL_BYTE_THRESHOLD,
-      );
+      expect(outcome.content.length).toBeLessThan(TOOL_OUTPUT_SPILL_CHAR_THRESHOLD);
       const chunk = JSON.parse(outcome.content) as {
         status: string;
         path: string;

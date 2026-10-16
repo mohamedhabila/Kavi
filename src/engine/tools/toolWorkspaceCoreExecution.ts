@@ -13,9 +13,10 @@ import {
   failedToolOutcome,
   type ToolRuntimeOutcome,
 } from '../../types/toolRuntimeOutcome';
-import { TOOL_OUTPUT_SPILL_BYTE_THRESHOLD } from './toolOutputSpill';
+import { resolveToolOutputSpillThreshold } from './toolOutputSpill';
 
-const READ_FILE_CHUNK_RESULT_BYTE_LIMIT = TOOL_OUTPUT_SPILL_BYTE_THRESHOLD - 512;
+/** Room for a chunk's metadata, so a whole chunk stays under the inline threshold. */
+const READ_FILE_CHUNK_METADATA_CHARS = 512;
 
 type ReadFileChunk = {
   status: 'read_chunk';
@@ -56,9 +57,9 @@ function buildReadFileChunk(params: {
   sha256: string;
   offset: number;
   totalBytes: number;
+  limitChars: number;
 }): string {
-  const { path, content, sha256, offset, totalBytes } = params;
-  const encoder = new TextEncoder();
+  const { path, content, sha256, offset, totalBytes, limitChars } = params;
   const totalChars = content.length;
   const totalLines = countNewlines(content) + 1;
   const startLine = countNewlines(content, offset) + 1;
@@ -95,7 +96,7 @@ function buildReadFileChunk(params: {
     const midpoint = Math.floor((low + high) / 2);
     const candidateEnd = avoidSplittingSurrogatePair(content, offset, midpoint);
     const candidate = serialize(candidateEnd);
-    if (encoder.encode(candidate).byteLength <= READ_FILE_CHUNK_RESULT_BYTE_LIMIT) {
+    if (candidate.length <= limitChars) {
       best = candidate;
       bestEnd = candidateEnd;
       low = midpoint + 1;
@@ -108,7 +109,7 @@ function buildReadFileChunk(params: {
     const nextEnd =
       resultCodePointWidth(content, offset) === 2 ? Math.min(offset + 2, totalChars) : offset + 1;
     const smallestProgressingChunk = serialize(nextEnd);
-    if (encoder.encode(smallestProgressingChunk).byteLength > READ_FILE_CHUNK_RESULT_BYTE_LIMIT) {
+    if (smallestProgressingChunk.length > limitChars) {
       throw new Error('read_file metadata exceeds the inline result budget');
     }
     return smallestProgressingChunk;
@@ -123,10 +124,16 @@ function resultCodePointWidth(value: string, offset: number): number {
   return first >= 0xd800 && first <= 0xdbff && second >= 0xdc00 && second <= 0xdfff ? 2 : 1;
 }
 
+/**
+ * A file up to the inline threshold comes back whole; a longer one in chunks of that size,
+ * each naming the offset of the next. [contextWindowTokens] is the model's working window,
+ * which bounds the threshold.
+ */
 export async function executeReadFile(
   args: { path: string; offset?: number },
   conversationId: string,
   fallbackConversationId?: string,
+  contextWindowTokens?: number,
 ): Promise<ToolRuntimeOutcome> {
   const pathArg = requireToolStringArg(args as Record<string, unknown>, 'path', 'read_file');
   if (pathArg.error) return failedToolOutcome(pathArg.error);
@@ -164,8 +171,8 @@ export async function executeReadFile(
         'Error: read_file offset splits a Unicode character. Use the nextOffset returned by the previous chunk.',
       );
     }
-    const totalBytes = new TextEncoder().encode(result.content).byteLength;
-    if (requestedOffset === undefined && totalBytes <= TOOL_OUTPUT_SPILL_BYTE_THRESHOLD) {
+    const inlineChars = resolveToolOutputSpillThreshold('read_file', contextWindowTokens);
+    if (requestedOffset === undefined && result.content.length <= inlineChars) {
       return completedToolOutcomeWithExactResultEvidence(result.content);
     }
     const chunk = buildReadFileChunk({
@@ -173,7 +180,8 @@ export async function executeReadFile(
       content: result.content,
       sha256: await sha256HexUtf8Async(result.content),
       offset,
-      totalBytes,
+      totalBytes: new TextEncoder().encode(result.content).byteLength,
+      limitChars: inlineChars - READ_FILE_CHUNK_METADATA_CHARS,
     });
     return completedToolOutcomeWithExactResultEvidence(chunk);
   } catch (error) {

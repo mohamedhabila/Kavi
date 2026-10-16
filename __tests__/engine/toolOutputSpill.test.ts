@@ -1,9 +1,9 @@
 import { DEFAULT_FETCH_MAX_CHARS } from '../../src/engine/tools/web-fetch';
 import {
   maybeSpillToolOutput,
-  resolveToolOutputSpillByteThreshold,
-  TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD,
-  TOOL_OUTPUT_SPILL_BYTE_THRESHOLD,
+  resolveToolOutputSpillThreshold,
+  TOOL_OUTPUT_DISCOVERY_SPILL_CHAR_THRESHOLD,
+  TOOL_OUTPUT_SPILL_CHAR_THRESHOLD,
   TOOL_OUTPUT_SPILL_PREVIEW_CHARS,
 } from '../../src/engine/tools/toolOutputSpill';
 import { writeConversationWorkspaceTextFile } from '../../src/services/conversationWorkspace/files';
@@ -46,7 +46,7 @@ describe('toolOutputSpill', () => {
   });
 
   it('spills oversized output to the workspace and returns a pointer preview', async () => {
-    const result = 'x'.repeat(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD + 64);
+    const result = 'x'.repeat(TOOL_OUTPUT_SPILL_CHAR_THRESHOLD + 64);
     const spilled = await maybeSpillToolOutput({
       result,
       conversationId: 'conv-1',
@@ -75,7 +75,7 @@ describe('toolOutputSpill', () => {
           status: 'completed',
           completionState: 'verified_success',
           workstreamId: 'worker-goal',
-          output: `Verified worker report ${'x'.repeat(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD)}`,
+          output: `Verified worker report ${'x'.repeat(TOOL_OUTPUT_SPILL_CHAR_THRESHOLD)}`,
           toolsUsed: ['read_file'],
           iterations: 12,
           depth: 1,
@@ -119,7 +119,7 @@ describe('toolOutputSpill', () => {
           activation: { name: 'sessions_spawn', eligible: true, callableNow: true },
         },
       ],
-      padding: 'x'.repeat(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD + 64),
+      padding: 'x'.repeat(TOOL_OUTPUT_SPILL_CHAR_THRESHOLD + 64),
     });
 
     const spilled = await maybeSpillToolOutput({
@@ -138,7 +138,7 @@ describe('toolOutputSpill', () => {
     const result = JSON.stringify({
       mode: 'search',
       tools: [],
-      padding: 'x'.repeat(TOOL_OUTPUT_DISCOVERY_SPILL_BYTE_THRESHOLD + 64),
+      padding: 'x'.repeat(TOOL_OUTPUT_DISCOVERY_SPILL_CHAR_THRESHOLD + 64),
     });
 
     const spilled = await maybeSpillToolOutput({
@@ -153,30 +153,47 @@ describe('toolOutputSpill', () => {
   });
 });
 
-describe('spill threshold for caller-bounded content tools', () => {
+describe('spill threshold', () => {
+  // Traced on Sonnet 5.5 (Claw-Anything): at 8 KB a list of the person's notes or mail
+  // spilled and the model answered from its first 1,200 characters (41 of 474 results).
+  it('hands the model a 30,000-character integration result whole', async () => {
+    const result = JSON.stringify({ notes: 'n'.repeat(30_000) });
+
+    const spilled = await maybeSpillToolOutput({
+      result,
+      conversationId: 'conv-1',
+      toolName: 'mcp__apps__notes_list',
+      contextWindowTokens: 400_000,
+      timestamp: 1,
+    });
+
+    expect(spilled).toMatchObject({ spilled: false, payload: result });
+  });
+
+  it("spills past Claude Code's documented 50,000 characters", () => {
+    expect(resolveToolOutputSpillThreshold('python')).toBe(50_000);
+    expect(resolveToolOutputSpillThreshold('ssh_exec', 400_000)).toBe(50_000);
+  });
+
   it('keeps a default-sized web_fetch window inline', () => {
-    // Spilling a result the caller already bounded costs a read_file round-trip and an
-    // extra model turn without saving any tokens — the model needs the content either
-    // way. Traced on device: two fetches produced two spill files and two extra reads.
-    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeGreaterThanOrEqual(
+    expect(resolveToolOutputSpillThreshold('web_fetch')).toBeGreaterThanOrEqual(
       DEFAULT_FETCH_MAX_CHARS,
     );
   });
 
-  it('keeps web_fetch above the general threshold', () => {
-    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeGreaterThan(
-      TOOL_OUTPUT_SPILL_BYTE_THRESHOLD,
-    );
-  });
+  it('spills sooner for a model whose window holds less', async () => {
+    // A quarter of an 8k on-device window, at two characters a token.
+    expect(resolveToolOutputSpillThreshold('python', 8_192)).toBe(4_096);
 
-  it('still spills a genuinely oversized multi-page fetch', () => {
-    expect(resolveToolOutputSpillByteThreshold('web_fetch')).toBeLessThan(Number.MAX_SAFE_INTEGER);
-    expect(Number.isFinite(resolveToolOutputSpillByteThreshold('web_fetch'))).toBe(true);
-  });
+    const spilled = await maybeSpillToolOutput({
+      result: 'x'.repeat(10_000),
+      conversationId: 'conv-1',
+      toolName: 'python',
+      contextWindowTokens: 8_192,
+      timestamp: 7,
+    });
 
-  it('leaves unbounded tools on the general threshold', () => {
-    expect(resolveToolOutputSpillByteThreshold('python')).toBe(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD);
-    expect(resolveToolOutputSpillByteThreshold('ssh_exec')).toBe(TOOL_OUTPUT_SPILL_BYTE_THRESHOLD);
+    expect(spilled.spilled).toBe(true);
   });
 });
 
@@ -196,7 +213,7 @@ describe('spill preview content selection', () => {
     // A head slice of the raw JSON spends the whole budget on the wrapper and the top
     // of the page, which is navigation chrome. The model then learns nothing and reads
     // the spill file back every time, so the offload costs a turn instead of saving one.
-    const article = `Titan has a mean radius of 2,574.73 km. ${'body '.repeat(4000)}`;
+    const article = `Titan has a mean radius of 2,574.73 km. ${'body '.repeat(12_000)}`;
     const payload = JSON.stringify({
       fetches: [{ url: 'https://en.wikipedia.org/wiki/Titan_(moon)', content: article }],
     });
@@ -230,7 +247,7 @@ describe('spill preview content selection', () => {
   });
 
   it('tells the model the preview may already answer the question', async () => {
-    const spilled = await spill(JSON.stringify({ content: 'x'.repeat(20_000) }));
+    const spilled = await spill(JSON.stringify({ content: 'x'.repeat(60_000) }));
 
     expect(spilled.payload).toContain('only if the preview does not already answer');
   });

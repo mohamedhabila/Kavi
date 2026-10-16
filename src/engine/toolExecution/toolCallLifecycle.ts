@@ -241,10 +241,13 @@ export async function executeToolCallLifecycle(
       }
     }
     const spillConversationId = params.workspaceConversationId ?? params.conversationId;
+    const effectiveBudgetWindow =
+      params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     const spilled = await maybeSpillToolOutput({
       result,
       conversationId: spillConversationId,
       toolName: effectiveToolCall.name,
+      contextWindowTokens: effectiveBudgetWindow,
     });
     result = spilled.payload;
     result = enrichToolResultWithSchemaRepair({
@@ -252,8 +255,6 @@ export async function executeToolCallLifecycle(
       toolName: effectiveToolCall.name,
       tools: params.groundedRequestScopedTools,
     });
-    const effectiveBudgetWindow =
-      params.toolResultContextWindow ?? getWorkingContextWindow(params.model);
     result = enforceToolResultBudget(result, effectiveBudgetWindow);
     applyTrackedAsyncToolResult(
       params.trackedAsyncOperations,
