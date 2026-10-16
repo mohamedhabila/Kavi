@@ -54,6 +54,7 @@ export function resolveDefaultGroundedRequestScopedTools(params: {
   workingMessages: ReadonlyArray<Message>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
+  upfrontToolNames?: ReadonlyArray<string>;
 }): ToolDefinition[] {
   return resolveTurnToolSurface({
     allTools: params.allTools,
@@ -63,5 +64,6 @@ export function resolveDefaultGroundedRequestScopedTools(params: {
     ],
     pendingAsyncMonitorToolNames: params.pendingAsyncMonitorToolNames,
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
+    upfrontToolNames: params.upfrontToolNames,
   });
 }

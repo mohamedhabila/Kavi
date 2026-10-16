@@ -351,6 +351,38 @@ describe('prepareAgentControlGraphModelTurn', () => {
     ]);
   });
 
+  // Traced on Sonnet 5.5 (Claw-Anything): with the person's mail and notes connected but only
+  // named in the capability index, Claude searched the workspace files, found nothing and asked
+  // the person; with the integration's tools declared it opened the apps first (30 of 30).
+  it("declares a connected integration's tools from the first turn, kept by the tool budget", async () => {
+    mockPreparedTurn();
+    const mailSearchTool = {
+      name: 'mcp__mail__mail_search',
+      description: '[Mail] Search the inbox.',
+      input_schema: { type: 'object', properties: { query: { type: 'string' } } },
+    } as any;
+    const calendarTool = {
+      name: 'mcp__calendar__list_events',
+      description: '[Calendar] List events.',
+      input_schema: { type: 'object', properties: {} },
+    } as any;
+
+    await prepareAgentControlGraphModelTurn({
+      ...createBaseParams(),
+      allTools: [writeTool, toolCatalogTool, mailSearchTool, calendarTool],
+    });
+
+    expectPreparedGroundedTools([
+      { name: 'write_file', placement: 'stable_prefix' },
+      { name: 'tool_catalog', placement: 'stable_prefix' },
+      { name: 'mcp__calendar__list_events', placement: 'stable_prefix' },
+      { name: 'mcp__mail__mail_search', placement: 'stable_prefix' },
+    ]);
+    expect(mockedPrepareAgentTurn.mock.calls[0]?.[0].pinnedToolNames).toEqual(
+      expect.arrayContaining(['mcp__calendar__list_events', 'mcp__mail__mail_search']),
+    );
+  });
+
   it('uses the stable discovery surface for ordinary turns without graph scope', async () => {
     mockPreparedTurn();
 

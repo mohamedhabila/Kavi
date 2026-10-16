@@ -1,4 +1,6 @@
 import { resolveProviderFamily } from '../../services/llm/catalog/providerFamilies';
+import { isOnDeviceLlmProvider } from '../../services/localLlm/provider';
+import { selectUpfrontIntegrationToolNames } from '../tools/integrationToolSurface';
 import { buildPreparedModelTurnPrompt } from './modelTurn/buildPreparedPromptTurn';
 import { resolveModelTurnGroundedToolSurface } from './modelTurn/resolveGroundedToolSurface';
 import { resolveModelTurnIterationRequest } from './modelTurn/resolveIterationRequest';
@@ -33,6 +35,9 @@ export async function prepareAgentControlGraphModelTurn(
     explicitToolSurfaceToolNames: params.explicitToolSurfaceToolNames,
     trackedAsyncOperations: params.trackedAsyncOperations,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
+    upfrontToolNames: selectUpfrontIntegrationToolNames(params.allTools, params.activeModel, {
+      onDeviceProvider: isOnDeviceLlmProvider(params.activeProvider),
+    }),
     workingMessages: params.workingMessages,
   });
 

@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // Kavi — Turn Tool Surface
 // ---------------------------------------------------------------------------
-// The tools a model turn sees: the core workbench and the discovery tools, then every tool
+// The tools a model turn sees: the core workbench, the discovery tools and the connected
+// integrations' tools that fit up front (integrationToolSurface.ts), then every tool
 // the live conversation has called or activated, in the order it first appeared, then the
 // run's pins and async monitors. Nothing a conversation brought onto the surface leaves it
 // until its messages leave the history window, so the declaration block only ever grows at
@@ -83,6 +84,8 @@ export interface ResolveTurnToolSurfaceParams {
   conversationToolNames: ReadonlyArray<string>;
   pendingAsyncMonitorToolNames?: ReadonlySet<string>;
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
+  /** Connected integrations' tools declared from the first turn, in a stable order. */
+  upfrontToolNames?: ReadonlyArray<string>;
 }
 
 export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): ToolDefinition[] {
@@ -104,6 +107,7 @@ export function resolveTurnToolSurface(params: ResolveTurnToolSurfaceParams): To
 
   add(DEFAULT_CORE_TOOL_ORDER);
   add(DISCOVERY_TOOL_ORDER);
+  add(params.upfrontToolNames ?? []);
   // The prefix every turn shares; a provider cache breakpoint after it never moves, so a call
   // whose later tools changed still reads it.
   const stablePrefixLength = surface.size;

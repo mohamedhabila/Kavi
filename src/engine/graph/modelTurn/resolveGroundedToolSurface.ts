@@ -15,6 +15,8 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   explicitToolSurfaceToolNames?: ReadonlyArray<string>;
   trackedAsyncOperations: ReadonlyMap<string, TrackedAsyncOperation>;
   sessionActivatedToolNames?: ReadonlyArray<string>;
+  /** Connected integrations' tools declared from the first turn (integrationToolSurface.ts). */
+  upfrontToolNames?: ReadonlyArray<string>;
   workingMessages: ReadonlyArray<Message>;
 }): Promise<{
   allowSessionCoordinationTools: boolean;
@@ -51,6 +53,7 @@ export async function resolveModelTurnGroundedToolSurface(params: {
     workingMessages: params.workingMessages,
     explicitToolSurfaceToolNames,
     sessionActivatedToolNames: params.sessionActivatedToolNames,
+    upfrontToolNames: params.upfrontToolNames,
   });
   const groundedToolNames = new Set(
     groundedRequestScopedTools.map((tool) => normalizeToolName(tool.name)).filter(Boolean),
@@ -67,8 +70,13 @@ export async function resolveModelTurnGroundedToolSurface(params: {
   const invokedToolNames = Array.from(params.completedWorkflowToolNames)
     .map((toolName) => normalizeToolName(toolName))
     .filter(Boolean);
-  const pinnedToolNames = Array.from(new Set(invokedToolNames)).filter((name) =>
-    groundedToolNames.has(name),
+  // Integration tools declared up front already fit their share of the window, so the tool
+  // budget never trims them back off the surface they were put on.
+  const upfrontToolNames = (params.upfrontToolNames ?? [])
+    .map((toolName) => normalizeToolName(toolName))
+    .filter(Boolean);
+  const pinnedToolNames = Array.from(new Set([...invokedToolNames, ...upfrontToolNames])).filter(
+    (name) => groundedToolNames.has(name),
   );
   const turnContract = resolveAgentExecutionTurnContract({
     groundedToolNames: groundedRequestScopedTools.map((tool) => tool.name),
