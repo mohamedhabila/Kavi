@@ -8,14 +8,22 @@ private let streamLogger = Logger(
 )
 
 extension Conversation {
-  public func sendMessageStream(_ message: Message, extraContext: [String: Any]? = nil)
-    -> AsyncThrowingStream<Message, Error>
-  {
+  public func sendMessageStream(
+    _ message: Message,
+    extraContext: [String: Any]? = nil,
+    maxOutputTokens: Int? = nil
+  ) -> AsyncThrowingStream<Message, Error> {
     AsyncThrowingStream { continuation in
       do {
         let handle = try activeHandle()
         let context = StreamContext(continuation: continuation)
-        try sendToStream(handle: handle, message: message, extraContext: extraContext, context: context)
+        try sendToStream(
+          handle: handle,
+          message: message,
+          extraContext: extraContext,
+          maxOutputTokens: maxOutputTokens,
+          context: context
+        )
       } catch {
         continuation.finish(throwing: error)
       }
@@ -26,14 +34,12 @@ extension Conversation {
     handle: ConversationHandle,
     message: Message,
     extraContext: [String: Any]? = nil,
+    maxOutputTokens: Int? = nil,
     context: StreamContext
   ) throws {
     let messageString = try jsonString(message.toJson)
     let extraContextString = try optionalJsonString(extraContext)
-    let optionalArgs = litert_lm_conversation_optional_args_create()
-    if let visualTokenBudget = ExperimentalFlags.visualTokenBudget {
-      litert_lm_conversation_optional_args_set_visual_token_budget(optionalArgs, Int32(visualTokenBudget))
-    }
+    let optionalArgs = makeOptionalArgs(maxOutputTokens: maxOutputTokens)
     defer { litert_lm_conversation_optional_args_delete(optionalArgs) }
 
     let contextPointer = Unmanaged.passRetained(context).toOpaque()

@@ -7,12 +7,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.facebook.react.bridge.BridgeReactContext
 import com.facebook.react.bridge.JavaOnlyMap
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -43,20 +45,53 @@ class KaviLocalLlmModuleLifecycleTest {
     }
   }
 
-  private fun buildRequest(config: OnDeviceBenchmarkConfig, requestId: String): JavaOnlyMap {
+  @Test
+  fun replyStopsAtTheRequestBudget() {
+    runBlocking {
+      val config = readOnDeviceBenchmarkConfig(arguments)
+      val module = KaviLocalLlmModule(BridgeReactContext(targetContext))
+      try {
+        val reply = CapturingPromise()
+        module.generate(
+          buildRequest(
+            config,
+            "phase1-output-cap",
+            conversationKey = "phase1-output-cap",
+            prompt = "Count from 1 to 300, one number per line, and write nothing else.",
+            maxTokens = 16,
+          ),
+          reply,
+        )
+        val text = (reply.awaitResolved() as ReadableMap).getString("text").orEmpty()
+        val numbers = Regex("\\d+").findAll(text).count()
+        // 16 tokens hold well under 20 numbers; without the cap the model counts on to 300.
+        assertTrue("A 16-token reply listed $numbers numbers: $text", numbers <= 20)
+      } finally {
+        module.invalidate()
+      }
+    }
+  }
+
+  private fun buildRequest(
+    config: OnDeviceBenchmarkConfig,
+    requestId: String,
+    conversationKey: String = "phase1-production-runtime-concurrency",
+    prompt: String = "Reply with one short sentence.",
+    maxTokens: Int = 32,
+  ): JavaOnlyMap {
     return JavaOnlyMap.of(
       "requestId",
       requestId,
       "conversationKey",
-      "phase1-production-runtime-concurrency",
+      conversationKey,
       "modelPath",
       config.modelPath,
       "prompt",
-      "Reply with one short sentence.",
+      prompt,
       "backend",
       config.backend,
       "maxTokens",
-      32,
+      maxTokens,
       "contextWindowTokens",
       4096,
       "topK",

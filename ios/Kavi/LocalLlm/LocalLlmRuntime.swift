@@ -35,7 +35,10 @@ actor LocalLlmRuntime {
     markActive(request.requestId, conversation)
     defer { clearActive(request.requestId) }
 
-    let response = try await conversation.conversation.sendMessage(message)
+    let response = try await conversation.conversation.sendMessage(
+      message,
+      maxOutputTokens: request.maxTokens
+    )
     conversation.transcriptSignature = try adapter.committedTranscriptSignature(
       for: request,
       response: response
@@ -58,7 +61,10 @@ actor LocalLlmRuntime {
     markActive(request.requestId, conversation)
     defer { clearActive(request.requestId) }
 
-    for try await chunk in conversation.conversation.sendMessageStream(message) {
+    for try await chunk in conversation.conversation.sendMessageStream(
+      message,
+      maxOutputTokens: request.maxTokens
+    ) {
       let text = chunk.toString
       if !text.isEmpty {
         output += text

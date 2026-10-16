@@ -26,11 +26,13 @@ internal class LiteRtMessageAdapter(
       request.topP,
       request.temperature,
     )
+    // The reply stops at the request's budget instead of running on until the context fills.
     val commonConfig = ConversationConfig(
       systemInstruction = request.systemPrompt?.let { Contents.of(it) },
       initialMessages = request.history.map { entry -> toLiteRtMessage(entry) },
       tools = toolProviders,
       automaticToolCalling = toolProviders.isEmpty(),
+      maxOutputToken = request.maxTokens,
     )
 
     return if (samplerConfig == null) {
@@ -42,6 +44,7 @@ internal class LiteRtMessageAdapter(
         initialMessages = commonConfig.initialMessages,
         tools = commonConfig.tools,
         automaticToolCalling = commonConfig.automaticToolCalling,
+        maxOutputToken = commonConfig.maxOutputToken,
       )
     }
   }

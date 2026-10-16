@@ -20,14 +20,15 @@ public final class Conversation {
     }
   }
 
-  public func sendMessage(_ message: Message, extraContext: [String: Any]? = nil) async throws -> Message {
+  public func sendMessage(
+    _ message: Message,
+    extraContext: [String: Any]? = nil,
+    maxOutputTokens: Int? = nil
+  ) async throws -> Message {
     let handle = try activeHandle()
     let messageString = try jsonString(message.toJson)
     let extraContextString = try optionalJsonString(extraContext)
-    let optionalArgs = litert_lm_conversation_optional_args_create()
-    if let visualTokenBudget = ExperimentalFlags.visualTokenBudget {
-      litert_lm_conversation_optional_args_set_visual_token_budget(optionalArgs, Int32(visualTokenBudget))
-    }
+    let optionalArgs = makeOptionalArgs(maxOutputTokens: maxOutputTokens)
     defer { litert_lm_conversation_optional_args_delete(optionalArgs) }
 
     guard let response = litert_lm_conversation_send_message(
@@ -56,6 +57,19 @@ public final class Conversation {
     }
     return handle
   }
+}
+
+/// One message's settings: the visual token budget, and the cap on the reply's tokens
+/// (thinking included), so a reply stops at its budget instead of filling the context.
+func makeOptionalArgs(maxOutputTokens: Int?) -> OpaquePointer? {
+  let optionalArgs = litert_lm_conversation_optional_args_create()
+  if let visualTokenBudget = ExperimentalFlags.visualTokenBudget {
+    litert_lm_conversation_optional_args_set_visual_token_budget(optionalArgs, Int32(visualTokenBudget))
+  }
+  if let maxOutputTokens, maxOutputTokens > 0 {
+    litert_lm_conversation_optional_args_set_max_output_tokens(optionalArgs, Int32(maxOutputTokens))
+  }
+  return optionalArgs
 }
 
 func jsonString(_ value: Any) throws -> String {

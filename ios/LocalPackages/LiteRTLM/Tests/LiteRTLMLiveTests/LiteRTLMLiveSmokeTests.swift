@@ -3,6 +3,34 @@ import Foundation
 import XCTest
 
 final class LiteRTLMLiveSmokeTests: XCTestCase {
+  func testReplyStopsAtTheTokenBudget() async throws {
+    let env = ProcessInfo.processInfo.environment
+    guard let modelPath = nonEmpty(env["LITERTLM_LIVE_MODEL_PATH"]) else {
+      throw XCTSkip("Set LITERTLM_LIVE_MODEL_PATH to run the LiteRT-LM live smoke test.")
+    }
+    let backendName = nonEmpty(env["LITERTLM_LIVE_BACKEND"]) ?? "cpu"
+    let engine = Engine(
+      engineConfig: try EngineConfig(
+        modelPath: modelPath,
+        backend: try backend(named: backendName),
+        maxNumTokens: 4096,
+        cacheDir: NSTemporaryDirectory()
+      )
+    )
+    try await withTimeout(seconds: 180) { try await engine.initialize() }
+    let conversation = try await engine.createConversation()
+
+    let response = try await withTimeout(seconds: 180) {
+      try await conversation.sendMessage(
+        Message("Count from 1 to 300, one number per line, and write nothing else.", role: .user),
+        maxOutputTokens: 16
+      )
+    }
+    let numbers = response.toString.split(whereSeparator: { !$0.isNumber }).count
+    // 16 tokens hold well under 20 numbers; without the cap the model counts on to 300.
+    XCTAssertLessThanOrEqual(numbers, 20, "A 16-token reply listed \(numbers) numbers.")
+  }
+
   func testGenerateWithConfiguredModel() async throws {
     let env = ProcessInfo.processInfo.environment
     guard let modelPath = nonEmpty(env["LITERTLM_LIVE_MODEL_PATH"]) else {

@@ -48,8 +48,13 @@ describe('iOS LiteRT-LM runtime bridge', () => {
     expect(runtimeSource).toContain('EngineConfig(');
     expect(runtimeSource).toContain('engine.initialize()');
     expect(runtimeSource).toContain('createConversation(with:');
-    expect(runtimeSource).toContain('sendMessage(message)');
-    expect(runtimeSource).toContain('sendMessageStream(message)');
+    // Both send paths cap the reply at the request's token budget.
+    expect(runtimeSource).toMatch(
+      /sendMessage\(\s*message,\s*maxOutputTokens: request\.maxTokens\s*\)/u,
+    );
+    expect(runtimeSource).toMatch(
+      /sendMessageStream\(\s*message,\s*maxOutputTokens: request\.maxTokens\s*\)/u,
+    );
     expect(runtimeSource).toContain('conversation.cancel()');
     expect(adapterSource).toContain('ConversationConfig(');
     expect(adapterSource).toContain('Message(prompt, role: .user)');
