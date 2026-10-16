@@ -1,6 +1,7 @@
 package com.kavi.mobile.localllm
 
-import com.google.ai.edge.litertlm.Capabilities
+import com.google.ai.edge.litertlm.LlmCapability
+import com.google.ai.edge.litertlm.ModelInfo
 
 internal class LiteRtAccelerationPolicy(
   private val metrics: RuntimeMetrics,
@@ -36,9 +37,12 @@ internal class LiteRtAccelerationPolicy(
   private fun getModelCapabilities(modelPath: String): LiteRtModelCapabilities {
     return cachedCapabilities.getOrPut(modelPath) {
       try {
-        Capabilities(modelPath).use { capabilities ->
+        // The model file's own description (LiteRT-LM 0.18 ModelInfo): only a language
+        // model's carries the speculative-decoding drafter.
+        ModelInfo.from(modelPath).use { info ->
           LiteRtModelCapabilities(
-            supportsSpeculativeDecoding = capabilities.hasSpeculativeDecodingSupport(),
+            supportsSpeculativeDecoding =
+              (info as? LlmCapability)?.hasSpeculativeDecodingSupport() == true,
             checkFailed = false,
           )
         }

@@ -3,13 +3,14 @@ package com.kavi.mobile
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Process
-import com.google.ai.edge.litertlm.Capabilities
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
+import com.google.ai.edge.litertlm.LlmCapability
 import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.ModelInfo
 import org.json.JSONObject
 import kotlin.system.measureTimeMillis
 
@@ -117,8 +118,8 @@ fun resolveOnDeviceAccelerationState(
 ): OnDeviceAccelerationState {
   var capabilityCheckFailed = false
   val supportsSpeculativeDecoding = try {
-    Capabilities(config.modelPath).use { capabilities ->
-      capabilities.hasSpeculativeDecodingSupport()
+    ModelInfo.from(config.modelPath).use { info ->
+      (info as? LlmCapability)?.hasSpeculativeDecodingSupport() == true
     }
   } catch (_: Throwable) {
     capabilityCheckFailed = true

@@ -68,14 +68,16 @@ public actor Engine {
     defer { litert_lm_session_config_delete(sessionConfig) }
 
     if let sampler = conversationConfig.samplerConfig {
-      var params = LiteRtLmSamplerParams(
-        type: kLiteRtLmSamplerTypeTopP,
-        top_k: Int32(sampler.topK),
-        top_p: sampler.topP,
-        temperature: sampler.temperature,
-        seed: Int32(sampler.seed)
-      )
-      litert_lm_session_config_set_sampler_params(sessionConfig, &params)
+      // Since LiteRT-LM 0.18 the parameters are an opaque object the session config copies.
+      guard let params = litert_lm_sampler_params_create(kLiteRtLmSamplerTypeTopP) else {
+        throw LiteRTLMError.engine(.failedToCreateSessionConfig)
+      }
+      defer { litert_lm_sampler_params_delete(params) }
+      litert_lm_sampler_params_set_top_k(params, Int32(sampler.topK))
+      litert_lm_sampler_params_set_top_p(params, sampler.topP)
+      litert_lm_sampler_params_set_temperature(params, sampler.temperature)
+      litert_lm_sampler_params_set_seed(params, Int32(sampler.seed))
+      litert_lm_session_config_set_sampler_params(sessionConfig, params)
     }
 
     guard let nativeConfig = litert_lm_conversation_config_create() else {

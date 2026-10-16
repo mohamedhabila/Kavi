@@ -80,10 +80,10 @@ describe('iOS LiteRT-LM runtime bridge', () => {
     expect(project).toContain('LiteRTLM in Frameworks');
     expect(project).toContain('packageProductDependencies');
     expect(packageManifest).toContain(
-      'https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.13.1/CLiteRTLM.xcframework.zip',
+      'https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.18.0/CLiteRTLM.xcframework.zip',
     );
     expect(packageManifest).toContain(
-      'https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.13.1/CLiteRTLM_mac.xcframework.zip',
+      'https://github.com/google-ai-edge/LiteRT-LM/releases/download/v0.18.0/CLiteRTLM_mac.xcframework.zip',
     );
     expect(packageManifest).not.toContain('-all_load');
   });

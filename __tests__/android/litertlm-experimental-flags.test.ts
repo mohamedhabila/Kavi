@@ -31,9 +31,9 @@ describe('android litertlm experimental flag and capability policy', () => {
   test('enables speculative decoding only from LiteRT model capabilities and GPU backend', () => {
     const source = readSource('LiteRtAccelerationPolicy.kt');
 
-    expect(source).toContain('import com.google.ai.edge.litertlm.Capabilities');
-    expect(source).toContain('Capabilities(modelPath).use');
-    expect(source).toContain('capabilities.hasSpeculativeDecodingSupport()');
+    expect(source).toContain('import com.google.ai.edge.litertlm.ModelInfo');
+    expect(source).toContain('ModelInfo.from(modelPath).use');
+    expect(source).toContain('(info as? LlmCapability)?.hasSpeculativeDecodingSupport() == true');
     expect(source).toContain('supportsSpeculativeDecodingOnAccelerator(key.backend)');
     expect(source).not.toMatch(/gemma|qwen|deepseek/u);
   });

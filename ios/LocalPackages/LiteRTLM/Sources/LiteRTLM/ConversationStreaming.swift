@@ -60,15 +60,17 @@ extension Conversation {
   }
 }
 
+/// Since LiteRT-LM 0.18 a chunk arrives as one object; its strings live as long as the chunk.
 private func streamCallback(
   userData: UnsafeMutableRawPointer?,
-  responseJson: UnsafePointer<CChar>?,
-  isFinal: Bool,
-  errorMessage: UnsafePointer<CChar>?
+  chunk: OpaquePointer?
 ) {
-  guard let userData else {
+  guard let userData, let chunk else {
     return
   }
+  let responseJson = litert_lm_stream_chunk_get_text(chunk)
+  let isFinal = litert_lm_stream_chunk_is_final(chunk)
+  let errorMessage = litert_lm_stream_chunk_get_error(chunk)
   let context = Unmanaged<Conversation.StreamContext>.fromOpaque(userData).takeUnretainedValue()
 
   if let errorMessage {
