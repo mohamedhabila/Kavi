@@ -1,6 +1,6 @@
 import { prepareAgentControlGraphModelTurn } from '../../src/engine/graph/prepareAgentControlGraphModelTurn';
 import { prepareAgentTurn } from '../../src/engine/graph/agentTurnPreparation';
-import { planIterationModel } from '../../src/services/context/tokenOptimization';
+import { planIterationMaxTokens } from '../../src/services/context/tokenOptimization';
 import { useSettingsStore } from '../../src/store/useSettingsStore';
 
 jest.mock('../../src/engine/graph/agentTurnPreparation', () => {
@@ -15,12 +15,12 @@ jest.mock('../../src/services/context/tokenOptimization', () => {
   const actual = jest.requireActual('../../src/services/context/tokenOptimization');
   return {
     ...actual,
-    planIterationModel: jest.fn(),
+    planIterationMaxTokens: jest.fn(),
   };
 });
 
 const mockedPrepareAgentTurn = jest.mocked(prepareAgentTurn);
-const mockedPlanIterationModel = jest.mocked(planIterationModel);
+const mockedPlanIterationMaxTokens = jest.mocked(planIterationMaxTokens);
 
 function memoryRead(text: string) {
   return {
@@ -192,16 +192,11 @@ function expectPreparedGroundedTools(
 describe('prepareAgentControlGraphModelTurn', () => {
   beforeEach(() => {
     mockedPrepareAgentTurn.mockReset();
-    mockedPlanIterationModel.mockReset();
+    mockedPlanIterationMaxTokens.mockReset();
+    mockedPlanIterationMaxTokens.mockReturnValue(1024);
   });
 
   it('returns a ready prepared turn with governance forcing and one-shot consumption', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     const result = await prepareAgentControlGraphModelTurn({
@@ -215,20 +210,14 @@ describe('prepareAgentControlGraphModelTurn', () => {
       },
     });
 
-    expect(result.requestModel).toBe('gpt-5-mini');
+    expect(result.requestModel).toBe('gpt-5');
     expect(result.requestMaxTokens).toBe(2048);
     expect(result.effectiveForceTextThisTurn).toBe(true);
     expect(result.effectiveForceTextReasonThisTurn).toBe('empty_delivery_recovery');
     expect(mockedPrepareAgentTurn).toHaveBeenCalledTimes(1);
   });
 
-  it('treats forced-text proceed turns as non-actionable for budgeting and memory', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
+  it('treats forced-text proceed turns as non-actionable for memory', async () => {
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -245,11 +234,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
       },
     });
 
-    expect(mockedPlanIterationModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actionableRequest: false,
-      }),
-    );
     expect(mockedPrepareAgentTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         promptBundleContext: expect.objectContaining({
@@ -261,12 +245,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('keeps the plan tool on the core surface', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -297,12 +275,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('treats proceed as an actionable request for prompt context', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -323,12 +295,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('drops a memory section read before memory was turned off', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
     useSettingsStore.setState({ disableLongTermMemory: true });
 
@@ -352,12 +318,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('exposes stable delegation primitives without prompt-language routing', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -392,12 +352,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('uses the stable discovery surface for ordinary turns without graph scope', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -412,12 +366,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('does not let pending async work seize tool-choice ownership for the next turn', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({
@@ -456,12 +404,6 @@ describe('prepareAgentControlGraphModelTurn', () => {
   });
 
   it('loads discovered tool_catalog category tools on the following turn', async () => {
-    mockedPlanIterationModel.mockReturnValue({
-      model: 'gpt-5-mini',
-      maxTokens: 1024,
-      thinkingLevel: 'minimal',
-      reason: 'test',
-    } as any);
     mockPreparedTurn();
 
     await prepareAgentControlGraphModelTurn({

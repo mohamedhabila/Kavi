@@ -21,12 +21,10 @@ export async function prepareAgentControlGraphModelTurn(
     activeModel: params.activeModel,
     activeProvider: params.activeProvider,
     disableTooling: params.disableTooling,
-    iteration: params.iteration,
     maxTokens: params.maxTokens,
     personaThinkingLevel: params.personaThinkingLevel,
     thinkingLevel: params.thinkingLevel,
     turnDirectives: params.turnDirectives,
-    workingMessages: params.workingMessages,
   });
 
   const toolSurface = await resolveModelTurnGroundedToolSurface({

@@ -33,22 +33,10 @@ function isGeminiModel(model: string): boolean {
   return resolveModelHostedFamily(model) === 'gemini';
 }
 
-export interface IterationPlanningArgs {
-  provider: LlmProviderConfig;
+export interface IterationTokenPlanArgs {
   primaryModel: string;
-  iteration: number;
-  maxTokens: number;
-  actionableRequest: boolean;
-  hasRecentToolMessages: boolean;
-  hasAttachments: boolean;
-  thinkingLevel: ThinkingLevel;
-}
-
-export interface IterationPlanningResult {
-  model: string;
   maxTokens: number;
   thinkingLevel: ThinkingLevel;
-  reason: string;
 }
 
 export interface PromptCachingPlan {
@@ -61,13 +49,6 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64;
 
 const PROMPT_CACHE_KEY_LABEL_MAX_LENGTH = 24;
 const PROMPT_CACHE_KEY_PREFIX = 'cm';
-
-function clampThinkingLevel(level: ThinkingLevel, upperBound: ThinkingLevel): ThinkingLevel {
-  const order: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'];
-  const current = order.indexOf(level);
-  const max = order.indexOf(upperBound);
-  return order[Math.min(current, max)];
-}
 
 function fnv1aHash(str: string, seed = 0x811c9dc5): string {
   let hash = seed >>> 0;
@@ -135,59 +116,32 @@ export function normalizeOpenAIPromptCacheKey(rawKey?: string | null): string | 
   return `${PROMPT_CACHE_KEY_PREFIX}:${label.slice(0, maxLabelLength)}:${fingerprint}`;
 }
 
-export function planIterationModel(args: IterationPlanningArgs): IterationPlanningResult {
-  const {
-    primaryModel,
-    iteration,
-    maxTokens,
-    actionableRequest,
-    hasRecentToolMessages,
-    hasAttachments,
-    thinkingLevel,
-  } = args;
-
+/**
+ * A model request's output budget: the caller's, within what the model can return. Gemini 3
+ * thinking models spend thinking tokens from max_tokens, so theirs carries the thinking
+ * level's overhead.
+ *
+ * The request keeps the run's own model and thinking level. This planner used to cap the
+ * thinking of every actionable step and tool follow-up at "low": Claude ran its whole tool
+ * loop at effort low whatever the person chose, and answered from the request or asked
+ * instead of looking in the person's connected apps (Claw-Anything, Sonnet 5.5).
+ */
+export function planIterationMaxTokens(args: IterationTokenPlanArgs): number {
+  const { primaryModel, maxTokens, thinkingLevel } = args;
   const outputCeiling = resolveFinalizationMaxTokens(primaryModel);
   let plannedMaxTokens = Math.max(512, Math.min(maxTokens, outputCeiling));
 
-  // Gemini 3 thinking models consume thinking tokens from the max_tokens
-  // budget — add overhead so the actual content is not cut off.
   if (isGeminiModel(primaryModel)) {
     const effectiveThinking = isGemini3OrLaterModel(primaryModel) ? thinkingLevel : 'off';
     const overhead = GEMINI_THINKING_OVERHEAD[effectiveThinking] ?? 0;
-    if (overhead > 0) {
-      plannedMaxTokens = Math.max(plannedMaxTokens + overhead, 8192);
-    } else {
-      // Even non-thinking Gemini models benefit from a higher floor
-      plannedMaxTokens = Math.max(plannedMaxTokens, 4096);
-    }
+    plannedMaxTokens =
+      overhead > 0
+        ? Math.max(plannedMaxTokens + overhead, 8192)
+        : // Even non-thinking Gemini models benefit from a higher floor
+          Math.max(plannedMaxTokens, 4096);
   }
 
-  plannedMaxTokens = Math.min(plannedMaxTokens, outputCeiling);
-
-  if (hasAttachments || thinkingLevel === 'high' || thinkingLevel === 'xhigh') {
-    return {
-      model: primaryModel,
-      maxTokens: plannedMaxTokens,
-      thinkingLevel,
-      reason: 'attachments-or-high-reasoning',
-    };
-  }
-
-  if (iteration > 1 && hasRecentToolMessages) {
-    return {
-      model: primaryModel,
-      maxTokens: plannedMaxTokens,
-      thinkingLevel: clampThinkingLevel(thinkingLevel, 'low'),
-      reason: 'tool-follow-up-primary-model',
-    };
-  }
-
-  return {
-    model: primaryModel,
-    maxTokens: plannedMaxTokens,
-    thinkingLevel: clampThinkingLevel(thinkingLevel, actionableRequest ? 'low' : 'medium'),
-    reason: actionableRequest ? 'actionable-request-capped-output' : 'default-response-cap',
-  };
+  return Math.min(plannedMaxTokens, outputCeiling);
 }
 
 type PromptCacheStructure = {

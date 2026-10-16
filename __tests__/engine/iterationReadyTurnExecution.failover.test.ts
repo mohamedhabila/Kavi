@@ -193,11 +193,9 @@ describe('prepared graph turn directive consumption', () => {
     const alternateRequest = resolveModelTurnIterationRequest({
       activeModel: result.runtime.activeModel,
       activeProvider: result.runtime.activeProvider,
-      iteration: 3,
       maxTokens: 4096,
       thinkingLevel: 'off',
       turnDirectives: retainedDirectives,
-      workingMessages: [],
     });
     const alternatePreparedTurn = prepareAgentTurn({
       allowSessionCoordinationTools: true,

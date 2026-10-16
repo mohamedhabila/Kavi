@@ -2,7 +2,7 @@ import {
   buildPromptCachingPlan,
   buildPromptCacheKey,
   OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH,
-  planIterationModel,
+  planIterationMaxTokens,
   resolveFinalizationMaxTokens,
   resolveSubAgentMaxTokens,
 } from '../../src/services/context/tokenOptimization';
@@ -489,104 +489,44 @@ describe('resolveFinalizationMaxTokens', () => {
   });
 });
 
-describe('planIterationModel', () => {
-  it('uses the requested ceiling for actionable turns when the model can support it', () => {
-    const plan = planIterationModel({
-      provider: makeProvider(),
-      primaryModel: 'gpt-5.4',
-      iteration: 1,
-      maxTokens: 16384,
-      actionableRequest: true,
-      hasRecentToolMessages: false,
-      hasAttachments: false,
-      thinkingLevel: 'medium',
-    });
-
-    expect(plan.maxTokens).toBe(16384);
-    expect(plan.reason).toBe('actionable-request-capped-output');
-  });
-
-  it('keeps sub-agent actionable turns at their larger worker budget', () => {
-    const plan = planIterationModel({
-      provider: makeProvider(),
-      primaryModel: 'gpt-5.4',
-      iteration: 1,
-      maxTokens: resolveSubAgentMaxTokens('gpt-5.4'),
-      actionableRequest: true,
-      hasRecentToolMessages: false,
-      hasAttachments: false,
-      thinkingLevel: 'medium',
-    });
-
-    expect(plan.maxTokens).toBe(32000);
-    expect(plan.reason).toBe('actionable-request-capped-output');
-  });
-
-  it('uses the requested ceiling for tool-follow-up turns when the model can support it', () => {
-    const plan = planIterationModel({
-      provider: makeProvider(),
-      primaryModel: 'gpt-5.4',
-      iteration: 2,
-      maxTokens: 16384,
-      actionableRequest: false,
-      hasRecentToolMessages: true,
-      hasAttachments: false,
-      thinkingLevel: 'low',
-    });
-
-    expect(plan.maxTokens).toBe(16384);
-  });
-
-  it('keeps the requested primary model on tool follow-up turns by default', () => {
-    const plan = planIterationModel({
-      provider: makeProvider({
-        model: 'gpt-5.4-mini',
-        availableModels: ['gpt-5.4-mini'],
+describe('planIterationMaxTokens', () => {
+  it("keeps the caller's budget when the model can return it", () => {
+    expect(
+      planIterationMaxTokens({
+        primaryModel: 'gpt-5.4',
+        maxTokens: 16384,
+        thinkingLevel: 'medium',
       }),
-      primaryModel: 'gpt-5.4',
-      iteration: 2,
-      maxTokens: 16384,
-      actionableRequest: false,
-      hasRecentToolMessages: true,
-      hasAttachments: false,
-      thinkingLevel: 'low',
-    });
-
-    expect(plan.model).toBe('gpt-5.4');
-    expect(plan.reason).toBe('tool-follow-up-primary-model');
+    ).toBe(16384);
   });
 
-  it('keeps tool follow-up turns on the primary model even when a smaller sibling model exists', () => {
-    const plan = planIterationModel({
-      provider: makeProvider({
-        model: 'gpt-5.4-mini',
-        availableModels: ['gpt-5.4-mini'],
+  it('keeps sub-agent turns at their larger worker budget', () => {
+    expect(
+      planIterationMaxTokens({
+        primaryModel: 'gpt-5.4',
+        maxTokens: resolveSubAgentMaxTokens('gpt-5.4'),
+        thinkingLevel: 'medium',
       }),
-      primaryModel: 'gpt-5.4',
-      iteration: 2,
-      maxTokens: 16384,
-      actionableRequest: false,
-      hasRecentToolMessages: true,
-      hasAttachments: false,
-      thinkingLevel: 'low',
-    });
-
-    expect(plan.model).toBe('gpt-5.4');
-    expect(plan.reason).toBe('tool-follow-up-primary-model');
+    ).toBe(32000);
   });
 
-  it('clamps expanded sub-agent budgets for smaller-context models', () => {
-    const plan = planIterationModel({
-      provider: makeProvider({ model: 'phi4' }),
-      primaryModel: 'phi4',
-      iteration: 1,
-      maxTokens: resolveSubAgentMaxTokens('phi4'),
-      actionableRequest: true,
-      hasRecentToolMessages: false,
-      hasAttachments: false,
-      thinkingLevel: 'medium',
-    });
+  it('holds a budget to what a smaller-context model can return', () => {
+    expect(
+      planIterationMaxTokens({
+        primaryModel: 'phi4',
+        maxTokens: resolveSubAgentMaxTokens('phi4'),
+        thinkingLevel: 'medium',
+      }),
+    ).toBe(8192);
+  });
 
-    expect(plan.maxTokens).toBe(8192);
+  it("adds a Gemini 3 model's thinking overhead to its budget", () => {
+    expect(
+      planIterationMaxTokens({
+        primaryModel: 'gemini-3.8-flash',
+        maxTokens: 2048,
+        thinkingLevel: 'medium',
+      }),
+    ).toBe(10240);
   });
 });
