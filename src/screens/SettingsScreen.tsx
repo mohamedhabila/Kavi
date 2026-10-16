@@ -44,6 +44,7 @@ import {
   type SettingsSection,
 } from './settings/useSettingsRemoteConfigFlow';
 import { useSettingsProviderFlow } from './settings/useSettingsProviderFlow';
+import { useSettingsSetupProviderRoute } from './settings/useSettingsSetupProviderRoute';
 import { useSettingsSectionNavigation } from './settings/useSettingsSectionNavigation';
 import { useSettingsPersonaFlow } from './settings/useSettingsPersonaFlow';
 import { useSettingsToolsFlow } from './settings/useSettingsToolsFlow';
@@ -80,6 +81,8 @@ export const SettingsScreen: React.FC = () => {
           returnTo: undefined,
           section: undefined,
           serverId: undefined,
+          setupDraft: undefined,
+          setupRequestId: undefined,
         });
       }
       continueNavigation();
@@ -213,6 +216,7 @@ export const SettingsScreen: React.FC = () => {
     updateProvider,
     removeProvider,
   });
+  useSettingsSetupProviderRoute(route.params, handleNewProvider);
   const {
     personas,
     editingPersonaId,

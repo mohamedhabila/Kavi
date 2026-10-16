@@ -30,6 +30,7 @@ import { resolveToolWorkspaceContext, type ToolExecutionContext } from './toolEx
 import { executePythonTool } from './toolPythonExecution';
 import { executeUpdatePlan } from './toolPlanExecution';
 import { executeRequestClarification } from './toolRequestClarificationExecution';
+import { executeSetupGuide } from './toolSetupGuideExecution';
 import { createConversationFileContext } from './toolWorkspaceFiles';
 import { executeListFiles, executeReadFile, executeWriteFile } from './toolWorkspaceCoreExecution';
 import {
@@ -224,6 +225,8 @@ export async function executeToolInner(
       return executeUpdatePlan(args);
     case 'request_clarification':
       return executeRequestClarification(args);
+    case 'setup_guide':
+      return executeSetupGuide(args);
 
     // Extended tools
     case 'web_fetch':

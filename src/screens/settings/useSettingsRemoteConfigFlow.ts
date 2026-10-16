@@ -1,3 +1,4 @@
+import type { SetupRouteParams } from './setupRouteDraft';
 import type { SettingsSection } from './settingsRemoteConfigTypes';
 import { useSettingsRemoteConfigActions } from './useSettingsRemoteConfigActions';
 import { useSettingsRemoteConfigControllers } from './useSettingsRemoteConfigControllers';
@@ -9,7 +10,7 @@ type TranslationFn = (key: string, params?: any) => string;
 type UseSettingsRemoteConfigFlowParams = {
   section: SettingsSection;
   setSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
-  routeParams?: { serverId?: string; section?: SettingsSection };
+  routeParams?: SetupRouteParams & { serverId?: string };
   t: TranslationFn;
 };
 

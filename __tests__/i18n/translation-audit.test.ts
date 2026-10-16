@@ -138,6 +138,7 @@ const DYNAMIC_KEY_PREFIXES = [
   'onboarding.webProviders.',
   'settings.thinkingOptions.',
   'settings.toolGroups.',
+  'setupGuide.topics.',
   'toolCall.status.',
   'toolCall.tools.',
 ];

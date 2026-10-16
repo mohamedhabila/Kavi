@@ -12,6 +12,7 @@ import type { ToolDefinition } from '../../types/tool';
 import { normalizeToolName } from './toolNameNormalization';
 import { UPDATE_PLAN_TOOL_NAME } from './plan-definitions';
 import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestClarification';
+import { SETUP_GUIDE_TOOL_NAME } from './setupGuideDefinition';
 
 /**
  * Turn-1 surface for a general mobile assistant. Discovery still gates the long tail,
@@ -28,6 +29,7 @@ import { REQUEST_CLARIFICATION_TOOL_NAME } from '../../services/agents/requestCl
 export const DEFAULT_CORE_TOOL_ORDER = [
   REQUEST_CLARIFICATION_TOOL_NAME,
   UPDATE_PLAN_TOOL_NAME,
+  SETUP_GUIDE_TOOL_NAME,
   'memory_remember',
   'memory_search',
   'memory_forget',

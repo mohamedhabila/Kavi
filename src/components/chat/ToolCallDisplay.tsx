@@ -9,6 +9,7 @@ import { redactSensitiveText } from '../../services/security/toolDetailRedaction
 import { createToolCallDisplayStyles } from './ToolCallDisplay.styles';
 import { ToolCallBody } from './ToolCallBody';
 import { parseToolCallPoll, ToolCallPoll } from './ToolCallPoll';
+import { parseToolCallSetupCard, ToolCallSetupCard } from './ToolCallSetupCard';
 import { ToolCallStatusIcon } from './ToolCallStatusIcon';
 import {
   formatCompactDuration,
@@ -98,6 +99,10 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
   const canViewCanvas = hasCompletedCanvasResult(toolCall.name, toolCall.status);
   const parsedPoll = useMemo(
     () => parseToolCallPoll(toolCall.name, toolCall.result),
+    [toolCall.name, toolCall.result],
+  );
+  const parsedSetupCard = useMemo(
+    () => parseToolCallSetupCard(toolCall.name, toolCall.result),
     [toolCall.name, toolCall.result],
   );
   const unsafeSummary = summarizeToolCall(toolCall, t);
@@ -204,6 +209,7 @@ const ToolCallDisplayComponent: React.FC<ToolCallDisplayProps> = ({
         ) : null}
       </View>
       {parsedPoll ? <ToolCallPoll poll={parsedPoll} styles={styles} /> : null}
+      {parsedSetupCard ? <ToolCallSetupCard card={parsedSetupCard} styles={styles} t={t} /> : null}
       {expanded ? (
         <ToolCallBody toolCall={toolCall} styles={styles} iconColor={colors.textSecondary} t={t} />
       ) : null}

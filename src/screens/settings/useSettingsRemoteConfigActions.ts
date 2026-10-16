@@ -10,13 +10,20 @@ import type {
 } from '../../types/remote';
 import { useConfigModalFlow } from './shared/useConfigModalFlow';
 import type { SettingsSection } from './settingsRemoteConfigTypes';
+import {
+  expoDraftFromRoute,
+  mcpDraftFromRoute,
+  setupRouteKey,
+  sshDraftFromRoute,
+  type SetupRouteParams,
+} from './setupRouteDraft';
 
 type TranslationFn = (key: string, params?: any) => string;
 
 type UseSettingsRemoteConfigActionsParams = {
   section: SettingsSection;
   setSection: React.Dispatch<React.SetStateAction<SettingsSection>>;
-  routeParams?: { serverId?: string; section?: SettingsSection };
+  routeParams?: SetupRouteParams & { serverId?: string };
   t: TranslationFn;
   mcpServers: McpServerConfig[];
   editingWorkspace: WorkspaceTargetConfig | null;
@@ -316,10 +323,11 @@ export function useSettingsRemoteConfigActions({
     [removeExpoProjectConfig],
   );
 
+  // A route opens one form once: an MCP server to edit, or a new form a setup guide asked for,
+  // filled in with what the guide knows (never a secret).
   useEffect(() => {
     const routeServerId = routeParams?.serverId as string | undefined;
-    const routeSection = routeParams?.section as SettingsSection | undefined;
-    const nextKey = routeServerId || routeSection || null;
+    const nextKey = routeServerId || setupRouteKey(routeParams);
 
     if (!nextKey || handledRouteMcpRef.current === nextKey) {
       return;
@@ -335,10 +343,41 @@ export function useSettingsRemoteConfigActions({
       return;
     }
 
-    if (routeSection === 'mcp-edit') {
-      handleNewMcp();
+    const draft = routeParams?.setupDraft;
+    switch (routeParams?.section) {
+      case 'mcp-edit':
+        openNewMcpConfig({
+          name: t('settings.newMcpServer'),
+          headers: {},
+          timeoutMs: 20000,
+          ...mcpDraftFromRoute(draft),
+        });
+        mcpFlow.openEditor('mcp-edit');
+        return;
+      case 'ssh-edit':
+        openNewSshConfig({ name: t('settings.newSshTarget'), ...sshDraftFromRoute(draft) });
+        sshFlow.openEditor('ssh-edit');
+        return;
+      case 'expo-account-edit':
+        openNewExpoAccountConfig({
+          name: t('settings.newExpoAccount'),
+          ...expoDraftFromRoute(draft),
+        });
+        expoFlow.openEditor('expo-account-edit');
+        return;
     }
-  }, [handleEditMcp, handleNewMcp, mcpServers, routeParams]);
+  }, [
+    expoFlow,
+    handleEditMcp,
+    mcpFlow,
+    mcpServers,
+    openNewExpoAccountConfig,
+    openNewMcpConfig,
+    openNewSshConfig,
+    routeParams,
+    sshFlow,
+    t,
+  ]);
 
   const isRemoteConfigModalActive =
     workspaceFlow.isActive ||
