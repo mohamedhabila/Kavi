@@ -1,12 +1,15 @@
 import { clearOldToolResults } from '../../src/services/context/compaction';
-import { maybeSpillToolOutput } from '../../src/engine/tools/toolOutputSpill';
+import {
+  maybeSpillToolOutput,
+  TOOL_OUTPUT_SPILL_CHAR_THRESHOLD,
+} from '../../src/engine/tools/toolOutputSpill';
 import { extractToolResultSummary } from '../../src/utils/toolResultSummary';
 import type { Message } from '../../src/types/message';
 
 jest.mock('../../src/services/conversationWorkspace/files', () => ({
   writeConversationWorkspaceTextFile: jest.fn().mockResolvedValue({
     path: '.kavi/spill/read_file-42.txt',
-    size: 9000,
+    size: 60_000,
     uri: 'file://spill',
   }),
 }));
@@ -31,7 +34,7 @@ function makeToolMessage(content: string): Message {
 
 describe('tool spill + compaction cooperation', () => {
   it('preserves spilled workspace paths through tool-result clearing', async () => {
-    const largePayload = 'x'.repeat(9_000);
+    const largePayload = 'x'.repeat(TOOL_OUTPUT_SPILL_CHAR_THRESHOLD + 1);
     const spilled = await maybeSpillToolOutput({
       result: largePayload,
       conversationId: 'conv-1',
