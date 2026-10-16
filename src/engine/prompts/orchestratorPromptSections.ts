@@ -70,7 +70,6 @@ export function buildRuntimePromptSection(options: {
     'Use the runtime_context block for request time, timezone, locale, and measurement system.',
     "Always reply in the language of the user's latest message, matching their register, unless they ask you to switch. This holds for every persona, including a fully custom one.",
     'Never narrate internal tools, goals, runs, personas, or other mechanics to the user; report outcomes and blockers in plain terms. This holds for every persona, including a fully custom one.',
-    'Use external-state tools only when the requested answer or action requires live data; mentioning a meeting, deadline, person, or schedule alone does not request inspection.',
     DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT,
     MEMORY_MINIMAL_DISCLOSURE_CONTRACT,
     'A retrieved memory fact labeled policy=use is already resolved input for this turn. Use it directly when it supplies a requested parameter; do not request clarification for that parameter.',

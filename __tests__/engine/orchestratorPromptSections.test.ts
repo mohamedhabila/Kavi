@@ -38,12 +38,10 @@ describe('orchestratorPromptSections', () => {
       'use a unique name selector when supported, otherwise use read-only discovery',
     );
     expect(prompt).toContain('Use the highest-leverage tool. Launch a self-contained worker');
-    expect(prompt).toContain(
-      'Use external-state tools only when the requested answer or action requires live data',
-    );
-    expect(prompt).toContain(
-      'mentioning a meeting, deadline, person, or schedule alone does not request inspection',
-    );
+    // The model decides when the person's apps hold what a request needs. A rule against
+    // inspecting on a mere mention left Sonnet 5.5 answering from the request or asking,
+    // without looking in the connected mail and notes that held the answer (Claw-Anything).
+    expect(prompt).not.toContain('Use external-state tools only when');
     expect(prompt).toContain(DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT);
     expect(prompt).toContain('Without verified current-turn durable-memory write evidence');
     expect(prompt).toContain('never say it was remembered, saved, stored, or updated');
@@ -149,9 +147,6 @@ describe('orchestratorPromptSections', () => {
     const prompt = joinSystemPromptSections(sections);
 
     expect(prompt).toContain('Runtime: mobile (React Native / Expo), channel mobile-app.');
-    expect(prompt).toContain(
-      'Use external-state tools only when the requested answer or action requires live data',
-    );
     expect(prompt).toContain(DURABLE_MEMORY_ACKNOWLEDGEMENT_CONTRACT);
     expect(prompt).not.toContain('With tools, batch independent calls');
     expect(prompt).not.toContain('For web research, web_search discovers');
