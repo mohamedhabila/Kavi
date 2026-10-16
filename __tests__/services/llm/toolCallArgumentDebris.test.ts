@@ -97,6 +97,19 @@ describe('a finished tool call is emitted with parseable arguments', () => {
     expect((event as { toolCall: { arguments: string } }).toolCall.arguments).toBe(args);
   });
 
+  it('emits a call made with no arguments as an empty object', () => {
+    // Traced on Sonnet 5.5 (Claw-Anything T04_T08): todo_list_tasks was called with no
+    // input, its argument text stayed empty, and the MCP bridge refused "" as invalid JSON.
+    for (const args of ['', '  ']) {
+      const [event] = collectPendingToolCallEvents(
+        { 0: { id: 'tc-1', name: 'mcp__apps__todo_list_tasks', arguments: args } } as never,
+        new Map(),
+      );
+
+      expect((event as { toolCall: { arguments: string } }).toolCall.arguments).toBe('{}');
+    }
+  });
+
   it('leaves arguments it cannot repair untouched, so the error still surfaces', () => {
     const args = '{"action": "add", "goals": [';
     const [event] = collectPendingToolCallEvents(

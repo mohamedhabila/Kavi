@@ -147,12 +147,18 @@ function getStreamedToolCallSignature(toolCall: StreamedToolCall): string {
  * leaves the stored arguments parseable for anything that reads them later.
  *
  * Recovery only acts on text that does not already parse, so a well-formed call is
- * returned untouched.
+ * returned untouched. A call with no arguments streams no argument text at all (Anthropic
+ * sends one empty input_json_delta for an empty input), and arguments are always a JSON
+ * object, so it is emitted as `{}`: a strict parse anywhere downstream (an MCP bridge, a
+ * native executor) would otherwise refuse a call the model made correctly.
  */
 function withRecoveredArguments(toolCall: StreamedToolCall): StreamedToolCall {
   const args = toolCall.arguments;
-  if (typeof args !== 'string' || args.length === 0) {
+  if (typeof args !== 'string') {
     return toolCall;
+  }
+  if (args.trim().length === 0) {
+    return { ...toolCall, arguments: '{}' };
   }
 
   try {
