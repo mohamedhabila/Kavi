@@ -10,6 +10,7 @@ import { getLocalLlmExecutionPolicy } from './executionPolicy';
 import { getNativeLocalLlmModelPath, resolveInstalledLocalLlmModelPath } from './modelArtifacts';
 import { applyLocalLlmRequestOverrides } from './requestOverrides';
 import type { LocalLlmExecutionPolicy, LocalLlmRequestOptions } from './types';
+import { limitLocalLlmForHeat, parseLocalLlmThermalState } from './thermalPolicy';
 
 export type PreparedLocalLlmRequest = {
   backend: LocalLlmAccelerator;
@@ -69,14 +70,17 @@ export async function prepareLocalLlmRequest(
   const observedBackend =
     resolvedBackend === 'cpu' ? null : getObservedLocalLlmBackend(provider, provider.model);
   const backend = observedBackend || resolvedBackend;
-  const executionPolicy = applyLocalLlmRequestOverrides(
-    getLocalLlmExecutionPolicy(provider.model, {
-      backend,
-      deviceMemoryGb: availability.deviceMemoryGb ?? null,
-      observedBackend,
-      lowMemoryDevice: availability.lowMemoryDevice ?? null,
-    }),
-    options,
+  const executionPolicy = limitLocalLlmForHeat(
+    applyLocalLlmRequestOverrides(
+      getLocalLlmExecutionPolicy(provider.model, {
+        backend,
+        deviceMemoryGb: availability.deviceMemoryGb ?? null,
+        observedBackend,
+        lowMemoryDevice: availability.lowMemoryDevice ?? null,
+      }),
+      options,
+    ),
+    parseLocalLlmThermalState(availability.thermalState),
   );
 
   const modelPath = resolveInstalledLocalLlmModelPath(provider, provider.model);

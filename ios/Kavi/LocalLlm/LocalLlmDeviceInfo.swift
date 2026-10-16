@@ -33,6 +33,22 @@ final class LocalLlmDeviceInfo {
     Double(ProcessInfo.processInfo.physicalMemory) / bytesInGb
   }
 
+  /// The phone's heat, as the app's thermal policy names it.
+  var thermalState: String? {
+    switch ProcessInfo.processInfo.thermalState {
+    case .nominal:
+      return "nominal"
+    case .fair:
+      return "fair"
+    case .serious:
+      return "serious"
+    case .critical:
+      return "critical"
+    @unknown default:
+      return nil
+    }
+  }
+
   func validateMemory(minDeviceMemoryGb: Int?) throws {
     guard let minDeviceMemoryGb else {
       return
@@ -58,6 +74,7 @@ final class LocalLlmDeviceInfo {
       "supportedAccelerators": localLlmSupportedIosAccelerators,
       "deviceMemoryGb": memoryGb,
       "lowMemoryDevice": memoryGb < lowMemoryDeviceGb,
+      "thermalState": thermalState ?? NSNull(),
       "accelerationFeatures": [
         "constrainedDecodingEnabled": false,
         "speculativeDecodingSupported": NSNull(),

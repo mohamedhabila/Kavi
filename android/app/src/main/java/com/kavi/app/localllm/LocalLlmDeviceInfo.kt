@@ -2,6 +2,7 @@ package com.kavi.mobile.localllm
 
 import android.app.ActivityManager
 import android.os.Build
+import android.os.PowerManager
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
@@ -26,6 +27,12 @@ internal class LocalLlmDeviceInfo(
       putBoolean("supportsStreaming", true)
       putArray("supportedAccelerators", buildSupportedAcceleratorsArray())
       putBoolean("lowMemoryDevice", lowMemoryDevice)
+      val thermalState = readThermalState()
+      if (thermalState != null) {
+        putString("thermalState", thermalState)
+      } else {
+        putNull("thermalState")
+      }
       if (deviceMemoryGb != null) {
         putDouble("deviceMemoryGb", deviceMemoryGb)
       } else {
@@ -53,6 +60,26 @@ internal class LocalLlmDeviceInfo(
       throw IllegalStateException(
         "This device reports about ${formatMemoryGb(deviceMemoryGb)} GB of memory, but the selected on-device model is recommended for devices with at least $minDeviceMemoryGb GB and is blocked here to avoid startup failures.",
       )
+    }
+  }
+
+  /**
+   * The phone's heat on Apple's four levels, which the app's policy speaks: Android's light
+   * and moderate throttling are fair, severe is serious, critical and beyond are critical.
+   */
+  private fun readThermalState(): String? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+      return null
+    }
+    val powerManager = reactContext.getSystemService(PowerManager::class.java) ?: return null
+    return when (powerManager.currentThermalStatus) {
+      PowerManager.THERMAL_STATUS_NONE -> "nominal"
+      PowerManager.THERMAL_STATUS_LIGHT, PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+      PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+      PowerManager.THERMAL_STATUS_CRITICAL,
+      PowerManager.THERMAL_STATUS_EMERGENCY,
+      PowerManager.THERMAL_STATUS_SHUTDOWN -> "critical"
+      else -> null
     }
   }
 

@@ -41,6 +41,8 @@ export interface NativeLocalLlmAvailability {
   supportedAccelerators?: LocalLlmAccelerator[];
   deviceMemoryGb?: number | null;
   lowMemoryDevice?: boolean;
+  /** The phone's heat: nominal, fair, serious or critical; null when it cannot tell. */
+  thermalState?: string | null;
   accelerationFeatures?: NativeLocalLlmAccelerationFeatures;
   runtimeMetrics?: NativeLocalLlmRuntimeMetrics;
 }
