@@ -185,6 +185,12 @@ const createdOneEventAt = (startDate: string): E2ERubric[] => [
   },
 ];
 
+const groundedSetupAnswer: E2ERubric = {
+  kind: 'turn_grounded_amounts',
+  turnIndex: 0,
+  toolName: 'setup_guide',
+};
+
 /** Minutes before the run, so every notification is recent and still showing. */
 const minutesAgo = (minutes: number): string =>
   new Date(Date.now() - minutes * 60_000).toISOString();
@@ -357,5 +363,28 @@ export const PHONE_WORLD_E2E_SCENARIOS: ReadonlyArray<E2EScenario> = [
     id: 'pw-ar-reply-karim',
     turns: ['رد على كريم وقل له إني وصلت.'],
     rubrics: repliedInNotification('Messages', 'كريم حداد'),
+  }),
+  // Someone who is not technical asks what to set up and what it costs: the answer's prices
+  // must be the ones the vendors' pages show today, as the setup guide read them.
+  phoneWorldScenario({
+    id: 'pw-setup-cheap-server',
+    turns: [
+      "I want a cheap server for my small website so you can look after it for me. I'm not technical: what should I get, and what does it cost?",
+    ],
+    rubrics: [groundedSetupAnswer],
+  }),
+  phoneWorldScenario({
+    id: 'pw-setup-bakery-app',
+    turns: [
+      'I want an app for my bakery that people can install on their phones. What do I need to set up so you can build it, and does it cost anything?',
+    ],
+    rubrics: [groundedSetupAnswer],
+  }),
+  phoneWorldScenario({
+    id: 'pw-es-setup-calls',
+    turns: [
+      'Quiero que hagas llamadas por mí para reservar mesas en restaurantes. ¿Qué tengo que configurar y cuánto cuesta?',
+    ],
+    rubrics: [groundedSetupAnswer],
   }),
 ];

@@ -274,6 +274,11 @@ export type E2ERubric =
       scope: 'all' | 'side_effectful';
       expectedCount: number;
     }
+  /**
+   * The turn called [toolName] successfully, and every money amount its answer states
+   * appears in the turn's tool results: prices come from what the tools read, not memory.
+   */
+  | { kind: 'turn_grounded_amounts'; turnIndex: number; toolName: string }
   | {
       kind: 'turn_memory_answer';
       turnIndex: number;

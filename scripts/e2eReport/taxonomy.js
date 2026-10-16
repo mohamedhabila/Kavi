@@ -94,6 +94,7 @@ function rubricFailureCategories(entry, rubricKind, turnCompletionField = null) 
       }
       return ['unknown_structural_failure'];
     case 'turn_final_response_token':
+    case 'turn_grounded_amounts':
     case 'turn_memory_answer':
       return ['final_response_failure'];
     case 'turn_clarification':

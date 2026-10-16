@@ -242,6 +242,9 @@ export const E2E_SCENARIO_BENCHMARK_REGISTRY: Readonly<
   'pw-es-mail-reply-latest': PHONE_WORLD_REGISTRATION,
   'pw-reply-whatsapp-ana': PHONE_WORLD_REGISTRATION,
   'pw-ar-reply-karim': PHONE_WORLD_REGISTRATION,
+  'pw-setup-cheap-server': PHONE_WORLD_REGISTRATION,
+  'pw-setup-bakery-app': PHONE_WORLD_REGISTRATION,
+  'pw-es-setup-calls': PHONE_WORLD_REGISTRATION,
   'file-write-read': {
     benchmarkFamilies: ['kavi-core', 'agentbench-adapted'],
     assessmentDimensions: ['tool_usage', 'task_completion', 'token_efficiency'],

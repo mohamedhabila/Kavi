@@ -185,6 +185,7 @@ const TRAJECTORY_RUBRICS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_clarification',
   'turn_native_invocation_count',
   'turn_tool_call_count',
+  'turn_grounded_amounts',
   'turn_memory_answer',
   'turn_memory_selection',
 ]);
@@ -257,6 +258,7 @@ function structuralEvidenceKindForRubric(rubric: E2ERubric): E2EBenchmarkStructu
     case 'turn_lifecycle_boundary':
       return 'lifecycle_event';
     case 'turn_final_response_token':
+    case 'turn_grounded_amounts':
     case 'turn_clarification':
     case 'turn_memory_answer':
       return 'assistant_response';

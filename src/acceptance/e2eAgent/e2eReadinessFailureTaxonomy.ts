@@ -38,6 +38,7 @@ const RUBRIC_KINDS: ReadonlySet<E2ERubricKind> = new Set([
   'turn_clarification',
   'turn_native_invocation_count',
   'turn_tool_call_count',
+  'turn_grounded_amounts',
   'turn_memory_answer',
   'turn_memory_selection',
   'worker_result_token',
@@ -161,6 +162,7 @@ function rubricFailureCategories(
           ? ['execution_failure']
           : ['unknown_structural_failure'];
     case 'turn_final_response_token':
+    case 'turn_grounded_amounts':
     case 'turn_memory_answer':
       return ['final_response_failure'];
     case 'turn_clarification':

@@ -17,6 +17,7 @@ import type {
   E2EScenarioResult,
   E2EScenarioTurnTrace,
 } from './types';
+import { ungroundedAmounts } from './e2eGroundedAmounts';
 
 type E2ETurnStageRubric = Extract<
   E2ERubric,
@@ -28,6 +29,7 @@ type E2ETurnStageRubric = Extract<
       | 'turn_clarification'
       | 'turn_native_invocation_count'
       | 'turn_tool_call_count'
+      | 'turn_grounded_amounts'
       | 'turn_memory_answer'
       | 'turn_memory_selection';
   }
@@ -271,6 +273,36 @@ export function evaluateE2ETurnStageRubric(
           fixtureId,
           passed: false,
           detail: `turn ${rubric.turnIndex} native invocation count ${actualCount} (expected ${rubric.expectedCount})`,
+        };
+      }
+      return { fixtureId, passed: true };
+    }
+
+    case 'turn_grounded_amounts': {
+      if (!rubric.toolName?.trim()) {
+        return { fixtureId, passed: false, detail: 'grounded amounts tool name is invalid' };
+      }
+      const called = turn.toolCalls.some(
+        (call) =>
+          call.name === rubric.toolName &&
+          turn.toolResults.some((result) => result.toolCallId === call.id && !result.isError),
+      );
+      if (!called) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} did not call ${rubric.toolName} successfully`,
+        };
+      }
+      const ungrounded = ungroundedAmounts(
+        turn.finalAssistant?.text ?? '',
+        turn.toolResults.map((result) => result.content),
+      );
+      if (ungrounded.length > 0) {
+        return {
+          fixtureId,
+          passed: false,
+          detail: `turn ${rubric.turnIndex} stated amounts no tool returned: ${ungrounded.slice(0, 5).join(', ')}`,
         };
       }
       return { fixtureId, passed: true };
