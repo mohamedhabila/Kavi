@@ -128,7 +128,10 @@ export function formatMcpResult(result: McpToolCallResult): string {
 }
 
 /**
- * Route an MCP tool call to the correct server
+ * Route an MCP tool call to the correct server. A refusal before the call is sent, and an
+ * error the server reports (`isError`), carry a failure kind: their outcome is known, so the
+ * model reads the error and recovers, as the MCP spec intends. A call that threw after it
+ * may have been sent (a timeout, a dropped connection) carries none: its effect is unknown.
  */
 export async function executeMcpTool(
   clients: Map<string, McpClient>,
@@ -138,33 +141,40 @@ export async function executeMcpTool(
 ): Promise<ToolRuntimeOutcome> {
   const parsed = parseMcpToolName(fullToolName);
   if (!parsed) {
-    return failedToolOutcome(`Error: invalid MCP tool name: ${fullToolName}`);
+    return failedToolOutcome(`Error: invalid MCP tool name: ${fullToolName}`, 'unknown_tool');
   }
 
   if (options?.isToolAllowed && !options.isToolAllowed(parsed.serverId, parsed.toolName)) {
     return failedToolOutcome(
       `Error: MCP tool "${parsed.toolName}" is not allowed for server "${parsed.serverId}"`,
+      'tool_filter',
     );
   }
 
   const client = clients.get(parsed.serverId);
   if (!client) {
-    return failedToolOutcome(`Error: MCP server "${parsed.serverId}" not connected`);
+    return failedToolOutcome(`Error: MCP server "${parsed.serverId}" not connected`, 'unavailable');
   }
 
   if (!client.isConnected()) {
-    return failedToolOutcome(`Error: MCP server "${parsed.serverId}" is disconnected`);
+    return failedToolOutcome(
+      `Error: MCP server "${parsed.serverId}" is disconnected`,
+      'unavailable',
+    );
   }
 
   let args: Record<string, unknown>;
   try {
     const parsedArgs = JSON.parse(argsString);
     if (!isPlainRecord(parsedArgs)) {
-      return failedToolOutcome('Error: MCP tool arguments must be a JSON object');
+      return failedToolOutcome(
+        'Error: MCP tool arguments must be a JSON object',
+        'invalid_arguments',
+      );
     }
     args = parsedArgs;
   } catch {
-    return failedToolOutcome('Error: invalid tool arguments JSON');
+    return failedToolOutcome('Error: invalid tool arguments JSON', 'invalid_arguments');
   }
 
   const jobId = startRemoteJob({
@@ -204,7 +214,9 @@ export async function executeMcpTool(
       result.isError ? 'error' : 'closed',
       result.isError ? formatted : undefined,
     );
-    return result.isError ? failedToolOutcome(formatted) : completedToolOutcome(formatted);
+    return result.isError
+      ? failedToolOutcome(formatted, 'tool_error')
+      : completedToolOutcome(formatted);
   } catch (err: unknown) {
     const message = `Error calling MCP tool: ${err instanceof Error ? err.message : String(err)}`;
     updateRemoteJob(jobId, {

@@ -1,3 +1,4 @@
+import type { ToolCallFailureKind } from '../../types/message';
 import type { ToolEffectReceipt } from '../../types/toolEffectReceipt';
 import { getCodeOwnedToolEffectContract } from '../../engine/toolExecution/toolEffectReceiptContracts';
 import type { ExecutionEffectClass, ExecutionEffectStatus } from './types';
@@ -51,6 +52,29 @@ function isReturnedCodeOwnedOperationalEffect(receipt: ToolEffectReceipt): boole
  */
 function isReturnedCodeOwnedOutcome(receipt: ToolEffectReceipt): boolean {
   return receipt.contractIdentity.kind === 'code_owned' && receipt.transportState === 'returned';
+}
+
+/**
+ * How an integration call fails with a known outcome: refused before it was sent, or an
+ * error the integration itself reported (MCP `isError`). The model reads the error and
+ * recovers, as the MCP spec intends; a retry of a reported failure is a new dispatch.
+ */
+const REPORTED_EXTERNAL_FAILURE_KINDS: ReadonlySet<ToolCallFailureKind> = new Set([
+  'tool_error',
+  'invalid_arguments',
+  'unknown_tool',
+  'tool_filter',
+  'unavailable',
+]);
+
+function isReportedExternalFailure(receipt: ToolEffectReceipt): boolean {
+  return (
+    receipt.contractIdentity.kind === 'runtime_external' &&
+    receipt.transportState === 'returned' &&
+    receipt.executionState === 'failed' &&
+    receipt.failureKind !== undefined &&
+    REPORTED_EXTERNAL_FAILURE_KINDS.has(receipt.failureKind)
+  );
 }
 
 const RETURNED_UNVERIFIED: EffectDispatchReceiptClassification = Object.freeze({
@@ -139,6 +163,10 @@ export function classifyEffectDispatchReceipt(
           requiresReconciliation: false,
         };
       }
+      if (isReportedExternalFailure(receipt)) {
+        return { disposition: 'failed', nextEffectStatus: 'failed', requiresReconciliation: false };
+      }
+      // Only an outcome nobody reported (a timeout, a dropped connection) needs reconciling.
       return {
         disposition: 'uncertain',
         nextEffectStatus: 'ambiguous',

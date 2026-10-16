@@ -143,16 +143,7 @@ describe('runtime-external effect authority', () => {
     ).toEqual({ count: 0 });
   });
 
-  it('keeps an untrusted MCP error behind reconciliation regardless of its name', async () => {
-    const declaration: ToolDefinition = {
-      name: 'mcp__orders__get_order',
-      description: '[Orders] Get one order',
-      input_schema: { type: 'object', properties: {} },
-    };
-    const callTool = jest.fn(async () => ({
-      content: [{ type: 'text' as const, text: 'Order not found' }],
-      isError: true,
-    }));
+  function bindUnannotatedTool(declaration: ToolDefinition, callTool: jest.Mock) {
     jest.spyOn(mcpManager, 'captureRuntimeToolBinding').mockReturnValue({
       client: { isConnected: () => true, callTool } as never,
       declaration,
@@ -167,13 +158,57 @@ describe('runtime-external effect authority', () => {
       },
       isCurrent: () => true,
     });
+  }
+
+  // Traced on Sonnet 5.5 (Claw-Anything T04_T08): an unannotated integration tool's error,
+  // which the MCP spec returns for the model to recover from, was held as an effect of unknown
+  // outcome, and the run stopped "to prevent a duplicate mutation" at its first error.
+  it('returns an error an unannotated MCP tool reported for the model to recover from', async () => {
+    const declaration: ToolDefinition = {
+      name: 'mcp__orders__get_order',
+      description: '[Orders] Get one order',
+      input_schema: { type: 'object', properties: {} },
+    };
+    const callTool = jest.fn(async () => ({
+      content: [{ type: 'text' as const, text: 'Order not found' }],
+      isError: true,
+    }));
+    bindUnannotatedTool(declaration, callTool);
+
+    const result = await executeToolCallLifecycle(runtimeLifecycle(declaration));
+
+    expect(result.toolMessage).toMatchObject({ content: 'Error: Order not found', isError: true });
+    expect(result.effectReceipt).toMatchObject({
+      executionState: 'failed',
+      failureKind: 'tool_error',
+      contractIdentity: { kind: 'runtime_external', source: 'mcp' },
+    });
+    expect(result.effectReconciliationRequired).toBeUndefined();
+    expect(result.effectDispatchObservation).toMatchObject({
+      kind: 'settled',
+      disposition: 'failed',
+      requiresReconciliation: false,
+    });
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a call whose outcome nobody reported behind reconciliation', async () => {
+    const declaration: ToolDefinition = {
+      name: 'mcp__orders__update_order',
+      description: '[Orders] Update one order',
+      input_schema: { type: 'object', properties: {} },
+    };
+    const callTool = jest.fn(async () => {
+      throw new Error('Request timed out');
+    });
+    bindUnannotatedTool(declaration, callTool);
 
     const result = await executeToolCallLifecycle(runtimeLifecycle(declaration));
 
     expect(JSON.parse(result.toolMessage.content)).toMatchObject({
       code: 'tool_effect_reconciliation_required',
       retryAllowed: false,
-      untrustedToolResult: 'Error: Order not found',
+      untrustedToolResult: 'Error calling MCP tool: Request timed out',
     });
     expect(result.effectReconciliationRequired).toBe(true);
     expect(callTool).toHaveBeenCalledTimes(1);
