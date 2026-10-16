@@ -4,7 +4,8 @@
 // Gated: RUN_CLAW_ANYTHING=1, CLAW_ANYTHING_SPEC=<task spec JSON written by
 // benchmarks/claw_anything/kavi_agent.py>, CLAW_ANYTHING_DISPATCH_TOKEN (the adapter's
 // dispatcher token) and the selected E2E provider's credentials. Run with TZ=UTC: the
-// task's day is a UTC date. The record is written to the spec's outPath.
+// task's day is a UTC date. The record is written to the spec's outPath. Optional:
+// CLAW_ANYTHING_CAPTURE_DIR=<dir> writes every model request there, credentials removed.
 // ---------------------------------------------------------------------------
 
 jest.mock('expo-sqlite', () => {
@@ -28,6 +29,7 @@ import { resetE2EWorkspaceSandbox } from '../../src/acceptance/e2eAgent/sandboxW
 import { shouldRunE2EAgentEval } from '../../src/acceptance/e2eAgent/providerConfig';
 import { mcpManager } from '../../src/services/mcp/manager';
 import { installClockOffset } from '../helpers/clockOffset';
+import { installRequestCapture } from '../helpers/requestCapture';
 
 const SPEC_PATH = process.env.CLAW_ANYTHING_SPEC?.trim() ?? '';
 const enabled =
@@ -54,6 +56,8 @@ describeLive('Claw-Anything task (live)', () => {
       if (!spec) throw new Error('No task spec.');
       const token = process.env.CLAW_ANYTHING_DISPATCH_TOKEN?.trim();
       if (!token) throw new Error('CLAW_ANYTHING_DISPATCH_TOKEN is not set.');
+      const captureDir = process.env.CLAW_ANYTHING_CAPTURE_DIR?.trim();
+      const restoreFetch = captureDir ? installRequestCapture(captureDir, spec.taskId) : null;
       const restoreClock = installClockOffset(clawAnythingTaskNow(spec) - Date.now());
       try {
         const record = await runClawAnythingTask(
@@ -63,6 +67,7 @@ describeLive('Claw-Anything task (live)', () => {
         fs.writeFileSync(spec.outPath, JSON.stringify(record));
       } finally {
         restoreClock();
+        restoreFetch?.();
       }
     },
     (spec?.timeoutSeconds ?? 60) * 1_000 + SETUP_MARGIN_MS,

@@ -49,18 +49,22 @@ Kavi runs on its E2E provider (`E2E_PROVIDER` and its key in `.env.local` or the
 
 ## Run
 
-From the repository root, with the judge's key exported and arguments as Claw-Anything's own CLI takes them:
+From the repository root, with the judge's key exported, one task per `run` (Claw-Anything's `batch` always runs trials in Docker containers, and Kavi runs on the host):
 
 ```sh
-.private/evals/upstream/claw-anything/.venv/bin/python benchmarks/claw_anything/run_kavi.py \
-  batch --tasks-dir benchmark/tool --trials 1 --parallel 1 \
-  --config /path/to/config.yaml --trace-dir "$PWD/.private/evals/claw-anything/runs/<name>" \
-  --model <Kavi's model id, recorded in the trace>
+for task in .private/evals/upstream/claw-anything/benchmark/tool/*/; do
+  .private/evals/upstream/claw-anything/.venv/bin/python benchmarks/claw_anything/run_kavi.py \
+    run --task "benchmark/tool/$(basename "$task")" --config /path/to/config.yaml \
+    --trace-dir "$PWD/.private/evals/claw-anything/runs/<name>" \
+    --model <Kavi's model id, recorded in the trace>
+done
 ```
 
-`run` with `--task benchmark/tool/<task>` runs one task. Set `CLAW_INJECT_ERRORS=0.25` to have the mock services answer a quarter of tool calls with 429/500 errors or slow responses; Claw-Anything's robustness score then measures recovery. Keep `--parallel 1` on a machine with less than 16 GB of memory: each trial runs up to 18 services and a Jest process.
+Run tasks one at a time: every task's mock services listen on the same fixed ports, and each trial runs up to 18 services and a Jest process. Set `CLAW_INJECT_ERRORS=0.25` to have the mock services answer a quarter of tool calls with 429/500 errors or slow responses; Claw-Anything's robustness score then measures recovery.
 
-Each trial's trace (`<task>_<id>.jsonl`) is graded by Claw-Anything as usual. Beside it, `.kavi.json` holds Kavi's own numbers (completion, terminal reason, token usage with cache reads, estimated cost) and `.kavi.log` the run's log. A trial whose Kavi process fails is recorded as an error, not as a task failure, and `batch --rerun-errors <trace dir>` retries it.
+The reference arm is Claw-Anything's own agent on the same tasks, model and judge: `benchmarks/claw_anything/run_reference.py run --task … --agent loop …` runs its CLI unchanged. An endpoint that needs a header, such as Anthropic's OpenAI-compatible API with a key that is not scoped to a workspace (`anthropic-workspace-id`), gets it from `CLAW_ANYTHING_EXTRA_HEADERS`, a JSON object; both drivers apply it to every client Claw-Anything creates.
+
+Each trial's trace (`<task>_<id>.jsonl`) is graded by Claw-Anything as usual. Beside it, `.kavi.json` holds Kavi's own numbers (completion, terminal reason, token usage with cache reads, estimated cost) and `.kavi.log` the run's log. A trial whose Kavi process fails is recorded as an error (`failure_modes` in its trace end), not as a task failure; rerun that task.
 
 Adapter checks:
 
