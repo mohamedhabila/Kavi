@@ -16,6 +16,11 @@ import { seedE2EWorkspaceSandbox } from '../e2eAgent/sandboxWorkspace';
 import { mapForegroundScenarioResult } from '../e2eAgent/scenarioResultMapper';
 import { E2E_DEFAULT_MAX_TOKENS } from '../e2eAgent/thresholds';
 import type { E2ETokenUsageSummary } from '../e2eAgent/types';
+import {
+  DEFAULT_PERSONA_ID,
+  getPersona,
+  resolvePersonaSystemPrompt,
+} from '../../services/agents/personas';
 import { mcpManager } from '../../services/mcp/manager';
 import { useApprovalStore } from '../../services/remote/approvalStore';
 import type { Message } from '../../types/message';
@@ -26,9 +31,15 @@ import { startClawAnythingToolServer, type ClawAnythingDispatch } from './clawAn
 /** The integration's id: its tools reach the model as mcp__apps__<tool>. */
 export const CLAW_ANYTHING_SERVER_ID = 'apps';
 const TOOL_PREFIX = `mcp__${CLAW_ANYTHING_SERVER_ID}__`;
-/** Base instructions every E2E scenario runs with, as the person's own setting. */
-const BASE_INSTRUCTIONS =
-  'You are Kavi, a graph-controlled personal assistant. Use tools to complete tasks.';
+/**
+ * The instructions Kavi runs the task with: Kavi as shipped (the default persona's prompt),
+ * then the task's own sections. They reach Kavi as the person's setting, which in the app
+ * replaces the persona's prompt, so the persona's prompt is carried along.
+ */
+export function clawAnythingSystemPrompt(spec: Pick<ClawAnythingTaskSpec, 'instructions'>): string {
+  const persona = resolvePersonaSystemPrompt(getPersona(DEFAULT_PERSONA_ID), '');
+  return [persona, spec.instructions].filter(Boolean).join('\n\n');
+}
 
 export type ClawAnythingToolCallRecord = Readonly<{
   id: string;
@@ -150,7 +161,7 @@ export async function runClawAnythingTask(
       provider,
       conversationId,
       conversationTitle: spec.taskId,
-      systemPrompt: [BASE_INSTRUCTIONS, spec.instructions].filter(Boolean).join('\n\n'),
+      systemPrompt: clawAnythingSystemPrompt(spec),
       scenarioTimeoutMs: timeoutMs,
       turns: [{ content: spec.prompt, timeoutMs }],
       maxTokens: E2E_DEFAULT_MAX_TOKENS,

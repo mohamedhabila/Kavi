@@ -18,7 +18,7 @@ Claw-Anything owns everything except the agent: it loads the task, starts its mo
 2. It runs the request through Kavi's foreground conversation path (`scripts/claw-anything-task.js`, then `__tests__/acceptance/clawAnythingLive.test.ts`). Each trial uses a fresh profile with the clock set to noon UTC on the task's day, as the mock services freeze it, and the activity logs in Kavi's workspace.
 3. It writes Kavi's steps (text, tool calls, results, the final reply) into the trace for Claw-Anything's grader and judge.
 
-Kavi gets what OpenHarness, the paper's harness, gets beyond its own base prompt: the task's day (its clock) and the "Activity Logs" section that says where the logs are, given as the person's own instructions. Nothing names the task, its rubric or its expected tools. The integration's tools are allowed the way every E2E scenario's tools are allowed, so whether to send, delete or only draft is Kavi's judgment, as it is the other harnesses'. Long-term memory is off: one request on a fresh profile cannot use it.
+Kavi runs as shipped: its default persona and its own runtime guidance, at each model's default thinking level. Beyond that it gets what OpenHarness, the paper's harness, gets beyond its own base prompt: the task's day (its clock), the "Activity Logs" section that says where the logs are, and Claw-Anything's "Agent Guidelines" section, given after the persona as the person's own instructions. Nothing names the task, its rubric or its expected tools. The integration's tools are allowed the way every E2E scenario's tools are allowed, so whether to send, delete or only draft is Kavi's judgment, as it is the other harnesses'. Long-term memory is off: one request on a fresh profile cannot use it.
 
 ## Setup
 

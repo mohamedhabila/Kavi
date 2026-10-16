@@ -28,7 +28,7 @@ from claw_anything.models.message import Message
 from claw_anything.models.task import TaskDefinition
 from claw_anything.models.trace import TokenUsage, ToolDispatch
 from claw_anything.runner.dispatcher import ToolDispatcher
-from claw_anything.runner.system_prompt import _render_activity_logs_section
+from claw_anything.runner.system_prompt import _render_activity_logs_section, _render_agent_guidelines
 
 KAVI_ROOT = Path(__file__).resolve().parents[2]
 TASK_SCRIPT = KAVI_ROOT / "scripts" / "claw-anything-task.js"
@@ -153,10 +153,15 @@ def build_spec(
         ],
         "dispatchUrl": dispatch_url,
         "activityLogs": activity_logs(workspace_root),
-        # The same "where the logs are" section OpenHarness receives (relative paths, which
-        # is where Kavi's workspace holds them).
-        "instructions": (
-            _render_activity_logs_section(workspace_root, relative=True) if workspace_root else ""
+        # The sections OpenHarness receives beyond the tools and the day: where the logs are
+        # (relative paths, which is where Kavi's workspace holds them) and the agent guidelines.
+        "instructions": "\n\n".join(
+            section
+            for section in (
+                _render_activity_logs_section(workspace_root, relative=True) if workspace_root else "",
+                _render_agent_guidelines(task),
+            )
+            if section
         ),
         "outPath": str(out_path),
     }

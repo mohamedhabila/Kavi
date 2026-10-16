@@ -135,6 +135,9 @@ class BuildSpecTest(unittest.TestCase):
             ],
         )
         self.assertIn("logs/timeline_20260330_20260331.md", spec["instructions"])
+        # The agent guidelines OpenHarness receives, naming the task's app tool families.
+        self.assertIn("## Agent Guidelines", spec["instructions"])
+        self.assertIn("gmail_*", spec["instructions"])
 
     def test_a_task_without_logs_gives_none(self) -> None:
         with tempfile.TemporaryDirectory() as workspace:

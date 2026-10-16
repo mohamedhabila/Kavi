@@ -2,7 +2,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 
-import { clawAnythingAssistantRecords } from '../../src/acceptance/clawAnything/clawAnythingRun';
+import {
+  clawAnythingAssistantRecords,
+  clawAnythingSystemPrompt,
+} from '../../src/acceptance/clawAnything/clawAnythingRun';
 import {
   clawAnythingTaskNow,
   parseClawAnythingTaskSpec,
@@ -12,6 +15,7 @@ import {
   startClawAnythingToolServer,
   type ClawAnythingDispatch,
 } from '../../src/acceptance/clawAnything/clawAnythingToolServer';
+import { BUILT_IN_PERSONAS, DEFAULT_PERSONA_ID } from '../../src/services/agents/personas';
 import type { Message } from '../../src/types/message';
 
 const LIST_MESSAGES = {
@@ -65,6 +69,22 @@ describe('Claw-Anything task spec', () => {
     expect(new Date(clawAnythingTaskNow({ executionDate: '2026-04-05' })).toISOString()).toBe(
       '2026-04-05T12:00:00.000Z',
     );
+  });
+});
+
+describe('clawAnythingSystemPrompt', () => {
+  const shipped = BUILT_IN_PERSONAS.find(
+    (persona) => persona.id === DEFAULT_PERSONA_ID,
+  )!.systemPrompt;
+
+  it("runs Kavi as shipped, with the task's sections after the persona", () => {
+    expect(clawAnythingSystemPrompt({ instructions: '## Activity Logs\n- logs/a.md' })).toBe(
+      `${shipped}\n\n## Activity Logs\n- logs/a.md`,
+    );
+  });
+
+  it('is the persona alone for a task without sections', () => {
+    expect(clawAnythingSystemPrompt({ instructions: '' })).toBe(shipped);
   });
 });
 
