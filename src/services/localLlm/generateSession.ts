@@ -66,9 +66,8 @@ export async function sendLocalLlmMessage(
         ...samplingConfig,
         ...(enableConstrainedDecoding ? { enableConstrainedDecoding: true } : {}),
         minDeviceMemoryGb: request.executionPolicy.minDeviceMemoryGb ?? undefined,
-        ...([...history, currentMessage].some((message) => message.imagePaths?.length)
-          ? { visualTokenBudget: LOCAL_LLM_VISUAL_TOKEN_BUDGET }
-          : {}),
+        // The budget travels with the vision encoder: Android's engine reads it at init.
+        ...(request.visionBackend ? { visualTokenBudget: LOCAL_LLM_VISUAL_TOKEN_BUDGET } : {}),
       },
       options?.signal,
     ).finally(() => {

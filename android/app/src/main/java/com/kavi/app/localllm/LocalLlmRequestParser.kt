@@ -67,6 +67,9 @@ internal class LocalLlmRequestParser {
       temperature = sampling.temperature,
       enableConstrainedDecoding = readBoolean(request, "enableConstrainedDecoding", false),
       minDeviceMemoryGb = readInt(request, "minDeviceMemoryGb"),
+      visualTokenBudget = readInt(request, "visualTokenBudget")?.also { budget ->
+        require(budget > 0) { "visualTokenBudget must be greater than 0." }
+      },
     )
   }
 

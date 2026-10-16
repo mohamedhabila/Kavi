@@ -36,6 +36,7 @@ import type {
   LocalStructuredMessage,
   LocalStructuredToolDefinition,
 } from './types';
+import { LOCAL_LLM_VISUAL_TOKEN_BUDGET } from './constants';
 
 const LOCAL_LLM_WARMUP_TASKS = new Map<string, Promise<void>>();
 
@@ -194,7 +195,7 @@ export async function warmupLocalLlmSession(
     modelPath: getNativeLocalLlmModelPath(modelPath),
     runtime,
     backend,
-    ...(visionBackend ? { visionBackend } : {}),
+    ...(visionBackend ? { visionBackend, visualTokenBudget: LOCAL_LLM_VISUAL_TOKEN_BUDGET } : {}),
     ...(audioBackend ? { audioBackend } : {}),
     maxTokens: executionPolicy.maxTokens,
     contextWindowTokens: getNativeLocalLlmRequestContextWindowTokens(

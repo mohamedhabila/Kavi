@@ -137,6 +137,8 @@ internal data class WarmupRequest(
   override val temperature: Float?,
   val enableConstrainedDecoding: Boolean,
   override val minDeviceMemoryGb: Int?,
+  /** The engine reads the visual token budget when it starts, so a warmup carries it too. */
+  val visualTokenBudget: Int? = null,
 ) : EngineRequest
 
 internal class RuntimeMetrics {

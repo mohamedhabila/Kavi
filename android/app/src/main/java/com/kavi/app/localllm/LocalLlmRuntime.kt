@@ -127,6 +127,7 @@ internal class LocalLlmRuntime(
   }
 
   private suspend fun warmupEngine(request: WarmupRequest): String {
+    applyVisualTokenBudget(request.visualTokenBudget)
     return engineStore.withEngine(request) { engineState, resolvedBackend, _ ->
       request.conversationKey?.takeIf { it.isNotBlank() }?.let { conversationKey ->
         val acquiredConversation = engineStore.acquireConversationOrResetEngine(

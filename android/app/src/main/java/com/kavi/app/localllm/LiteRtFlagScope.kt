@@ -29,8 +29,9 @@ internal class LiteRtFlagScope {
 }
 
 /**
- * LiteRT-LM reads how many tokens to encode an image to from a process-wide flag when a
- * message is sent; every request asks for the same budget, so setting it per request is safe.
+ * LiteRT-LM reads how many tokens to encode an image to from a process-wide flag, when an
+ * engine starts and when a message is sent; every request and warmup with a vision encoder
+ * carries the same budget, so setting it per request is safe.
  */
 @OptIn(ExperimentalApi::class)
 internal fun applyVisualTokenBudget(budget: Int?) {

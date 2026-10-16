@@ -116,7 +116,7 @@ export interface NativeLocalLlmRequest {
   temperature?: number;
   enableConstrainedDecoding?: boolean;
   minDeviceMemoryGb?: number;
-  /** Tokens each image is encoded to, sent with the images it applies to. */
+  /** Tokens each image is encoded to, sent with the vision encoder it applies to. */
   visualTokenBudget?: number;
 }
 
@@ -140,6 +140,8 @@ export interface NativeLocalLlmWarmupRequest {
   temperature?: number;
   enableConstrainedDecoding?: boolean;
   minDeviceMemoryGb?: number;
+  /** Tokens each image is encoded to, sent with the vision encoder it applies to. */
+  visualTokenBudget?: number;
 }
 
 export interface NativeLocalLlmStreamEvent {

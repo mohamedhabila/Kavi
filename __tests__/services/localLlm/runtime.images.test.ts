@@ -61,10 +61,14 @@ describe('a photo sent to Gemma 4 on the phone', () => {
     });
   });
 
-  it('sends no visual budget when no image is shown', async () => {
+  it('sends the visual budget with the vision encoder, before any photo arrives', async () => {
     phoneAt('nominal');
     await sendLocalLlmMessage(await installedGemma(), [{ role: 'user', content: 'Hi' }] as never);
 
-    expect(nativeRequest()).not.toHaveProperty('visualTokenBudget');
+    // Android's engine reads the budget when it starts, so a text turn that starts it carries it.
+    expect(nativeRequest()).toMatchObject({
+      visionBackend: expect.any(String),
+      visualTokenBudget: 280,
+    });
   });
 });
