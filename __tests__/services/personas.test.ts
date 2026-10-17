@@ -58,7 +58,9 @@ describe('BUILT_IN_PERSONAS', () => {
     expect(assistant?.systemPrompt).toContain(
       'Never mention tools, goals, runs, personas, or any other internal mechanics',
     );
-    expect(assistant?.systemPrompt).toContain('short enough for a phone screen');
+    // A fixed phone-screen length made replies to many-item requests leave out facts Kavi had
+    // read; the length follows the request instead.
+    expect(assistant?.systemPrompt).toContain("Fit the reply's length to the request");
     expect(assistant?.systemPrompt).toContain('ask exactly one focused question');
     expect(assistant?.systemPrompt).toContain('worth talking to a professional');
     expect(assistant?.systemPrompt).toContain('never invent a specific fact');
