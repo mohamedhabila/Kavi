@@ -53,6 +53,8 @@ export type ClawAnythingToolCallRecord = Readonly<{
 export type ClawAnythingAssistantRecord = Readonly<{
   text: string;
   toolCalls: ReadonlyArray<ClawAnythingToolCallRecord>;
+  /** Why the model stopped this step (end_turn, tool_use, max_tokens, ...), when recorded. */
+  finishReason: string | null;
 }>;
 
 export type ClawAnythingRunRecord = Readonly<{
@@ -102,6 +104,7 @@ export function clawAnythingAssistantRecords(
           isError: call.status === 'failed' || toolMessage?.isError === true,
         };
       }),
+      finishReason: message.assistantMetadata?.finishReason ?? null,
     }));
 }
 

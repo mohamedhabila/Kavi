@@ -250,7 +250,14 @@ describe('clawAnythingAssistantRecords', () => {
         ],
       }),
       message({ role: 'tool', toolCallId: 'c1', content: 'ignored: the call holds its result' }),
-      message({ content: 'Here is what collides.' }),
+      message({
+        content: 'Here is what collides.',
+        assistantMetadata: {
+          kind: 'final',
+          completionStatus: 'complete',
+          finishReason: 'end_turn',
+        },
+      }),
     ]);
 
     expect(records).toEqual([
@@ -272,8 +279,9 @@ describe('clawAnythingAssistantRecords', () => {
             isError: true,
           },
         ],
+        finishReason: null,
       },
-      { text: 'Here is what collides.', toolCalls: [] },
+      { text: 'Here is what collides.', toolCalls: [], finishReason: 'end_turn' },
     ]);
   });
 

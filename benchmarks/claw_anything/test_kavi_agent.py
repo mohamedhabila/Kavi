@@ -15,7 +15,15 @@ from claw_anything.models.task import TaskDefinition
 from claw_anything.models.trace import ToolDispatch
 
 import kavi_agent
-from kavi_agent import DispatchBridge, KaviAgent, KaviRunError, activity_logs, build_spec, record_messages
+from kavi_agent import (
+    DispatchBridge,
+    KaviAgent,
+    KaviRunError,
+    activity_logs,
+    build_spec,
+    finish_reason_counts,
+    record_messages,
+)
 
 
 def task(**overrides: object) -> TaskDefinition:
@@ -147,6 +155,22 @@ class BuildSpecTest(unittest.TestCase):
     def test_refuses_a_task_without_a_day(self) -> None:
         with self.assertRaises(KaviRunError):
             build_spec(task(execution_date=None), None, "http://127.0.0.1:1/dispatch", Path("record.json"))
+
+
+class FinishReasonCountsTest(unittest.TestCase):
+    def test_counts_each_steps_stop_reason(self) -> None:
+        record = {
+            "assistant": [
+                {"finishReason": "tool_use"},
+                {"finishReason": "tool_use"},
+                {"finishReason": "max_tokens"},
+                {"finishReason": None},
+            ]
+        }
+        self.assertEqual(finish_reason_counts(record), {"tool_use": 2, "max_tokens": 1, "unrecorded": 1})
+
+    def test_no_steps_no_counts(self) -> None:
+        self.assertEqual(finish_reason_counts({}), {})
 
 
 class RecordMessagesTest(unittest.TestCase):

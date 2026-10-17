@@ -167,6 +167,15 @@ def build_spec(
     }
 
 
+def finish_reason_counts(record: JsonObject) -> dict[str, int]:
+    """How often each model step stopped for each reason, e.g. {"tool_use": 3, "end_turn": 1}."""
+    counts: dict[str, int] = {}
+    for step in record.get("assistant") or []:
+        reason = step.get("finishReason") or "unrecorded"
+        counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
 def record_messages(record: JsonObject) -> list[tuple[Message, bool]]:
     """Kavi's steps as trace messages; the flag marks the final assistant reply."""
     steps = record.get("assistant") or []
@@ -239,6 +248,7 @@ class KaviAgent(BaseAgent):
             dispatcher.close()
         self._emit_record(record)
         sidecar = {key: record.get(key) for key in ("completed", "terminalReason", "durationMs", "usage", "costUsd", "errors")}
+        sidecar["finishReasons"] = finish_reason_counts(record)
         trace_path.with_suffix(".kavi.json").write_text(json.dumps(sidecar, ensure_ascii=False), encoding="utf-8")
 
     def _run_kavi(self, task: TaskDefinition, spec_path: Path, token: str, log_path: Path) -> None:
